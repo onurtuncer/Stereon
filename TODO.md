@@ -15,7 +15,7 @@
 - [x] PR template with test checklist and AI-disclosure checkbox (ADR-0015)
 - [x] Issue templates: bug (with native-file or journal attachment), feature, corpus case
 - [x] `CODEOWNERS` with module owners for Tier B/C libraries (ADR-0015)
-- [ ] Branch protection on `main`: required CI checks, one approving review, linear history
+- [x] Branch protection on `main`: required CI checks, one approving review, linear history (admins may bypass while there is a single maintainer)
 - [x] Set the GitHub About description and topics
 - [ ] Choose a logo direction from the four concepts; add the mark and wordmark as SVG under `docs/brand/` and use it in the README header
 
