@@ -29,14 +29,14 @@
 - [ ] Feature-test-macro wrappers: `stereon::exec` (std::execution ↔ stdexec), `stereon::simd` (std::simd ↔ xsimd)
 - [ ] Include-graph check enforcing library layering (fails CI on an upward dependency)
 - [ ] `.clang-format` and `.clang-tidy`, including a rule banning literal epsilon comparisons in `topo/`, `boolean/`, `mesh/` (ADR-0001, ADR-0002)
-- [ ] Licence-header check (REUSE or equivalent) (ADR-0008)
+- [x] Licence-header check (REUSE or equivalent) (ADR-0008)
 
 ## 3. Continuous integration (week 2)
 
-- [ ] Linux GCC 16: debug + release, blocking
-- [ ] Linux GCC 16: ASan/UBSan and TSan jobs, blocking
-- [ ] Windows GCC 16 via MSYS2 UCRT64 (`msys2/setup-msys2`), blocking
-- [ ] macOS GCC 16 (Homebrew), blocking
+- [x] Linux GCC 16: debug + release, blocking
+- [x] Linux GCC 16: ASan/UBSan and TSan jobs, blocking
+- [x] Windows GCC 16 via MSYS2 UCRT64 (`msys2/setup-msys2`), blocking
+- [x] macOS GCC 16 (Homebrew), blocking
 - [ ] Clang (latest) and MSVC (latest): non-blocking, reported
 - [ ] Coverage report (gcov/llvm-cov) published per PR
 - [ ] Benchmark job on `main` with results stored for trend tracking
