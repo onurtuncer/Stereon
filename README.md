@@ -70,8 +70,8 @@ Third-party dependencies are fetched by CMake: [stdexec](https://github.com/NVID
 ### Build and test
 
 ```bash
-git clone https://github.com/<org>/stereon.git
-cd stereon
+git clone https://github.com/onurtuncer/Stereon.git
+cd Stereon
 cmake --preset gcc16-release
 cmake --build --preset gcc16-release
 ctest --preset gcc16-release
@@ -134,7 +134,7 @@ Contributions are welcome once the Phase 0 foundations settle. Before opening a 
 - [`CONTRIBUTING.md`](CONTRIBUTING.md): coding standards, commit conventions, and the contributor agreement
 - [`docs/adr/`](docs/adr/): accepted design decisions. A PR that contradicts an accepted ADR needs a new ADR.
 
-Every change must include a test that fails before it and passes after it. AI-assisted contributions are welcome under the same rule; see ADR-015 for the policy.
+Every change must include a test that fails before it and passes after it. AI-assisted contributions are welcome under the same rule; see [ADR-0015](docs/adr/0015-ai-contribution-policy.md) for the policy.
 
 ## License
 
@@ -149,7 +149,7 @@ If you use Stereon in academic work, please cite the repository until a paper is
   title  = {Stereon: a modern C++26 B-rep geometric modeling kernel},
   author = {Tuncer, Onur and contributors},
   year   = {2026},
-  url    = {https://github.com/<org>/stereon}
+  url    = {https://github.com/onurtuncer/Stereon}
 }
 ```
 

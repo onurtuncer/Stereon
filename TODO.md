@@ -8,15 +8,15 @@
 
 ## 1. Repository and governance (week 1)
 
-- [ ] Create the GitHub organisation and `stereon` repository (private until the name check is done)
-- [ ] Add `LICENSE` (MPL-2.0, per ADR-0008) and the MPL header template
-- [ ] Add `README.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`
-- [ ] Add `docs/adr/` with ADR-0000 template and ADRs 0001–0016
-- [ ] PR template with test checklist and AI-disclosure checkbox (ADR-0015)
-- [ ] Issue templates: bug (with native-file or journal attachment), feature, corpus case
-- [ ] `CODEOWNERS` with module owners for Tier B/C libraries (ADR-0015)
+- [x] Create the `onurtuncer/Stereon` repository (public, kept under the personal account)
+- [x] Add `LICENSE` (MPL-2.0, per ADR-0008) and the MPL header template
+- [x] Add `README.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`
+- [x] Add `docs/adr/` with ADR-0000 template and ADRs 0001–0016
+- [x] PR template with test checklist and AI-disclosure checkbox (ADR-0015)
+- [x] Issue templates: bug (with native-file or journal attachment), feature, corpus case
+- [x] `CODEOWNERS` with module owners for Tier B/C libraries (ADR-0015)
 - [ ] Branch protection on `main`: required CI checks, one approving review, linear history
-- [ ] Set the GitHub About description and topics
+- [x] Set the GitHub About description and topics
 - [ ] Choose a logo direction from the four concepts; add the mark and wordmark as SVG under `docs/brand/` and use it in the README header
 
 ## 2. Build system and toolchain (weeks 1–2)
