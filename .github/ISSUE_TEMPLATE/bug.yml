@@ -1,0 +1,75 @@
+name: Bug report
+description: A wrong result, invalid shape, failed operation, crash or build problem.
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. A minimal reproducible input is the most useful thing you can give us; every confirmed bug becomes a permanent regression case in `corpus/`.
+
+        **Security problems** (for example, a crash on a malicious input file) must not be reported here. Follow [SECURITY.md](https://github.com/onurtuncer/Stereon/blob/main/SECURITY.md) instead.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - core
+        - robust
+        - curve
+        - surface
+        - intersect
+        - topo
+        - build
+        - boolean
+        - blend
+        - mesh
+        - io
+        - python
+        - viewer
+        - build system / CI
+        - not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: The operation you ran, what you got, and what you expected instead.
+      placeholder: |
+        boolean_cut(box, cylinder) returns ToleranceExceeded on edge 37; expected a valid solid with a through hole.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Minimal code or commands. Please keep it as small as possible.
+      render: cpp
+    validations:
+      required: true
+  - type: textarea
+    id: attachments
+    attributes:
+      label: Input files and journal
+      description: |
+        Drag in the native file (`.stn`), STEP file or operation journal that reproduces the problem. A journal lets us replay the failing operation in isolation (ADR-0007). Only attach files you are allowed to share publicly.
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Error and diagnostics
+      description: The `KernelError` message, contract violation, validity-checker report, sanitizer output or stack trace.
+      render: text
+  - type: input
+    id: commit
+    attributes:
+      label: Stereon commit
+      placeholder: e.g. e68514e
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Compiler, platform and build preset
+      placeholder: e.g. GCC 16.1, Windows 11 (MSYS2 UCRT64), gcc16-debug
+    validations:
+      required: true

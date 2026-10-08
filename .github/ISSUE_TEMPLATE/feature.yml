@@ -1,0 +1,42 @@
+name: Feature request
+description: Propose a new capability or a change to existing behaviour.
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check the [roadmap](https://github.com/onurtuncer/Stereon/blob/main/README.md#roadmap) and the [ADRs](https://github.com/onurtuncer/Stereon/tree/main/docs/adr) first. Changes to tolerances, topology storage, geometry dispatch, error handling, threading or the file format usually need a new ADR.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and why is it hard or impossible today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: The API or behaviour you would like. A short code sketch helps.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: input
+    id: adrs
+    attributes:
+      label: Related ADRs
+      description: ADRs this request touches or would contradict.
+      placeholder: e.g. ADR-0003, ADR-0009
+  - type: dropdown
+    id: contribute
+    attributes:
+      label: Would you work on this?
+      options:
+        - "Yes, I can open a pull request"
+        - "Yes, with guidance"
+        - "No"
+    validations:
+      required: true

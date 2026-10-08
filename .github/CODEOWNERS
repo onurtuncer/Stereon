@@ -1,0 +1,26 @@
+# Code owners (ADR-0015).
+#
+# Tier B and Tier C libraries need a review from their module owner. Tier C
+# changes also need line-by-line human review. The last matching pattern wins.
+# Add a second owner per module as maintainers join (pair ownership).
+
+# Default: everything else, including Tier A libraries
+*                       @onurtuncer
+
+# ADRs are human-owned
+/docs/adr/              @onurtuncer
+
+# Tier B: robust, topo, build, mesh
+/src/robust/            @onurtuncer
+/src/topo/              @onurtuncer
+/src/build/             @onurtuncer
+/src/mesh/              @onurtuncer
+
+# Tier C: intersect, boolean, blend
+/src/intersect/         @onurtuncer
+/src/boolean/           @onurtuncer
+/src/blend/             @onurtuncer
+
+# Governance and licensing
+/LICENSE                @onurtuncer
+/.github/               @onurtuncer

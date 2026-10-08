@@ -1,0 +1,66 @@
+name: Corpus case
+description: Contribute a geometry model to the test corpus (a hard case, a failure, or a reference model).
+labels: ["corpus", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The corpus is how Stereon is judged: every case is run in CI and **regression cases are never deleted**. Only submit files you have the right to redistribute; each file's source and licence is recorded in `corpus/LICENSES.md` (ADR-0008).
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of case
+      options:
+        - Failure (Stereon gives a wrong result, an invalid shape or an error)
+        - Hard case (passes today, but exercises a degenerate or tricky situation)
+        - Reference model (a realistic part for coverage and benchmarks)
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: Model files
+      description: Drag in the STEP, native (`.stn`) or other input files, plus an operation journal if you have one.
+    validations:
+      required: true
+  - type: textarea
+    id: operation
+    attributes:
+      label: Operation
+      description: What should be done with the model (e.g. "import, then boolean_cut A − B", "tessellate at 0.01 mm").
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      description: How to tell the result is correct. Analytic values (volume, area, face count), results from another kernel (OpenCASCADE, Manifold, a commercial system), or "valid solid" at minimum.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Current behaviour
+      description: For failures, the `KernelError`, validity-checker report or wrong values you get, and the Stereon commit.
+      render: text
+  - type: input
+    id: source
+    attributes:
+      label: Source of the model
+      description: Who made it, and where it came from (your own work, a public dataset with URL, a generated case).
+    validations:
+      required: true
+  - type: input
+    id: licence
+    attributes:
+      label: Licence of the model
+      description: SPDX identifier if possible, e.g. CC0-1.0, CC-BY-4.0, MPL-2.0.
+    validations:
+      required: true
+  - type: checkboxes
+    id: rights
+    attributes:
+      label: Redistribution
+      options:
+        - label: I have the right to share these files publicly under the licence stated above, and they contain no confidential or export-controlled data.
+          required: true

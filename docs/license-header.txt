@@ -1,0 +1,25 @@
+Stereon source file header (MPL-2.0, ADR-0008)
+==============================================
+
+Every source file starts with the header below, written in the comment
+syntax of its language. Copy the matching block verbatim. The CI licence
+check looks for the SPDX line.
+
+C++ (.cpp, .hpp, .cppm, .ixx), C:
+
+// SPDX-License-Identifier: MPL-2.0
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+CMake, Python, shell, YAML, TOML:
+
+# SPDX-License-Identifier: MPL-2.0
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+Files that cannot hold a comment (images, JSON, corpus geometry) are
+covered by REUSE.toml or, for corpus files, by corpus/LICENSES.md.
