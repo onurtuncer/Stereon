@@ -35,4 +35,4 @@ Adopt option 3.
 
 ## Verification
 
-Prototype union/cut/common on boxes and cylinders by month 6, including a set of models with deliberately loosened edges (1e-4 to 1e-2 mm). Pass: all results valid, tolerance growth logged, no operation depends on a literal epsilon (enforced by a clang-tidy check on `topo/` and `boolean/`).
+Prototype union/cut/common on boxes and cylinders by the end of Phase 0 (week 12), including a set of models with deliberately loosened edges (1e-4 to 1e-2 mm). Pass: all results valid, tolerance growth logged, no operation depends on a literal epsilon (enforced by a clang-tidy check on `topo/` and `boolean/`).
