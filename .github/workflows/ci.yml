@@ -1,0 +1,124 @@
+# SPDX-FileCopyrightText: 2026 Onur Tuncer and Stereon contributors
+# SPDX-License-Identifier: MPL-2.0
+#
+# Blocking CI on the reference compiler, GCC 16 (ADR-0016), plus the
+# REUSE licence check (ADR-0008). Job names are stable: branch protection
+# refers to them.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CTEST_OUTPUT_ON_FAILURE: "1"
+  CMAKE_BUILD_PARALLEL_LEVEL: "4"
+
+jobs:
+  linux:
+    name: Linux GCC 16 (${{ matrix.preset }})
+    runs-on: ubuntu-24.04
+    container:
+      image: gcc:16.2
+      # LeakSanitizer needs ptrace.
+      options: --cap-add SYS_PTRACE
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [gcc16-debug, gcc16-release, gcc16-asan]
+    steps:
+      - name: Install CMake and Ninja
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends cmake ninja-build
+          g++ --version | head -1; cmake --version | head -1; ninja --version
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }} -DSTEREON_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }}
+
+  linux-tsan:
+    name: Linux GCC 16 (gcc16-tsan)
+    runs-on: ubuntu-24.04
+    steps:
+      # ThreadSanitizer fails on kernels with high mmap randomisation. It is
+      # a host setting, so this job runs the GCC container by hand.
+      - name: Lower mmap randomisation for TSan
+        run: sudo sysctl vm.mmap_rnd_bits=28
+      - uses: actions/checkout@v4
+      - name: Configure, build and test in gcc:16.2
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src gcc:16.2 bash -ec '
+            apt-get update -qq
+            apt-get install -y -qq --no-install-recommends cmake ninja-build
+            git config --global --add safe.directory /src
+            cmake --preset gcc16-tsan -DSTEREON_WARNINGS_AS_ERRORS=ON
+            cmake --build --preset gcc16-tsan
+            ctest --preset gcc16-tsan'
+
+  windows:
+    name: Windows GCC 16 (MSYS2 UCRT64, ${{ matrix.preset }})
+    runs-on: windows-2025
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [gcc16-debug, gcc16-windows]
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            git
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+      - uses: actions/checkout@v4
+      - name: Toolchain versions
+        run: g++ --version | head -1; cmake --version | head -1; ninja --version
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }} -DSTEREON_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }}
+
+  macos:
+    name: macOS GCC 16 (gcc16-debug)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GCC 16 and Ninja
+        run: |
+          brew install gcc@16 ninja
+          g++-16 --version | head -1; cmake --version | head -1
+      - name: Configure
+        run: cmake --preset gcc16-debug -DCMAKE_CXX_COMPILER=g++-16 -DSTEREON_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build --preset gcc16-debug
+      - name: Test
+        run: ctest --preset gcc16-debug
+
+  reuse:
+    name: REUSE licence check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: reuse lint
+        run: pipx run reuse lint
