@@ -1,0 +1,123 @@
+{
+  "version": 8,
+  "cmakeMinimumRequired": { "major": 3, "minor": 30, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "gcc16-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "g++",
+        "STEREON_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "gcc16-debug",
+      "displayName": "GCC 16 debug",
+      "description": "Development build: contracts enforced, checked handles on (ADR-0004, ADR-0016)",
+      "inherits": "gcc16-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "STEREON_CONTRACT_SEMANTIC": "enforce",
+        "STEREON_CHECKED_HANDLES": "ON"
+      }
+    },
+    {
+      "name": "gcc16-release",
+      "displayName": "GCC 16 release",
+      "description": "Optimised build. Contract semantic is provisional until the ADR-0016 hot-path/boundary split is decided",
+      "inherits": "gcc16-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "STEREON_CONTRACT_SEMANTIC": "enforce",
+        "STEREON_CHECKED_HANDLES": "OFF"
+      }
+    },
+    {
+      "name": "gcc16-observe",
+      "displayName": "GCC 16 corpus (observe)",
+      "description": "CI corpus run: contract violations are logged and the run fails afterwards (ADR-0016)",
+      "inherits": "gcc16-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "STEREON_CONTRACT_SEMANTIC": "observe",
+        "STEREON_CHECKED_HANDLES": "ON"
+      }
+    },
+    {
+      "name": "gcc16-asan",
+      "displayName": "GCC 16 ASan + UBSan",
+      "description": "AddressSanitizer and UndefinedBehaviorSanitizer; not available with MinGW",
+      "inherits": "gcc16-debug",
+      "cacheVariables": { "STEREON_SANITIZER": "address" },
+      "condition": { "type": "notEquals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+    },
+    {
+      "name": "gcc16-tsan",
+      "displayName": "GCC 16 TSan",
+      "description": "ThreadSanitizer; not available with MinGW",
+      "inherits": "gcc16-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "STEREON_SANITIZER": "thread"
+      },
+      "condition": { "type": "notEquals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+    },
+    {
+      "name": "gcc16-windows",
+      "displayName": "GCC 16 Windows release (MSYS2 UCRT64)",
+      "description": "Release build with the GCC runtime linked statically, so binaries run outside the MSYS2 shell",
+      "inherits": "gcc16-release",
+      "cacheVariables": {
+        "CMAKE_EXE_LINKER_FLAGS": "-static-libgcc -static-libstdc++"
+      },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+    },
+    {
+      "name": "bench",
+      "displayName": "GCC 16 benchmarks",
+      "description": "Release build with the benchmark suite; contracts ignored so timings measure the algorithms",
+      "inherits": "gcc16-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "STEREON_CONTRACT_SEMANTIC": "ignore",
+        "STEREON_BUILD_TESTS": "OFF",
+        "STEREON_BUILD_BENCH": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "gcc16-debug",   "configurePreset": "gcc16-debug" },
+    { "name": "gcc16-release", "configurePreset": "gcc16-release" },
+    { "name": "gcc16-observe", "configurePreset": "gcc16-observe" },
+    { "name": "gcc16-asan",    "configurePreset": "gcc16-asan" },
+    { "name": "gcc16-tsan",    "configurePreset": "gcc16-tsan" },
+    { "name": "gcc16-windows", "configurePreset": "gcc16-windows" },
+    { "name": "bench",         "configurePreset": "bench" }
+  ],
+  "testPresets": [
+    {
+      "name": "test-base",
+      "hidden": true,
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    },
+    { "name": "gcc16-debug",   "inherits": "test-base", "configurePreset": "gcc16-debug" },
+    { "name": "gcc16-release", "inherits": "test-base", "configurePreset": "gcc16-release" },
+    { "name": "gcc16-observe", "inherits": "test-base", "configurePreset": "gcc16-observe" },
+    {
+      "name": "gcc16-asan",
+      "inherits": "test-base",
+      "configurePreset": "gcc16-asan",
+      "environment": { "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1", "UBSAN_OPTIONS": "print_stacktrace=1" }
+    },
+    {
+      "name": "gcc16-tsan",
+      "inherits": "test-base",
+      "configurePreset": "gcc16-tsan",
+      "environment": { "TSAN_OPTIONS": "halt_on_error=1" }
+    },
+    { "name": "gcc16-windows", "inherits": "test-base", "configurePreset": "gcc16-windows" }
+  ]
+}

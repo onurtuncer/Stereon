@@ -77,7 +77,9 @@ cmake --build --preset gcc16-release
 ctest --preset gcc16-release
 ```
 
-Other presets: `gcc16-debug` (contracts enforced, sanitizers on), `gcc16-asan`, `gcc16-tsan`, `bench`.
+Other presets: `gcc16-debug` (contracts enforced, checked handles), `gcc16-observe` (contracts logged, for corpus runs), `gcc16-asan` and `gcc16-tsan` (Linux and macOS), `gcc16-windows` (static GCC runtime) and `bench`.
+
+On Windows, build from an MSYS2 UCRT64 shell with `mingw-w64-ucrt-x86_64-gcc`, `-cmake` and `-ninja` installed.
 
 ## Repository layout
 

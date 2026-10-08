@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: 2026 Onur Tuncer and Stereon contributors
+# SPDX-License-Identifier: MPL-2.0
+#
+# Baseline checks for all of Stereon. Still to come (TODO §2):
+# a custom check banning literal epsilon comparisons and raw sign tests on
+# computed doubles in topo/, boolean/ and mesh/ (ADR-0001, ADR-0002).
+---
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  cert-err58-cpp,
+  cppcoreguidelines-*,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  misc-*,
+  -misc-non-private-member-variables-in-classes,
+  -misc-no-recursion,
+  modernize-*,
+  -modernize-use-trailing-return-type,
+  performance-*,
+  readability-*,
+  -readability-identifier-length,
+  -readability-magic-numbers,
+  -readability-math-missing-parentheses
+WarningsAsErrors: ''
+HeaderFilterRegex: '(src|tests)/.*'
+FormatStyle: file
+CheckOptions:
+  # Naming per CONTRIBUTING.md: PascalCase types, snake_case everything else.
+  - { key: readability-identifier-naming.ClassCase,          value: CamelCase }
+  - { key: readability-identifier-naming.StructCase,         value: CamelCase }
+  - { key: readability-identifier-naming.EnumCase,           value: CamelCase }
+  - { key: readability-identifier-naming.EnumConstantCase,   value: CamelCase }
+  - { key: readability-identifier-naming.TypeAliasCase,      value: CamelCase }
+  - { key: readability-identifier-naming.ConceptCase,        value: CamelCase }
+  - { key: readability-identifier-naming.TemplateParameterCase, value: CamelCase }
+  - { key: readability-identifier-naming.FunctionCase,       value: lower_case }
+  - { key: readability-identifier-naming.VariableCase,       value: lower_case }
+  - { key: readability-identifier-naming.ParameterCase,      value: lower_case }
+  - { key: readability-identifier-naming.MemberCase,         value: lower_case }
+  - { key: readability-identifier-naming.NamespaceCase,      value: lower_case }
+  - { key: readability-identifier-naming.MacroDefinitionCase, value: UPPER_CASE }
+  - { key: readability-identifier-naming.MacroDefinitionPrefix, value: STEREON_ }
+...

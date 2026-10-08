@@ -21,10 +21,10 @@
 
 ## 2. Build system and toolchain (weeks 1–2)
 
-- [ ] Top-level `CMakeLists.txt` (CMake ≥ 3.30, Ninja), C++26, modules enabled
+- [x] Top-level `CMakeLists.txt` (CMake ≥ 3.30, Ninja), C++26, modules enabled
 - [ ] One CMake target per library (`stereon::core`, `stereon::robust`, …) with private include visibility
-- [ ] `CMakePresets.json`: `gcc16-debug`, `gcc16-release`, `gcc16-asan`, `gcc16-tsan`, `gcc16-windows`, `bench`
-- [ ] Contract evaluation semantics per preset: enforce (debug), observe (CI corpus), ignore/enforce-boundary (release) (ADR-0016)
+- [x] `CMakePresets.json`: `gcc16-debug`, `gcc16-release`, `gcc16-observe`, `gcc16-asan`, `gcc16-tsan`, `gcc16-windows`, `bench`
+- [ ] Contract evaluation semantics per preset: enforce (debug), observe (CI corpus), ignore/enforce-boundary (release) (ADR-0016). Debug and observe done; release is provisionally `enforce` until the per-TU split is decided
 - [ ] Dependency fetching (CPM or FetchContent): stdexec, xsimd, Catch2, RapidCheck, Google Benchmark, nanobind
 - [ ] Feature-test-macro wrappers: `stereon::exec` (std::execution ↔ stdexec), `stereon::simd` (std::simd ↔ xsimd)
 - [ ] Include-graph check enforcing library layering (fails CI on an upward dependency)
