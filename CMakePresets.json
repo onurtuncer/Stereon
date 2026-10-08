@@ -49,6 +49,13 @@
       }
     },
     {
+      "name": "gcc16-coverage",
+      "displayName": "GCC 16 coverage",
+      "description": "Debug build instrumented for gcov; report with gcovr (CI posts it on pull requests)",
+      "inherits": "gcc16-debug",
+      "cacheVariables": { "STEREON_COVERAGE": "ON" }
+    },
+    {
       "name": "gcc16-asan",
       "displayName": "GCC 16 ASan + UBSan",
       "description": "AddressSanitizer and UndefinedBehaviorSanitizer; not available with MinGW",
@@ -119,6 +126,7 @@
     { "name": "gcc16-debug",   "configurePreset": "gcc16-debug" },
     { "name": "gcc16-release", "configurePreset": "gcc16-release" },
     { "name": "gcc16-observe", "configurePreset": "gcc16-observe" },
+    { "name": "gcc16-coverage", "configurePreset": "gcc16-coverage" },
     { "name": "gcc16-asan",    "configurePreset": "gcc16-asan" },
     { "name": "gcc16-tsan",    "configurePreset": "gcc16-tsan" },
     { "name": "gcc16-windows", "configurePreset": "gcc16-windows" },
@@ -136,6 +144,7 @@
     { "name": "gcc16-debug",   "inherits": "test-base", "configurePreset": "gcc16-debug" },
     { "name": "gcc16-release", "inherits": "test-base", "configurePreset": "gcc16-release" },
     { "name": "gcc16-observe", "inherits": "test-base", "configurePreset": "gcc16-observe" },
+    { "name": "gcc16-coverage", "inherits": "test-base", "configurePreset": "gcc16-coverage" },
     {
       "name": "gcc16-asan",
       "inherits": "test-base",
