@@ -31,17 +31,40 @@ endif()
 
 add_library(stereon_options INTERFACE)
 
-target_compile_options(stereon_options INTERFACE
-    -freflection
-    -fcontracts
-    -fcontract-evaluation-semantic=${STEREON_CONTRACT_SEMANTIC}
-    -Wall -Wextra -Wpedantic
-    -Wconversion -Wsign-conversion -Wshadow
-    -Wnon-virtual-dtor -Wold-style-cast -Woverloaded-virtual
-    -Wnull-dereference -Wdouble-promotion -Wimplicit-fallthrough
-    $<$<BOOL:${STEREON_WARNINGS_AS_ERRORS}>:-Werror>)
+# GCC 16 is the reference compiler (ADR-0016). Clang and MSVC are built in
+# non-blocking CI; they get C++26 language flags only when they accept them.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(stereon_options INTERFACE
+        -freflection
+        -fcontracts
+        -fcontract-evaluation-semantic=${STEREON_CONTRACT_SEMANTIC})
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag(-freflection STEREON_CLANG_HAS_REFLECTION)
+    check_cxx_compiler_flag(-fcontracts STEREON_CLANG_HAS_CONTRACTS)
+    target_compile_options(stereon_options INTERFACE
+        $<$<BOOL:${STEREON_CLANG_HAS_REFLECTION}>:-freflection>
+        $<$<BOOL:${STEREON_CLANG_HAS_CONTRACTS}>:-fcontracts>)
+endif()
 
-if(STEREON_SANITIZER STREQUAL "address")
+if(MSVC)
+    target_compile_options(stereon_options INTERFACE
+        /W4 /permissive- /utf-8 /Zc:__cplusplus /Zc:preprocessor
+        $<$<BOOL:${STEREON_WARNINGS_AS_ERRORS}>:/WX>)
+else()
+    target_compile_options(stereon_options INTERFACE
+        -Wall -Wextra -Wpedantic
+        -Wconversion -Wsign-conversion -Wshadow
+        -Wnon-virtual-dtor -Wold-style-cast -Woverloaded-virtual
+        -Wnull-dereference -Wdouble-promotion -Wimplicit-fallthrough
+        $<$<BOOL:${STEREON_WARNINGS_AS_ERRORS}>:-Werror>)
+endif()
+
+if(MSVC AND STEREON_SANITIZER STREQUAL "address")
+    target_compile_options(stereon_options INTERFACE /fsanitize=address)
+elseif(MSVC AND NOT STEREON_SANITIZER STREQUAL "")
+    message(FATAL_ERROR "MSVC supports only STEREON_SANITIZER=address")
+elseif(STEREON_SANITIZER STREQUAL "address")
     target_compile_options(stereon_options INTERFACE
         -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all)
     target_link_options(stereon_options INTERFACE -fsanitize=address,undefined)
@@ -52,7 +75,7 @@ elseif(NOT STEREON_SANITIZER STREQUAL "")
     message(FATAL_ERROR "STEREON_SANITIZER must be empty, 'address' or 'thread'")
 endif()
 
-if(MINGW)
+if(MINGW AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     # std::print and std::println need libstdc++exp on MinGW
     # (docs/toolchain/gcc16-feature-probe.md).
     target_link_libraries(stereon_options INTERFACE stdc++exp)

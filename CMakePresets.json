@@ -3,14 +3,17 @@
   "cmakeMinimumRequired": { "major": 3, "minor": 30, "patch": 0 },
   "configurePresets": [
     {
-      "name": "gcc16-base",
+      "name": "base",
       "hidden": true,
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}",
-      "cacheVariables": {
-        "CMAKE_CXX_COMPILER": "g++",
-        "STEREON_BUILD_TESTS": "ON"
-      }
+      "cacheVariables": { "STEREON_BUILD_TESTS": "ON" }
+    },
+    {
+      "name": "gcc16-base",
+      "hidden": true,
+      "inherits": "base",
+      "cacheVariables": { "CMAKE_CXX_COMPILER": "g++" }
     },
     {
       "name": "gcc16-debug",
@@ -75,6 +78,31 @@
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
     },
     {
+      "name": "clang-debug",
+      "displayName": "Clang debug (non-blocking)",
+      "description": "Clang with libc++; C++26 reflection and contracts only if this Clang supports them (ADR-0016)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_CXX_FLAGS": "-stdlib=libc++",
+        "CMAKE_EXE_LINKER_FLAGS": "-stdlib=libc++",
+        "CMAKE_BUILD_TYPE": "Debug",
+        "STEREON_CHECKED_HANDLES": "ON"
+      }
+    },
+    {
+      "name": "msvc-debug",
+      "displayName": "MSVC debug (non-blocking)",
+      "description": "MSVC from a Visual Studio developer prompt; reflection and contracts not yet available (ADR-0016)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "cl",
+        "CMAKE_BUILD_TYPE": "Debug",
+        "STEREON_CHECKED_HANDLES": "ON"
+      },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+    },
+    {
       "name": "bench",
       "displayName": "GCC 16 benchmarks",
       "description": "Release build with the benchmark suite; contracts ignored so timings measure the algorithms",
@@ -94,6 +122,8 @@
     { "name": "gcc16-asan",    "configurePreset": "gcc16-asan" },
     { "name": "gcc16-tsan",    "configurePreset": "gcc16-tsan" },
     { "name": "gcc16-windows", "configurePreset": "gcc16-windows" },
+    { "name": "clang-debug",   "configurePreset": "clang-debug" },
+    { "name": "msvc-debug",    "configurePreset": "msvc-debug" },
     { "name": "bench",         "configurePreset": "bench" }
   ],
   "testPresets": [
@@ -118,6 +148,8 @@
       "configurePreset": "gcc16-tsan",
       "environment": { "TSAN_OPTIONS": "halt_on_error=1" }
     },
-    { "name": "gcc16-windows", "inherits": "test-base", "configurePreset": "gcc16-windows" }
+    { "name": "gcc16-windows", "inherits": "test-base", "configurePreset": "gcc16-windows" },
+    { "name": "clang-debug",   "inherits": "test-base", "configurePreset": "clang-debug" },
+    { "name": "msvc-debug",    "inherits": "test-base", "configurePreset": "msvc-debug" }
   ]
 }
