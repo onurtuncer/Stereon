@@ -70,3 +70,12 @@ Report the bug upstream and recheck it with each GCC release. A regression test 
    - modules need `-fmodules` (CMake's C++26 module support adds this)
    - add `-lstdc++exp` on MinGW
    - `import std;` needs CMake's experimental `CMAKE_CXX_MODULE_STD` support, or building `bits/std.cc` ourselves
+
+## Other compilers (non-blocking CI, 2026-10-08)
+
+| Compiler | Builds and tests the Phase 0 skeleton | `-freflection` | `-fcontracts` | Notes |
+| --- | --- | --- | --- | --- |
+| Clang 22.1.8 (apt.llvm.org, libc++) | ✅ | Not accepted | Not accepted | Named modules work with CMake 3.31 and `clang-scan-deps-22` |
+| MSVC 19.51 (windows-2025 runner) | ✅ | n/a | n/a | CMake 4.4 does not know C++26 for MSVC, so it builds with `CXX_STANDARD 23`, which selects MSVC's newest standard switch |
+
+Neither can build code that uses reflection or contracts. Both stay non-blocking until they can (ADR-0016).

@@ -37,7 +37,7 @@
 - [x] Linux GCC 16: ASan/UBSan and TSan jobs, blocking
 - [x] Windows GCC 16 via MSYS2 UCRT64 (`msys2/setup-msys2`), blocking
 - [x] macOS GCC 16 (Homebrew), blocking
-- [ ] Clang (latest) and MSVC (latest): non-blocking, reported
+- [x] Clang (latest) and MSVC (latest): non-blocking, reported
 - [ ] Coverage report (gcov/llvm-cov) published per PR
 - [ ] Benchmark job on `main` with results stored for trend tracking
 - [ ] Nightly job: full test suite + determinism check (1, 2, 8, 32 threads) (ADR-0007)
