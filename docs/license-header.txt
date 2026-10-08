@@ -2,11 +2,13 @@ Stereon source file header (MPL-2.0, ADR-0008)
 ==============================================
 
 Every source file starts with the header below, written in the comment
-syntax of its language. Copy the matching block verbatim. The CI licence
-check looks for the SPDX line.
+syntax of its language. Copy the matching block verbatim; use the year
+the file was created. The CI licence check (`reuse lint`) looks for the
+two SPDX lines.
 
 C++ (.cpp, .hpp, .cppm, .ixx), C:
 
+// SPDX-FileCopyrightText: 2026 Onur Tuncer and Stereon contributors
 // SPDX-License-Identifier: MPL-2.0
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
@@ -15,6 +17,7 @@ C++ (.cpp, .hpp, .cppm, .ixx), C:
 
 CMake, Python, shell, YAML, TOML:
 
+# SPDX-FileCopyrightText: 2026 Onur Tuncer and Stereon contributors
 # SPDX-License-Identifier: MPL-2.0
 #
 # This Source Code Form is subject to the terms of the Mozilla Public

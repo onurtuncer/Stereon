@@ -121,6 +121,7 @@ Pull requests with unsigned commits cannot be merged. To sign off commits you ha
 Stereon is licensed under the [Mozilla Public License 2.0](LICENSE). Every source file starts with this header, using the comment syntax of its language. [`docs/license-header.txt`](docs/license-header.txt) has copy-ready versions for C++, CMake, Python and other languages:
 
 ```cpp
+// SPDX-FileCopyrightText: 2026 Onur Tuncer and Stereon contributors
 // SPDX-License-Identifier: MPL-2.0
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
@@ -128,7 +129,7 @@ Stereon is licensed under the [Mozilla Public License 2.0](LICENSE). Every sourc
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ```
 
-A CI check confirms that every source file has the header.
+Files that cannot hold a comment (Markdown, JSON, images) are covered by [`REUSE.toml`](REUSE.toml). `reuse lint` checks that every file is covered, and will run in CI.
 
 ## Review and merging
 
