@@ -19,7 +19,7 @@ Floating-point round-off makes geometric predicates (orientation, point-in-polyg
 
 Adopt option 3.
 
-- `stereon::robust` provides Shewchuk-style adaptive predicates: `orient2d`, `orient3d`, `incircle`, `insphere`, plus expansion arithmetic for custom predicates.
+- `stereon::robust` provides Shewchuk-style adaptive predicates: `Orient2D`, `Orient3D`, `InCircle`, `InSphere`, plus expansion arithmetic for custom predicates.
 - An `Interval` type (outward-rounded, using directed rounding or error-free transformations) serves as the fast filter for curve/surface predicates; ambiguous intervals fall back to higher precision or to subdivision.
 - Every topological decision in `topo/`, `boolean/` and `mesh/` goes through a predicate in `robust/`. Direct sign tests on computed doubles are banned in those libraries (clang-tidy rule).
 - Constructions return a value plus an error bound where one is cheap to compute.

@@ -51,8 +51,22 @@ Stereon is written in C++26 with C++20 modules. These rules come from the ADRs a
 **Language and style**
 
 - Format with the repository's `.clang-format` and keep `.clang-tidy` clean.
-- Types use `PascalCase` (`Shape`, `KernelError`, `BSplineCurve`). Functions, variables and namespaces use `snake_case` (`make_box`, `boolean_cut`, `tolerance_of`).
-- Geometry types are plain aggregates with no base class. Their behaviour lives in free functions found by ADL: `eval`, `deriv`, `domain`, `bounding_box`, and so on ([ADR-0003](docs/adr/0003-geometry-polymorphism.md)).
+- Naming follows the [Hazel engine](https://github.com/TheCherno/Hazel) style ([ADR-0017](docs/adr/0017-naming-conventions.md)):
+
+  | Element | Style | Example |
+  | --- | --- | --- |
+  | Namespaces, modules | PascalCase | `Stereon`, `Stereon.Core` |
+  | Types, concepts, enums, enum values | PascalCase | `KernelError`, `CurveGeometry`, `ErrorCode::ToleranceExceeded` |
+  | Functions and methods | PascalCase; accessors start with `Get` | `MakeBox`, `Orient3D`, `ctx.GetResolution()` |
+  | Public struct fields, constants | PascalCase | `Version::Major`, `LibraryVersion` |
+  | Private and protected members | `m_` + PascalCase | `m_Pages` |
+  | Static members and file-scope statics | `s_` + PascalCase | `s_NextStoreId` |
+  | Local variables, parameters | camelCase | `faceCount`, `tolerance` |
+  | Macros | `STEREON_` + UPPER_SNAKE_CASE | `STEREON_TRY` |
+  | Source files | PascalCase | `Version.cppm`, `VersionTests.cpp` |
+
+  Library folders and CMake targets stay lowercase (`src/core`, `stereon::core`).
+- Geometry types are plain aggregates with no base class. Their behaviour lives in free functions found by ADL: `Eval`, `Deriv`, `Domain`, `BoundingBox`, and so on ([ADR-0003](docs/adr/0003-geometry-polymorphism.md)).
 - Prefer value semantics. Avoid owning raw pointers and `shared_ptr` graphs between topological entities.
 
 **Correctness**
@@ -60,7 +74,7 @@ Stereon is written in C++26 with C++20 modules. These rules come from the ADRs a
 - **No exceptions.** Operations that can fail return `std::expected<T, KernelError>` marked `[[nodiscard]]`. `std::bad_alloc` is the only exception that may propagate ([ADR-0006](docs/adr/0006-error-handling.md)).
 - **Contracts for programming errors.** Preconditions (parameter in domain, non-degenerate input) and key postconditions are written as contracts. A contract violation never becomes a `KernelError` ([ADR-0016](docs/adr/0016-cpp26-adoption-and-contracts.md)).
 - **No invalid results.** An operation returns a shape that passes the validity checker or an error. Returning an invalid shape is a bug.
-- **No hidden epsilons.** Code in `topo/`, `boolean/` and `mesh/` never compares against literal constants. It uses `tolerance_of(entity)` or `ctx.resolution()` ([ADR-0001](docs/adr/0001-tolerance-model.md)).
+- **No hidden epsilons.** Code in `topo/`, `boolean/` and `mesh/` never compares against literal constants. It uses `ToleranceOf(entity)` or `ctx.GetResolution()` ([ADR-0001](docs/adr/0001-tolerance-model.md)).
 - **Predicates go through `robust/`.** Every topological decision in `topo/`, `boolean/` and `mesh/` uses a predicate from `stereon::robust`. Direct sign tests on computed doubles are not allowed there ([ADR-0002](docs/adr/0002-numeric-robustness.md)).
 - **Tolerances grow only explicitly.** Increasing an edge or vertex tolerance happens through a named operation that logs the entity, the old and new values and the reason.
 
@@ -68,7 +82,7 @@ Stereon is written in C++26 with C++20 modules. These rules come from the ADRs a
 
 - **No global mutable state** and no `thread_local` state that can affect results. Caches, schedulers, tolerances and logging live in the `Context` passed to every operation ([ADR-0007](docs/adr/0007-threading-and-determinism.md)).
 - **Determinism.** Results must be bit-identical for any thread count. Merge parallel results in a fixed order keyed by input entity index, never in completion order, and use fixed-order or compensated floating-point reductions. Every parallel algorithm needs a determinism test.
-- **Handles stay typed.** Use `Id<Tag>` handles and their named accessors (`reversed(h)`, `base(h)`). Never convert handles to raw integers or mask bits by hand ([ADR-0004](docs/adr/0004-topology-storage-and-handles.md)).
+- **Handles stay typed.** Use `Id<Tag>` handles and their named accessors (`IsReversed(h)`, `BaseOf(h)`). Never convert handles to raw integers or mask bits by hand ([ADR-0004](docs/adr/0004-topology-storage-and-handles.md)).
 
 **Library layering**
 
@@ -99,7 +113,7 @@ Further rules:
 
 ## Commit conventions
 
-- Subject line: `<library>: <imperative summary>`, at most 72 characters, no trailing period. Examples: `core: add Interval with outward rounding`, `robust: fix orient3d filter bound`, `docs: clarify tolerance ceiling in ADR-0001`.
+- Subject line: `<library>: <imperative summary>`, at most 72 characters, no trailing period. Examples: `core: add Interval with outward rounding`, `robust: fix Orient3D filter bound`, `docs: clarify tolerance ceiling in ADR-0001`.
 - Use `build`, `ci`, `docs` or `tests` as the prefix for changes outside `src/`.
 - After a blank line, the body explains *why* the change is made. Reference issues and ADRs (`Fixes #42`, `See ADR-0004`).
 - Keep each commit buildable. Branch protection on `main` requires a linear history, so rebase rather than merge.

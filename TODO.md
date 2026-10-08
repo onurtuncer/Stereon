@@ -26,7 +26,7 @@
 - [x] `CMakePresets.json`: `gcc16-debug`, `gcc16-release`, `gcc16-observe`, `gcc16-asan`, `gcc16-tsan`, `gcc16-windows`, `bench`
 - [ ] Contract evaluation semantics per preset: enforce (debug), observe (CI corpus), ignore/enforce-boundary (release) (ADR-0016). Debug and observe done; release is provisionally `enforce` until the per-TU split is decided
 - [ ] Dependency fetching (CPM or FetchContent): stdexec, xsimd, Catch2, RapidCheck, Google Benchmark, nanobind
-- [ ] Feature-test-macro wrappers: `stereon::exec` (std::execution ↔ stdexec), `stereon::simd` (std::simd ↔ xsimd)
+- [ ] Feature-test-macro wrappers: `Stereon::Exec` (std::execution ↔ stdexec), `Stereon::Simd` (std::simd ↔ xsimd)
 - [ ] Include-graph check enforcing library layering (fails CI on an upward dependency)
 - [ ] `.clang-format` and `.clang-tidy`, including a rule banning literal epsilon comparisons in `topo/`, `boolean/`, `mesh/` (ADR-0001, ADR-0002)
 - [x] Licence-header check (REUSE or equivalent) (ADR-0008)
@@ -51,7 +51,7 @@
 - [ ] Generational builder handles (index + generation) with free lists (ADR-0004)
 - [ ] `STEREON_CHECKED_HANDLES` mode (on in debug, asan, fuzzing presets): handles carry store ID + generation; every access checks store, bounds and generation (ADR-0004 safeguards)
 - [ ] `static_assert` + CI check that release-build handles are exactly 4 bytes
-- [ ] Named accessors for packed orientation bits (`reversed(h)`, `base(h)`); no manual masking
+- [ ] Named accessors for packed orientation bits (`IsReversed(h)`, `BaseOf(h)`); no manual masking
 - [ ] Paged arena / copy-on-write page container (`shared_ptr<const Page>`, 256 entries) (ADR-0005)
 - [ ] `KernelError`, `ErrorCode`, `std::expected` aliases, `STEREON_TRY` macro (ADR-0006)
 - [ ] `Context`: resolution, tolerance ceiling, scheduler, logger, journal sink (ADR-0001, ADR-0007)
@@ -60,7 +60,7 @@
 
 ## 5. `stereon::robust` (weeks 3–6)
 
-- [ ] Adaptive-precision `orient2d`, `orient3d`, `incircle`, `insphere` (Shewchuk-style)
+- [ ] Adaptive-precision `Orient2D`, `Orient3D`, `InCircle`, `InSphere` (Shewchuk-style)
 - [ ] Expansion arithmetic primitives for custom predicates
 - [ ] Interval-filtered predicate helpers with exact fallback
 - [ ] Adversarial test suite (Shewchuk cases + 10⁶ random near-degenerate cases)
@@ -71,7 +71,7 @@
 - [ ] Concepts `CurveGeometry`, `Curve2dGeometry`, `SurfaceGeometry` (ADR-0003)
 - [ ] Type-erased `Curve`, `Curve2d`, `Surface` with 96-byte small-buffer storage and shared payloads
 - [ ] Two toy types per concept: `Line` + `Circle`, `Plane` + `Cylinder`
-- [ ] `visit_builtin` fast path generated with expansion statements and pack indexing (ADR-0016)
+- [ ] `VisitBuiltin` fast path generated with expansion statements and pack indexing (ADR-0016)
 - [ ] Type-pair dispatch table for binary operations (stub intersection handlers)
 - [ ] Contracts on all evaluator entry points (domain, finiteness)
 - [ ] Reflection-based serialiser prototype for geometry structs (ADR-0012 groundwork)
@@ -82,10 +82,10 @@
 - [ ] SoA stores for vertex, edge, coedge (with radial ring), loop, face, shell, solid, following Golovanov's logical entity model (ADR-0004)
 - [ ] Edge record per ADR-0009: curve kind (`Intersection`, `Exact`, `Boundary`, `Degenerate`), tolerance, exact or cached 3D curve slot; pcurves on coedges on a shared parameter
 - [ ] Cache invalidation of the 3D edge curve when a pcurve changes (stub is enough for Phase 0)
-- [ ] `ShapeBuilder` → `freeze()` → immutable `Shape`, with old→new remap table
-- [ ] Adjacency views: `faces_of(edge)`, `edges_of(vertex)`, loop walks
-- [ ] Minimal validity checks (manifoldness, loop closure, orientation), naming offending entities with `describe()`
-- [ ] `describe(shape, handle)` for every entity kind, used in logs, contract messages and checker reports
+- [ ] `ShapeBuilder` → `Freeze()` → immutable `Shape`, with old→new remap table
+- [ ] Adjacency views: `FacesOf(edge)`, `EdgesOf(vertex)`, loop walks
+- [ ] Minimal validity checks (manifoldness, loop closure, orientation), naming offending entities with `Describe()`
+- [ ] `Describe(shape, handle)` for every entity kind, used in logs, contract messages and checker reports
 - [ ] Debug builds run the validity checker after every public operation (ADR-0004 safeguards)
 - [ ] Build a box (`Exact` edges) and a cylinder (`Exact` + `Boundary`/seam edges) by hand as test bodies
 
@@ -116,7 +116,7 @@
 - [ ] **ADR-0005:** 100 local edits on a 10⁶-face body: memory and copy cost
 - [ ] **ADR-0007:** determinism check across thread counts on the prototype operations
 - [ ] **ADR-0009:** early review of the edge representation, since ADR-0004's edge record depends on it (full acceptance is due before Phase 1 topology work)
-- [ ] Review ADRs 0001–0008, 0015, 0016 and move each to **Accepted** or revise
+- [ ] Review ADRs 0001–0008, 0015–0017 and move each to **Accepted** or revise
 
 ## 11. Documentation (ongoing)
 
@@ -124,7 +124,7 @@
 - [ ] `docs/architecture.md`: library layering diagram and data flow
 - [ ] `docs/contributing-with-ai.md`: how agents are given ADR context and tests
 - [ ] `docs/references.md`: reading list (Piegl & Tiller, Patrikalakis & Maekawa, Stroud, Golovanov, Shewchuk) with the chapters each module relies on
-- [ ] `docs/debugging.md`: checked handles, `describe()`, pretty-printer setup, journals, viewer and `stn-dump`
+- [ ] `docs/debugging.md`: checked handles, `Describe()`, pretty-printer setup, journals, viewer and `stn-dump`
 - [ ] Update the README roadmap status at the end of the phase
 
 ---
@@ -134,11 +134,11 @@
 All of the following must pass in CI before Phase 1 starts:
 
 - [ ] Predicates pass the adversarial suite with zero inconsistent results
-- [ ] Type-erased `Curve` with `visit_builtin` within 10% of direct calls; pure virtual fallback within 2×
+- [ ] Type-erased `Curve` with `VisitBuiltin` within 10% of direct calls; pure virtual fallback within 2×
 - [ ] ADR-0004 prototype: adjacency ≥ 5× faster than OCCT, memory per face < 50% of OCCT
 - [ ] Release-build handles are 4 bytes; seeded-fault suite caught 100% in debug builds
 - [ ] Pretty-printers pass their scripted GDB and LLDB tests
 - [ ] Handle design decided (index throughout, or hybrid) and recorded in ADR-0004
 - [ ] Output identical for 1, 2, 8 and 32 threads
 - [ ] All blocking CI jobs green on Linux, Windows and macOS
-- [ ] ADRs 0001–0008, 0015, 0016 accepted
+- [ ] ADRs 0001–0008, 0015–0017 accepted

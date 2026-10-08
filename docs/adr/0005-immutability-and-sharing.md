@@ -19,7 +19,7 @@ CAD applications need undo, cheap copies of large bodies, and safe concurrent re
 
 Adopt option 3.
 
-- `Shape` is immutable after `freeze()` (ADR-0004). All kernel operations take `const Shape&` and return `std::expected<Shape, KernelError>`.
+- `Shape` is immutable after `Freeze()` (ADR-0004). All kernel operations take `const Shape&` and return `std::expected<Shape, KernelError>`.
 - Storage is paged (256 entries per page); pages are `shared_ptr<const Page>`. Builders copy a page on first write.
 - Geometry pools follow the same scheme; large NURBS payloads are shared immutable buffers.
 - Undo is keeping the previous `Shape` value. No kernel-level undo log exists.

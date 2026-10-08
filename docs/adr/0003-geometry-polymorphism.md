@@ -20,10 +20,10 @@ The kernel handles many curve and surface types (line, circle, ellipse, B-spline
 
 Adopt option 4.
 
-- Geometry types (`Line`, `Circle`, `BSplineCurve`, `Plane`, `Cylinder`, `BSplineSurface`, …) are aggregates with no base class. Behaviour is provided by free functions found by ADL: `eval`, `deriv`, `domain`, `bounding_box`, `project`, `reverse`, `transform`.
+- Geometry types (`Line`, `Circle`, `BSplineCurve`, `Plane`, `Cylinder`, `BSplineSurface`, …) are aggregates with no base class. Behaviour is provided by free functions found by ADL: `Eval`, `Deriv`, `Domain`, `BoundingBox`, `Project`, `Reversed`, `Transformed`.
 - C++ concepts `CurveGeometry`, `Curve2dGeometry` and `SurfaceGeometry` define the required operations. Any type satisfying the concept can be wrapped.
 - `Curve`, `Curve2d` and `Surface` are copyable value types with 96-byte small-buffer storage; larger types (NURBS with many poles) store an immutable shared payload so copies stay cheap.
-- Hot loops call `visit_builtin(g, f)`, which dispatches once over a closed `std::variant`-like table of built-in types (generated with expansion statements and pack indexing, ADR-0016) and falls back to virtual dispatch for user types.
+- Hot loops call `VisitBuiltin(g, f)`, which dispatches once over a closed `std::variant`-like table of built-in types (generated with expansion statements and pack indexing, ADR-0016) and falls back to virtual dispatch for user types.
 - Binary operations (curve–curve, surface–surface intersection) dispatch through a table keyed on type-ID pairs, with analytic special cases registered for known pairs and a generic NURBS fallback.
 
 ## Consequences
@@ -35,4 +35,4 @@ Adopt option 4.
 
 ## Verification
 
-Benchmark a tight evaluation loop (10⁸ calls) on line, circle and cubic B-spline. Pass: the erased `Curve` path is within 10% of direct calls when using `visit_builtin`, and within 2× for the pure virtual fallback.
+Benchmark a tight evaluation loop (10⁸ calls) on line, circle and cubic B-spline. Pass: the erased `Curve` path is within 10% of direct calls when using `VisitBuiltin`, and within 2× for the pure virtual fallback.
