@@ -7,9 +7,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-import stereon.robust;
+import Stereon.Robust;
 
 TEST_CASE("robust re-exports core", "[robust][layering]")
 {
-    STATIC_REQUIRE(stereon::version.major == 0);
+    STATIC_REQUIRE(Stereon::LibraryVersion.Major == 0);
 }
