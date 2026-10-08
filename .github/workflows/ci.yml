@@ -115,6 +115,43 @@ jobs:
       - name: Test
         run: ctest --preset gcc16-debug
 
+  # Coverage: gcovr turns the gcov data into Cobertura XML and Codecov
+  # reports it, including the pull request comment (codecov.yml). Informational,
+  # not a required check. Needs the CODECOV_TOKEN repository secret.
+  coverage:
+    name: Coverage (gcc16-coverage)
+    runs-on: ubuntu-24.04
+    container: gcc:16.2
+    steps:
+      - name: Install CMake, Ninja and gcovr
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends cmake ninja-build python3-venv
+          python3 -m venv /opt/gcovr
+          /opt/gcovr/bin/pip install -q gcovr
+          echo "/opt/gcovr/bin" >> "$GITHUB_PATH"
+      - uses: actions/checkout@v4
+      - name: Trust the workspace for git (Codecov reads the commit from it)
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Configure
+        run: cmake --preset gcc16-coverage
+      - name: Build
+        run: cmake --build --preset gcc16-coverage
+      - name: Test
+        run: ctest --preset gcc16-coverage
+      - name: Collect coverage
+        run: |
+          gcovr --version | head -1
+          gcovr --root . --filter 'src/' --gcov-executable gcov             --exclude-unreachable-branches --exclude-throw-branches             --cobertura coverage.xml --print-summary             build/gcc16-coverage
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+          flags: gcc16
+          disable_search: true
+          fail_ci_if_error: false
+
   # Non-blocking: Clang and MSVC are reported until they support C++26
   # reflection and contracts (ADR-0016). Failures show on the run but do not
   # fail it, and these jobs are not required checks in branch protection.

@@ -13,6 +13,7 @@ include_guard(GLOBAL)
 option(STEREON_BUILD_TESTS "Build the unit and property tests" ON)
 option(STEREON_BUILD_BENCH "Build the benchmark suite" OFF)
 option(STEREON_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
+option(STEREON_COVERAGE "Instrument Stereon libraries and tests for gcov coverage (GCC)" OFF)
 option(STEREON_CHECKED_HANDLES
     "Handles carry store ID and generation; every access is checked (ADR-0004)" OFF)
 
@@ -73,6 +74,15 @@ elseif(STEREON_SANITIZER STREQUAL "thread")
     target_link_options(stereon_options INTERFACE -fsanitize=thread)
 elseif(NOT STEREON_SANITIZER STREQUAL "")
     message(FATAL_ERROR "STEREON_SANITIZER must be empty, 'address' or 'thread'")
+endif()
+
+if(STEREON_COVERAGE)
+    if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        message(FATAL_ERROR "STEREON_COVERAGE requires GCC (gcov)")
+    endif()
+    # Atomic counters keep coverage correct once operations run in parallel.
+    target_compile_options(stereon_options INTERFACE --coverage -fprofile-update=atomic)
+    target_link_options(stereon_options INTERFACE --coverage)
 endif()
 
 if(MINGW AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
