@@ -94,6 +94,6 @@ function(stereon_add_library name)
         PUBLIC FILE_SET CXX_MODULES FILES ${arg_MODULES}
         PRIVATE ${arg_SOURCES})
     target_link_libraries(stereon_${name} PRIVATE stereon_options)
-    target_compile_features(stereon_${name} PUBLIC cxx_std_26)
+    target_compile_features(stereon_${name} PUBLIC cxx_std_${STEREON_CXX_STANDARD})
     set_target_properties(stereon_${name} PROPERTIES EXPORT_NAME ${name})
 endfunction()
