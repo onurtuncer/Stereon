@@ -7,20 +7,20 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-import stereon.core;
+import Stereon.Core;
 
 TEST_CASE("version matches the CMake project version", "[core][version]")
 {
-    STATIC_REQUIRE(stereon::version == stereon::Version{STEREON_EXPECTED_VERSION_MAJOR,
-                                                       STEREON_EXPECTED_VERSION_MINOR,
-                                                       STEREON_EXPECTED_VERSION_PATCH});
+    STATIC_REQUIRE(Stereon::LibraryVersion == Stereon::Version{STEREON_EXPECTED_VERSION_MAJOR,
+                                                              STEREON_EXPECTED_VERSION_MINOR,
+                                                              STEREON_EXPECTED_VERSION_PATCH});
 }
 
 TEST_CASE("checked handles follow the build configuration", "[core][handles]")
 {
 #if defined(STEREON_CHECKED_HANDLES)
-    STATIC_REQUIRE(stereon::checked_handles);
+    STATIC_REQUIRE(Stereon::CheckedHandles);
 #else
-    STATIC_REQUIRE_FALSE(stereon::checked_handles);
+    STATIC_REQUIRE_FALSE(Stereon::CheckedHandles);
 #endif
 }

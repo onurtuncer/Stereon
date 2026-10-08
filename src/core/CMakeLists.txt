@@ -7,8 +7,8 @@
 
 stereon_add_library(core
     MODULES
-        core.cppm
-        version.cppm)
+        Core.cppm
+        Version.cppm)
 
 target_compile_definitions(stereon_core PRIVATE
     STEREON_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}

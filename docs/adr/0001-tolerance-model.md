@@ -24,7 +24,7 @@ Adopt option 3.
 - **Local tolerances.** Every `Edge` and `Vertex` stores a tolerance ≥ resolution. Native construction produces resolution-tight entities. A local tolerance may only grow through an explicit operation (import healing, sewing, boolean fallback) that logs the entity, the old and new value, and the reason.
 - **Containment invariant.** A vertex tolerance sphere contains the ends of all its edges; an edge tolerance tube contains its 3D curve and all its pcurves mapped to 3D. The validity checker (ADR-0004) enforces this.
 - **Ceiling.** Local tolerances above 0.01 mm make an operation fail with `KernelError::ToleranceExceeded` unless the caller raises the ceiling explicitly in the `Context`.
-- **No hidden epsilons.** Topology and boolean code never compare with literal constants; they query `tolerance_of(entity)` or `ctx.resolution()`.
+- **No hidden epsilons.** Topology and boolean code never compare with literal constants; they query `ToleranceOf(entity)` or `ctx.GetResolution()`.
 
 ## Consequences
 

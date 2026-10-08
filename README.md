@@ -37,23 +37,23 @@ Design decisions are recorded as ADRs in [`docs/adr/`](docs/adr/).
 *Target API for v0.6; not yet implemented.*
 
 ```cpp
-import stereon;
-using namespace stereon;
+import Stereon;
+using namespace Stereon;
 
 int main() {
     Context ctx;                                        // no global state
 
-    auto box  = make_box(ctx, {0, 0, 0}, {40, 30, 20});
-    auto hole = make_cylinder(ctx, Axis{{20, 15, -1}, {0, 0, 1}}, 6.0, 22.0);
+    auto box  = MakeBox(ctx, {0, 0, 0}, {40, 30, 20});
+    auto hole = MakeCylinder(ctx, Axis{{20, 15, -1}, {0, 0, 1}}, 6.0, 22.0);
 
-    std::expected<Shape, KernelError> part = boolean_cut(ctx, *box, *hole);
+    std::expected<Shape, KernelError> part = BooleanCut(ctx, *box, *hole);
     if (!part) {
-        std::println(stderr, "cut failed: {}", part.error().message());
+        std::println(stderr, "cut failed: {}", part.error().GetMessage());
         return 1;
     }
 
-    std::println("volume = {:.3f} mm^3", mass_properties(*part).volume);
-    write_step(*part, "bracket.step");
+    std::println("volume = {:.3f} mm^3", ComputeMassProperties(*part).Volume);
+    WriteStep(*part, "bracket.step");
 }
 ```
 

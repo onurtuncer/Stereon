@@ -7,6 +7,6 @@
 
 stereon_add_library(robust
     MODULES
-        robust.cppm)
+        Robust.cppm)
 
 target_link_libraries(stereon_robust PUBLIC stereon::core)

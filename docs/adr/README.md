@@ -30,3 +30,4 @@ This directory records Stereon's significant design decisions. Each ADR states t
 | [0014](0014-mesh-generation-boundary.md) | Mesh generation boundary | 5 | Proposed |
 | [0015](0015-ai-contribution-policy.md) | AI contribution policy | 0 | Proposed |
 | [0016](0016-cpp26-adoption-and-contracts.md) | C++26 adoption and contracts policy | 0 | Proposed |
+| [0017](0017-naming-conventions.md) | Naming conventions (Hazel style) | 0 | Proposed |

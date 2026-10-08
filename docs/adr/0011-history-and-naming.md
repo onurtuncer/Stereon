@@ -20,7 +20,7 @@ Applications built on a kernel need to know what happened to each entity during 
 Adopt option 2 now, designed so option 3 can be built on it later.
 
 - Every operation returns, alongside the result, a `History` that maps each input entity to output entities with a tag: `Generated`, `Modified`, `Deleted` or `Unchanged`.
-- The remap table produced by `ShapeBuilder::freeze()` (ADR-0004) is composed into the history automatically, so algorithms only record their own semantic relations.
+- The remap table produced by `ShapeBuilder::Freeze()` (ADR-0004) is composed into the history automatically, so algorithms only record their own semantic relations.
 - Generated entities record their generators (e.g. a fillet face records the edge it replaced and the two faces it joins).
 - Sparse attributes (ADR-0004) are propagated through history by default: `Modified` and `Unchanged` entities keep their attributes.
 - A persistent-ID attribute slot is reserved but not interpreted by the kernel in v1.0.
