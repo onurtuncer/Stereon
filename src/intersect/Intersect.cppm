@@ -5,7 +5,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-/// Stereon.Core: math types, intervals, boxes, handles, arenas and errors.
-export module Stereon.Core;
+/// Stereon.Intersect: curve-curve, curve-surface and surface-surface intersection (ADR-0010).
+/// Empty until Phase 1.
+export module Stereon.Intersect;
 
-export import :Version;
+export import Stereon.Surface;

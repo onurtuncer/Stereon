@@ -12,15 +12,11 @@ import Stereon.Core;
 TEST_CASE("version matches the CMake project version", "[core][version]")
 {
     STATIC_REQUIRE(Stereon::LibraryVersion == Stereon::Version{STEREON_EXPECTED_VERSION_MAJOR,
-                                                              STEREON_EXPECTED_VERSION_MINOR,
-                                                              STEREON_EXPECTED_VERSION_PATCH});
+                                                               STEREON_EXPECTED_VERSION_MINOR,
+                                                               STEREON_EXPECTED_VERSION_PATCH});
 }
 
 TEST_CASE("checked handles follow the build configuration", "[core][handles]")
 {
-#if defined(STEREON_CHECKED_HANDLES)
-    STATIC_REQUIRE(Stereon::CheckedHandles);
-#else
-    STATIC_REQUIRE_FALSE(Stereon::CheckedHandles);
-#endif
+    STATIC_REQUIRE(Stereon::CheckedHandles == (STEREON_CHECKED_HANDLES != 0));
 }

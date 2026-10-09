@@ -12,10 +12,14 @@ include_guard(GLOBAL)
 
 option(STEREON_BUILD_TESTS "Build the unit and property tests" ON)
 option(STEREON_BUILD_BENCH "Build the benchmark suite" OFF)
+option(STEREON_BUILD_PYTHON "Build the Python bindings (nanobind)" OFF)
 option(STEREON_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 option(STEREON_COVERAGE "Instrument Stereon libraries and tests for gcov coverage (GCC)" OFF)
 option(STEREON_CHECKED_HANDLES
     "Handles carry store ID and generation; every access is checked (ADR-0004)" OFF)
+
+option(STEREON_HOT_CONTRACTS
+    "Compile hot-path contracts (STEREON_HOT_PRE/POST/ASSERT); release builds turn them off (ADR-0016)" ON)
 
 set(STEREON_CONTRACT_SEMANTIC "enforce" CACHE STRING
     "Contract evaluation semantic (ADR-0016): ignore, observe, enforce or quick_enforce")
@@ -49,8 +53,11 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 if(MSVC)
+    # C4324 ("structure was padded due to alignment specifier") is
+    # informational; stdexec triggers it in templates instantiated in Stereon
+    # modules, where /external:W0 does not reach.
     target_compile_options(stereon_options INTERFACE
-        /W4 /permissive- /utf-8 /Zc:__cplusplus /Zc:preprocessor
+        /W4 /permissive- /utf-8 /Zc:__cplusplus /Zc:preprocessor /wd4324
         $<$<BOOL:${STEREON_WARNINGS_AS_ERRORS}>:/WX>)
 else()
     target_compile_options(stereon_options INTERFACE
@@ -91,19 +98,62 @@ if(MINGW AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_link_libraries(stereon_options INTERFACE stdc++exp)
 endif()
 
-# stereon_add_library(<name> MODULES <files...>)
+# stereon_add_library(<name> MODULES <files...> [SOURCES <files...>] [DEPENDS <libs...>])
 #
-# Creates stereon_<name> with alias stereon::<name>. Module interface units
-# go in a CXX_MODULES file set; private dependencies on other Stereon
-# libraries are added by the caller with target_link_libraries.
+# Creates stereon_<name> with alias stereon::<name>.
+#
+# - MODULES are the module interface units (primary interface and partitions)
+#   and go in a public CXX_MODULES file set.
+# - SOURCES are module implementation units and other private sources.
+# - DEPENDS names lower Stereon libraries, without the stereon:: prefix. They
+#   are linked PUBLIC because a module interface may re-export them. The order
+#   in src/CMakeLists.txt is the layering; tools/check_layering.py rejects any
+#   upward dependency.
+#
+# Include visibility: src/<name>/include/ is the only public include
+# directory (macro headers, since modules cannot export macros). Everything
+# else under src/<name>/ is private to the library.
 function(stereon_add_library name)
-    cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "MODULES;SOURCES")
+    cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "MODULES;SOURCES;DEPENDS")
+    if(arg_UNPARSED_ARGUMENTS)
+        message(FATAL_ERROR "stereon_add_library(${name}): unknown arguments ${arg_UNPARSED_ARGUMENTS}")
+    endif()
+    if(NOT arg_MODULES)
+        message(FATAL_ERROR "stereon_add_library(${name}): at least one module interface is required")
+    endif()
+
     add_library(stereon_${name})
     add_library(stereon::${name} ALIAS stereon_${name})
     target_sources(stereon_${name}
         PUBLIC FILE_SET CXX_MODULES FILES ${arg_MODULES}
         PRIVATE ${arg_SOURCES})
+
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include")
+        target_include_directories(stereon_${name}
+            PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>")
+    endif()
+    target_include_directories(stereon_${name} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+
+    foreach(dep IN LISTS arg_DEPENDS)
+        target_link_libraries(stereon_${name} PUBLIC stereon::${dep})
+    endforeach()
     target_link_libraries(stereon_${name} PRIVATE stereon_options)
     target_compile_features(stereon_${name} PUBLIC cxx_std_${STEREON_CXX_STANDARD})
     set_target_properties(stereon_${name} PROPERTIES EXPORT_NAME ${name})
+endfunction()
+
+# stereon_exec_sources(<files...>)
+#
+# Marks source files that include <Stereon/Core/Exec.hpp>. They are excluded
+# from module scanning, so CMake does not compile them with -fmodules: GCC 16.2
+# crashes on stdexec under that flag. Such files cannot import modules. Call it
+# in the directory that adds the files to their target.
+#
+# GCC's -Wnull-dereference is also turned off for them: it fires in stdexec's
+# inlined intrusive queue after optimisation, where -isystem does not reach.
+function(stereon_exec_sources)
+    set_source_files_properties(${ARGN} PROPERTIES CXX_SCAN_FOR_MODULES OFF)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        set_property(SOURCE ${ARGN} APPEND PROPERTY COMPILE_OPTIONS -Wno-null-dereference)
+    endif()
 endfunction()

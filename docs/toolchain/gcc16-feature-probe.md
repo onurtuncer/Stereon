@@ -53,18 +53,22 @@ On Windows, a terminating contract violation exits the process with code 127 and
 | Bug | Trigger | Workaround |
 | --- | --- | --- |
 | Internal compiler error (segfault) in GCC 16.2.0 | A defaulted **hidden-friend** comparison (`friend constexpr bool operator==(const T&, const T&) = default;`) in a type exported from a module, used in a translation unit that imports the module. Happens in plain modules and partitions, with or without `-freflection` and contracts. | Declare defaulted comparisons as members: `constexpr bool operator==(const T&) const = default;`. Defaulted member comparisons work. |
+| Internal compiler error (segfault) in GCC 16.2.0 on stdexec | Any translation unit compiled with `-fmodules` that includes stdexec, even with no module code: `#include <stdexec/__detail/__query.hpp>` alone reproduces it (`__query.hpp:177`, `forwarding_query_t::operator()`). Seen with stdexec `nvhpc-25.09`, `nvhpc-26.05` and `main` (2026-10-09). CMake adds `-fmodules` to every source it scans for modules. Plain `-std=c++26` builds of stdexec work. A stdexec header unit builds but cannot be used (`no class template named '__f' in 'struct stdexec::just_t'`). | `Stereon::Exec` is a header, `<Stereon/Core/Exec.hpp>`, not a module partition. Files that include it are excluded from module scanning with `stereon_exec_sources()`, so they cannot import modules. |
+| Internal compiler error C1001 in MSVC 19.50 on stdexec | stdexec senders used through a named module that includes stdexec in its global module fragment. stdexec included directly builds and runs. | Same as for GCC. |
 
-Report the bug upstream and recheck it with each GCC release. A regression test should guard the workaround once the fix lands.
+Report the bugs upstream and recheck them with each compiler release. A regression test should guard each workaround once the fix lands.
+
+**Consequence for ADR-0007.** Until GCC's stdexec crash is fixed, code that builds sender graphs cannot live in module units. It has to sit in non-module source files behind plain function declarations, which module code can call through an ordinary header. This should be settled before Phase 1 algorithms are written.
 
 ## Findings for the ADR-0016 review
 
 1. **Reflection is no longer partial.** GCC 16.2 reports the P2996 macros at `202603L`, and the serialiser probe walks struct members end to end. The ADR's Context section ("GCC 16 is the only compiler with reflection (partial)") can be updated.
-2. **The release split in ADR-0016 needs a mechanism.** The evaluation semantic is chosen per translation unit, not per contract, so "ignore for hot-path checks, enforce for cheap API-boundary checks" cannot be expressed with one global flag. Options to decide between:
+2. **The release split in ADR-0016 needs a mechanism.** *Resolved: option 3, contract macros (see ADR-0016, "Mechanism for the release split").* The evaluation semantic is chosen per translation unit, not per contract, so "ignore for hot-path checks, enforce for cheap API-boundary checks" cannot be expressed with one global flag. Options to decide between:
    - Compile public API-boundary translation units with `enforce` or `quick_enforce` and internal ones with `ignore`. This is the mixed mode that P2900 allows.
    - Use `-fcontracts-client-check=pre`, so callers check preconditions while definitions are built with `-fcontracts-definition-check=off`.
    - Mark hot-path checks with a project macro that expands to nothing in release builds.
 3. **Use `quick_enforce` for release boundary checks.** It is the cheapest terminating semantic, but it skips the violation handler, so release builds will not log diagnostics.
-4. **Polyfills still needed:** stdexec for `std::execution`, xsimd for `std::simd`. The feature-test-macro wrappers (`Stereon::Exec`, `Stereon::Simd`) should switch on `__cpp_lib_senders` and `__cpp_lib_simd`.
+4. **Polyfills still needed:** stdexec for `std::execution`, xsimd for `std::simd`. The feature-test-macro wrappers (`Stereon::Exec`, `Stereon::Simd`) should switch on `__cpp_lib_senders` and `__cpp_lib_simd`. *Done: `Stereon::Simd` is the `Stereon.Core:Simd` partition; `Stereon::Exec` is a header because of the stdexec crashes above.*
 5. **Build system notes for CMake:**
    - add `-freflection` globally
    - modules need `-fmodules` (CMake's C++26 module support adds this)

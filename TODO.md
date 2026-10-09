@@ -22,13 +22,13 @@
 ## 2. Build system and toolchain (weeks 1–2)
 
 - [x] Top-level `CMakeLists.txt` (CMake ≥ 3.30, Ninja), C++26, modules enabled
-- [ ] One CMake target per library (`stereon::core`, `stereon::robust`, …) with private include visibility
+- [x] One CMake target per library (`stereon::core`, `stereon::robust`, …) with private include visibility. All eleven libraries exist; only `src/<library>/include/` is public
 - [x] `CMakePresets.json`: `gcc16-debug`, `gcc16-release`, `gcc16-observe`, `gcc16-asan`, `gcc16-tsan`, `gcc16-windows`, `bench`
-- [ ] Contract evaluation semantics per preset: enforce (debug), observe (CI corpus), ignore/enforce-boundary (release) (ADR-0016). Debug and observe done; release is provisionally `enforce` until the per-TU split is decided
-- [ ] Dependency fetching (CPM or FetchContent): stdexec, xsimd, Catch2, RapidCheck, Google Benchmark, nanobind
-- [ ] Feature-test-macro wrappers: `Stereon::Exec` (std::execution ↔ stdexec), `Stereon::Simd` (std::simd ↔ xsimd)
-- [ ] Include-graph check enforcing library layering (fails CI on an upward dependency)
-- [ ] `.clang-format` and `.clang-tidy`, including a rule banning literal epsilon comparisons in `topo/`, `boolean/`, `mesh/` (ADR-0001, ADR-0002)
+- [x] Contract evaluation semantics per preset: enforce (debug), observe (CI corpus), ignore/enforce-boundary (release) (ADR-0016). Release enforces `STEREON_PRE`/`POST`/`ASSERT` and compiles out the `STEREON_HOT_*` contracts
+- [x] Dependency fetching (CPM or FetchContent): stdexec, xsimd, Catch2, RapidCheck, Google Benchmark, nanobind
+- [x] Feature-test-macro wrappers: `Stereon::Exec` (std::execution ↔ stdexec), `Stereon::Simd` (std::simd ↔ xsimd). `Exec` is a header, not a module, because GCC 16.2 and MSVC crash on stdexec in modules
+- [x] Include-graph check enforcing library layering (fails CI on an upward dependency): `tools/check_layering.py`
+- [x] `.clang-format` and `.clang-tidy`, including a rule banning literal epsilon comparisons in `topo/`, `boolean/`, `mesh/` (ADR-0001, ADR-0002). The ban is `tools/check_epsilon.py`, since clang-tidy cannot parse the GCC build; CI checks formatting with clang-format 22.1.8
 - [x] Licence-header check (REUSE or equivalent) (ADR-0008)
 
 ## 3. Continuous integration (week 2)

@@ -1,9 +1,11 @@
 # SPDX-FileCopyrightText: 2026 Onur Tuncer and Stereon contributors
 # SPDX-License-Identifier: MPL-2.0
 #
-# Baseline checks for all of Stereon. Still to come (TODO §2):
-# a custom check banning literal epsilon comparisons and raw sign tests on
-# computed doubles in topo/, boolean/ and mesh/ (ADR-0001, ADR-0002).
+# Baseline checks for all of Stereon. The ban on literal epsilon comparisons
+# and raw sign tests on computed doubles in topo/, boolean/ and mesh/
+# (ADR-0001, ADR-0002) is enforced by tools/check_epsilon.py instead of a
+# clang-tidy check: clang-tidy cannot parse the GCC module and reflection
+# flags the build uses (ADR-0016).
 ---
 Checks: >
   -*,

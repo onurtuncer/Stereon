@@ -3,7 +3,8 @@
 #
 # Blocking CI on the reference compiler, GCC 16 (ADR-0016), plus the
 # REUSE licence check (ADR-0008). Job names are stable: branch protection
-# refers to them.
+# refers to them. The lint, Python bindings and benchmark build jobs are not
+# required checks until they are added to branch protection.
 
 name: CI
 
@@ -204,3 +205,62 @@ jobs:
       - uses: actions/checkout@v4
       - name: reuse lint
         run: pipx run reuse lint
+
+  # Source checks: formatting, library layering and the epsilon ban in
+  # topo/, boolean/ and mesh/ (ADR-0001, ADR-0002). clang-format is pinned so
+  # every contributor formats the same way.
+  lint:
+    name: Lint (format, layering, epsilon)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install clang-format
+        run: pip install clang-format==22.1.8
+      - name: clang-format
+        run: |
+          clang-format --version
+          git ls-files -z -- '*.cpp' '*.cppm' '*.hpp' '*.h' | xargs -0 clang-format --dry-run --Werror
+      - name: Library layering
+        run: python tools/check_layering.py
+      - name: Epsilon ban (self-test, then src/)
+        run: |
+          python tools/check_epsilon.py --self-test
+          python tools/check_epsilon.py
+
+  python:
+    name: Python bindings (GCC 16, gcc16-debug)
+    runs-on: ubuntu-24.04
+    container: gcc:16.2
+    steps:
+      - name: Install CMake, Ninja and Python headers
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends cmake ninja-build python3-dev
+          python3 --version
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake --preset gcc16-debug -DSTEREON_BUILD_PYTHON=ON -DSTEREON_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build --preset gcc16-debug
+      - name: Test (includes importing the module)
+        run: ctest --preset gcc16-debug
+
+  bench:
+    name: Benchmarks build (bench)
+    runs-on: ubuntu-24.04
+    container: gcc:16.2
+    steps:
+      - name: Install CMake and Ninja
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends cmake ninja-build
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake --preset bench -DSTEREON_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build --preset bench
+      - name: Smoke run
+        run: ./build/bench/bench/stereon_bench --benchmark_min_time=0.01s

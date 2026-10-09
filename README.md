@@ -65,7 +65,7 @@ int main() {
 - CMake 3.30+ and Ninja
 - Python 3.11+ (optional, for bindings and test tooling)
 
-Third-party dependencies are fetched by CMake: [stdexec](https://github.com/NVIDIA/stdexec) (until the standard library ships `std::execution`), [xsimd](https://github.com/xtensor-stack/xsimd) (fallback for `std::simd`), Catch2, RapidCheck, Google Benchmark and nanobind.
+Third-party dependencies are fetched by CMake at pinned versions (see [`cmake/StereonDependencies.cmake`](cmake/StereonDependencies.cmake)): [stdexec](https://github.com/NVIDIA/stdexec) (until the standard library ships `std::execution`) and [xsimd](https://github.com/xtensor-stack/xsimd) (until it ships `std::simd`) always; Catch2 and RapidCheck with the tests; Google Benchmark with `STEREON_BUILD_BENCH`; nanobind with `STEREON_BUILD_PYTHON`.
 
 ### Build and test
 
@@ -77,7 +77,9 @@ cmake --build --preset gcc16-release
 ctest --preset gcc16-release
 ```
 
-Other presets: `gcc16-debug` (contracts enforced, checked handles), `gcc16-observe` (contracts logged, for corpus runs), `gcc16-asan` and `gcc16-tsan` (Linux and macOS), `gcc16-windows` (static GCC runtime) and `bench`.
+Other presets: `gcc16-debug` (contracts enforced, checked handles), `gcc16-observe` (contracts logged, for corpus runs), `gcc16-asan` and `gcc16-tsan` (Linux and macOS), `gcc16-windows` (static GCC runtime) and `bench`. Release presets keep API-boundary contracts and compile out hot-path ones (ADR-0016).
+
+Add `-DSTEREON_BUILD_PYTHON=ON` to any preset to build the Python module (`import stereon`).
 
 On Windows, build from an MSYS2 UCRT64 shell with `mingw-w64-ucrt-x86_64-gcc`, `-cmake` and `-ninja` installed.
 
@@ -102,6 +104,7 @@ stereon/
 ├── tests/           # unit, property-based, fuzz and regression tests
 ├── corpus/          # geometry test corpus (regression cases never deleted)
 ├── bench/           # benchmark suite
+├── tools/           # source checks run by CI (layering, epsilon ban)
 └── docs/
     └── adr/         # architecture decision records
 ```

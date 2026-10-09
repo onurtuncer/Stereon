@@ -25,11 +25,10 @@ inline constexpr Version LibraryVersion{STEREON_VERSION_MAJOR, STEREON_VERSION_M
                                         STEREON_VERSION_PATCH};
 
 /// True when the library was built with checked handles (ADR-0004).
-inline constexpr bool CheckedHandles =
-#if defined(STEREON_CHECKED_HANDLES)
-    true;
-#else
-    false;
-#endif
+inline constexpr bool CheckedHandles = STEREON_CHECKED_HANDLES != 0;
+
+/// True when hot-path contracts are compiled in (ADR-0016). Release builds
+/// keep only boundary contracts.
+inline constexpr bool HotContracts = STEREON_HOT_CONTRACTS != 0;
 
 } // namespace Stereon
