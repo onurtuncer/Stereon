@@ -158,3 +158,23 @@ If you use Stereon in academic work, please cite the repository until a paper is
 ## Acknowledgements
 
 Stereon builds on ideas from decades of solid modeling research, in particular *The NURBS Book* (Piegl & Tiller), *Shape Interrogation for Computer Aided Design and Manufacturing* (Patrikalakis & Maekawa), *Boundary Representation Modelling Techniques* (Stroud), and Shewchuk's robust geometric predicates.
+
+
+---
+
+## Community
+
+- **Bug Tracker**: [GitHub Issues](https://github.com/onurtuncer/Stereon/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/onurtuncer/Stereon/discussions/)
+
+---
+
+## Author
+
+**Prof. Dr. Onur Tuncer**  
+Aerospace Engineer, Researcher & C++ Systems Developer  
+Istanbul Technical University · [onur.tuncer@itu.edu.tr](mailto:onur.tuncer@itu.edu.tr)
+
+<p align="left">
+  <img src="assets/itu_logo.png" width="180" alt="Istanbul Technical University"/>
+</p>

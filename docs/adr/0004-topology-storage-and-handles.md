@@ -1,7 +1,7 @@
 # ADR-0004: Topology storage and handles
 
 - **Status:** Proposed
-- **Date:** 2026-09-29
+- **Date:** 2026-10-08
 - **Owner:** Onur Tuncer
 - **Phase:** 0
 
@@ -11,9 +11,31 @@ Booleans constantly ask adjacency questions ("which faces share this edge?", "wh
 
 This ADR separates the **logical model** (which entities exist and how they relate) from the **physical storage** (how they sit in memory). The logical model follows Golovanov (*Geometric Modeling: The Mathematics of Shapes*, the design basis of the C3D kernel): solid → shell → face → loop → oriented edge (coedge) → edge → vertex, with explicit orientation at each level and edges defined by the surfaces they join (ADR-0009). The physical storage below is Stereon's own; C3D's pointer-linked, reference-counted objects are not used, and no C3D code or API is copied.
 
+### Prior art: OpenCASCADE `BRepGraph`
+
+As of OCCT master (August 2026), OpenCASCADE contains `BRepGraph` (`src/ModelingData/TKBRep/BRepGraph`, backed by `BRepGraphInc`), an index-based incidence-table representation of B-rep topology. It independently arrives at much of this ADR:
+
+- per-kind entity tables with typed 32-bit IDs (`BRepGraph_NodeId::Typed<Kind>`, cross-kind conversion deleted);
+- a `CoEdge` entity owning the pcurve of each edge–face use (half-edge pattern);
+- generation counters, soft removal, compaction, per-kind UIDs, a history layer, a validation pass, fuzz tests and a parallel policy;
+- assembly tables (`Product`, `Occurrence`) separate from part topology.
+
+It differs from Stereon in ways that matter for this decision:
+
+| | OCCT `BRepGraph` | Stereon |
+| --- | --- | --- |
+| Role | An additional layer, populated from and reconstructed to `TopoDS`; the boolean and fillet toolkits (`TKBO`, `TKFillet`) do not use it in the inspected snapshot | The only topology store; every algorithm works on it natively |
+| Mutability | A mutable graph with an editor, version stamps and cache invalidation | Mutable `ShapeBuilder`, then an immutable frozen `Shape` with copy-on-write pages (ADR-0005) |
+| Geometry | Representation tables holding mutable, reference-counted `Geom_*` handles | Immutable type-erased geometry values in pools (ADR-0003) |
+| Edge curves | Independent 3D curve plus pcurves, consistency via SameParameter/SameRange semantics | Edges defined by their two surfaces and pcurves on a shared parameter; 3D curve is a cache (ADR-0009) |
+| Placement | `LocalLocation` on child and occurrence references | No transforms inside a body; placement only in the assembly layer |
+| Non-manifold | Edge→coedge relation lists | Radial coedge rings |
+
+**Implications.** `BRepGraph` confirms the direction of this ADR, so the storage layout alone is not a differentiator; Stereon's case rests on native use throughout, immutability with determinism, the edge model and the tolerance discipline. Its relation tables, history layer, deduplication, validation and fuzz tests are worth studying. Its tables also offer a convenient bridge for the OCCT differential-testing harness. OCCT is LGPL-2.1: its design is studied for ideas only, and no OCCT code is copied into Stereon (ADR-0008). If OCCT moves its core algorithms onto `BRepGraph`, revisit Stereon's positioning in the roadmap.
+
 ## Options
 
-1. **Pointer graph of reference-counted objects** (OCCT `TopoDS_TShape`). Familiar; poor cache locality, atomic reference-count contention, identity by memory address, hard to serialise.
+1. **Pointer graph of reference-counted objects** (OCCT `TopoDS_TShape`, C3D). Familiar; poor cache locality, atomic reference-count contention, identity by memory address, hard to serialise.
 2. **Structure-of-arrays per entity type with typed index handles.** Cache-friendly, trivially serialisable, cheap to copy, thread-safe when frozen; raw indices are opaque in a debugger.
 3. **ECS-style (entities plus optional component tables).** Arbitrary attributes; topology traversal becomes a chain of table lookups.
 
