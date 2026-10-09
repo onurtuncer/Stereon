@@ -31,6 +31,14 @@ Use `gcc16-debug` while developing. It enforces contracts, enables checked handl
 
 On Windows, build in an MSYS2 UCRT64 shell with `mingw-w64-ucrt-x86_64-gcc`.
 
+CI also runs these source checks. `ctest` runs the last two whenever Python is installed:
+
+```bash
+git ls-files -z -- '*.cpp' '*.cppm' '*.hpp' '*.h' | xargs -0 clang-format --dry-run --Werror   # pip install clang-format==22.1.8
+python tools/check_layering.py
+python tools/check_epsilon.py
+```
+
 ## What a pull request needs
 
 - [ ] A test that fails without the change and passes with it.
@@ -50,7 +58,7 @@ Stereon is written in C++26 with C++20 modules. These rules come from the ADRs a
 
 **Language and style**
 
-- Format with the repository's `.clang-format` and keep `.clang-tidy` clean.
+- Format with the repository's `.clang-format`, using clang-format 22.1.8 as CI does, and keep `.clang-tidy` clean.
 - Naming follows the [Hazel engine](https://github.com/TheCherno/Hazel) style ([ADR-0017](docs/adr/0017-naming-conventions.md)):
 
   | Element | Style | Example |
@@ -72,7 +80,8 @@ Stereon is written in C++26 with C++20 modules. These rules come from the ADRs a
 **Correctness**
 
 - **No exceptions.** Operations that can fail return `std::expected<T, KernelError>` marked `[[nodiscard]]`. `std::bad_alloc` is the only exception that may propagate ([ADR-0006](docs/adr/0006-error-handling.md)).
-- **Contracts for programming errors.** Preconditions (parameter in domain, non-degenerate input) and key postconditions are written as contracts. A contract violation never becomes a `KernelError` ([ADR-0016](docs/adr/0016-cpp26-adoption-and-contracts.md)).
+- **Contracts for programming errors.** Preconditions (parameter in domain, non-degenerate input) and key postconditions are written as contracts. A contract violation never becomes a `KernelError` ([ADR-0016](docs/adr/0016-cpp26-adoption-and-contracts.md)). Write them with the macros from `<Stereon/Core/Contracts.hpp>`: `STEREON_PRE`, `STEREON_POST` and `STEREON_ASSERT` for cheap checks on public entry points, and `STEREON_HOT_PRE`, `STEREON_HOT_POST` and `STEREON_HOT_ASSERT` for checks inside hot loops and evaluators. Release builds compile out the hot ones.
+- **Standard-library polyfills through wrappers.** Use `Stereon::Simd` (from `import Stereon.Core;`) and `Stereon::Exec` (from `<Stereon/Core/Exec.hpp>`), never `xsimd::`, `stdexec::`, `std::simd` or `std::execution` directly. A file that includes `Exec.hpp` must be listed with `stereon_exec_sources()` in its CMakeLists and cannot import modules. GCC 16.2 and MSVC crash on stdexec otherwise ([gcc16-feature-probe.md](docs/toolchain/gcc16-feature-probe.md#known-compiler-bugs)).
 - **No invalid results.** An operation returns a shape that passes the validity checker or an error. Returning an invalid shape is a bug.
 - **No hidden epsilons.** Code in `topo/`, `boolean/` and `mesh/` never compares against literal constants. It uses `ToleranceOf(entity)` or `ctx.GetResolution()` ([ADR-0001](docs/adr/0001-tolerance-model.md)).
 - **Predicates go through `robust/`.** Every topological decision in `topo/`, `boolean/` and `mesh/` uses a predicate from `stereon::robust`. Direct sign tests on computed doubles are not allowed there ([ADR-0002](docs/adr/0002-numeric-robustness.md)).
@@ -86,7 +95,7 @@ Stereon is written in C++26 with C++20 modules. These rules come from the ADRs a
 
 **Library layering**
 
-Libraries depend only on libraries below them: `core` → `robust` → `curve` / `surface` → `intersect` → `topo` → `build` → `boolean` → `blend`, with `mesh` and `io` on top. CI fails on an upward dependency.
+Libraries depend only on libraries below them: `core` → `robust` → `curve` → `surface` → `intersect` → `topo` → `build` → `boolean` → `blend` → `mesh` → `io`. The order of `add_subdirectory()` calls in [`src/CMakeLists.txt`](src/CMakeLists.txt) is the rule, and `tools/check_layering.py` fails CI on an upward module import, header include or CMake link. Each library's public headers live in `src/<library>/include/`. Everything else in the library folder is private.
 
 ## Dependencies
 

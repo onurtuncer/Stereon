@@ -26,6 +26,7 @@ Adopt option 3.
   - `debug` and fuzzing: **enforce** (terminate with diagnostics);
   - corpus and CI runs: **observe** (log and continue, then fail the run);
   - `release`: **ignore** for hot-path checks, **enforce** for cheap API-boundary checks.
+- **Mechanism for the release split.** The evaluation semantic is chosen per translation unit, not per contract, so one flag cannot ignore some contracts and enforce others. Contracts are therefore written with macros from `<Stereon/Core/Contracts.hpp>`. `STEREON_PRE`, `STEREON_POST` and `STEREON_ASSERT` mark boundary checks and are always compiled. `STEREON_HOT_PRE`, `STEREON_HOT_POST` and `STEREON_HOT_ASSERT` mark hot-path checks and are compiled only when the CMake option `STEREON_HOT_CONTRACTS` is on. Release presets turn it off and keep the `enforce` semantic, so boundary violations still reach the violation handler and are logged. The macros expand to nothing on compilers without P2900 contracts, which keeps Clang and MSVC building.
 - Contract violations are programming errors and never become `KernelError`s (ADR-0006).
 
 ## Consequences
@@ -36,4 +37,4 @@ Adopt option 3.
 
 ## Verification
 
-CI confirms the GCC build with contracts enforced passes all tests; feature-test macros correctly select standard vs polyfill implementations; the contract-observe corpus run reports zero violations before each release.
+CI confirms the GCC build with contracts enforced passes all tests; a test confirms `Stereon::HotContracts` matches the build configuration; feature-test macros correctly select standard vs polyfill implementations; the contract-observe corpus run reports zero violations before each release.

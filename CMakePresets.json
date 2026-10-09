@@ -29,11 +29,12 @@
     {
       "name": "gcc16-release",
       "displayName": "GCC 16 release",
-      "description": "Optimised build. Contract semantic is provisional until the ADR-0016 hot-path/boundary split is decided",
+      "description": "Optimised build: boundary contracts enforced, hot-path contracts compiled out (ADR-0016)",
       "inherits": "gcc16-base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "STEREON_CONTRACT_SEMANTIC": "enforce",
+        "STEREON_HOT_CONTRACTS": "OFF",
         "STEREON_CHECKED_HANDLES": "OFF"
       }
     },
@@ -117,6 +118,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "STEREON_CONTRACT_SEMANTIC": "ignore",
+        "STEREON_HOT_CONTRACTS": "OFF",
         "STEREON_BUILD_TESTS": "OFF",
         "STEREON_BUILD_BENCH": "ON"
       }

@@ -43,3 +43,11 @@ if(STEREON_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
+
+if(STEREON_BUILD_BENCH)
+    add_subdirectory(bench)
+endif()
+
+if(STEREON_BUILD_PYTHON)
+    add_subdirectory(python)
+endif()
