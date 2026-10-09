@@ -38,7 +38,7 @@
 - [x] Windows GCC 16 via MSYS2 UCRT64 (`msys2/setup-msys2`), blocking
 - [x] macOS GCC 16 (Homebrew), blocking
 - [x] Clang (latest) and MSVC (latest): non-blocking, reported
-- [ ] Coverage report (gcov/llvm-cov) published per PR
+- [x] Coverage report (gcov/llvm-cov) published per PR
 - [ ] Benchmark job on `main` with results stored for trend tracking
 - [ ] Nightly job: full test suite + determinism check (1, 2, 8, 32 threads) (ADR-0007)
 
@@ -104,6 +104,7 @@
 - [ ] OCCT differential-testing harness: build OCCT in CI, compare volumes/areas/face counts on shared cases
 - [ ] `corpus/` layout, metadata format and `corpus/LICENSES.md`
 - [ ] Regression-case workflow: failing case → minimal file + journal → never deleted
+- [ ] Benchmark harness against OCCT per `docs/benchmarks.md`: pinned OCCT build in CI, Phase 0 benchmarks B0.1–B0.5 running and reported
 - [ ] Seeded-fault test suite for handles and topology: stale handles, handles from another shape, off-by-one indices, wrong entity kinds, corrupted adjacency (ADR-0004 verification)
 
 ## 10. ADR prototypes (weeks 6–12)
