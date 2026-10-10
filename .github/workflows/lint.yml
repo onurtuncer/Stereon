@@ -1,0 +1,56 @@
+# SPDX-FileCopyrightText: 2026 Onur Tuncer and Stereon contributors
+# SPDX-License-Identifier: MPL-2.0
+#
+# Source checks: the REUSE licence check (ADR-0008), formatting, library
+# layering and the epsilon ban in topo/, boolean/ and mesh/ (ADR-0001,
+# ADR-0002). clang-format is pinned so every contributor formats the same way.
+# Job names are stable: branch protection refers to them.
+
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CTEST_OUTPUT_ON_FAILURE: "1"
+  CMAKE_BUILD_PARALLEL_LEVEL: "4"
+
+jobs:
+  reuse:
+    name: REUSE licence check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: reuse lint
+        run: pipx run reuse lint
+
+  lint:
+    name: Lint (format, layering, epsilon)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install clang-format
+        run: pip install clang-format==22.1.8
+      - name: clang-format
+        run: |
+          clang-format --version
+          git ls-files -z -- '*.cpp' '*.cppm' '*.hpp' '*.h' | xargs -0 clang-format --dry-run --Werror
+      - name: Library layering
+        run: python tools/check_layering.py
+      - name: Epsilon ban (self-test, then src/)
+        run: |
+          python tools/check_epsilon.py --self-test
+          python tools/check_epsilon.py

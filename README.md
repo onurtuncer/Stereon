@@ -1,5 +1,15 @@
 # Stereon
 
+[![Linux](https://github.com/onurtuncer/Stereon/actions/workflows/linux.yml/badge.svg?branch=main)](https://github.com/onurtuncer/Stereon/actions/workflows/linux.yml)
+[![Windows](https://github.com/onurtuncer/Stereon/actions/workflows/windows.yml/badge.svg?branch=main)](https://github.com/onurtuncer/Stereon/actions/workflows/windows.yml)
+[![macOS](https://github.com/onurtuncer/Stereon/actions/workflows/macos.yml/badge.svg?branch=main)](https://github.com/onurtuncer/Stereon/actions/workflows/macos.yml)
+[![Lint](https://github.com/onurtuncer/Stereon/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/onurtuncer/Stereon/actions/workflows/lint.yml)
+[![Python](https://github.com/onurtuncer/Stereon/actions/workflows/python.yml/badge.svg?branch=main)](https://github.com/onurtuncer/Stereon/actions/workflows/python.yml)
+[![Benchmarks](https://github.com/onurtuncer/Stereon/actions/workflows/bench.yml/badge.svg?branch=main)](https://github.com/onurtuncer/Stereon/actions/workflows/bench.yml)
+[![codecov](https://codecov.io/gh/onurtuncer/Stereon/branch/main/graph/badge.svg)](https://codecov.io/gh/onurtuncer/Stereon)
+[![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg)](LICENSE)
+[![C++26](https://img.shields.io/badge/C%2B%2B-26-blue.svg)](docs/adr/0016-cpp26-adoption-and-contracts.md)
+
 **A modern C++26 boundary-representation (B-rep) geometric modeling kernel.**
 
 Stereon is an open-source solid modeling kernel: NURBS and analytic geometry, B-rep topology, robust Boolean operations, STEP data exchange and watertight meshing for analysis. It is built from scratch on C++26 with value semantics, type-erased geometry and thread safety by construction.
