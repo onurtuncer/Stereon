@@ -6,7 +6,7 @@ This directory records Stereon's significant design decisions. Each ADR states t
 
 - One file per decision, numbered sequentially: `NNNN-short-title.md`. Start from [`0000-template.md`](0000-template.md).
 - Status moves from **Proposed** to **Accepted** after review and, where the ADR names one, after its verification prototype passes.
-- Accepted ADRs are never edited except to fix typos. A change of mind is a new ADR that supersedes the old one; the old one's status becomes "Superseded by ADR-MMMM".
+- Proposed ADRs may be revised in place; a substantive revision adds a **Revised** line under the date naming what changed. Accepted ADRs are never edited except to fix typos. A change of mind is a new ADR that supersedes the old one; the old one's status becomes "Superseded by ADR-MMMM".
 - A pull request that contradicts an accepted ADR is rejected unless it comes with a new ADR.
 - All ADRs are reviewed at every release gate.
 
@@ -31,3 +31,4 @@ This directory records Stereon's significant design decisions. Each ADR states t
 | [0015](0015-ai-contribution-policy.md) | AI contribution policy | 0 | Proposed |
 | [0016](0016-cpp26-adoption-and-contracts.md) | C++26 adoption and contracts policy | 0 | Proposed |
 | [0017](0017-naming-conventions.md) | Naming conventions (Hazel style) | 0 | Proposed |
+| [0018](0018-validity-checking.md) | Validity checking | 0 | Proposed |

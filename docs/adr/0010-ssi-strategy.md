@@ -2,6 +2,7 @@
 
 - **Status:** Proposed (to be accepted before Phase 2)
 - **Date:** 2026-09-28
+- **Revised:** 2026-10-10 (completeness and accuracy as separate obligations; contact types)
 - **Owner:** Onur Tuncer
 - **Phase:** 2
 
@@ -24,8 +25,12 @@ Adopt option 4.
 - **Generic path.** Subdivide both surfaces into Bézier patches with tight bounding volumes; prune with interval tests; use normal-cone tests to rule out small closed loops in a patch pair; collect seed points on every branch and on patch boundaries.
 - **Marching.** Trace each branch with adaptive step size controlled by curvature and chordal error, refining each point onto both surfaces with Newton iteration.
 - **Special points.** Detect tangential contact, branch points and singularities explicitly; they end or split branches instead of being stepped over.
-- **Output.** Each branch becomes a B-spline 3D curve plus a pcurve on each surface (ADR-0009), with a certified maximum deviation.
-- **Failure.** An unresolved case returns `KernelError::IntersectionFailed` with the patch pair involved; it is never silently skipped.
+- **Two separate obligations.** SSI must discharge both, and a failure of either is reported as such:
+  1. **Completeness** — every branch is found. A patch pair is discarded only when a bounding-volume or interval test *proves* separation, or when the normal-cone test proves at most one branch and that branch has been found. A patch pair that cannot be resolved within the subdivision budget returns `KernelError::IntersectionFailed` with the patch pair; it is never silently skipped.
+  2. **Accuracy** — every output curve carries a certificate (ADR-0009) bounding its deviation from both surfaces over the whole parameter range, computed by interval evaluation, not sampling. A branch that cannot be certified to the requested tolerance returns `KernelError::CertificationFailed` or is widened within the healing budget (logged).
+- **Contact type.** Each branch is tagged `Crossing`, `Tangential` or `Overlap` (ADR-0013). The type is decided from the angle between the surface normals along the branch using interval bounds on the normals; where the type changes along a branch (a tangency that becomes a crossing), the branch is split at the change point. `Overlap` regions are returned as regions with their boundary branches, not as curves.
+- **Output.** Each branch becomes a B-spline 3D curve plus a pcurve on each surface (ADR-0009), with its certificate and contact type.
+- **Inputs.** Both surfaces must be tier 2 (`BoundedGeometry`, ADR-0003) for the generic path; tier 1 surfaces return `KernelError::NotSupported`.
 
 ## Consequences
 
@@ -35,4 +40,4 @@ Adopt option 4.
 
 ## Verification
 
-Phase 2 exit gate: on the SSI corpus (tangent cylinders, near-coincident NURBS, small loops, pole contact), all branches found, no spurious branches, and a tolerance certificate on every curve.
+Phase 2 exit gate: on the SSI corpus (tangent cylinders, near-coincident NURBS, small loops, pole contact), all branches found, no spurious branches, a certificate on every curve and a correct contact type on every branch. Completeness is checked against ground truth where it exists (analytic cases) and against OCCT and a dense-sampling oracle elsewhere; accuracy is checked by a 1 000-sample regression run per curve, which must never exceed the certified bound. Cases that exhaust the budget must fail with the right error code rather than return a partial result.
