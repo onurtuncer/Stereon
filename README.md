@@ -6,6 +6,7 @@
 [![Lint](https://github.com/onurtuncer/Stereon/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/onurtuncer/Stereon/actions/workflows/lint.yml)
 [![Python](https://github.com/onurtuncer/Stereon/actions/workflows/python.yml/badge.svg?branch=main)](https://github.com/onurtuncer/Stereon/actions/workflows/python.yml)
 [![Benchmarks](https://github.com/onurtuncer/Stereon/actions/workflows/bench.yml/badge.svg?branch=main)](https://github.com/onurtuncer/Stereon/actions/workflows/bench.yml)
+[![Docs](https://github.com/onurtuncer/Stereon/actions/workflows/deploy-docs.yml/badge.svg?branch=main)](https://onurtuncer.github.io/Stereon/)
 [![codecov](https://codecov.io/gh/onurtuncer/Stereon/branch/main/graph/badge.svg)](https://codecov.io/gh/onurtuncer/Stereon)
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg)](LICENSE)
 [![C++26](https://img.shields.io/badge/C%2B%2B-26-blue.svg)](docs/adr/0016-cpp26-adoption-and-contracts.md)
@@ -115,7 +116,7 @@ stereon/
 ├── corpus/          # geometry test corpus (regression cases never deleted)
 ├── bench/           # benchmark suite
 ├── tools/           # source checks run by CI (layering, epsilon ban)
-└── docs/
+└── docs/            # Sphinx manual (placeholders), built with -DSTEREON_BUILD_DOCS=ON
     └── adr/         # architecture decision records
 ```
 

@@ -70,3 +70,6 @@ Testing/
 
 # Python bytecode (tools/)
 __pycache__/
+
+# Sphinx / Doxygen output from local manual builds
+docs/_build/

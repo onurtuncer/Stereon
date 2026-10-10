@@ -13,6 +13,7 @@ include_guard(GLOBAL)
 option(STEREON_BUILD_TESTS "Build the unit and property tests" ON)
 option(STEREON_BUILD_BENCH "Build the benchmark suite" OFF)
 option(STEREON_BUILD_PYTHON "Build the Python bindings (nanobind)" OFF)
+option(STEREON_BUILD_DOCS "Build the Sphinx manual and Doxygen API reference" OFF)
 option(STEREON_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 option(STEREON_COVERAGE "Instrument Stereon libraries and tests for gcov coverage (GCC)" OFF)
 option(STEREON_CHECKED_HANDLES
