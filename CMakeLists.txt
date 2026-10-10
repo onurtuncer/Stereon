@@ -51,3 +51,7 @@ endif()
 if(STEREON_BUILD_PYTHON)
     add_subdirectory(python)
 endif()
+
+if(STEREON_BUILD_DOCS)
+    add_subdirectory(docs)
+endif()
