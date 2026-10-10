@@ -80,11 +80,12 @@
 ## 7. Topology prototype (weeks 6–10)
 
 - [ ] SoA stores for vertex, edge, coedge (with radial ring), loop, face, shell, solid, following Golovanov's logical entity model (ADR-0004)
-- [ ] Edge record per ADR-0009: curve kind (`Intersection`, `Exact`, `Boundary`, `Degenerate`), tolerance, exact or cached 3D curve slot; pcurves on coedges on a shared parameter
+- [ ] Edge record per ADR-0009: curve kind (`Intersection`, `Exact`, `Trim`, `Boundary`, `Spatial`, `Degenerate`), tolerance, stored primary coedge, own or cached 3D curve slot with certificate; pcurves on coedges on a shared parameter
 - [ ] Cache invalidation of the 3D edge curve when a pcurve changes (stub is enough for Phase 0)
-- [ ] `ShapeBuilder` → `Freeze()` → immutable `Shape`, with old→new remap table
+- [ ] `ShapeBuilder` → `Freeze()` → immutable `Shape` with stable indices and alive bitsets; separate `Compact()` returning the old→new remap table (ADR-0004)
 - [ ] Adjacency views: `FacesOf(edge)`, `EdgesOf(vertex)`, loop walks
-- [ ] Minimal validity checks (manifoldness, loop closure, orientation), naming offending entities with `Describe()`
+- [ ] `Structural`-level validity checker with rule IDs and a `ValidityReport`, naming offending entities with `Describe()` (ADR-0018); `Geometric` level once edge certificates exist
+- [ ] `OperationResult` (shape, history, tolerance changes, warnings) as the return type of shape-producing operations (ADR-0006)
 - [ ] `Describe(shape, handle)` for every entity kind, used in logs, contract messages and checker reports
 - [ ] Debug builds run the validity checker after every public operation (ADR-0004 safeguards)
 - [ ] Build a box (`Exact` edges) and a cylinder (`Exact` + `Boundary`/seam edges) by hand as test bodies
@@ -114,10 +115,12 @@
 - [ ] **ADR-0004:** ~10⁶-face body: adjacency speed and memory vs OCCT
 - [ ] **ADR-0004:** debuggability check: seeded-fault suite caught 100% in debug builds; pretty-printers working in GDB and LLDB
 - [ ] **ADR-0004 decision point:** keep index handles throughout, or switch to the hybrid (pointers in `ShapeBuilder`, indices in `Shape`). Decide before Phase 1 algorithms start
-- [ ] **ADR-0005:** 100 local edits on a 10⁶-face body: memory and copy cost
+- [ ] **ADR-0005:** 100 local edits on a 10⁶-face body (surface replacement, face deletion, face and edge splitting; no `Compact()`): memory and copy cost; page-size sweep 128/256/1 024
+- [ ] **ADR-0001:** merge-policy test with vertex chains at 0.8× tolerance; result deterministic and radius-bounded
+- [ ] **ADR-0018:** seeded-fault corpus for the checker; zero false positives on valid bodies
 - [ ] **ADR-0007:** determinism check across thread counts on the prototype operations
 - [ ] **ADR-0009:** early review of the edge representation, since ADR-0004's edge record depends on it (full acceptance is due before Phase 1 topology work)
-- [ ] Review ADRs 0001–0008, 0015–0017 and move each to **Accepted** or revise
+- [ ] Review ADRs 0001–0008, 0015–0018 and move each to **Accepted** or revise
 
 ## 11. Documentation (ongoing)
 

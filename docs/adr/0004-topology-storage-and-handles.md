@@ -2,6 +2,7 @@
 
 - **Status:** Proposed
 - **Date:** 2026-10-08
+- **Revised:** 2026-10-10 (`Freeze()` keeps indices, `Compact()` is explicit; edge record follows revised ADR-0009; page size is a tuning constant)
 - **Owner:** Onur Tuncer
 - **Phase:** 0
 
@@ -43,12 +44,12 @@ It differs from Stereon in ways that matter for this decision:
 
 Adopt option 2, with a small ECS-style side table for sparse attributes.
 
-1. **Builder and frozen shape.** `ShapeBuilder` is mutable and single-threaded; its handles are 32-bit index + 32-bit generation with free lists, so stale handles are detected. `Freeze()` compacts to an immutable `Shape` with plain 32-bit indices and emits an old→new remap table that feeds the history maps.
+1. **Builder and frozen shape.** `ShapeBuilder` is mutable and single-threaded; its handles are 32-bit index + 32-bit generation, so stale handles are detected. `Freeze()` seals the builder's arrays into an immutable `Shape` with plain 32-bit indices **without renumbering**: entities removed in the builder leave tombstone slots recorded in a per-table alive bitset, so every page the edit did not touch stays shared with the input `Shape` (ADR-0005). A builder opened on an existing `Shape` appends new entities and does not reuse slots freed in the same session; an index that is live in both input and output therefore denotes the same or a modified entity, and the `Freeze()` remap is the identity. `Compact(shape)` is a separate, explicit operation that renumbers, drops tombstones and returns the old→new remap table that feeds the history maps (ADR-0011); callers run it when the alive ratio falls below a `Context` threshold or before archiving. Renumbering inside `Freeze()` would copy every page that holds an index, which defeats structural sharing for any deletion.
 2. **Coedge core with radial rings.** Each coedge stores `Next`, `Prev`, `Radial` (next use of the same edge, forming a ring), `Edge`, `Loop`, `PCurve` and `Reversed`. The radial ring handles manifold solids, sheets and non-manifold edges with one structure.
 3. **Geometry in separate pools.** Topology references curves, pcurves and surfaces by index into pools of type-erased values (ADR-0003); several faces may share one surface.
-   **Edge records follow ADR-0009.** Each edge stores its curve kind (`Intersection`, `Exact`, `Boundary`, `Degenerate`), its tolerance, and either its exact 3D curve (`Exact`) or a cached 3D approximation with its certified deviation (`Intersection`). The pcurves stay on the coedges, all on the edge's shared parameter; the surfaces are reached through each coedge's face, so an edge never stores its own surface references. Cached 3D curves are invalidated whenever a pcurve of the edge changes.
+   **Edge records follow ADR-0009.** Each edge stores its curve kind (`Intersection`, `Exact`, `Trim`, `Boundary`, `Spatial`, `Degenerate`), its tolerance, the ID of its primary coedge (for kinds that evaluate through a surface), and either its own 3D curve (`Exact`, `Spatial`) or a cached 3D approximation with its certificate (`Intersection`, `Trim`). The pcurves stay on the coedges, all on the edge's shared parameter; the surfaces are reached through each coedge's face, so an edge never stores its own surface references. Cached 3D curves are invalidated whenever a pcurve of the edge changes. The primary coedge is stored, not derived from ring order, so re-linking a radial ring never changes an edge's evaluation.
 4. **No per-sub-shape transforms.** Bodies are stored in their own coordinates. Instancing belongs to an assembly layer above the kernel.
-5. **Copy-on-write pages.** Arrays are stored in 256-entry pages behind `shared_ptr<const Page>`; an operation copies only the pages it touches (ADR-0005).
+5. **Copy-on-write pages.** Arrays are stored in fixed-size pages behind `shared_ptr<const Page>`; an operation copies only the pages it touches (ADR-0005). The page size is a per-table tuning constant (initially 256 entries) fixed by the Phase 0 measurement in ADR-0005; vertex and face records differ in size, so the same entry count does not imply the same bytes per page. It is not part of the public API or the file format.
 6. **Sparse attributes** (names, colours, user tags, persistent IDs) live in a side table keyed by handle, keeping hot arrays small.
 
 Handles are local to one `Shape`. Identity across operations comes from history maps, never from handles.
@@ -61,7 +62,7 @@ Index handles fail differently from pointers: a stale or off-by-one index usuall
 2. **Checked handles in debug builds.** With `STEREON_CHECKED_HANDLES` (on in `debug`, `asan` and fuzzing presets), every handle also carries the 32-bit ID of the store it came from and its generation. Every access verifies store ID, bounds and generation, and a mismatch is a contract violation reporting the handle, the expected store and the entity kind. Release builds compile handles down to a plain 32-bit index; `sizeof` checks in CI confirm this.
 3. **Orientation bits are explicit.** Where an orientation flag is packed into a handle (e.g. the sense bit of an oriented coedge), it is accessed only through named functions (`IsReversed(h)`, `BaseOf(h)`), never by manual masking.
 4. **Pretty-printers show the entity, not the index.** GDB (Python) and LLDB formatters resolve a handle against its store and display it, e.g. `Edge#4711 [Line, tol 1e-5, faces 12|37]`. A `Describe(shape, handle)` function returns the same text for logs and assertions.
-5. **Validity checking after every operation.** In debug builds, every public operation runs the array-level validity checker on its result, so corruption is reported at the operation that caused it. The checker names the offending entities with `Describe()`.
+5. **Validity checking after every operation.** In debug builds, every public operation runs the validity checker (ADR-0018) on its result at the `Structural` and `Geometric` levels, so corruption is reported at the operation that caused it. The checker names the offending entities with `Describe()`.
 6. **Replayable journals.** Each operation can record its inputs and parameters to a journal file; any failure can be replayed deterministically in isolation (ADR-0007).
 7. **Visual and textual inspection.** Any shape or sub-shape can be sent to the debug viewer (`STEREON_DUMP(obj)`) and written as JSON with `stn-dump` (ADR-0012), so two versions of a shape can be diffed.
 
@@ -72,14 +73,15 @@ Index handles fail differently from pointers: a stale or off-by-one index usuall
 - Parallel read-only algorithms, serialisation, determinism and shape diffing in tests become straightforward.
 - Debugging depends on the safeguards above; they are Phase 0 deliverables, not later polish.
 - Debug builds are slower and handles are larger (checked handles plus per-operation validation); acceptable because release builds pay nothing.
-- We must build adjacency range views (`FacesOf(edge)`, `EdgesOf(vertex)`, loop walks), the remap machinery, and an array-level validity checker.
+- We must build adjacency range views (`FacesOf(edge)`, `EdgesOf(vertex)`, loop walks), the alive bitsets and `Compact()` with its remap machinery, and the validity checker of ADR-0018.
+- Tombstones mean iteration skips dead slots and memory is reclaimed only by `Compact()`; a long edit sequence without compaction wastes space, which the `Context` threshold bounds.
 - Non-manifold support from day 1 costs some complexity in Euler operators but avoids rewriting the boolean code later.
 
 ## Verification
 
 Phase 0 prototype with a ~10⁶-face body. Pass:
 
-- Adjacency queries ≥ 5× faster than OCCT `TopExp::MapShapesAndAncestors`; memory per face < 50% of OCCT; modifying one face copies < 1% of pages.
+- Adjacency queries ≥ 5× faster than OCCT `TopExp::MapShapesAndAncestors`; memory per face < 50% of OCCT; each of replacing one face's surface, deleting one face and splitting one face copies < 1% of pages without a `Compact()`.
 - Release-build handles are exactly 4 bytes (`static_assert` + CI check).
 - A seeded-fault test suite — stale handles, handles from another shape, off-by-one indices, wrong entity kinds, corrupted adjacency — is caught in debug builds 100% of the time, each at the first faulty access or at the end of the operation that caused it, with a `Describe()` message naming the entity.
 - Pretty-printers render every handle type in GDB and LLDB (tested in CI with scripted debugger sessions).

@@ -2,6 +2,7 @@
 
 - **Status:** Proposed
 - **Date:** 2026-09-28
+- **Revised:** 2026-10-10 (what contracts may guard)
 - **Owner:** Onur Tuncer
 - **Phase:** 0
 
@@ -22,7 +23,7 @@ Adopt option 3.
 - **Reference compiler:** GCC 16+. CI on GCC is blocking; Clang and MSVC run as non-blocking until they support reflection and contracts, then become blocking.
 - **Mandatory language features:** contracts, static reflection, expansion statements, pack indexing, C++20 modules.
 - **Library features with polyfills** behind thin `stereon::` wrappers: `std::execution` → NVIDIA stdexec; `std::simd` → xsimd where libstdc++ support is incomplete. Wrappers switch to the standard version via feature-test macros.
-- **Contracts.** Every public geometric operation states preconditions (parameter in domain, non-degenerate input, knot vectors non-decreasing) and key postconditions (finite results, valid output). Evaluation semantic per build:
+- **Contracts guard programmer obligations only.** Low-level evaluators (`Eval`, `Deriv`, `Project`) state preconditions on their documented parameter domain and on geometry the caller has already validated; store accessors state preconditions on handle validity and store membership; algorithms assert internal invariants; key postconditions (finite results, valid output) are stated everywhere. Anything that can arrive from outside the kernel — a user shape, a parameter of a public operation, a knot vector read from a file — is validated by code that returns `KernelError` (ADR-0006), never guarded by a contract. Geometry types therefore have two construction paths: a checked factory (`MakeBSplineCurve(...) -> std::expected<BSplineCurve, KernelError>`) for data from outside, and direct aggregate construction, guarded by `STEREON_PRE`, for kernel code that has established validity. A violated contract always means a bug in Stereon or in a caller's use of the C++ API, never bad data. Evaluation semantic per build:
   - `debug` and fuzzing: **enforce** (terminate with diagnostics);
   - corpus and CI runs: **observe** (log and continue, then fail the run);
   - `release`: **ignore** for hot-path checks, **enforce** for cheap API-boundary checks.
@@ -37,4 +38,4 @@ Adopt option 3.
 
 ## Verification
 
-CI confirms the GCC build with contracts enforced passes all tests; a test confirms `Stereon::HotContracts` matches the build configuration; feature-test macros correctly select standard vs polyfill implementations; the contract-observe corpus run reports zero violations before each release.
+CI confirms the GCC build with contracts enforced passes all tests; a test confirms `Stereon::HotContracts` matches the build configuration; feature-test macros correctly select standard vs polyfill implementations; the contract-observe corpus run reports zero violations before each release. The fuzzing run of ADR-0006 (corrupt files and invalid shapes into every public operation) must trigger no contract violation, which proves that no public entry point has a precondition user data can reach.
