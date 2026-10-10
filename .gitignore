@@ -43,6 +43,8 @@
 build/
 Build/
 build-*/
+# ...but src/build/ is the Build library, not build output.
+!src/build/
 
 # CMake generated files
 CMakeFiles/
