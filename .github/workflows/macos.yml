@@ -1,0 +1,41 @@
+# SPDX-FileCopyrightText: 2026 Onur Tuncer and Stereon contributors
+# SPDX-License-Identifier: MPL-2.0
+#
+# Blocking CI on the reference compiler, GCC 16 (ADR-0016), on macOS.
+# Job names are stable: branch protection refers to them.
+
+name: macOS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CTEST_OUTPUT_ON_FAILURE: "1"
+  CMAKE_BUILD_PARALLEL_LEVEL: "4"
+
+jobs:
+  macos:
+    name: macOS GCC 16 (gcc16-debug)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GCC 16 and Ninja
+        run: |
+          brew install gcc@16 ninja
+          g++-16 --version | head -1; cmake --version | head -1
+      - name: Configure
+        run: cmake --preset gcc16-debug -DCMAKE_CXX_COMPILER=g++-16 -DSTEREON_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build --preset gcc16-debug
+      - name: Test
+        run: ctest --preset gcc16-debug

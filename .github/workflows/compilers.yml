@@ -1,0 +1,68 @@
+# SPDX-FileCopyrightText: 2026 Onur Tuncer and Stereon contributors
+# SPDX-License-Identifier: MPL-2.0
+#
+# Non-blocking: Clang and MSVC are reported until they support C++26
+# reflection and contracts (ADR-0016). Failures show on the run but do not
+# fail it, and these jobs are not required checks in branch protection.
+
+name: Clang and MSVC
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CTEST_OUTPUT_ON_FAILURE: "1"
+  CMAKE_BUILD_PARALLEL_LEVEL: "4"
+
+jobs:
+  clang:
+    name: Linux Clang latest (clang-debug, non-blocking)
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install latest stable LLVM (Clang, libc++, clang-scan-deps)
+        run: |
+          wget -q https://apt.llvm.org/llvm.sh
+          LLVM=$(grep -oP '^CURRENT_LLVM_STABLE=\K[0-9]+' llvm.sh)
+          sudo bash llvm.sh "$LLVM" all
+          sudo apt-get install -y -qq ninja-build
+          echo "LLVM=$LLVM" >> "$GITHUB_ENV"
+          clang++-$LLVM --version | head -1; cmake --version | head -1
+      - name: Configure
+        run: |
+          cmake --preset clang-debug \
+            -DCMAKE_CXX_COMPILER=clang++-$LLVM \
+            -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS=clang-scan-deps-$LLVM
+      - name: Build
+        run: cmake --build --preset clang-debug
+      - name: Test
+        run: ctest --preset clang-debug
+
+  msvc:
+    name: Windows MSVC latest (msvc-debug, non-blocking)
+    runs-on: windows-2025
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Toolchain versions
+        run: |
+          cl 2>&1 | Select-Object -First 1
+          cmake --version | Select-Object -First 1
+      - name: Configure
+        run: cmake --preset msvc-debug
+      - name: Build
+        run: cmake --build --preset msvc-debug
+      - name: Test
+        run: ctest --preset msvc-debug
