@@ -65,4 +65,19 @@ struct StringMaker<B> {
     static std::string convert(const B& box) { return std::format("{}", box); }
 };
 
+template <Stereon::EntityKind K>
+struct StringMaker<Stereon::Id<K>> {
+    static std::string convert(const Stereon::Id<K>& h) { return std::format("{}", h); }
+};
+
+template <Stereon::EntityKind K>
+struct StringMaker<Stereon::BuilderId<K>> {
+    static std::string convert(const Stereon::BuilderId<K>& h) { return std::format("{}", h); }
+};
+
+template <Stereon::EntityKind K>
+struct StringMaker<Stereon::Oriented<K>> {
+    static std::string convert(const Stereon::Oriented<K>& h) { return std::format("{}", h); }
+};
+
 } // namespace Catch

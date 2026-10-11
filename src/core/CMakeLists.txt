@@ -9,13 +9,17 @@ stereon_add_library(core
     MODULES
         Box.cppm
         Core.cppm
+        Enum.cppm
         Error.cppm
+        Handle.cppm
         Interval.cppm
         Matrix.cppm
         Scalar.cppm
         Simd.cppm
         Vector.cppm
-        Version.cppm)
+        Version.cppm
+    SOURCES
+        Handle.cpp)
 
 # stdexec is PUBLIC: <Stereon/Core/Exec.hpp> is a public header that includes
 # it. xsimd is only included in the global module fragment of the Simd
