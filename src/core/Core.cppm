@@ -10,5 +10,6 @@
 /// header, <Stereon/Core/Exec.hpp>, because of compiler bugs (see there).
 export module Stereon.Core;
 
+export import :Error;
 export import :Simd;
 export import :Version;

@@ -53,7 +53,7 @@
 - [ ] `static_assert` + CI check that release-build handles are exactly 4 bytes
 - [ ] Named accessors for packed orientation bits (`IsReversed(h)`, `BaseOf(h)`); no manual masking
 - [ ] Paged arena / copy-on-write page container (`shared_ptr<const Page>`, 256 entries) (ADR-0005)
-- [ ] `KernelError`, `ErrorCode`, `std::expected` aliases, `STEREON_TRY` macro (ADR-0006)
+- [x] `KernelError`, `ErrorCode`, `std::expected` aliases, `STEREON_TRY` macro (ADR-0006). `KernelError` carries code, message and tolerances; entities, `ValidityReport` and journal ID follow with handles, the checker and the journal
 - [ ] `Context`: resolution, tolerance ceiling, scheduler, logger, journal sink (ADR-0001, ADR-0007)
 - [ ] Logging and operation journal (inputs + parameters, replayable)
 - [ ] Unit and property tests for all of the above
