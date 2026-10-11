@@ -30,6 +30,7 @@
 - [x] Include-graph check enforcing library layering (fails CI on an upward dependency): `tools/check_layering.py`
 - [x] `.clang-format` and `.clang-tidy`, including a rule banning literal epsilon comparisons in `topo/`, `boolean/`, `mesh/` (ADR-0001, ADR-0002). The ban is `tools/check_epsilon.py`, since clang-tidy cannot parse the GCC build; CI checks formatting with clang-format 22.1.8
 - [x] Licence-header check (REUSE or equivalent) (ADR-0008)
+- [x] Function complexity and length limits per tier (ADR-0022): `tools/check_complexity.py` in the lint job and CTest, with the self-test the ADR asks for; `tools/requirements.txt` pins its lizard and CI's clang-format
 - [ ] Remove `stereon_anchor_contracts()` and `ContractAnchor()`, restore `RelWithDebInfo` for `gcc16-observe` and hot-path contracts for `gcc16-tsan` once the known-failing `stereon_contract_probe` test turns green, i.e. GCC checks contracts imported from modules (docs/toolchain/gcc16-feature-probe.md)
 
 ## 3. Continuous integration (week 2)
