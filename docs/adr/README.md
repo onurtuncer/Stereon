@@ -32,3 +32,5 @@ This directory records Stereon's significant design decisions. Each ADR states t
 | [0016](0016-cpp26-adoption-and-contracts.md) | C++26 adoption and contracts policy | 0 | Proposed |
 | [0017](0017-naming-conventions.md) | Naming conventions (Hazel style) | 0 | Proposed |
 | [0018](0018-validity-checking.md) | Validity checking | 0 | Proposed |
+| [0019](0019-library-linking-packaging-and-abi.md) | Library linking, packaging and ABI policy | 0 | Proposed |
+| [0020](0020-cpp-c-abi-and-python-bindings.md) | C++ API, C ABI and Python bindings | 0 | Proposed |

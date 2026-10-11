@@ -5,8 +5,8 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-# Python bindings (nanobind). Only a version attribute so far: the rule for
-# exposing PascalCase C++ names to Python is still open (ADR-0017).
+# Python bindings (nanobind). Only a version attribute so far; names map to
+# snake_case functions and PascalCase classes as set by ADR-0020.
 nanobind_add_module(stereon_python StereonModule.cpp)
 set_target_properties(stereon_python PROPERTIES OUTPUT_NAME stereon)
 target_link_libraries(stereon_python PRIVATE stereon::core stereon_options)

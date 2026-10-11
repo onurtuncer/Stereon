@@ -2,6 +2,7 @@
 
 - **Status:** Proposed
 - **Date:** 2026-10-08
+- **Revised:** 2026-10-11 (C and Python names set by ADR-0020)
 - **Owner:** Onur Tuncer
 - **Phase:** 0
 
@@ -39,6 +40,7 @@ Further rules:
 - **Name clashes between a function and a type are avoided by the function name.** Free functions that return a modified copy use past participles (`Transformed(curve, t)`, `Reversed(curve)`), so they do not collide with types such as `Transform`. Predicates on handles use `Is` (`IsReversed(h)`). Relationship queries use `Of` (`FacesOf(edge)`, `ToleranceOf(entity)`, `BaseOf(h)`).
 - **Acronyms and dimensions** are written as words: `Orient2D`, `InSphere`, `BSplineCurve`, `PCurve`, `Id`.
 - **Not covered by this ADR:** standard-library names and customisation points keep their own spelling (`begin`, `end`, `size`, `operator==`, `std::expected::transform`). Library folders and CMake targets stay lowercase (`src/core`, `stereon::core`), since they are not C++ identifiers.
+- **C and Python names** are set by ADR-0020: the C ABI uses `stn_snake_case` functions and types and `STN_UPPER_SNAKE_CASE` constants; Python uses snake_case functions, PascalCase classes and properties in place of `Get` accessors.
 - **Formatting is separate.** This ADR fixes names only; layout is set by `.clang-format`.
 
 ## Consequences
@@ -46,7 +48,7 @@ Further rules:
 - Types, functions and members are distinguishable without tooling; `m_` and `s_` make object and global state visible in algorithm code.
 - Stereon code reads differently from the standard library it calls. Accepted: the boundary is visible, which is useful in a kernel that wraps `std::` heavily.
 - Names in ADRs 0001–0016 and the README were renamed to this style while they were still Proposed.
-- Python bindings (nanobind) will need a rule for exposing PascalCase names: keep them, or map to snake_case for Python users. To be decided with the bindings.
+- Python names differ from the C++ names they bind (`MakeBox` → `make_box`); the mapping is explicit and reviewed (ADR-0020).
 - Range-based `for` and other standard customisation points must keep lowercase member names (`begin`, `end`), an exception reviewers must allow.
 
 ## Verification
