@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: 2026 Onur Tuncer and Stereon contributors
+# SPDX-License-Identifier: MPL-2.0
+#
+# Python packages for the source checks that CI's lint job runs and that
+# CTest runs when they are installed: pip install -r tools/requirements.txt
+#
+# clang-format is pinned so that every contributor formats the same way;
+# lizard measures function complexity for check_complexity.py (ADR-0022).
+clang-format==22.1.8
+lizard==1.24.1
