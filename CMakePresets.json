@@ -91,6 +91,7 @@
       "description": "Clang with libc++; C++26 reflection and contracts only if this Clang supports them (ADR-0016)",
       "inherits": "base",
       "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
         "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_CXX_FLAGS": "-stdlib=libc++",
         "CMAKE_EXE_LINKER_FLAGS": "-stdlib=libc++",

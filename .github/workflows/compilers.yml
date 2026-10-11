@@ -42,6 +42,7 @@ jobs:
       - name: Configure
         run: |
           cmake --preset clang-debug \
+            -DCMAKE_C_COMPILER=clang-$LLVM \
             -DCMAKE_CXX_COMPILER=clang++-$LLVM \
             -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS=clang-scan-deps-$LLVM
       - name: Build
