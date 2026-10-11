@@ -8,6 +8,7 @@
 stereon_add_library(core
     MODULES
         Core.cppm
+        Error.cppm
         Simd.cppm
         Version.cppm)
 

@@ -57,6 +57,7 @@ On Windows, a terminating contract violation exits the process with code 127 and
 | Internal compiler error (segfault) in GCC 16.2.0 | A defaulted **hidden-friend** comparison (`friend constexpr bool operator==(const T&, const T&) = default;`) in a type exported from a module, used in a translation unit that imports the module. Happens in plain modules and partitions, with or without `-freflection` and contracts. | Declare defaulted comparisons as members: `constexpr bool operator==(const T&) const = default;`. Defaulted member comparisons work. |
 | Internal compiler error (segfault) in GCC 16.2.0 on stdexec | Any translation unit compiled with `-fmodules` that includes stdexec, even with no module code: `#include <stdexec/__detail/__query.hpp>` alone reproduces it (`__query.hpp:177`, `forwarding_query_t::operator()`). Seen with stdexec `nvhpc-25.09`, `nvhpc-26.05` and `main` (2026-10-09). CMake adds `-fmodules` to every source it scans for modules. Plain `-std=c++26` builds of stdexec work. A stdexec header unit builds but cannot be used (`no class template named '__f' in 'struct stdexec::just_t'`). | `Stereon::Exec` is a header, `<Stereon/Core/Exec.hpp>`, not a module partition. Files that include it are excluded from module scanning with `stereon_exec_sources()`, so they cannot import modules. |
 | Internal compiler error C1001 in MSVC 19.50 on stdexec | stdexec senders used through a named module that includes stdexec in its global module fragment. stdexec included directly builds and runs. | Same as for GCC. |
+| False `-Wshadow` warning in GCC 16.2.0 on expansion statements | `template for (constexpr std::meta::info e : ...)`: every unrolled iteration warns that `e` shadows the previous one. | Build reflected tables with an ordinary loop in a `consteval` function instead, as `ToString(ErrorCode)` does in `src/core/Error.cppm`. |
 
 Report the bugs upstream and recheck them with each compiler release. A regression test should guard each workaround once the fix lands.
 
@@ -85,3 +86,8 @@ Report the bugs upstream and recheck them with each compiler release. A regressi
 | MSVC 19.51 (windows-2025 runner) | ✅ | n/a | n/a | CMake 4.4 does not know C++26 for MSVC, so it builds with `CXX_STANDARD 23`, which selects MSVC's newest standard switch |
 
 Neither can build code that uses reflection or contracts. Both stay non-blocking until they can (ADR-0016).
+
+Until then, Stereon code keeps two fallbacks, both to be removed when these compilers catch up:
+
+- **Contracts.** The boundary macros `STEREON_PRE`, `STEREON_POST` and `STEREON_ASSERT` (`<Stereon/Core/Contracts.hpp>`) exist only so that Clang and MSVC compile code with contracts. Once both accept `-fcontracts`, write `pre`, `post` and `contract_assert` directly. The `STEREON_HOT_*` macros stay, because C++26 has no per-contract labels to separate hot-path from boundary checks.
+- **Reflection.** Code that uses reflection checks `__cpp_impl_reflection` and `__cpp_lib_reflection` and provides a reduced fallback; `ToString(ErrorCode)` returns `"ErrorCode"` without it.
