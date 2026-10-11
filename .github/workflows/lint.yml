@@ -42,8 +42,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install clang-format
-        run: pip install clang-format==22.1.8
+      - name: Install clang-format and lizard
+        run: pip install clang-format==22.1.8 lizard==1.24.1
       - name: clang-format
         run: |
           clang-format --version
@@ -54,6 +54,10 @@ jobs:
         run: |
           python tools/check_epsilon.py --self-test
           python tools/check_epsilon.py
+      - name: Function complexity limits (self-test, then the tree; ADR-0022)
+        run: |
+          python tools/check_complexity.py --self-test
+          python tools/check_complexity.py
       - name: Corpus cases and nominal ground truth (self-test, then corpus/)
         run: |
           python tools/check_corpus.py --self-test

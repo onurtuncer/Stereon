@@ -59,6 +59,7 @@ Stereon is written in C++26 with C++20 modules. These rules come from the ADRs a
 **Language and style**
 
 - Format with the repository's `.clang-format`, using clang-format 22.1.8 as CI does, and keep `.clang-tidy` clean.
+- Keep functions within the complexity and length limits of [ADR-0022](docs/adr/0022-function-complexity.md); `python tools/check_complexity.py` (needs `pip install lizard`) reports the violations CI would. Split along the case analysis, and mark a justified exception with `// complexity-exempt: <reason>` on the line before the function.
 - Naming follows the [Hazel engine](https://github.com/TheCherno/Hazel) style ([ADR-0017](docs/adr/0017-naming-conventions.md)):
 
   | Element | Style | Example |
