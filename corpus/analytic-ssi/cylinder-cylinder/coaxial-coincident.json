@@ -1,0 +1,46 @@
+{
+  "format": "stereon-corpus-case/1",
+  "id": "analytic-ssi/cylinder-cylinder/coaxial-coincident",
+  "kind": "reference",
+  "summary": "One cylinder given by two axis points and a scaled, reversed axis.",
+  "added": "2026-10-11",
+  "source": "Authored for RS-0001",
+  "licence": "MPL-2.0",
+  "references": ["RS-0001", "ADR-0010"],
+  "tags": ["coincidence", "non-unit"],
+  "inputs": {
+    "surfaces": [
+      {
+        "name": "A",
+        "type": "cylinder",
+        "point": [0, 0, 0],
+        "axis": [0, 0, 1],
+        "radius": 3,
+        "tolerance": 0.001
+      },
+      {
+        "name": "B",
+        "type": "cylinder",
+        "point": [0, 0, 9],
+        "axis": [0, 0, -2],
+        "radius": 3,
+        "tolerance": 0.001
+      }
+    ]
+  },
+  "operation": {
+    "name": "intersect",
+    "operands": ["A", "B"]
+  },
+  "expected": {
+    "nominal": {
+      "tier": "A",
+      "configuration": "coincident"
+    },
+    "tolerant": {
+      "status": "proposed",
+      "configuration": "coincident",
+      "snapped": false
+    }
+  }
+}

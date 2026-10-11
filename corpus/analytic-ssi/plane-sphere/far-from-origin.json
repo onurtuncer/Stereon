@@ -1,0 +1,44 @@
+{
+  "format": "stereon-corpus-case/1",
+  "id": "analytic-ssi/plane-sphere/far-from-origin",
+  "kind": "hard",
+  "summary": "Near-tangent sphere and plane 490 m from the origin, near the edge of the size box.",
+  "added": "2026-10-11",
+  "source": "Authored for RS-0001",
+  "licence": "MPL-2.0",
+  "references": ["RS-0001", "ADR-0010"],
+  "tags": ["snap", "tangency", "size-box"],
+  "inputs": {
+    "surfaces": [
+      {
+        "name": "A",
+        "type": "plane",
+        "point": [490010.0005, 0, 0],
+        "normal": [1, 0, 0],
+        "tolerance": 0.001
+      },
+      {
+        "name": "B",
+        "type": "sphere",
+        "centre": [490000, 0, 0],
+        "radius": 10,
+        "tolerance": 0.001
+      }
+    ]
+  },
+  "operation": {
+    "name": "intersect",
+    "operands": ["A", "B"]
+  },
+  "expected": {
+    "nominal": {
+      "tier": "A",
+      "configuration": "disjoint"
+    },
+    "tolerant": {
+      "status": "proposed",
+      "configuration": "tangent_point",
+      "snapped": true
+    }
+  }
+}

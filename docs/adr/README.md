@@ -2,6 +2,8 @@
 
 This directory records Stereon's significant design decisions. Each ADR states the context, the options considered, the decision, its consequences, and how the decision is verified.
 
+Open questions that have to be researched before they can be decided live in [`docs/research/`](../research/) as research specifications. A go decision there leads to a new or revised ADR here.
+
 ## Rules
 
 - One file per decision, numbered sequentially: `NNNN-short-title.md`. Start from [`0000-template.md`](0000-template.md).
