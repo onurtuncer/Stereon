@@ -7,9 +7,14 @@
 
 stereon_add_library(core
     MODULES
+        Box.cppm
         Core.cppm
         Error.cppm
+        Interval.cppm
+        Matrix.cppm
+        Scalar.cppm
         Simd.cppm
+        Vector.cppm
         Version.cppm)
 
 # stdexec is PUBLIC: <Stereon/Core/Exec.hpp> is a public header that includes
