@@ -11,7 +11,9 @@
 export module Stereon.Core;
 
 export import :Box;
+export import :Enum;
 export import :Error;
+export import :Handle;
 export import :Interval;
 export import :Matrix;
 export import :Scalar;

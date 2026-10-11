@@ -34,24 +34,31 @@ stereon_add_tests(robust)
 # Do contracts written in Stereon.Core fire in a unit that imports it? Each
 # probe violates one and must print the violation. GCC 16.2 checks the module's
 # inline functions only with the contract anchor above, and drops the checks in
-# its templates altogether; the second test is marked as a known failure and
-# turns red when a compiler release fixes it, which is the signal to remove
-# stereon_anchor_contracts(). The probe violates hot-path contracts, so it exists
-# only where they are compiled; only the reference compiler has contracts, and an
-# "ignore" build (the bench preset) checks nothing.
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND STEREON_HOT_CONTRACTS
-   AND NOT STEREON_CONTRACT_SEMANTIC STREQUAL "ignore")
+# its templates altogether; that test is marked as a known failure and turns
+# red when a compiler release fixes it, which is the signal to remove
+# stereon_anchor_contracts(). The handle check is reported from a module
+# implementation unit and works regardless. Only the reference compiler has
+# contracts, and an "ignore" build (the bench preset) checks nothing.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT STEREON_CONTRACT_SEMANTIC STREQUAL "ignore")
     add_executable(stereon_contract_probe probes/ContractProbe.cpp)
     target_link_libraries(stereon_contract_probe PRIVATE stereon::core stereon_options)
     stereon_anchor_contracts(stereon_contract_probe)
-    add_test(NAME "core: contracts in module inline functions fire in importers"
-        COMMAND stereon_contract_probe inline)
-    add_test(NAME "core: contracts in module templates fire in importers (GCC 16.2 drops them)"
-        COMMAND stereon_contract_probe template)
-    set_tests_properties("core: contracts in module inline functions fire in importers"
-        PROPERTIES PASS_REGULAR_EXPRESSION "contract violation")
-    set_tests_properties("core: contracts in module templates fire in importers (GCC 16.2 drops them)"
-        PROPERTIES PASS_REGULAR_EXPRESSION "contract violation" WILL_FAIL TRUE)
+    if(STEREON_HOT_CONTRACTS)
+        add_test(NAME "core: contracts in module inline functions fire in importers"
+            COMMAND stereon_contract_probe inline)
+        add_test(NAME "core: contracts in module templates fire in importers (GCC 16.2 drops them)"
+            COMMAND stereon_contract_probe template)
+        set_tests_properties("core: contracts in module inline functions fire in importers"
+            PROPERTIES PASS_REGULAR_EXPRESSION "contract violation")
+        set_tests_properties("core: contracts in module templates fire in importers (GCC 16.2 drops them)"
+            PROPERTIES PASS_REGULAR_EXPRESSION "contract violation" WILL_FAIL TRUE)
+    endif()
+    if(STEREON_CHECKED_HANDLES)
+        add_test(NAME "core: checked handles report a stale handle"
+            COMMAND stereon_contract_probe handle)
+        set_tests_properties("core: checked handles report a stale handle"
+            PROPERTIES PASS_REGULAR_EXPRESSION "invalid handle Vertex#0@0.*slot released.*contract violation")
+    endif()
 endif()
 
 # Source checks that need only Python. CI runs the same scripts in its lint job.
