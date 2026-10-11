@@ -8,6 +8,7 @@
 module;
 
 #include <concepts>
+#include <format>
 
 export module Stereon.Core:Scalar;
 
@@ -33,3 +34,21 @@ concept Scalar = std::regular<T> && !std::integral<T> && std::constructible_from
                  };
 
 } // namespace Stereon
+
+namespace Stereon::Detail {
+
+/// Shared by the std::formatter specialisations of the math types, none of
+/// which take a format specification of their own.
+struct EmptySpecParser {
+    template <typename ParseContext>
+    static constexpr auto Parse(ParseContext& ctx)
+    {
+        const auto it = ctx.begin();
+        if (it != ctx.end() && *it != '}') {
+            throw std::format_error("Stereon math types take no format specification");
+        }
+        return it;
+    }
+};
+
+} // namespace Stereon::Detail

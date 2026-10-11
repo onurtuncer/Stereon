@@ -7,8 +7,10 @@
 
 stereon_add_library(core
     MODULES
+        Box.cppm
         Core.cppm
         Error.cppm
+        Interval.cppm
         Matrix.cppm
         Scalar.cppm
         Simd.cppm

@@ -55,4 +55,14 @@ struct StringMaker<Stereon::BasicTransform<T>> {
     static std::string convert(const Stereon::BasicTransform<T>& t) { return std::format("{}", t); }
 };
 
+template <>
+struct StringMaker<Stereon::Interval> {
+    static std::string convert(const Stereon::Interval& i) { return std::format("{}", i); }
+};
+
+template <Stereon::AnyBox B>
+struct StringMaker<B> {
+    static std::string convert(const B& box) { return std::format("{}", box); }
+};
+
 } // namespace Catch

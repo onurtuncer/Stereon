@@ -383,22 +383,6 @@ template <Scalar T>
 // std::format support: "(x, y)" and "(x, y, z)", with no format specification
 // of their own. Only for scalars that are themselves formattable.
 
-namespace Stereon::Detail {
-
-struct EmptySpecParser {
-    template <typename ParseContext>
-    static constexpr auto Parse(ParseContext& ctx)
-    {
-        const auto it = ctx.begin();
-        if (it != ctx.end() && *it != '}') {
-            throw std::format_error("Stereon math types take no format specification");
-        }
-        return it;
-    }
-};
-
-} // namespace Stereon::Detail
-
 template <Stereon::Scalar T>
     requires std::formattable<T, char>
 struct std::formatter<Stereon::BasicVec2<T>> {

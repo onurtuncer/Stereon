@@ -10,6 +10,7 @@
 nanobind_add_module(stereon_python StereonModule.cpp)
 set_target_properties(stereon_python PROPERTIES OUTPUT_NAME stereon)
 target_link_libraries(stereon_python PRIVATE stereon::core stereon_options)
+stereon_anchor_contracts(stereon_python)
 # nanobind_add_module adds these as ordinary include directories; as system
 # directories, Stereon's strict warnings do not fire inside them.
 target_include_directories(stereon_python SYSTEM PRIVATE

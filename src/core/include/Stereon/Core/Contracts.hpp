@@ -61,3 +61,17 @@
 #define STEREON_HOT_POST(...)
 #define STEREON_HOT_ASSERT(...) static_cast<void>(sizeof(static_cast<bool>(__VA_ARGS__)))
 #endif
+
+// GCC 16.2 activates contract checking per translation unit only when it
+// parses a contract there. A unit that merely imports Stereon.Core therefore
+// cannot link the module's inline functions (their checks call a per-unit
+// helper the importer never emits) and silently skips the checks in its
+// templates. Parsing this one contract repairs the first problem, not the
+// second (docs/toolchain/gcc16-feature-probe.md). Stereon's own executables
+// get this header through stereon_anchor_contracts() in CMake; other
+// importers include it in every unit that imports a Stereon module.
+#if STEREON_HAS_CONTRACTS
+namespace Stereon::Detail {
+inline void ContractAnchor() STEREON_PRE(true) {}
+} // namespace Stereon::Detail
+#endif
