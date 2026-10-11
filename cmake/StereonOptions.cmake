@@ -93,8 +93,9 @@ if(STEREON_COVERAGE)
     target_link_options(stereon_options INTERFACE --coverage)
 endif()
 
-if(MINGW AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    # std::print and std::println need libstdc++exp on MinGW
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    # libstdc++exp holds the default contract violation handler on every
+    # platform, and std::print/std::println on MinGW
     # (docs/toolchain/gcc16-feature-probe.md).
     target_link_libraries(stereon_options INTERFACE stdc++exp)
 endif()

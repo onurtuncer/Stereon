@@ -46,6 +46,8 @@ Other GCC options:
 - `-fcontracts-definition-check=[on|off]`: check contracts inside the callee (default `on`).
 - `-fcontract-checks-outlined`, `-fcontract-disable-optimized-checks`, `-fcontracts-conservative-ipa`.
 
+The default `handle_contract_violation` is a weak symbol in `libstdc++exp`, not in `libstdc++`, so any program built with `-fcontracts` and a checking semantic must link `-lstdc++exp` on every platform. Without it, Linux and macOS fail at link time with an undefined reference to `handle_contract_violation`.
+
 On Windows, a terminating contract violation exits the process with code 127 and prints `terminate called without an active exception`. Test harnesses and death tests should expect that.
 
 ## Known compiler bugs
@@ -72,7 +74,7 @@ Report the bugs upstream and recheck them with each compiler release. A regressi
 5. **Build system notes for CMake:**
    - add `-freflection` globally
    - modules need `-fmodules` (CMake's C++26 module support adds this)
-   - add `-lstdc++exp` on MinGW
+   - add `-lstdc++exp` on every platform: contracts need its default violation handler, and MinGW also needs it for `std::print`
    - `import std;` needs CMake's experimental `CMAKE_CXX_MODULE_STD` support, or building `bits/std.cc` ourselves
 
 ## Other compilers (non-blocking CI, 2026-10-08)
