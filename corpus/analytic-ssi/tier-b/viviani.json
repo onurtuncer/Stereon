@@ -1,0 +1,44 @@
+{
+  "format": "stereon-corpus-case/1",
+  "id": "analytic-ssi/tier-b/viviani",
+  "kind": "reference",
+  "summary": "Viviani's curve: sphere of radius 2 and cylinder of radius 1 through its centre. Quartic, outside Tier A.",
+  "added": "2026-10-11",
+  "source": "Authored for RS-0001",
+  "licence": "MPL-2.0",
+  "references": ["RS-0001", "ADR-0010"],
+  "tags": ["tier-b", "quartic"],
+  "inputs": {
+    "surfaces": [
+      {
+        "name": "A",
+        "type": "sphere",
+        "centre": [0, 0, 0],
+        "radius": 2,
+        "tolerance": 0.001
+      },
+      {
+        "name": "B",
+        "type": "cylinder",
+        "point": [1, 0, 0],
+        "axis": [0, 0, 1],
+        "radius": 1,
+        "tolerance": 0.001
+      }
+    ]
+  },
+  "operation": {
+    "name": "intersect",
+    "operands": ["A", "B"]
+  },
+  "expected": {
+    "nominal": {
+      "tier": "B",
+      "configuration": "quartic"
+    },
+    "tolerant": {
+      "status": "proposed",
+      "outcome": "NotSupported"
+    }
+  }
+}
