@@ -17,6 +17,15 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <version>
+
+// Same condition as in Error.cppm.
+#if defined(__cpp_impl_reflection) && defined(__cpp_lib_reflection)
+#include <meta>
+#define STEREON_TEST_REFLECTION 1
+#else
+#define STEREON_TEST_REFLECTION 0
+#endif
 
 import Stereon.Core;
 
@@ -91,23 +100,37 @@ TEST_CASE("error codes keep their numeric values", "[core][errors]")
     STATIC_REQUIRE(static_cast<std::uint32_t>(ErrorCode::ParseError) == 9);
 }
 
-TEST_CASE("every error code has a distinct name", "[core][errors]")
+#if STEREON_TEST_REFLECTION
+TEST_CASE("the numeric-value test covers every error code", "[core][errors]")
 {
-    REQUIRE(Stereon::ToString(ErrorCode::InvalidInput) == "InvalidInput");
-    REQUIRE(Stereon::ToString(ErrorCode::ParseError) == "ParseError");
+    // Fails when a code is appended without pinning its number above.
+    STATIC_REQUIRE(std::meta::enumerators_of(^^Stereon::ErrorCode).size() == 9);
+}
+
+TEST_CASE("error code names come from the enumerators", "[core][errors]")
+{
+    STATIC_REQUIRE(Stereon::ErrorCodeNames);
+    STATIC_REQUIRE(Stereon::ToString(ErrorCode::InvalidInput) == "InvalidInput");
+    STATIC_REQUIRE(Stereon::ToString(ErrorCode::ParseError) == "ParseError");
+    REQUIRE(Stereon::ToString(static_cast<ErrorCode>(0)) == "Unknown");
+    REQUIRE(Stereon::ToString(static_cast<ErrorCode>(10)) == "Unknown");
 
     std::vector<std::string> names;
     for (std::uint32_t value = 1; value <= 9; ++value) {
         const auto name = Stereon::ToString(static_cast<ErrorCode>(value));
-        REQUIRE_FALSE(name.empty());
         REQUIRE(name != "Unknown");
         names.emplace_back(name);
     }
     std::ranges::sort(names);
     REQUIRE(std::ranges::adjacent_find(names) == names.end());
-
-    REQUIRE(Stereon::ToString(static_cast<ErrorCode>(0)) == "Unknown");
 }
+#else
+TEST_CASE("error codes have no names without reflection", "[core][errors]")
+{
+    STATIC_REQUIRE_FALSE(Stereon::ErrorCodeNames);
+    STATIC_REQUIRE(Stereon::ToString(ErrorCode::ParseError) == "ErrorCode");
+}
+#endif
 
 TEST_CASE("KernelError carries code, message and tolerances", "[core][errors]")
 {

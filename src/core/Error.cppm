@@ -14,6 +14,16 @@ module;
 #include <string_view>
 #include <utility>
 #include <vector>
+#include <version>
+
+#if defined(__cpp_impl_reflection) && defined(__cpp_lib_reflection)
+#include <array>
+#include <cstddef>
+#include <meta>
+#define STEREON_ERROR_CODE_NAMES 1
+#else
+#define STEREON_ERROR_CODE_NAMES 0
+#endif
 
 export module Stereon.Core:Error;
 
@@ -41,31 +51,55 @@ enum class ErrorCode : std::uint32_t {
     ParseError,          ///< A file or stream is malformed.
 };
 
+/// True when ToString reports enumerator names. It needs static reflection,
+/// which the reference compiler has (ADR-0016) and Clang and MSVC lack.
+inline constexpr bool ErrorCodeNames = STEREON_ERROR_CODE_NAMES != 0;
+
+} // namespace Stereon
+
+#if STEREON_ERROR_CODE_NAMES
+namespace Stereon::Detail {
+
+struct ErrorCodeName {
+    ErrorCode Code{};
+    std::string_view Name;
+};
+
+// Read from the enum at compile time, so a new code needs no new entry.
+consteval auto MakeErrorCodeNameTable()
+{
+    constexpr auto enumerators = std::define_static_array(std::meta::enumerators_of(^^ErrorCode));
+    std::array<ErrorCodeName, enumerators.size()> table{};
+    for (std::size_t i = 0; i < enumerators.size(); ++i) {
+        table[i] = {std::meta::extract<ErrorCode>(enumerators[i]),
+                    std::define_static_string(std::meta::identifier_of(enumerators[i]))};
+    }
+    return table;
+}
+
+inline constexpr auto ErrorCodeNameTable = MakeErrorCodeNameTable();
+
+} // namespace Stereon::Detail
+#endif
+
+export namespace Stereon {
+
 /// The enumerator's name, e.g. "ToleranceExceeded"; "Unknown" for a value
-/// that is not an enumerator.
+/// that is not an enumerator. Without reflection every value gives
+/// "ErrorCode", and only the number identifies the code.
 [[nodiscard]] constexpr std::string_view ToString(const ErrorCode code) noexcept
 {
-    switch (code) {
-    case ErrorCode::InvalidInput:
-        return "InvalidInput";
-    case ErrorCode::InvalidResult:
-        return "InvalidResult";
-    case ErrorCode::ToleranceExceeded:
-        return "ToleranceExceeded";
-    case ErrorCode::IntersectionFailed:
-        return "IntersectionFailed";
-    case ErrorCode::CertificationFailed:
-        return "CertificationFailed";
-    case ErrorCode::DegenerateResult:
-        return "DegenerateResult";
-    case ErrorCode::NotSupported:
-        return "NotSupported";
-    case ErrorCode::NotImplemented:
-        return "NotImplemented";
-    case ErrorCode::ParseError:
-        return "ParseError";
+#if STEREON_ERROR_CODE_NAMES
+    for (const auto& entry : Detail::ErrorCodeNameTable) {
+        if (entry.Code == code) {
+            return entry.Name;
+        }
     }
     return "Unknown";
+#else
+    static_cast<void>(code);
+    return "ErrorCode";
+#endif
 }
 
 /// A failed operation: what went wrong, a message for people and the
