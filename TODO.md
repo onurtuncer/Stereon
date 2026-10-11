@@ -30,6 +30,7 @@
 - [x] Include-graph check enforcing library layering (fails CI on an upward dependency): `tools/check_layering.py`
 - [x] `.clang-format` and `.clang-tidy`, including a rule banning literal epsilon comparisons in `topo/`, `boolean/`, `mesh/` (ADR-0001, ADR-0002). The ban is `tools/check_epsilon.py`, since clang-tidy cannot parse the GCC build; CI checks formatting with clang-format 22.1.8
 - [x] Licence-header check (REUSE or equivalent) (ADR-0008)
+- [x] Function complexity and length limits per tier (ADR-0022): `tools/check_complexity.py` in the lint job and CTest, with the self-test the ADR asks for; `tools/requirements.txt` pins its lizard and CI's clang-format
 - [ ] Remove `stereon_anchor_contracts()` and `ContractAnchor()`, restore `RelWithDebInfo` for `gcc16-observe` and hot-path contracts for `gcc16-tsan` once the known-failing `stereon_contract_probe` test turns green, i.e. GCC checks contracts imported from modules (docs/toolchain/gcc16-feature-probe.md)
 
 ## 3. Continuous integration (week 2)
@@ -50,11 +51,11 @@
 - [x] Fixed-size `Vec2/3`, `Point2/3`, `Mat3/4`, `Transform` with constexpr operations. They are the `double` instances of scalar-generic `Basic*` templates over the `Scalar` concept (ADR-0021), checked with a forward-mode dual number in tests
 - [x] `Interval` with outward rounding. Bounds step one representable value outward on the bit pattern, so the arithmetic is constexpr and needs no rounding-mode state
 - [x] `Box2`, `Box3` (bounding boxes) with union, intersection and interval-based tests. A box is one `Interval` per axis, so every test is the per-axis interval test
-- [ ] Typed handles `Id<Tag>` (32-bit), one distinct type per entity kind, no implicit integer conversions (ADR-0004)
-- [ ] Generational builder handles (index + generation) with free lists (ADR-0004)
-- [ ] `STEREON_CHECKED_HANDLES` mode (on in debug, asan, fuzzing presets): handles carry store ID + generation; every access checks store, bounds and generation (ADR-0004 safeguards)
-- [ ] `static_assert` + CI check that release-build handles are exactly 4 bytes
-- [ ] Named accessors for packed orientation bits (`IsReversed(h)`, `BaseOf(h)`); no manual masking
+- [x] Typed handles `Id<Tag>` (32-bit), one distinct type per entity kind, no implicit integer conversions (ADR-0004). `Id<EntityKind>` with the kind as the tag, so diagnostics and the C ABI can name it
+- [x] Generational builder handles (index + generation) with free lists (ADR-0004). `BuilderId` and `GenerationTable`; slots released in a session become reusable at `BeginSession()`, which keeps indices stable across one edit
+- [x] `STEREON_CHECKED_HANDLES` mode (on in debug, asan, fuzzing presets): handles carry store ID + generation; every access checks store, bounds and generation (ADR-0004 safeguards). `GenerationTable::Check()`; the report and contract violation come from `Handle.cpp`, a module implementation unit, so they fire in every importer
+- [x] `static_assert` + CI check that release-build handles are exactly 4 bytes (`Handle.cppm`; the release and Windows CI presets compile it)
+- [x] Named accessors for packed orientation bits (`IsReversed(h)`, `BaseOf(h)`); no manual masking. `Oriented<Kind>` keeps the sense in the top bit and `Reversed(h)` flips it
 - [ ] Paged arena / copy-on-write page container (`shared_ptr<const Page>`, 256 entries) (ADR-0005)
 - [x] `KernelError`, `ErrorCode`, `std::expected` aliases, `STEREON_TRY` macro (ADR-0006). `KernelError` carries code, message and tolerances; entities, `ValidityReport` and journal ID follow with handles, the checker and the journal
 - [ ] `Context`: resolution, tolerance ceiling, scheduler, logger, journal sink (ADR-0001, ADR-0007)

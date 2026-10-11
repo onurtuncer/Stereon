@@ -39,6 +39,15 @@ int main(const int argc, char** argv)
         const Stereon::Interval reversed{value + 1.0, 1.0};
         return reversed.IsEmpty() ? 1 : 0;
     }
+    if (std::strcmp(argv[1], "handle") == 0) {
+        // A checked-handle failure is reported from the module's own unit,
+        // so it fires at every optimisation level.
+        Stereon::GenerationTable<Stereon::EntityKind::Vertex> table;
+        const auto handle = table.Allocate();
+        table.Release(handle);
+        table.Check(handle);
+        return table.IsAlive(handle) ? 0 : 1;
+    }
     if (std::strcmp(argv[1], "template") == 0) {
         // Normalized, a template, requires a non-zero vector.
         const Stereon::Vec3 unit = Normalized(Stereon::Vec3{value - 2.0, 0.0, 0.0});
