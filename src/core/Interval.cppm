@@ -75,7 +75,7 @@ public:
 
     /// The closed interval [lower, upper]. Bounds may be infinite; NaN is not
     /// a bound.
-    constexpr Interval(const double lower, const double upper) STEREON_PRE(lower <= upper)
+    constexpr Interval(const double lower, const double upper) STEREON_HOT_PRE(lower <= upper)
         : m_Lower(lower)
         , m_Upper(upper)
     {}
@@ -144,7 +144,7 @@ public:
     /// Division by an interval containing zero has no finite enclosure, so it
     /// is a precondition, not a result.
     friend constexpr Interval operator/(const Interval& a, const Interval& b)
-        STEREON_PRE(b.m_Lower > 0.0 || b.m_Upper < 0.0)
+        STEREON_HOT_PRE(b.m_Lower > 0.0 || b.m_Upper < 0.0)
     {
         if (a.IsEmpty() || b.IsEmpty()) {
             return {};
@@ -208,13 +208,13 @@ private:
     return {lower, upper};
 }
 
-[[nodiscard]] constexpr double Width(const Interval& i) STEREON_PRE(!i.IsEmpty())
+[[nodiscard]] constexpr double Width(const Interval& i) STEREON_HOT_PRE(!i.IsEmpty())
 {
     return i.GetUpper() - i.GetLower();
 }
 
 [[nodiscard]] constexpr double Midpoint(const Interval& i)
-    STEREON_PRE(!i.IsEmpty() && i.IsBounded())
+    STEREON_HOT_PRE(!i.IsEmpty() && i.IsBounded())
 {
     // Never overflows, unlike (lower + upper) / 2.
     return 0.5 * i.GetLower() + 0.5 * i.GetUpper();
@@ -252,7 +252,7 @@ private:
 }
 
 [[nodiscard]] constexpr Interval Sqrt(const Interval& i)
-    STEREON_PRE(i.IsEmpty() || i.GetLower() >= 0.0)
+    STEREON_HOT_PRE(i.IsEmpty() || i.GetLower() >= 0.0)
 {
     if (i.IsEmpty()) {
         return {};

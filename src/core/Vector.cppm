@@ -35,8 +35,8 @@ struct BasicVec2 {
     // module crashes GCC 16.2 (docs/toolchain/gcc16-feature-probe.md).
     constexpr bool operator==(const BasicVec2&) const = default;
 
-    constexpr T& operator[](const std::size_t i) STEREON_PRE(i < 2) { return i == 0 ? X : Y; }
-    constexpr const T& operator[](const std::size_t i) const STEREON_PRE(i < 2)
+    constexpr T& operator[](const std::size_t i) STEREON_HOT_PRE(i < 2) { return i == 0 ? X : Y; }
+    constexpr const T& operator[](const std::size_t i) const STEREON_HOT_PRE(i < 2)
     {
         return i == 0 ? X : Y;
     }
@@ -82,11 +82,11 @@ struct BasicVec3 {
 
     constexpr bool operator==(const BasicVec3&) const = default;
 
-    constexpr T& operator[](const std::size_t i) STEREON_PRE(i < 3)
+    constexpr T& operator[](const std::size_t i) STEREON_HOT_PRE(i < 3)
     {
         return i == 0 ? X : (i == 1 ? Y : Z);
     }
-    constexpr const T& operator[](const std::size_t i) const STEREON_PRE(i < 3)
+    constexpr const T& operator[](const std::size_t i) const STEREON_HOT_PRE(i < 3)
     {
         return i == 0 ? X : (i == 1 ? Y : Z);
     }
@@ -135,8 +135,8 @@ struct BasicPoint2 {
 
     constexpr bool operator==(const BasicPoint2&) const = default;
 
-    constexpr T& operator[](const std::size_t i) STEREON_PRE(i < 2) { return i == 0 ? X : Y; }
-    constexpr const T& operator[](const std::size_t i) const STEREON_PRE(i < 2)
+    constexpr T& operator[](const std::size_t i) STEREON_HOT_PRE(i < 2) { return i == 0 ? X : Y; }
+    constexpr const T& operator[](const std::size_t i) const STEREON_HOT_PRE(i < 2)
     {
         return i == 0 ? X : Y;
     }
@@ -171,11 +171,11 @@ struct BasicPoint3 {
 
     constexpr bool operator==(const BasicPoint3&) const = default;
 
-    constexpr T& operator[](const std::size_t i) STEREON_PRE(i < 3)
+    constexpr T& operator[](const std::size_t i) STEREON_HOT_PRE(i < 3)
     {
         return i == 0 ? X : (i == 1 ? Y : Z);
     }
-    constexpr const T& operator[](const std::size_t i) const STEREON_PRE(i < 3)
+    constexpr const T& operator[](const std::size_t i) const STEREON_HOT_PRE(i < 3)
     {
         return i == 0 ? X : (i == 1 ? Y : Z);
     }
@@ -275,14 +275,14 @@ template <Scalar T>
 /// is a contract, not a KernelError (ADR-0006).
 template <Scalar T>
 [[nodiscard]] constexpr BasicVec2<T> Normalized(const BasicVec2<T>& a)
-    STEREON_PRE(T{} < LengthSquared(a))
+    STEREON_HOT_PRE(T{} < LengthSquared(a))
 {
     return a / Length(a);
 }
 
 template <Scalar T>
 [[nodiscard]] constexpr BasicVec3<T> Normalized(const BasicVec3<T>& a)
-    STEREON_PRE(T{} < LengthSquared(a))
+    STEREON_HOT_PRE(T{} < LengthSquared(a))
 {
     return a / Length(a);
 }

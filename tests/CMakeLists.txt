@@ -36,9 +36,11 @@ stereon_add_tests(robust)
 # inline functions only with the contract anchor above, and drops the checks in
 # its templates altogether; the second test is marked as a known failure and
 # turns red when a compiler release fixes it, which is the signal to remove
-# stereon_anchor_contracts(). Only the reference compiler has contracts, and an
+# stereon_anchor_contracts(). The probe violates hot-path contracts, so it exists
+# only where they are compiled; only the reference compiler has contracts, and an
 # "ignore" build (the bench preset) checks nothing.
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT STEREON_CONTRACT_SEMANTIC STREQUAL "ignore")
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND STEREON_HOT_CONTRACTS
+   AND NOT STEREON_CONTRACT_SEMANTIC STREQUAL "ignore")
     add_executable(stereon_contract_probe probes/ContractProbe.cpp)
     target_link_libraries(stereon_contract_probe PRIVATE stereon::core stereon_options)
     stereon_anchor_contracts(stereon_contract_probe)

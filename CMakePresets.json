@@ -41,10 +41,10 @@
     {
       "name": "gcc16-observe",
       "displayName": "GCC 16 corpus (observe)",
-      "description": "CI corpus run: contract violations are logged and the run fails afterwards (ADR-0016)",
+      "description": "CI corpus run: contract violations are logged and the run fails afterwards (ADR-0016). Unoptimised until GCC 16.2's module contracts link under optimisation (docs/toolchain/gcc16-feature-probe.md)",
       "inherits": "gcc16-base",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_BUILD_TYPE": "Debug",
         "STEREON_CONTRACT_SEMANTIC": "observe",
         "STEREON_CHECKED_HANDLES": "ON"
       }
@@ -67,10 +67,11 @@
     {
       "name": "gcc16-tsan",
       "displayName": "GCC 16 TSan",
-      "description": "ThreadSanitizer; not available with MinGW",
+      "description": "ThreadSanitizer; not available with MinGW. Hot-path contracts are off: TSan looks for races, and GCC 16.2 cannot link module contracts under optimisation (docs/toolchain/gcc16-feature-probe.md)",
       "inherits": "gcc16-debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "STEREON_HOT_CONTRACTS": "OFF",
         "STEREON_SANITIZER": "thread"
       },
       "condition": { "type": "notEquals", "lhs": "${hostSystemName}", "rhs": "Windows" }

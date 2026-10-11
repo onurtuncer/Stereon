@@ -64,11 +64,11 @@ struct Box2 {
 
     constexpr bool operator==(const Box2&) const = default;
 
-    constexpr Interval& operator[](const std::size_t axis) STEREON_PRE(axis < 2)
+    constexpr Interval& operator[](const std::size_t axis) STEREON_HOT_PRE(axis < 2)
     {
         return axis == 0 ? X : Y;
     }
-    constexpr const Interval& operator[](const std::size_t axis) const STEREON_PRE(axis < 2)
+    constexpr const Interval& operator[](const std::size_t axis) const STEREON_HOT_PRE(axis < 2)
     {
         return axis == 0 ? X : Y;
     }
@@ -100,11 +100,11 @@ struct Box3 {
 
     constexpr bool operator==(const Box3&) const = default;
 
-    constexpr Interval& operator[](const std::size_t axis) STEREON_PRE(axis < 3)
+    constexpr Interval& operator[](const std::size_t axis) STEREON_HOT_PRE(axis < 3)
     {
         return axis == 0 ? X : (axis == 1 ? Y : Z);
     }
-    constexpr const Interval& operator[](const std::size_t axis) const STEREON_PRE(axis < 3)
+    constexpr const Interval& operator[](const std::size_t axis) const STEREON_HOT_PRE(axis < 3)
     {
         return axis == 0 ? X : (axis == 1 ? Y : Z);
     }
@@ -183,7 +183,7 @@ template <AnyBox B>
 }
 
 template <AnyBox B>
-[[nodiscard]] constexpr typename B::Point MinCorner(const B& box) STEREON_PRE(!box.IsEmpty())
+[[nodiscard]] constexpr typename B::Point MinCorner(const B& box) STEREON_HOT_PRE(!box.IsEmpty())
 {
     typename B::Point p{};
     for (std::size_t i = 0; i < B::Dimension; ++i) {
@@ -193,7 +193,7 @@ template <AnyBox B>
 }
 
 template <AnyBox B>
-[[nodiscard]] constexpr typename B::Point MaxCorner(const B& box) STEREON_PRE(!box.IsEmpty())
+[[nodiscard]] constexpr typename B::Point MaxCorner(const B& box) STEREON_HOT_PRE(!box.IsEmpty())
 {
     typename B::Point p{};
     for (std::size_t i = 0; i < B::Dimension; ++i) {
@@ -203,7 +203,7 @@ template <AnyBox B>
 }
 
 template <AnyBox B>
-[[nodiscard]] constexpr typename B::Point Center(const B& box) STEREON_PRE(!box.IsEmpty())
+[[nodiscard]] constexpr typename B::Point Center(const B& box) STEREON_HOT_PRE(!box.IsEmpty())
 {
     typename B::Point p{};
     for (std::size_t i = 0; i < B::Dimension; ++i) {
@@ -214,7 +214,7 @@ template <AnyBox B>
 
 /// The vector from the minimum to the maximum corner.
 template <AnyBox B>
-[[nodiscard]] constexpr typename B::Vec Diagonal(const B& box) STEREON_PRE(!box.IsEmpty())
+[[nodiscard]] constexpr typename B::Vec Diagonal(const B& box) STEREON_HOT_PRE(!box.IsEmpty())
 {
     typename B::Vec v{};
     for (std::size_t i = 0; i < B::Dimension; ++i) {

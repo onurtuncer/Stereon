@@ -53,12 +53,12 @@ struct BasicMat {
     constexpr bool operator==(const BasicMat&) const = default;
 
     constexpr T& operator()(const std::size_t row, const std::size_t col)
-        STEREON_PRE(row < N && col < N)
+        STEREON_HOT_PRE(row < N && col < N)
     {
         return Elements[row * N + col];
     }
     constexpr const T& operator()(const std::size_t row, const std::size_t col) const
-        STEREON_PRE(row < N && col < N)
+        STEREON_HOT_PRE(row < N && col < N)
     {
         return Elements[row * N + col];
     }
@@ -209,7 +209,7 @@ template <Scalar T, std::size_t N>
 /// sometimes wants the adjugate without the division.
 template <Scalar T, std::size_t N>
 [[nodiscard]] constexpr T Cofactor(const BasicMat<T, N>& m, const std::size_t row,
-                                   const std::size_t col) STEREON_PRE(row < N && col < N)
+                                   const std::size_t col) STEREON_HOT_PRE(row < N && col < N)
 {
     if constexpr (N == 1) {
         return T{1};
@@ -223,7 +223,7 @@ template <Scalar T, std::size_t N>
 /// that may meet one checks Determinant() first and reports a KernelError.
 template <Scalar T, std::size_t N>
 [[nodiscard]] constexpr BasicMat<T, N> Inverse(const BasicMat<T, N>& m)
-    STEREON_PRE(Determinant(m) != T{})
+    STEREON_HOT_PRE(Determinant(m) != T{})
 {
     const T det = Determinant(m);
     BasicMat<T, N> r;
@@ -257,7 +257,7 @@ using Transform = BasicTransform<double>;
 
 template <Scalar T>
 [[nodiscard]] constexpr BasicTransform<T> Inverse(const BasicTransform<T>& t)
-    STEREON_PRE(Determinant(t.Linear) != T{})
+    STEREON_HOT_PRE(Determinant(t.Linear) != T{})
 {
     const BasicMat<T, 3> inverse = Inverse(t.Linear);
     return {inverse, -(inverse * t.Translation)};
@@ -299,7 +299,7 @@ template <Scalar T>
 /// (Rodrigues' formula). The axis need not be unit length, only non-zero.
 template <Scalar T>
 [[nodiscard]] constexpr BasicTransform<T> MakeRotation(const BasicVec3<T>& axis, const T& angle)
-    STEREON_PRE(T{} < LengthSquared(axis))
+    STEREON_HOT_PRE(T{} < LengthSquared(axis))
 {
     using std::cos;
     using std::sin;

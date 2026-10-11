@@ -47,7 +47,9 @@ its own. Lengths are millimetres and angles radians.
 ``Determinant`` and ``Inverse`` are closed-form cofactor expansions, so their
 results do not depend on a pivoting strategy (ADR-0007). A singular matrix or
 a zero vector passed to ``Normalized`` is a contract violation, not a
-``KernelError``: code that may meet one checks first.
+``KernelError``: code that may meet one checks first. These primitives run in
+inner loops, so their contracts are hot-path contracts (ADR-0016), compiled in
+debug and sanitizer builds and left out of release builds.
 
 Every type formats with ``std::format``: ``"{}"`` gives ``(1, 2, 3)`` for a
 vector or point and ``[[1, 0], [0, 1]]`` for a matrix.
