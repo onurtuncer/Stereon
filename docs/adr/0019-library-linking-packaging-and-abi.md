@@ -55,10 +55,7 @@ Adopt option 3.
 
 ### 4. C boundary and object ownership
 
-- Before offering a compiler-independent binary SDK, provide a versioned C ABI with opaque handles and explicitly sized scalar types. Do not expose STL types, templates, C++ object layouts or exceptions through it.
-- Kernel-owned resources are released through matching kernel functions. Caller-provided buffers have explicit size and lifetime rules; callbacks have documented calling convention and lifetime.
-- Translate failures to C status/diagnostic results (ADR-0006), including allocation failures at the C boundary. Programming-error contract violations retain ADR-0016 semantics and are not recoverable status results.
-- Define an ABI version query and reject unsupported ABI versions before exchanging objects.
+- Before offering a compiler-independent binary SDK, provide a versioned C ABI. ADR-0020 specifies it: opaque resources, explicitly sized types, ownership and release, operation-owned diagnostics, allocation-free out-of-memory status, version and capability queries.
 - This C ABI is a packaging milestone, not a prerequisite for initial source-based C++ development.
 
 ### 5. Python and plugins
