@@ -1,0 +1,43 @@
+{
+  "format": "stereon-corpus-case/1",
+  "id": "analytic-ssi/plane-plane/unequal-tolerances",
+  "kind": "hard",
+  "summary": "Planes 5e-3 apart with tolerances 1e-2 and 1e-5: the answer depends on how a pair tolerance is formed.",
+  "added": "2026-10-11",
+  "source": "Authored for RS-0001",
+  "licence": "MPL-2.0",
+  "references": ["RS-0001", "ADR-0010"],
+  "tags": ["open-question", "unequal-tolerance"],
+  "inputs": {
+    "surfaces": [
+      {
+        "name": "A",
+        "type": "plane",
+        "point": [0, 0, 0],
+        "normal": [0, 0, 1],
+        "tolerance": 0.01
+      },
+      {
+        "name": "B",
+        "type": "plane",
+        "point": [0, 0, 0.005],
+        "normal": [0, 0, 1],
+        "tolerance": 1e-05
+      }
+    ]
+  },
+  "operation": {
+    "name": "intersect",
+    "operands": ["A", "B"]
+  },
+  "expected": {
+    "nominal": {
+      "tier": "A",
+      "configuration": "disjoint"
+    },
+    "tolerant": {
+      "status": "open",
+      "question": "O1"
+    }
+  }
+}

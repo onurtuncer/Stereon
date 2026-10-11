@@ -10,9 +10,86 @@ Curves and surfaces
 
 Analytic, NURBS and procedural curves and surfaces, the geometry concepts, and the type-erased Curve and Surface wrappers.
 
+Vectors, points and transforms
+------------------------------
+
+``Stereon.Core`` provides the fixed-size types that every geometry type is
+built from: ``Vec2``, ``Vec3``, ``Point2``, ``Point3``, the square matrices
+``Mat2``, ``Mat3`` and ``Mat4``, and the affine ``Transform``. All of their
+operations are ``constexpr``.
+
+Points are positions and vectors are displacements, so ``Point - Point`` is a
+``Vec``, ``Point + Vec`` is a ``Point``, and ``Point + Point`` does not
+compile. ``ToVec`` and ``ToPoint`` convert explicitly.
+
+.. code-block:: cpp
+
+   import Stereon.Core;
+
+   using namespace Stereon;
+
+   constexpr Point3 corner{10, 0, 0};
+   constexpr Vec3 up{0, 0, 1};
+
+   // (a * b) applies b first: rotate about Z, then lift by 5 mm.
+   const Transform lift = MakeTranslation(5.0 * up) * MakeRotation(up, 0.5);
+   const Point3 moved = Transformed(corner, lift);
+   const Vec3 direction = Transformed(up, lift); // vectors ignore the translation
+
+Each type is the ``double`` instance of a scalar-generic template
+(``BasicVec3<T>``, ``BasicMat<T, N>``, ``BasicTransform<T>``) constrained by
+the ``Scalar`` concept, so the same code runs on the active scalar type of an
+automatic-differentiation backend (ADR-0021). Generic code keeps the scalar
+type: constants are written ``T{2}``, and mathematical functions are called
+through ADL, ``using std::sqrt; sqrt(x);``, so that an active type can supply
+its own. Lengths are millimetres and angles radians.
+
+``Determinant`` and ``Inverse`` are closed-form cofactor expansions, so their
+results do not depend on a pivoting strategy (ADR-0007). A singular matrix or
+a zero vector passed to ``Normalized`` is a contract violation, not a
+``KernelError``: code that may meet one checks first. These primitives run in
+inner loops, so their contracts are hot-path contracts (ADR-0016), compiled in
+debug and sanitizer builds and left out of release builds.
+
+Every type formats with ``std::format``: ``"{}"`` gives ``(1, 2, 3)`` for a
+vector or point and ``[[1, 0], [0, 1]]`` for a matrix.
+
+Intervals and bounding boxes
+----------------------------
+
+``Interval`` is a closed interval of doubles with outward rounding: every
+operation returns an interval that contains every real result of the
+operation on real numbers from its operands. It is the enclosure arithmetic
+behind the predicate filters of ADR-0002. Rounding steps each bound one
+representable value outward on the bit pattern, so the arithmetic is
+``constexpr``, carries no rounding-mode state, and gives the same bits on
+every platform (ADR-0007); the price is that an exact result is also widened
+by one step.
+
+.. code-block:: cpp
+
+   const Interval sum = Interval{0.1} + Interval{0.2};
+   assert(0.1 + 0.2 != 0.3);      // double arithmetic rounds
+   assert(Contains(sum, 0.3));    // the enclosure does not lose it
+
+``Interval{}`` is the empty interval, the identity of ``Hull``; ``Squared``
+is tighter than ``i * i`` when the interval contains zero; and division by an
+interval containing zero is a contract violation rather than a result.
+
+``Box2`` and ``Box3`` are products of one ``Interval`` per axis (``box.X``,
+``box.Y``, ``box.Z``). ``Contains``, ``Intersects``, ``Hull`` and
+``Intersection`` are the per-axis interval operations, so a box is empty as
+soon as one axis is, and ``Box3{}`` is the empty box. Boxes are closed:
+touching faces intersect. ``Box3::FromCorners`` accepts two opposite corners
+in either order. Both intervals and boxes are ``double`` only; they bound and
+decide, which stays discrete (ADR-0021).
+
+Curves and surfaces
+-------------------
+
 .. todo::
 
-   Write this chapter. It is a placeholder for the documentation effort.
+   Write this section. It is a placeholder for the documentation effort.
 
 Related design decisions
 ------------------------

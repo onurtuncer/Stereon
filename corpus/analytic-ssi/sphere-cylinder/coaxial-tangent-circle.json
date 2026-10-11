@@ -1,0 +1,45 @@
+{
+  "format": "stereon-corpus-case/1",
+  "id": "analytic-ssi/sphere-cylinder/coaxial-tangent-circle",
+  "kind": "reference",
+  "summary": "Sphere centred on the axis with the cylinder's radius touches it along a circle.",
+  "added": "2026-10-11",
+  "source": "Authored for RS-0001",
+  "licence": "MPL-2.0",
+  "references": ["RS-0001", "ADR-0010"],
+  "tags": ["tangency"],
+  "inputs": {
+    "surfaces": [
+      {
+        "name": "A",
+        "type": "sphere",
+        "centre": [0, 0, 1],
+        "radius": 3,
+        "tolerance": 0.001
+      },
+      {
+        "name": "B",
+        "type": "cylinder",
+        "point": [0, 0, 0],
+        "axis": [0, 0, 1],
+        "radius": 3,
+        "tolerance": 0.001
+      }
+    ]
+  },
+  "operation": {
+    "name": "intersect",
+    "operands": ["A", "B"]
+  },
+  "expected": {
+    "nominal": {
+      "tier": "A",
+      "configuration": "tangent_circle"
+    },
+    "tolerant": {
+      "status": "proposed",
+      "configuration": "tangent_circle",
+      "snapped": false
+    }
+  }
+}

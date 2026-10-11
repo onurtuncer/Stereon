@@ -100,6 +100,20 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_link_libraries(stereon_options INTERFACE stdc++exp)
 endif()
 
+# stereon_anchor_contracts(<target>)
+#
+# GCC 16.2 workaround: a unit that imports a Stereon module without parsing a
+# contract of its own fails to link the module's inline functions. Preinclude
+# <Stereon/Core/Contracts.hpp>, whose ContractAnchor() is that contract, into
+# every source of a non-module target (-include cannot precede a module
+# declaration). Remove when stereon_contract_probe reports the fix.
+function(stereon_anchor_contracts target)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_compile_options(${target} PRIVATE -include Stereon/Core/Contracts.hpp)
+        target_link_libraries(${target} PRIVATE stereon::core)
+    endif()
+endfunction()
+
 # stereon_add_library(<name> MODULES <files...> [SOURCES <files...>] [DEPENDS <libs...>])
 #
 # Creates stereon_<name> with alias stereon::<name>.

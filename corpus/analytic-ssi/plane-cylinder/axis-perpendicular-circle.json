@@ -1,0 +1,45 @@
+{
+  "format": "stereon-corpus-case/1",
+  "id": "analytic-ssi/plane-cylinder/axis-perpendicular-circle",
+  "kind": "reference",
+  "summary": "Plane perpendicular to a non-unit cylinder axis gives a circle.",
+  "added": "2026-10-11",
+  "source": "Authored for RS-0001",
+  "licence": "MPL-2.0",
+  "references": ["RS-0001", "ADR-0010"],
+  "tags": ["robust", "non-unit"],
+  "inputs": {
+    "surfaces": [
+      {
+        "name": "A",
+        "type": "plane",
+        "point": [0, 0, 3],
+        "normal": [0, 0, 1],
+        "tolerance": 0.001
+      },
+      {
+        "name": "B",
+        "type": "cylinder",
+        "point": [0, 0, 0],
+        "axis": [0, 0, 7],
+        "radius": 5,
+        "tolerance": 0.001
+      }
+    ]
+  },
+  "operation": {
+    "name": "intersect",
+    "operands": ["A", "B"]
+  },
+  "expected": {
+    "nominal": {
+      "tier": "A",
+      "configuration": "circle"
+    },
+    "tolerant": {
+      "status": "proposed",
+      "configuration": "circle",
+      "snapped": false
+    }
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "format": "stereon-corpus-case/1",
+  "id": "analytic-ssi/arrangement/plane-chain",
+  "kind": "hard",
+  "summary": "Planes at 0, 0.8 and 1.6 tolerances: A~B and B~C but not A~C. Per-pair snapping gives an unrealisable A=B=C.",
+  "added": "2026-10-11",
+  "source": "Authored for RS-0001",
+  "licence": "MPL-2.0",
+  "references": ["RS-0001", "ADR-0001", "ADR-0010"],
+  "tags": ["joint-consistency", "non-transitive", "coincidence"],
+  "inputs": {
+    "surfaces": [
+      {
+        "name": "A",
+        "type": "plane",
+        "point": [0, 0, 0],
+        "normal": [0, 0, 1],
+        "tolerance": 0.001
+      },
+      {
+        "name": "B",
+        "type": "plane",
+        "point": [0, 0, 0.0008],
+        "normal": [0, 0, 1],
+        "tolerance": 0.001
+      },
+      {
+        "name": "C",
+        "type": "plane",
+        "point": [0, 0, 0.0016],
+        "normal": [0, 0, 1],
+        "tolerance": 0.001
+      }
+    ]
+  },
+  "operation": {
+    "name": "arrange",
+    "operands": ["A", "B", "C"]
+  },
+  "expected": {
+    "nominal": {
+      "pairs": {
+        "A-B": "disjoint",
+        "A-C": "disjoint",
+        "B-C": "disjoint"
+      }
+    },
+    "tolerant": {
+      "status": "proposed",
+      "pairs": {
+        "A-B": "coincident",
+        "A-C": "disjoint",
+        "B-C": "disjoint"
+      },
+      "snaps": ["A-B"]
+    }
+  }
+}

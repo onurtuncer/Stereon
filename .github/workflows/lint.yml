@@ -54,3 +54,7 @@ jobs:
         run: |
           python tools/check_epsilon.py --self-test
           python tools/check_epsilon.py
+      - name: Corpus cases and nominal ground truth (self-test, then corpus/)
+        run: |
+          python tools/check_corpus.py --self-test
+          python tools/check_corpus.py

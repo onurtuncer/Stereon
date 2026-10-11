@@ -1,0 +1,45 @@
+{
+  "format": "stereon-corpus-case/1",
+  "id": "analytic-ssi/tier-b/sphere-centre-near-axis",
+  "kind": "hard",
+  "summary": "Sphere centre 0.4 tolerance off the cylinder axis: Tier B as numbers, snapped onto the axis and Tier A under tolerance.",
+  "added": "2026-10-11",
+  "source": "Authored for RS-0001",
+  "licence": "MPL-2.0",
+  "references": ["RS-0001", "ADR-0010"],
+  "tags": ["tier-b", "snap"],
+  "inputs": {
+    "surfaces": [
+      {
+        "name": "A",
+        "type": "sphere",
+        "centre": [0.0004, 0, 0],
+        "radius": 5,
+        "tolerance": 0.001
+      },
+      {
+        "name": "B",
+        "type": "cylinder",
+        "point": [0, 0, 0],
+        "axis": [0, 0, 1],
+        "radius": 3,
+        "tolerance": 0.001
+      }
+    ]
+  },
+  "operation": {
+    "name": "intersect",
+    "operands": ["A", "B"]
+  },
+  "expected": {
+    "nominal": {
+      "tier": "B",
+      "configuration": "quartic"
+    },
+    "tolerant": {
+      "status": "proposed",
+      "configuration": "two_circles",
+      "snapped": true
+    }
+  }
+}

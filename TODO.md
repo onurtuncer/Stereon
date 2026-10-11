@@ -30,6 +30,7 @@
 - [x] Include-graph check enforcing library layering (fails CI on an upward dependency): `tools/check_layering.py`
 - [x] `.clang-format` and `.clang-tidy`, including a rule banning literal epsilon comparisons in `topo/`, `boolean/`, `mesh/` (ADR-0001, ADR-0002). The ban is `tools/check_epsilon.py`, since clang-tidy cannot parse the GCC build; CI checks formatting with clang-format 22.1.8
 - [x] Licence-header check (REUSE or equivalent) (ADR-0008)
+- [ ] Remove `stereon_anchor_contracts()` and `ContractAnchor()`, restore `RelWithDebInfo` for `gcc16-observe` and hot-path contracts for `gcc16-tsan` once the known-failing `stereon_contract_probe` test turns green, i.e. GCC checks contracts imported from modules (docs/toolchain/gcc16-feature-probe.md)
 
 ## 3. Continuous integration (week 2)
 
@@ -44,9 +45,9 @@
 
 ## 4. `stereon::core` (weeks 2–5)
 
-- [ ] Fixed-size `Vec2/3`, `Point2/3`, `Mat3/4`, `Transform` with constexpr operations
-- [ ] `Interval` with outward rounding
-- [ ] `Box2`, `Box3` (bounding boxes) with union, intersection and interval-based tests
+- [x] Fixed-size `Vec2/3`, `Point2/3`, `Mat3/4`, `Transform` with constexpr operations. They are the `double` instances of scalar-generic `Basic*` templates over the `Scalar` concept (ADR-0021), checked with a forward-mode dual number in tests
+- [x] `Interval` with outward rounding. Bounds step one representable value outward on the bit pattern, so the arithmetic is constexpr and needs no rounding-mode state
+- [x] `Box2`, `Box3` (bounding boxes) with union, intersection and interval-based tests. A box is one `Interval` per axis, so every test is the per-axis interval test
 - [ ] Typed handles `Id<Tag>` (32-bit), one distinct type per entity kind, no implicit integer conversions (ADR-0004)
 - [ ] Generational builder handles (index + generation) with free lists (ADR-0004)
 - [ ] `STEREON_CHECKED_HANDLES` mode (on in debug, asan, fuzzing presets): handles carry store ID + generation; every access checks store, bounds and generation (ADR-0004 safeguards)
@@ -103,7 +104,7 @@
 - [ ] Catch2 + RapidCheck wiring; test naming and tagging conventions
 - [ ] libFuzzer harness skeleton (for later STEP and primitive-placement fuzzing)
 - [ ] OCCT differential-testing harness: build OCCT in CI, compare volumes/areas/face counts on shared cases
-- [ ] `corpus/` layout, metadata format and `corpus/LICENSES.md`
+- [x] `corpus/` layout, metadata format and `corpus/LICENSES.md` ([`corpus/README.md`](corpus/README.md)); cases validated by `tools/check_corpus.py` in CI
 - [ ] Regression-case workflow: failing case → minimal file + journal → never deleted
 - [ ] Benchmark harness against OCCT per `docs/benchmarks.md`: pinned OCCT build in CI, Phase 0 benchmarks B0.1–B0.5 running and reported
 - [ ] Seeded-fault test suite for handles and topology: stale handles, handles from another shape, off-by-one indices, wrong entity kinds, corrupted adjacency (ADR-0004 verification)
@@ -111,6 +112,7 @@
 ## 10. ADR prototypes (weeks 6–12)
 
 - [ ] **ADR-0001:** union/cut/common on boxes and cylinders, including loosened-tolerance variants (1e-4 to 1e-2 mm); confirm tolerance growth is logged
+- [ ] **RS-0001:** build the ADR-0001 prototype's intersections to the contract in [RS-0001](docs/research/RS-0001-tolerant-analytic-intersection.md) and run it on `corpus/analytic-ssi/`. Before that, as a side track that needs no kernel code: the literature survey, the sweep generator, the exact reference oracle and the go/no-go decision (due week 12)
 - [ ] **ADR-0003:** dispatch benchmark, 10⁸ evaluations on line, circle, cubic B-spline
 - [ ] **ADR-0004:** ~10⁶-face body: adjacency speed and memory vs OCCT
 - [ ] **ADR-0004:** debuggability check: seeded-fault suite caught 100% in debug builds; pretty-printers working in GDB and LLDB
