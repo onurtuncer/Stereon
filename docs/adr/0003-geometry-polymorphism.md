@@ -34,6 +34,8 @@ Adopt option 4.
   | 3 | `IntersectableGeometry` | either certified analytic intersection handlers registered in the pair table, or `ToBSpline(g, tol) -> expected<BSplineSurface, KernelError>` with a certified deviation | participation as a face surface in booleans and blends |
 
   All built-in types are tier 3. Tier 2 is what makes a user surface usable in any search; tier 3 is what makes it usable in booleans.
+
+  Design-parameter derivatives are a separate optional capability, orthogonal to the tiers (ADR-0021).
 - `Curve`, `Curve2d` and `Surface` are copyable value types with small-buffer storage; larger types (NURBS with many poles) store an immutable shared payload so copies stay cheap. The initial buffer size is 96 bytes; it is a tuning constant fixed by the Phase 0 benchmark, not part of the public API or ABI promise.
 - Hot loops call `VisitBuiltin(g, f)`, which dispatches once over a closed `std::variant`-like table of built-in types (generated with expansion statements and pack indexing, ADR-0016) and falls back to virtual dispatch for user types.
 - Binary operations (curve–curve, surface–surface intersection) dispatch through a table keyed on type-ID pairs, with analytic special cases registered for known pairs and a generic NURBS fallback.
