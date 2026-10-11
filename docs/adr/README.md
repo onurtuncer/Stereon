@@ -35,3 +35,4 @@ This directory records Stereon's significant design decisions. Each ADR states t
 | [0019](0019-library-linking-packaging-and-abi.md) | Library linking, packaging and ABI policy | 0 | Proposed |
 | [0020](0020-cpp-c-abi-and-python-bindings.md) | C++ API, C ABI and Python bindings | 0 | Proposed |
 | [0021](0021-shape-derivatives.md) | Shape derivatives as an operation contract | 0 | Proposed |
+| [0022](0022-function-complexity.md) | Function complexity limits | 0 | Proposed |
