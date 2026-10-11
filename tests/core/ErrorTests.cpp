@@ -34,6 +34,10 @@ using Stereon::Fail;
 using Stereon::KernelError;
 using Stereon::Result;
 
+// Results are compared through their value (REQUIRE(*result == x)), never
+// directly: with libc++, Catch2's expression wrapper makes std::expected's
+// operator== constraint depend on itself and Clang rejects it.
+
 namespace {
 
 Result<int> ParsePositive(const int value)
@@ -160,7 +164,8 @@ TEST_CASE("STEREON_TRY unwraps values and returns errors early", "[core][errors]
 {
     Trace ok;
     const auto sum = SumOfPositives(2, 3, ok);
-    REQUIRE(sum == 5);
+    REQUIRE(sum.has_value());
+    REQUIRE(*sum == 5);
     REQUIRE(ok.Steps == 2);
 
     Trace firstFails;
@@ -185,13 +190,17 @@ TEST_CASE("STEREON_TRY_VOID propagates errors without a value", "[core][errors][
 
 TEST_CASE("STEREON_TRY moves move-only values", "[core][errors][try]")
 {
-    REQUIRE(Unboxed(7) == 7);
+    const auto unboxed = Unboxed(7);
+    REQUIRE(unboxed.has_value());
+    REQUIRE(*unboxed == 7);
     REQUIRE(Unboxed(-7).error().GetCode() == ErrorCode::InvalidInput);
 }
 
 TEST_CASE("STEREON_TRY converts between result value types", "[core][errors][try]")
 {
-    REQUIRE(Describe(12) == "12");
+    const auto described = Describe(12);
+    REQUIRE(described.has_value());
+    REQUIRE(*described == "12");
     REQUIRE(Describe(-12).error().GetCode() == ErrorCode::InvalidInput);
 }
 
