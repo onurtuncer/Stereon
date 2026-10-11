@@ -44,7 +44,7 @@
 
 ## 4. `stereon::core` (weeks 2–5)
 
-- [ ] Fixed-size `Vec2/3`, `Point2/3`, `Mat3/4`, `Transform` with constexpr operations
+- [x] Fixed-size `Vec2/3`, `Point2/3`, `Mat3/4`, `Transform` with constexpr operations. They are the `double` instances of scalar-generic `Basic*` templates over the `Scalar` concept (ADR-0021), checked with a forward-mode dual number in tests
 - [ ] `Interval` with outward rounding
 - [ ] `Box2`, `Box3` (bounding boxes) with union, intersection and interval-based tests
 - [ ] Typed handles `Id<Tag>` (32-bit), one distinct type per entity kind, no implicit integer conversions (ADR-0004)

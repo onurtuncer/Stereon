@@ -11,5 +11,8 @@
 export module Stereon.Core;
 
 export import :Error;
+export import :Matrix;
+export import :Scalar;
 export import :Simd;
+export import :Vector;
 export import :Version;
