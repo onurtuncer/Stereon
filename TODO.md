@@ -58,8 +58,8 @@
 - [x] Named accessors for packed orientation bits (`IsReversed(h)`, `BaseOf(h)`); no manual masking. `Oriented<Kind>` keeps the sense in the top bit and `Reversed(h)` flips it
 - [ ] Paged arena / copy-on-write page container (`shared_ptr<const Page>`, 256 entries) (ADR-0005)
 - [x] `KernelError`, `ErrorCode`, `std::expected` aliases, `STEREON_TRY` macro (ADR-0006). `KernelError` carries code, message and tolerances; entities, `ValidityReport` and journal ID follow with handles, the checker and the journal
-- [ ] `Context`: resolution, tolerance ceiling, scheduler, logger, journal sink (ADR-0001, ADR-0007)
-- [ ] Logging and operation journal (inputs + parameters, replayable)
+- [x] `Context`: resolution, tolerance ceiling, scheduler, logger, journal sink (ADR-0001, ADR-0007). A value with `With...` modifiers; also the size box, the tolerance-growth policy (ADR-0006), the validity level (ADR-0018) and the compaction threshold (ADR-0004). The scheduler is a kind and a thread count, since stdexec types cannot appear in module code (docs/toolchain/gcc16-feature-probe.md)
+- [x] Logging and operation journal (inputs + parameters, replayable). Kernel-owned `LogSink` and `JournalSink` (ADR-0023), `MemoryJournal`, `JournalId` on `KernelError`; replay of a recorded entry lands with the first operation (the ADR-0001 prototype in section 10)
 - [ ] Unit and property tests for all of the above
 
 ## 5. `stereon::robust` (weeks 3–6)
