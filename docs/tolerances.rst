@@ -8,7 +8,9 @@
 Tolerances and numeric robustness
 =================================
 
-The tolerance model, model resolution, per-entity tolerances, and the exact and filtered predicates that every topological decision goes through.
+The tolerance model, model resolution and per-entity tolerances. The exact and
+filtered predicates that every topological decision goes through have their
+own chapter, :doc:`predicates`.
 
 .. todo::
 
