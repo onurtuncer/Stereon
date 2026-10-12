@@ -44,7 +44,7 @@ jobs:
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-cmake
             mingw-w64-ucrt-x86_64-ninja
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Toolchain versions
         run: g++ --version | head -1; cmake --version | head -1; ninja --version
       - name: Configure

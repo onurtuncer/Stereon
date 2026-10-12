@@ -28,7 +28,7 @@ jobs:
     name: macOS GCC 16 (gcc16-debug)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install GCC 16 and Ninja
         run: |
           brew install gcc@16 ninja
