@@ -87,9 +87,88 @@ decide, which stays discrete (ADR-0021).
 Curves and surfaces
 -------------------
 
-.. todo::
+Geometry types are plain aggregates with no base class (ADR-0003). What a
+type can do is given by free functions found by argument-dependent lookup,
+and three concepts name the set a type must provide:
 
-   Write this section. It is a placeholder for the documentation effort.
+- ``CurveGeometry``, a curve in space: ``Eval(c, t)``, ``Deriv(c, t, n)``,
+  ``Domain(c)``, ``BoundingBox(c)``, ``Project(c, p)``, ``Reversed(c)`` and
+  ``Transformed(c, x)``;
+- ``Curve2dGeometry``, a curve in a surface's parameter plane (a pcurve,
+  ADR-0009): the same without ``Transformed``, since there is no 2D transform
+  type yet;
+- ``SurfaceGeometry``: ``Eval(s, uv)``, ``Deriv(s, uv, du, dv)``, ``Domain``
+  (a ``Box2``), ``BoundingBox``, ``Project`` (returning the parameter point),
+  ``Reversed`` and ``Transformed``.
+
+These are tier 1 of ADR-0003. The bounding operations of tier 2 and the
+intersection capability of tier 3 arrive with the intersection work.
+
+The built-in types so far are ``Line`` and ``Circle`` (and ``Line2d`` and
+``Circle2d`` in the plane), ``Plane`` and ``Cylinder``. A line is
+``Origin + t * Direction``; a circle is ``Center + Radius * (cos t * XAxis +
+sin t * YAxis)`` on ``[0, 2π]``; a plane is ``Origin + u * XAxis + v *
+YAxis``; a cylinder is the circle swept along its axis. Like the core math
+types they are instances of templates over the ``Scalar`` concept, so
+``Eval``, ``Deriv``, ``Reversed`` and ``Transformed`` also run on the active
+scalar type of an automatic-differentiation backend (ADR-0021).
+``Domain``, ``BoundingBox`` and ``Project`` bound and decide, and stay
+``double`` like ``Interval``.
+
+.. code-block:: cpp
+
+   import Stereon.Surface;
+
+   using namespace Stereon;
+
+   const Circle rim{Point3{0, 0, 0}, 5.0, Vec3{1, 0, 0}, Vec3{0, 1, 0}};
+   const Point3 top = Eval(rim, std::numbers::pi / 2);   // (0, 5, 0)
+   const double t = Project(rim, Point3{0, -9, 3});      // 3 pi / 2
+
+   const Cylinder wall{Point3{0, 0, 0}, 5.0, Vec3{1, 0, 0}, Vec3{0, 1, 0}};
+   const Vec3 normal = Cross(Deriv(wall, {0.0, 2.0}, 1, 0),
+                             Deriv(wall, {0.0, 2.0}, 0, 1)); // points outward
+
+Some conventions worth knowing:
+
+- ``Deriv`` of order n of a circle turns the radius vector by n quarter
+  turns, selected by ``n mod 4``, so that no rounded multiple of π/2 enters
+  the argument.
+- ``Project`` on a circle or cylinder returns an angle in ``[0, 2π)``; a point
+  on the axis, which is equally close to every point of the circle, gets 0.
+- ``Reversed`` runs a curve the other way and turns a surface's normal round:
+  for a cylinder it runs u backwards, which is why ``Cylinder`` carries a
+  ``RightHanded`` flag and its frame may have either handedness.
+- ``Transformed`` accepts similarities: rigid motions, reflections and
+  uniform scaling. A non-uniform scaling would turn a circle into an
+  ellipse, which the type cannot hold.
+- Circle bounding boxes are computed in ``Interval`` arithmetic, so they
+  enclose the exact circle. Lines, planes and cylinders are unbounded and
+  return ``Everything()``.
+
+Type-erased wrappers
+~~~~~~~~~~~~~~~~~~~~
+
+``Curve``, ``Curve2d`` and ``Surface`` hold any type satisfying the matching
+concept behind one copyable value type, and satisfy the concept themselves, so
+code written against the concept works on either. A wrapped value smaller
+than the 96-byte buffer, which every built-in type is, lives inside the
+wrapper and allocates nothing; a larger one, such as a NURBS curve with many
+poles, is held immutable behind a shared pointer and shared between copies.
+``Target<T>()`` returns the wrapped value when it is a ``T``.
+
+.. code-block:: cpp
+
+   const Curve edge(rim);                       // explicit: wrapping is a choice
+   const Point3 p = Eval(edge, 1.0);            // one virtual call
+   if (const Circle* c = edge.Target<Circle>()) { /* the circle itself */ }
+   const Curve back = Reversed(edge);           // still a Circle inside
+
+The wrappers are ``double`` only and are ``std::semiregular``, so the paged
+stores of ADR-0004 can hold them. Hot loops over built-in types will dispatch
+once with ``VisitBuiltin`` instead of once per call; that fast path, the
+type-pair dispatch table and the dispatch benchmark that fixes the buffer
+size are the next steps of the geometry scaffolding.
 
 Related design decisions
 ------------------------

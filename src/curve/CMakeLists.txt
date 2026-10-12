@@ -7,6 +7,10 @@
 
 stereon_add_library(curve
     MODULES
+        Circle.cppm
+        Concepts.cppm
         Curve.cppm
+        Erased.cppm
+        Line.cppm
     DEPENDS
         robust)

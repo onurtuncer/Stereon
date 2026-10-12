@@ -5,8 +5,14 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-/// Stereon.Curve: 2D and 3D analytic and NURBS curves (ADR-0003).
-/// Empty until the geometry scaffolding lands.
+/// Stereon.Curve: curves in space and in a surface's parameter plane
+/// (ADR-0003): the CurveGeometry and Curve2dGeometry concepts, the built-in
+/// Line and Circle, and the type-erased Curve and Curve2d.
 export module Stereon.Curve;
 
 export import Stereon.Robust;
+
+export import :Circle;
+export import :Concepts;
+export import :Erased;
+export import :Line;
