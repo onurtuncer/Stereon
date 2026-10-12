@@ -15,10 +15,13 @@ module;
 #include <compare>
 #include <concepts>
 #include <cstddef>
+#include <functional>
 #include <iterator>
 #include <memory>
 #include <ranges>
 #include <span>
+#include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -40,11 +43,31 @@ export module Stereon.Core:Arena;
 /// operations belong to one thread at a time, the builder's (ADR-0004,
 /// ADR-0007).
 ///
+/// Writes are scoped. Set(index, value) replaces an entry; Modify(index, fn)
+/// and ModifyPage(page, fn) hand fn a reference to the entry or a span of
+/// the page, made unique first, valid only for the duration of the call.
+/// No mutable reference is ever returned, because a reference that outlived
+/// the copy-on-write step would write into a page that a later copy shares,
+/// changing a snapshot that is meant to be immutable. During fn the arena
+/// must not be copied, moved, assigned, cleared, resized or edited again;
+/// each of those checks this on every build and reports a violation from a
+/// module implementation unit (Arena.cpp), so the check does not depend on
+/// GCC 16.2 honouring contracts in imported templates.
+///
 /// The page size is a tuning constant per table, fixed by the Phase 0
 /// measurement of ADR-0005 (bench/ArenaBench.cpp); nothing in the public
 /// API of the stores depends on it. Hot loops take the span of a page once
 /// with GetPageSpan() instead of indexing entry by entry, which keeps the
 /// page lookup and the reference counting out of the inner loop.
+
+namespace Stereon::Detail {
+
+/// Reports an arena operation attempted while an edit callback runs, then
+/// raises a contract violation (and aborts without contracts). Defined in
+/// Arena.cpp, a module implementation unit, so it fires in every importer.
+[[noreturn]] void ArenaEditViolation(std::string_view operation) noexcept;
+
+} // namespace Stereon::Detail
 
 export namespace Stereon {
 
@@ -160,8 +183,14 @@ public:
     /// Copies share every page with their source; the copy is cheap and
     /// neither arena can observe a write made through the other.
     PagedArena() = default;
-    PagedArena(const PagedArena&) = default;
-    PagedArena(PagedArena&&) noexcept = default;
+    PagedArena(const PagedArena& other)
+        : m_Pages((other.CheckNotEditing("copy"), other.m_Pages))
+        , m_Size(other.m_Size)
+    {}
+    PagedArena(PagedArena&& other) noexcept
+        : m_Pages((other.CheckNotEditing("move"), std::move(other.m_Pages)))
+        , m_Size(std::exchange(other.m_Size, 0))
+    {}
     ~PagedArena() = default;
 
     /// Copy-and-swap, so that an assignment copies page pointers into a
@@ -171,6 +200,7 @@ public:
     /// this path never takes (docs/toolchain/gcc16-feature-probe.md).
     PagedArena& operator=(PagedArena other) noexcept
     {
+        CheckNotEditing("assignment");
         m_Pages.swap(other.m_Pages);
         std::swap(m_Size, other.m_Size);
         return *this;
@@ -258,6 +288,7 @@ public:
     /// one is full and otherwise copies the last page first if it is shared.
     std::size_t PushBack(T value)
     {
+        CheckNotEditing("PushBack");
         const std::size_t index = m_Size;
         if (OffsetOf(index) == 0) {
             m_Pages.push_back(std::make_shared<Page>());
@@ -267,20 +298,45 @@ public:
         return index;
     }
 
-    /// The entry for writing. Its page is copied first when it is shared, so
-    /// no other arena sees the write. For many entries of one page,
-    /// ModifyPage() does the copy-on-write step once.
-    [[nodiscard]] T& Modify(const std::size_t index) STEREON_PRE(index < GetSize())
+    /// Replaces the entry, copying its page first when it is shared.
+    void Set(const std::size_t index, T value) STEREON_PRE(index < GetSize())
     {
-        return Unshare(PageOf(index))[OffsetOf(index)];
+        CheckNotEditing("Set");
+        Unshare(PageOf(index))[OffsetOf(index)] = std::move(value);
     }
 
-    /// The live entries of a page for writing, the page copied first when it
-    /// is shared.
-    [[nodiscard]] std::span<T> ModifyPage(const std::size_t page) STEREON_PRE(page < GetPageCount())
+    /// Calls fn(entry) with the entry made writable: its page is copied first
+    /// when it is shared, so no other arena sees the write. The reference is
+    /// valid only during the call; fn returns a value, never a reference,
+    /// and must not keep the address. For many entries of one page,
+    /// ModifyPage() does the copy-on-write step once.
+    template <typename F>
+        requires std::invocable<F&, T&>
+    decltype(auto) Modify(const std::size_t index, F&& fn) STEREON_PRE(index < GetSize())
     {
-        return std::span<T>{Unshare(page).data(), PageLength(page)};
+        static_assert(!std::is_reference_v<std::invoke_result_t<F&, T&>>,
+                      "an arena edit must not return a reference into the arena");
+        CheckNotEditing("Modify");
+        const EditScope scope(*this);
+        return std::invoke(fn, Unshare(PageOf(index))[OffsetOf(index)]);
     }
+
+    /// Calls fn(entries) with the live entries of a page made writable, the
+    /// page copied first when it is shared; the span is valid only during
+    /// the call, as for Modify().
+    template <typename F>
+        requires std::invocable<F&, std::span<T>>
+    decltype(auto) ModifyPage(const std::size_t page, F&& fn) STEREON_PRE(page < GetPageCount())
+    {
+        static_assert(!std::is_reference_v<std::invoke_result_t<F&, std::span<T>>>,
+                      "an arena edit must not return a reference into the arena");
+        CheckNotEditing("ModifyPage");
+        const EditScope scope(*this);
+        return std::invoke(fn, std::span<T>{Unshare(page).data(), PageLength(page)});
+    }
+
+    /// True while a Modify() or ModifyPage() callback runs.
+    [[nodiscard]] bool IsEditing() const noexcept { return m_Editing; }
 
     /// Room for the page pointers of size entries; pages themselves are
     /// allocated as entries arrive.
@@ -292,6 +348,7 @@ public:
     /// that page, unobservable, until the arena grows into them again.
     void Resize(const std::size_t size)
     {
+        CheckNotEditing("Resize");
         if (size < m_Size) {
             Shrink(size);
         } else {
@@ -302,12 +359,39 @@ public:
     /// Releases every page.
     void Clear() noexcept
     {
+        CheckNotEditing("Clear");
         m_Pages.clear();
         m_Size = 0;
     }
 
 private:
     using PagePtr = std::shared_ptr<Page>;
+
+    /// Marks the arena as being edited for the lifetime of the scope, also
+    /// when the callback exits with an exception (std::bad_alloc).
+    class EditScope {
+    public:
+        explicit EditScope(PagedArena& arena) noexcept
+            : m_Arena(arena)
+        {
+            m_Arena.m_Editing = true;
+        }
+        EditScope(const EditScope&) = delete;
+        EditScope& operator=(const EditScope&) = delete;
+        ~EditScope() { m_Arena.m_Editing = false; }
+
+    private:
+        PagedArena& m_Arena;
+    };
+
+    /// Every build: an operation during an edit callback would invalidate or
+    /// share the reference the callback holds.
+    void CheckNotEditing(const std::string_view operation) const noexcept
+    {
+        if (m_Editing) {
+            Detail::ArenaEditViolation(operation);
+        }
+    }
 
     static constexpr std::size_t Shift = static_cast<std::size_t>(std::countr_zero(N));
     static constexpr std::size_t Mask = N - 1;
@@ -375,6 +459,7 @@ private:
 
     std::vector<PagePtr> m_Pages;
     std::size_t m_Size = 0;
+    bool m_Editing = false;
 };
 
 static_assert(std::random_access_iterator<PagedArena<int>::ConstIterator>);

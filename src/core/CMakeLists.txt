@@ -23,6 +23,7 @@ stereon_add_library(core
         Vector.cppm
         Version.cppm
     SOURCES
+        Arena.cpp
         Handle.cpp
         Log.cpp)
 

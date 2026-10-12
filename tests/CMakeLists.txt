@@ -53,6 +53,12 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT STEREON_CONTRACT_SEMANTIC STREQU
         set_tests_properties("core: contracts in module templates fire in importers (GCC 16.2 drops them)"
             PROPERTIES PASS_REGULAR_EXPRESSION "contract violation" WILL_FAIL TRUE)
     endif()
+    # The arena's borrow check is a plain branch that reports from Arena.cpp,
+    # so it fires in every build that evaluates contracts.
+    add_test(NAME "core: copying an arena inside its edit callback is reported"
+        COMMAND stereon_contract_probe arena)
+    set_tests_properties("core: copying an arena inside its edit callback is reported"
+        PROPERTIES PASS_REGULAR_EXPRESSION "PagedArena copy during an edit callback.*contract violation")
     if(STEREON_CHECKED_HANDLES)
         add_test(NAME "core: checked handles report a stale handle"
             COMMAND stereon_contract_probe handle)
