@@ -125,12 +125,32 @@ def check_text(text: str, check_precision: bool) -> list[tuple[int, str]]:
     return problems
 
 
+def walked_sources(root: Path) -> list[Path]:
+    """Every source file under the checked directories, in a fixed order."""
+    files = []
+    for directory in CHECKED_DIRECTORIES:
+        base = root / directory
+        if base.is_dir():
+            files.extend(f for f in sorted(base.rglob("*")) if f.is_file() and f.suffix in SOURCE_SUFFIXES)
+    return files
+
+
 def tracked_sources(root: Path) -> list[Path]:
-    result = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "-z", "--", *[f"{d}/" for d in CHECKED_DIRECTORIES]],
-        check=True,
-        capture_output=True,
-    )
+    """The tracked source files under the checked directories.
+
+    Falls back to walking the tree when git cannot answer: CI runs the
+    check inside a container where the checkout belongs to another user and
+    git refuses the repository ("dubious ownership"), and an exported tree
+    has no git at all.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z", "--", *[f"{d}/" for d in CHECKED_DIRECTORIES]],
+            check=True,
+            capture_output=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return walked_sources(root)
     files = [root / name for name in result.stdout.decode("utf-8").split("\0") if name]
     return [f for f in files if f.suffix in SOURCE_SUFFIXES]
 
