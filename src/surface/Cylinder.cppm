@@ -9,8 +9,6 @@ module;
 
 #include <Stereon/Core/Contracts.hpp>
 
-#include <cmath>
-
 export module Stereon.Surface:Cylinder;
 
 import Stereon.Curve;
@@ -56,10 +54,9 @@ template <Scalar T>
 [[nodiscard]] constexpr BasicVec3<T> RadialTurned(const BasicCylinder<T>& cylinder, const T& u,
                                                   const int quarterTurns)
 {
-    using std::cos;
-    using std::sin;
-    const T c = cos(u);
-    const T s = sin(u);
+    // Not std::cos: see Stereon.Core:Trigonometry.
+    const T c = Cos(u);
+    const T s = Sin(u);
     switch (quarterTurns % 4) {
     case 1:
         return cylinder.Radius * (-s * cylinder.XAxis + c * cylinder.YAxis);
@@ -120,7 +117,7 @@ template <Scalar T>
     if (x == 0.0 && y == 0.0) {
         return {0.0, v};
     }
-    const double angle = std::atan2(y, x);
+    const double angle = Atan2(y, x);
     if (angle >= 0.0) {
         return {angle, v};
     }
