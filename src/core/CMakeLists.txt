@@ -20,6 +20,7 @@ stereon_add_library(core
         Matrix.cppm
         Scalar.cppm
         Simd.cppm
+        SmallBuffer.cppm
         Vector.cppm
         Version.cppm
     SOURCES

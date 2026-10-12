@@ -7,6 +7,10 @@
 
 stereon_add_library(surface
     MODULES
+        Concepts.cppm
+        Cylinder.cppm
+        Erased.cppm
+        Plane.cppm
         Surface.cppm
     DEPENDS
         curve)
