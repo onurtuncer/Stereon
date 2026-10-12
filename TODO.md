@@ -56,7 +56,7 @@
 - [x] `STEREON_CHECKED_HANDLES` mode (on in debug, asan, fuzzing presets): handles carry store ID + generation; every access checks store, bounds and generation (ADR-0004 safeguards). `GenerationTable::Check()`; the report and contract violation come from `Handle.cpp`, a module implementation unit, so they fire in every importer
 - [x] `static_assert` + CI check that release-build handles are exactly 4 bytes (`Handle.cppm`; the release and Windows CI presets compile it)
 - [x] Named accessors for packed orientation bits (`IsReversed(h)`, `BaseOf(h)`); no manual masking. `Oriented<Kind>` keeps the sense in the top bit and `Reversed(h)` flips it
-- [ ] Paged arena / copy-on-write page container (`shared_ptr<const Page>`, 256 entries) (ADR-0005)
+- [x] Paged arena / copy-on-write page container (`shared_ptr<const Page>`, 256 entries) (ADR-0005). `PagedArena<T, N>`: a copy shares every page, the first write to a page copies it unless the arena holds it alone, and hot loops read one page span at a time; `bench/ArenaBench.cpp` runs the 128/256/1 024 sweep on a 10⁶-record table
 - [x] `KernelError`, `ErrorCode`, `std::expected` aliases, `STEREON_TRY` macro (ADR-0006). `KernelError` carries code, message and tolerances; entities, `ValidityReport` and journal ID follow with handles, the checker and the journal
 - [ ] `Context`: resolution, tolerance ceiling, scheduler, logger, journal sink (ADR-0001, ADR-0007)
 - [ ] Logging and operation journal (inputs + parameters, replayable)
@@ -104,7 +104,7 @@
 
 ## 9. Testing infrastructure (weeks 2–10)
 
-- [ ] Catch2 + RapidCheck wiring; test naming and tagging conventions
+- [x] Catch2 + RapidCheck wiring; test naming and tagging conventions. One executable per library, cases tagged `[<library>]` plus topic tags and `[property]` for `rc::prop` tests ([`tests/CMakeLists.txt`](tests/CMakeLists.txt))
 - [ ] libFuzzer harness skeleton (for later STEP and primitive-placement fuzzing)
 - [ ] OCCT differential-testing harness: build OCCT in CI, compare volumes/areas/face counts on shared cases
 - [x] `corpus/` layout, metadata format and `corpus/LICENSES.md` ([`corpus/README.md`](corpus/README.md)); cases validated by `tools/check_corpus.py` in CI
