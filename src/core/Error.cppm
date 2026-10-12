@@ -18,6 +18,7 @@ module;
 export module Stereon.Core:Error;
 
 import :Enum;
+import :Journal;
 
 /// Error handling (ADR-0006). Operations that can fail return
 /// Result<T> = std::expected<T, KernelError>; the kernel does not throw,
@@ -60,12 +61,11 @@ inline constexpr bool ErrorCodeNames = EnumNames;
     }
 }
 
-/// A failed operation: what went wrong, a message for people and the
-/// tolerance values at stake.
+/// A failed operation: what went wrong, a message for people, the
+/// tolerance values at stake and the journal entry to replay it from.
 ///
-/// ADR-0006 also attaches the entities involved, a ValidityReport and a
-/// journal ID for replay. They arrive with handles, the validity checker
-/// and the operation journal.
+/// ADR-0006 also attaches the entities involved and a ValidityReport. They
+/// arrive with handles and the validity checker.
 class KernelError {
 public:
     KernelError(const ErrorCode code, std::string message)
@@ -79,6 +79,10 @@ public:
     /// Tolerances at stake in millimetres, in the order they were added.
     [[nodiscard]] std::span<const double> GetTolerances() const noexcept { return m_Tolerances; }
 
+    /// The journal entry of the operation that failed, or the invalid id when
+    /// the Context had no journal (ADR-0023).
+    [[nodiscard]] JournalId GetJournalId() const noexcept { return m_JournalId; }
+
     /// Adds a tolerance value; chains on a temporary:
     /// KernelError(ErrorCode::ToleranceExceeded, "...").WithTolerance(0.02).
     [[nodiscard]] KernelError WithTolerance(const double tolerance) &&
@@ -87,10 +91,17 @@ public:
         return std::move(*this);
     }
 
+    [[nodiscard]] KernelError WithJournalId(const JournalId id) &&
+    {
+        m_JournalId = id;
+        return std::move(*this);
+    }
+
 private:
     ErrorCode m_Code;
     std::string m_Message;
     std::vector<double> m_Tolerances;
+    JournalId m_JournalId;
 };
 
 /// The return type of every public operation that can fail (ADR-0006).

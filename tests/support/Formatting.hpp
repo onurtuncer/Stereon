@@ -80,4 +80,14 @@ struct StringMaker<Stereon::Oriented<K>> {
     static std::string convert(const Stereon::Oriented<K>& h) { return std::format("{}", h); }
 };
 
+template <>
+struct StringMaker<Stereon::LogLevel> {
+    static std::string convert(const Stereon::LogLevel level) { return std::format("{}", level); }
+};
+
+template <>
+struct StringMaker<Stereon::JournalId> {
+    static std::string convert(const Stereon::JournalId id) { return std::format("{}", id); }
+};
+
 } // namespace Catch
