@@ -42,6 +42,29 @@ violation. Release builds compile ``Id`` down to its 4-byte index, which a
 ``static_assert`` guards. Handles are local to one store; identity across
 operations comes from history maps (ADR-0011).
 
+Storage pages
+-------------
+
+Entity tables and geometry pools keep their entries in ``PagedArena<T, N>``
+(ADR-0005): fixed-size pages of ``N`` entries, 256 unless a table chooses
+otherwise, behind ``std::shared_ptr``. Copying an arena copies the page
+pointers, so a snapshot of a million-entry table costs a few thousand pointer
+copies and shares every page with its source. The first write to a page,
+through ``Modify(index)`` or ``ModifyPage(page)``, copies the page when
+another arena still holds it and writes in place when the arena holds it
+alone; memory grows with what an edit touched, not with the size of the
+table. ``PushBack`` appends, ``Resize`` grows with value-initialised entries
+or drops whole pages, and ``GetPageSpan(page)`` hands hot loops one page at a
+time, so the page lookup and the reference counting stay out of inner loops.
+
+A ``const`` arena can be read, and copied, from any thread; the mutating
+operations belong to one thread, the builder's (ADR-0007).
+``SharedPageCount(a, b)`` and ``IsPageShared(page)`` report what a snapshot
+and its edit still share, which the tests and ``bench/ArenaBench.cpp`` use
+to measure the copy cost. The page size is a tuning constant per table, fixed
+by the Phase 0 measurement of ADR-0005 over 128, 256 and 1 024 entries;
+nothing in the public API of the stores depends on it.
+
 .. todo::
 
    Document the SoA stores, ``ShapeBuilder``, ``Freeze()`` and ``Compact()``,
