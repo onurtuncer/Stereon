@@ -37,6 +37,7 @@ CI also runs these source checks. `ctest` runs the last two whenever Python is i
 git ls-files -z -- '*.cpp' '*.cppm' '*.hpp' '*.h' | xargs -0 clang-format --dry-run --Werror   # pip install clang-format==22.1.8
 python tools/check_layering.py
 python tools/check_epsilon.py
+python tools/check_literals.py
 ```
 
 ## What a pull request needs
@@ -86,6 +87,7 @@ Stereon is written in C++26 with C++20 modules. These rules come from the ADRs a
 - **Standard-library polyfills through wrappers.** Use `Stereon::Simd` (from `import Stereon.Core;`) and `Stereon::Exec` (from `<Stereon/Core/Exec.hpp>`), never `xsimd::`, `stdexec::`, `std::simd` or `std::execution` directly. A file that includes `Exec.hpp` must be listed with `stereon_exec_sources()` in its CMakeLists and cannot import modules. GCC 16.2 and MSVC crash on stdexec otherwise ([gcc16-feature-probe.md](docs/toolchain/gcc16-feature-probe.md#known-compiler-bugs)).
 - **No invalid results.** An operation returns a shape that passes the validity checker or an error. Returning an invalid shape is a bug.
 - **No hidden epsilons.** Code in `topo/`, `boolean/` and `mesh/` never compares against literal constants. It uses `ToleranceOf(entity)` or `ctx.GetResolution()` ([ADR-0001](docs/adr/0001-tolerance-model.md)).
+- **No magic numbers.** Mathematical constants come from `<numbers>` (`std::numbers::pi`, `pi_v<T>` in generic code), never as decimals; model and algorithm constants are named once with their provenance; derived constants are written as their formula, powers of two as hexadecimal floats (`0x1p-53`). `python tools/check_literals.py` flags the recognisable cases ([ADR-0024](docs/adr/0024-named-constants.md)).
 - **Predicates go through `robust/`.** Every topological decision in `topo/`, `boolean/` and `mesh/` uses a predicate from `stereon::robust`. Direct sign tests on computed doubles are not allowed there ([ADR-0002](docs/adr/0002-numeric-robustness.md)).
 - **Tolerances grow only explicitly.** Increasing an edge or vertex tolerance happens through a named operation that logs the entity, the old and new values and the reason.
 

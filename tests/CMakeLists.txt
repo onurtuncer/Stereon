@@ -72,6 +72,11 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME "tools: epsilon lint"
         COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/check_epsilon.py"
                 --root "${PROJECT_SOURCE_DIR}")
+    add_test(NAME "tools: literal lint self-test"
+        COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/check_literals.py" --self-test)
+    add_test(NAME "tools: literal lint"
+        COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/check_literals.py"
+                --root "${PROJECT_SOURCE_DIR}")
     # The complexity check needs the lizard package; without it the script
     # exits 77, which CTest reports as skipped rather than failed.
     add_test(NAME "tools: complexity self-test"
