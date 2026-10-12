@@ -37,6 +37,7 @@ Stereon
 
    architecture
    tolerances
+   predicates
    geometry
    topology
    intersection

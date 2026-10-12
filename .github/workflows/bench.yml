@@ -33,7 +33,7 @@ jobs:
         run: |
           apt-get update -qq
           apt-get install -y -qq --no-install-recommends cmake ninja-build
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Configure
         run: cmake --preset bench -DSTEREON_WARNINGS_AS_ERRORS=ON
       - name: Build
