@@ -64,11 +64,11 @@
 
 ## 5. `stereon::robust` (weeks 3–6)
 
-- [ ] Adaptive-precision `Orient2D`, `Orient3D`, `InCircle`, `InSphere` (Shewchuk-style)
-- [ ] Expansion arithmetic primitives for custom predicates
-- [ ] Interval-filtered predicate helpers with exact fallback
-- [ ] Adversarial test suite (Shewchuk cases + 10⁶ random near-degenerate cases)
-- [ ] Benchmarks: filtered vs naive floating point
+- [x] Adaptive-precision `Orient2D`, `Orient3D`, `InCircle`, `InSphere` (Shewchuk-style). `Stereon.Robust`: stage A with Shewchuk's bounds, stage B on the rounded differences (exact when their tails vanish), stage C for the orientations, then the exact cofactor form on the raw coordinates; results are `Sign`, never doubles
+- [x] Expansion arithmetic primitives for custom predicates. `TwoSum`, `TwoDiff`, `TwoProduct`, `Split`; `Expansion<N>` with capacity-typed `Sum`, `Scaled`, `Product` and operators, all constexpr; the library is built with `-ffp-contract=off` (PUBLIC)
+- [x] Interval-filtered predicate helpers with exact fallback. `SignOf(Interval)` and `FilteredSign(estimate, exact)`
+- [x] Adversarial test suite (Shewchuk cases + 10⁶ random near-degenerate cases). The Kettner grid, an `__int128` oracle on integer and dyadic inputs, exactly degenerate integer constructions (collinear, coplanar, cocircular, cospherical) with one-unit perturbations; 20 000 cases per predicate in CI, the 10⁶ run is the hidden test `stereon_robust_tests "[exhaustive]"`
+- [x] Benchmarks: filtered vs naive floating point (`bench/RobustBench.cpp`, B0.1): random, nearly degenerate and exact-stage costs per predicate
 
 ## 6. Geometry scaffolding (weeks 4–8)
 
