@@ -1,0 +1,43 @@
+# SPDX-FileCopyrightText: 2026 Onur Tuncer and Stereon contributors
+# SPDX-License-Identifier: MPL-2.0
+#
+# Keeps the CI actions and the pinned Python tools current; SECURITY.md lists
+# the pipeline and fetched dependencies as in scope. Monthly and grouped, so a
+# one-maintainer project sees two or three pull requests a month, each running
+# the full matrix once.
+#
+# Not covered: the C++ dependencies are CMake FetchContent pins (stdexec,
+# xsimd, Catch2, RapidCheck, Google Benchmark, nanobind), which Dependabot
+# cannot read, and the gcc:16.2 image in the TSan workflow, which changes with
+# the reference toolchain. Both are checked by hand (TODO, section 3).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"
+
+  - package-ecosystem: pip
+    directory: /docs
+    schedule:
+      interval: monthly
+    groups:
+      manual-python:
+        patterns: ["*"]
+    commit-message:
+      prefix: "docs"
+
+  - package-ecosystem: pip
+    directory: /tools
+    schedule:
+      interval: monthly
+    groups:
+      check-python:
+        patterns: ["*"]
+    commit-message:
+      prefix: "tools"

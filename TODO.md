@@ -43,6 +43,8 @@
 - [x] Coverage report (gcov/llvm-cov) published per PR
 - [ ] Benchmark job on `main` with results stored for trend tracking
 - [ ] Nightly job: full test suite + determinism check (1, 2, 8, 32 threads) (ADR-0007)
+- [x] Dependabot keeps the GitHub Actions and the pip pins (`docs/requirements.txt`, `tools/requirements.txt`) current: monthly, grouped
+- [ ] Check the CMake FetchContent pins (stdexec, xsimd, Catch2, RapidCheck, Google Benchmark, nanobind) and the `gcc:16.2` image against upstream at each phase gate; Dependabot cannot read them
 
 ## 4. `stereon::core` (weeks 2–5)
 
