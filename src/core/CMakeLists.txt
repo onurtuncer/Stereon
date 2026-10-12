@@ -7,6 +7,7 @@
 
 stereon_add_library(core
     MODULES
+        Arena.cppm
         Box.cppm
         Core.cppm
         Enum.cppm
