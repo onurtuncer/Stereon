@@ -7,11 +7,14 @@
 
 stereon_add_library(robust
     MODULES
+        Domain.cppm
         Expansion.cppm
         Filter.cppm
         Predicates.cppm
         Robust.cppm
         Sign.cppm
+    SOURCES
+        Robust.cpp
     DEPENDS
         core)
 

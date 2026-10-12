@@ -8,6 +8,7 @@
 export module Stereon.Robust:Predicates;
 
 import Stereon.Core;
+import :Domain;
 import :Expansion;
 import :Sign;
 
@@ -30,10 +31,15 @@ import :Sign;
 ///   result. It is reached only for degenerate or nearly degenerate input.
 ///
 /// The constants are Shewchuk's, for round-to-nearest-even doubles (unit
-/// roundoff 2^-53) and no fused multiply-add. Inputs must be finite and far
-/// enough from overflow for the products of coordinate differences to be
-/// finite; there is no other restriction. The manual's "Exact predicates"
-/// chapter derives the determinants and the bounds.
+/// roundoff 2^-53) and no fused multiply-add. Shewchuk's analysis also
+/// assumes that nothing underflows or overflows; stage A therefore carries an
+/// absolute term, UnderflowGuard, and the adaptive and exact stages first
+/// check the numerical domain of :Domain and rescale the coordinates by an
+/// exact power of two when needed. Coordinates must be finite, and their
+/// binary exponents must span less than about 2045 / d orders for a
+/// predicate of degree d; otherwise the exact stage reports a contract
+/// violation. The manual's "Exact predicates" chapter derives the
+/// determinants, the bounds and the domain.
 
 namespace Stereon::Detail {
 
@@ -204,12 +210,32 @@ export namespace Stereon {
 [[nodiscard]] constexpr Sign Orient2DExact(const Point2& a, const Point2& b,
                                            const Point2& c) noexcept
 {
+    const Detail::DomainCheck domain = Detail::CheckDomain({a, b, c}, 2);
+    if (domain.Status == Detail::DomainStatus::Scalable) {
+        using Detail::ScaledByPowerOfTwo;
+        return Orient2DExact(ScaledByPowerOfTwo(a, domain.Shift),
+                             ScaledByPowerOfTwo(b, domain.Shift),
+                             ScaledByPowerOfTwo(c, domain.Shift));
+    }
+    if (domain.Status != Detail::DomainStatus::Inside) {
+        Detail::PredicateDomainViolation("Orient2D", domain.Status);
+    }
     return Detail::ExactOrient2(a, b, c).GetSign();
 }
 
 [[nodiscard]] constexpr Sign Orient3DExact(const Point3& a, const Point3& b, const Point3& c,
                                            const Point3& d) noexcept
 {
+    const Detail::DomainCheck domain = Detail::CheckDomain({a, b, c, d}, 3);
+    if (domain.Status == Detail::DomainStatus::Scalable) {
+        using Detail::ScaledByPowerOfTwo;
+        const int s = domain.Shift;
+        return Orient3DExact(ScaledByPowerOfTwo(a, s), ScaledByPowerOfTwo(b, s),
+                             ScaledByPowerOfTwo(c, s), ScaledByPowerOfTwo(d, s));
+    }
+    if (domain.Status != Detail::DomainStatus::Inside) {
+        Detail::PredicateDomainViolation("Orient3D", domain.Status);
+    }
     return Detail::ExactDet4(a, b, c, d).GetSign();
 }
 
@@ -218,6 +244,16 @@ export namespace Stereon {
 [[nodiscard]] constexpr Sign InCircleExact(const Point2& a, const Point2& b, const Point2& c,
                                            const Point2& d) noexcept
 {
+    const Detail::DomainCheck domain = Detail::CheckDomain({a, b, c, d}, 4);
+    if (domain.Status == Detail::DomainStatus::Scalable) {
+        using Detail::ScaledByPowerOfTwo;
+        const int s = domain.Shift;
+        return InCircleExact(ScaledByPowerOfTwo(a, s), ScaledByPowerOfTwo(b, s),
+                             ScaledByPowerOfTwo(c, s), ScaledByPowerOfTwo(d, s));
+    }
+    if (domain.Status != Detail::DomainStatus::Inside) {
+        Detail::PredicateDomainViolation("InCircle", domain.Status);
+    }
     using Detail::ExactLift;
     using Detail::ExactOrient2;
     const auto det = ExactLift(a) * ExactOrient2(b, c, d) - ExactLift(b) * ExactOrient2(a, c, d) +
@@ -231,6 +267,17 @@ export namespace Stereon {
 [[nodiscard]] constexpr Sign InSphereExact(const Point3& a, const Point3& b, const Point3& c,
                                            const Point3& d, const Point3& e) noexcept
 {
+    const Detail::DomainCheck domain = Detail::CheckDomain({a, b, c, d, e}, 5);
+    if (domain.Status == Detail::DomainStatus::Scalable) {
+        using Detail::ScaledByPowerOfTwo;
+        const int s = domain.Shift;
+        return InSphereExact(ScaledByPowerOfTwo(a, s), ScaledByPowerOfTwo(b, s),
+                             ScaledByPowerOfTwo(c, s), ScaledByPowerOfTwo(d, s),
+                             ScaledByPowerOfTwo(e, s));
+    }
+    if (domain.Status != Detail::DomainStatus::Inside) {
+        Detail::PredicateDomainViolation("InSphere", domain.Status);
+    }
     using Detail::ExactDet4;
     using Detail::ExactLift;
     const auto ta = ExactLift(a) * ExactDet4(b, c, d, e);
@@ -250,6 +297,11 @@ namespace Stereon::Detail {
 [[nodiscard]] constexpr Sign Orient2DAdaptive(const Point2& a, const Point2& b, const Point2& c,
                                               const double detSum) noexcept
 {
+    // Stages B and C are exact only inside the domain; outside it the exact
+    // stage rescales or reports.
+    if (CheckDomain({a, b, c}, 2).Status != DomainStatus::Inside) {
+        return Orient2DExact(a, b, c);
+    }
     const Vec2 ac = a - c;
     const Vec2 bc = b - c;
     const Expansion<4> det = TwoProduct(ac.X, bc.Y) - TwoProduct(ac.Y, bc.X);
@@ -276,6 +328,9 @@ namespace Stereon::Detail {
 [[nodiscard]] constexpr Sign Orient3DAdaptive(const Point3& a, const Point3& b, const Point3& c,
                                               const Point3& d, const double permanent) noexcept
 {
+    if (CheckDomain({a, b, c, d}, 3).Status != DomainStatus::Inside) {
+        return Orient3DExact(a, b, c, d);
+    }
     const Vec3 ad = a - d;
     const Vec3 bd = b - d;
     const Vec3 cd = c - d;
@@ -310,6 +365,9 @@ namespace Stereon::Detail {
 [[nodiscard]] constexpr Sign InCircleAdaptive(const Point2& a, const Point2& b, const Point2& c,
                                               const Point2& d, const double permanent) noexcept
 {
+    if (CheckDomain({a, b, c, d}, 4).Status != DomainStatus::Inside) {
+        return InCircleExact(a, b, c, d);
+    }
     const Vec2 ad = a - d;
     const Vec2 bd = b - d;
     const Vec2 cd = c - d;
@@ -330,6 +388,9 @@ namespace Stereon::Detail {
                                               const Point3& d, const Point3& e,
                                               const double permanent) noexcept
 {
+    if (CheckDomain({a, b, c, d, e}, 5).Status != DomainStatus::Inside) {
+        return InSphereExact(a, b, c, d, e);
+    }
     const Vec3 ae = a - e;
     const Vec3 be = b - e;
     const Vec3 ce = c - e;
@@ -368,8 +429,9 @@ export namespace Stereon {
     // same answer in those cases, since |det| is then the whole permanent,
     // and it does so without a branch on the sign of random data.
     const double detSum = Detail::Magnitude(detLeft) + Detail::Magnitude(detRight);
-    const double errorBound = Detail::Orient2DBoundA * detSum;
-    if (Detail::Magnitude(det) >= errorBound) {
+    const double errorBound = Detail::Orient2DBoundA * detSum + Detail::UnderflowGuard;
+    // Strict, unlike Shewchuk's >=: an overflowed product gives inf >= inf.
+    if (Detail::Magnitude(det) > errorBound) {
         return SignOf(det);
     }
     return Detail::Orient2DAdaptive(a, b, c, detSum);
@@ -386,7 +448,7 @@ export namespace Stereon {
     const Vec3 cd = c - d;
     const double det = Detail::Det3(ad, bd, cd);
     const double permanent = Detail::Det3Permanent(ad, bd, cd);
-    const double errorBound = Detail::Orient3DBoundA * permanent;
+    const double errorBound = Detail::Orient3DBoundA * permanent + Detail::UnderflowGuard;
     if (Detail::Magnitude(det) > errorBound) {
         return SignOf(det);
     }
@@ -410,7 +472,7 @@ export namespace Stereon {
     const double permanent = Detail::MinorPermanent(bd, cd) * aLift +
                              Detail::MinorPermanent(cd, ad) * bLift +
                              Detail::MinorPermanent(ad, bd) * cLift;
-    const double errorBound = Detail::InCircleBoundA * permanent;
+    const double errorBound = Detail::InCircleBoundA * permanent + Detail::UnderflowGuard;
     if (Detail::Magnitude(det) > errorBound) {
         return SignOf(det);
     }
@@ -436,7 +498,7 @@ export namespace Stereon {
     const double permanent =
         Detail::Det3Permanent(be, ce, de) * aLift + Detail::Det3Permanent(ce, de, ae) * bLift +
         Detail::Det3Permanent(de, ae, be) * cLift + Detail::Det3Permanent(ae, be, ce) * dLift;
-    const double errorBound = Detail::InSphereBoundA * permanent;
+    const double errorBound = Detail::InSphereBoundA * permanent + Detail::UnderflowGuard;
     if (Detail::Magnitude(det) > errorBound) {
         return SignOf(det);
     }

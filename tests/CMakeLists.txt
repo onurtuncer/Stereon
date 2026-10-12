@@ -41,7 +41,7 @@ stereon_add_tests(robust)
 # contracts, and an "ignore" build (the bench preset) checks nothing.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT STEREON_CONTRACT_SEMANTIC STREQUAL "ignore")
     add_executable(stereon_contract_probe probes/ContractProbe.cpp)
-    target_link_libraries(stereon_contract_probe PRIVATE stereon::core stereon_options)
+    target_link_libraries(stereon_contract_probe PRIVATE stereon::robust stereon_options)
     stereon_anchor_contracts(stereon_contract_probe)
     if(STEREON_HOT_CONTRACTS)
         add_test(NAME "core: contracts in module inline functions fire in importers"
@@ -53,6 +53,12 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT STEREON_CONTRACT_SEMANTIC STREQU
         set_tests_properties("core: contracts in module templates fire in importers (GCC 16.2 drops them)"
             PROPERTIES PASS_REGULAR_EXPRESSION "contract violation" WILL_FAIL TRUE)
     endif()
+    # Like the arena check, the predicate domain is reported from a module
+    # implementation unit, so it fires in every build that evaluates contracts.
+    add_test(NAME "robust: coordinates outside the predicate domain are reported"
+        COMMAND stereon_contract_probe predicate)
+    set_tests_properties("robust: coordinates outside the predicate domain are reported"
+        PROPERTIES PASS_REGULAR_EXPRESSION "Orient2D outside the predicate domain.*contract violation")
     if(STEREON_CHECKED_HANDLES)
         add_test(NAME "core: checked handles report a stale handle"
             COMMAND stereon_contract_probe handle)

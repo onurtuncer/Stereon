@@ -39,8 +39,11 @@ import :Sign;
 ///
 /// The arithmetic assumes round-to-nearest-even, no fused multiply-add (the
 /// robust library is built with -ffp-contract=off, and so is every unit that
-/// instantiates these templates) and no overflow. Underflow is harmless: the
-/// transformations stay exact for subnormal results.
+/// instantiates these templates), and that no operation underflows or
+/// overflows. Underflow is not harmless: a product that falls below 2^-1022
+/// loses bits, and TwoProduct is then no longer exact. The predicates keep
+/// their inputs inside a domain where this cannot happen (:Domain); custom
+/// predicates built from these pieces need the same care.
 ///
 /// The manual's "Exact predicates" chapter derives the algorithms.
 
