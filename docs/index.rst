@@ -55,6 +55,14 @@ Stereon
    testing
    references
 
+Planning
+--------
+
+The proposed capability baseline and its commit-pinned repository audit are
+maintained in the `planning index
+<https://github.com/onurtuncer/Stereon/tree/main/docs/planning>`_.
+They describe the long-term coverage target and do not replace the ADRs.
+
 Open documentation tasks
 ------------------------
 
