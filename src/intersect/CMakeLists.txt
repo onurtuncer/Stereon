@@ -7,6 +7,7 @@
 
 stereon_add_library(intersect
     MODULES
+        Dispatch.cppm
         Intersect.cppm
     DEPENDS
         surface)

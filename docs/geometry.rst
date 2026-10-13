@@ -165,10 +165,57 @@ poles, is held immutable behind a shared pointer and shared between copies.
    const Curve back = Reversed(edge);           // still a Circle inside
 
 The wrappers are ``double`` only and are ``std::semiregular``, so the paged
-stores of ADR-0004 can hold them. Hot loops over built-in types will dispatch
-once with ``VisitBuiltin`` instead of once per call; that fast path, the
-type-pair dispatch table and the dispatch benchmark that fixes the buffer
-size are the next steps of the geometry scaffolding.
+stores of ADR-0004 can hold them.
+
+The fast path
+~~~~~~~~~~~~~
+
+A call through ``Curve`` costs one virtual call, which is a lot next to
+evaluating a line. Hot loops therefore dispatch once with
+``VisitBuiltin(curve, f)``: when the curve wraps one of the built-in types
+(``BuiltinCurveTypes``, ``BuiltinCurve2dTypes``, ``BuiltinSurfaceTypes``),
+``f`` receives that type and its loop makes direct calls; any other type
+reaches ``f`` as the wrapper, whose calls stay virtual. The type test is
+generated with an expansion statement and pack indexing over the type list
+(ADR-0016) and runs once per ``VisitBuiltin``.
+
+.. code-block:: cpp
+
+   const double length = VisitBuiltin(edge, [&](const auto& g) {
+       double total = 0.0;
+       for (std::size_t i = 1; i < samples.size(); ++i) {   // runs on Circle itself
+           total += Length(Eval(g, samples[i]) - Eval(g, samples[i - 1]));
+       }
+       return total;
+   });
+
+Every call of ``f`` must return the same type. The two paths run the same
+code, and property tests require them to agree to the bit on every built-in
+type. ``BuiltinIndexOf`` gives a wrapped value's position in its type list,
+which the intersection tables of ``Stereon.Intersect`` use: ``Intersect(a,
+b, ctx)`` dispatches built-in pairs through a table generated at compile
+time, one handler per ordered pair. Every handler is a stub returning
+``NotImplemented`` until the analytic handlers of ADR-0010 arrive, and types
+that are not built in return ``NotSupported``.
+
+Measured in ``bench/GeometryBench.cpp`` (GCC 16.2, -O3), in nanoseconds per
+evaluation:
+
+===================================  ======  ======
+Path                                 Line    Circle
+===================================  ======  ======
+Direct call on the concrete type     2.2     49
+``VisitBuiltin``, loop inside        2.0     46
+``VisitBuiltin`` around every call   6.4     50
+``Curve``, one virtual call each     5.6     50
+===================================  ======  ======
+
+``VisitBuiltin`` meets ADR-0003's target of 10% over direct calls. The
+virtual path misses its target of 2x for a line, where the evaluation costs
+about as much as the call; for a circle the trigonometry dominates. The copy
+benchmark settles the buffer size: at 64 bytes a circle no longer fits and a
+copy costs 42 ns instead of 12, while 128 bytes gains nothing, so
+``GeometryBufferSize`` stays at 96, which also holds ``Cylinder`` (88 bytes).
 
 Related design decisions
 ------------------------

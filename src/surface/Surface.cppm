@@ -15,3 +15,4 @@ export import :Concepts;
 export import :Cylinder;
 export import :Erased;
 export import :Plane;
+export import :Visit;
