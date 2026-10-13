@@ -59,6 +59,15 @@ concept CurveGeometryN = std::copyable<C> && requires(const C c, const double t,
     { Reversed(c) } -> std::same_as<C>;
 };
 
+/// A curve that is periodic in its parameter provides Period(c), the length
+/// of one period, so that every finite parameter is valid for it; any other
+/// curve must be evaluated inside Domain(c). Optional: the erased wrappers
+/// report 0, "not periodic", for a type without it.
+template <typename C>
+concept PeriodicCurve = requires(const C c) {
+    { Period(c) } -> std::same_as<double>;
+};
+
 /// A curve in space. It can also be moved: Transformed(c, x) applies a rigid
 /// motion or a similarity.
 template <typename C>

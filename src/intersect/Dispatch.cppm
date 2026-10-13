@@ -10,8 +10,9 @@ module;
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <format>
+#include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 export module Stereon.Intersect:Dispatch;
@@ -82,9 +83,11 @@ Result<CurveCurveIntersection> CurveStub(const Curve&, const Curve&, const Conte
     // specializations of GeometryTypeName when another module odr-uses them.
     constexpr std::string_view nameA = GeometryTypeName<A>;
     constexpr std::string_view nameB = GeometryTypeName<B>;
-    return Fail(
-        ErrorCode::NotImplemented,
-        std::format("{} x {} intersection is not implemented yet (ADR-0010)", nameA, nameB));
+    std::string message(nameA);
+    message += " x ";
+    message += nameB;
+    message += " intersection is not implemented yet (ADR-0010)";
+    return Fail(ErrorCode::NotImplemented, std::move(message));
 }
 
 template <typename A, typename B>
@@ -94,9 +97,11 @@ Result<SurfaceSurfaceIntersection> SurfaceStub(const Surface&, const Surface&, c
     // specializations of GeometryTypeName when another module odr-uses them.
     constexpr std::string_view nameA = GeometryTypeName<A>;
     constexpr std::string_view nameB = GeometryTypeName<B>;
-    return Fail(
-        ErrorCode::NotImplemented,
-        std::format("{} x {} intersection is not implemented yet (ADR-0010)", nameA, nameB));
+    std::string message(nameA);
+    message += " x ";
+    message += nameB;
+    message += " intersection is not implemented yet (ADR-0010)";
+    return Fail(ErrorCode::NotImplemented, std::move(message));
 }
 
 /// table[i][j] handles type i of Ts against type j.

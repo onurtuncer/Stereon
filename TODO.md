@@ -77,8 +77,8 @@
 - [x] Two toy types per concept: `Line` + `Circle`, `Plane` + `Cylinder`. Also `Line2d` + `Circle2d` for `Curve2dGeometry`; all scalar-generic (ADR-0021)
 - [x] `VisitBuiltin` fast path generated with expansion statements and pack indexing (ADR-0016). Within 10% of direct calls in `bench/GeometryBench.cpp`; the virtual fallback is 2.6x direct for a line, 1.03x for a circle
 - [x] Type-pair dispatch table for binary operations (stub intersection handlers). `Stereon.Intersect`: compile-time tables over `BuiltinCurveTypes` and `BuiltinSurfaceTypes`, `NotImplemented` stubs, `NotSupported` for user types
-- [ ] Contracts on all evaluator entry points (domain, finiteness)
-- [ ] Reflection-based serialiser prototype for geometry structs (ADR-0012 groundwork)
+- [x] Contracts on all evaluator entry points (domain, finiteness). Plain branches reporting from `EvaluatorChecks.cpp`, because GCC 16.2 drops contracts in imported templates; domain checks honour `Period`/`Periods`; hot-path, so debug and sanitizer presets only
+- [x] Reflection-based serialiser prototype for geometry structs (ADR-0012 groundwork). `Serialized`, `Deserialized<T>` (ParseError on malformed input) and `ToJson` in `Stereon.Core:Serialize`
 - [x] Property tests comparing fast path and erased path on every type. Bitwise agreement for every operation of every built-in curve and surface
 
 ## 7. Topology prototype (weeks 6–10)

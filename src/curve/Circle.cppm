@@ -46,6 +46,7 @@ inline constexpr double CirclePeriod = 2.0 * std::numbers::pi;
 template <Scalar T, std::size_t D>
 [[nodiscard]] constexpr BasicPointN<T, D> Eval(const BasicCircle<T, D>& circle, const T& t)
 {
+    Detail::RequireFinite(t, "Eval(Circle)", "a non-finite parameter");
     using std::cos;
     using std::sin;
     return circle.Center + circle.Radius * (cos(t) * circle.XAxis + sin(t) * circle.YAxis);
@@ -55,8 +56,10 @@ template <Scalar T, std::size_t D>
 /// Radius * (cos(t + n pi/2) * XAxis + sin(t + n pi/2) * YAxis).
 template <Scalar T, std::size_t D>
 [[nodiscard]] constexpr BasicVecN<T, D> Deriv(const BasicCircle<T, D>& circle, const T& t,
-                                              const int n) STEREON_HOT_PRE(n >= 1)
+                                              const int n)
 {
+    Detail::RequireFinite(t, "Deriv(Circle)", "a non-finite parameter");
+    Detail::Require(n >= 1, "Deriv(Circle)", "a derivative order below 1");
     using std::cos;
     using std::sin;
     // cos and sin of t + n pi/2, by the quarter turn n mod 4, so that no
@@ -80,6 +83,14 @@ template <Scalar T, std::size_t D>
 [[nodiscard]] constexpr Interval Domain([[maybe_unused]] const BasicCircle<T, D>& circle)
 {
     return Interval{0.0, CirclePeriod};
+}
+
+/// 2 pi: a circle is periodic, so every finite parameter is valid and
+/// [0, 2 pi] is one period of it.
+template <Scalar T, std::size_t D>
+[[nodiscard]] constexpr double Period([[maybe_unused]] const BasicCircle<T, D>& circle) noexcept
+{
+    return CirclePeriod;
 }
 
 /// A box containing the circle: along each axis i the circle reaches
@@ -107,6 +118,7 @@ template <std::size_t D>
 template <std::size_t D>
 [[nodiscard]] double Project(const BasicCircle<double, D>& circle, const BasicPointN<double, D>& p)
 {
+    Detail::RequireFinite(p, "Project(Circle)", "a non-finite point");
     const BasicVecN<double, D> offset = p - circle.Center;
     const double x = Dot(offset, circle.XAxis);
     const double y = Dot(offset, circle.YAxis);

@@ -34,6 +34,18 @@ stereon_add_tests(curve)
 stereon_add_tests(surface)
 stereon_add_tests(intersect)
 
+# The reflection serialiser is instantiated in the test unit, which pulls the
+# module's <meta> declarations into it. GCC 16.2 then rejects the built-in
+# std::contracts::contract_violation that the contract anchor creates
+# ("conflicting declaration"; docs/toolchain/gcc16-feature-probe.md), so these
+# tests are built without the anchor. They call no inline module function
+# that carries a contract, which is what the anchor exists for.
+add_executable(stereon_serialize_tests serialize/SerializeTests.cpp)
+target_link_libraries(stereon_serialize_tests
+    PRIVATE stereon::surface stereon_options Catch2::Catch2WithMain stereon_rapidcheck_catch)
+target_include_directories(stereon_serialize_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/support")
+catch_discover_tests(stereon_serialize_tests TEST_PREFIX "serialize: " DISCOVERY_MODE PRE_TEST)
+
 # Do contracts written in Stereon.Core fire in a unit that imports it? Each
 # probe violates one and must print the violation. GCC 16.2 checks the module's
 # inline functions only with the contract anchor above, and drops the checks in
@@ -44,9 +56,20 @@ stereon_add_tests(intersect)
 # contracts, and an "ignore" build (the bench preset) checks nothing.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT STEREON_CONTRACT_SEMANTIC STREQUAL "ignore")
     add_executable(stereon_contract_probe probes/ContractProbe.cpp)
-    target_link_libraries(stereon_contract_probe PRIVATE stereon::robust stereon_options)
+    target_link_libraries(stereon_contract_probe PRIVATE stereon::surface stereon_options)
     stereon_anchor_contracts(stereon_contract_probe)
     if(STEREON_HOT_CONTRACTS)
+        # The geometry evaluators check their preconditions with plain branches
+        # that report from EvaluatorChecks.cpp, so they fire in importers even
+        # though the evaluators are templates (hot-path checks: debug presets).
+        add_test(NAME "curve: a non-finite parameter is reported"
+            COMMAND stereon_contract_probe evaluator-nan)
+        add_test(NAME "curve: a parameter outside a bounded domain is reported"
+            COMMAND stereon_contract_probe evaluator-domain)
+        set_tests_properties("curve: a non-finite parameter is reported"
+            PROPERTIES PASS_REGULAR_EXPRESSION "Eval.Curve. called with a non-finite parameter.*contract violation")
+        set_tests_properties("curve: a parameter outside a bounded domain is reported"
+            PROPERTIES PASS_REGULAR_EXPRESSION "Eval.Curve. called with a parameter outside the domain.*contract violation")
         add_test(NAME "core: contracts in module inline functions fire in importers"
             COMMAND stereon_contract_probe inline)
         add_test(NAME "core: contracts in module templates fire in importers (GCC 16.2 drops them)"
