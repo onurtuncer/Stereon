@@ -58,4 +58,4 @@ jobs:
       - name: Build
         run: cmake --build --preset gcc16-release --target stereon_occt_tests
       - name: Differential tests
-        run: ctest --preset gcc16-release -R "^occt: "
+        run: 'ctest --preset gcc16-release -R "^occt: "'
