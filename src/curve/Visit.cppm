@@ -38,28 +38,37 @@ template <std::size_t D>
 using BuiltinCurveTypesN = std::conditional_t<D == 2, BuiltinCurve2dTypes, BuiltinCurveTypes>;
 
 /// A short name for diagnostics, e.g. in "Line x Circle intersection is not
-/// implemented"; "geometry" for a type that does not name itself.
-/// Read it in constant expressions (or copy it into a constexpr variable):
-/// GCC 16.2 emits no definition for the explicit specializations when
-/// another module odr-uses them (docs/toolchain/gcc16-feature-probe.md).
+/// implemented": GeometryNameOf(static_cast<const T*>(nullptr)), which each
+/// built-in type overloads and argument-dependent lookup finds; "geometry"
+/// for any other type. Overloads rather than explicit specializations of
+/// GeometryTypeName, because MSVC rejects specializations of an exported
+/// template in a module interface and GCC 16.2 emits no definition for them
+/// when another module odr-uses one.
 template <typename T>
-inline constexpr std::string_view GeometryTypeName = "geometry";
+[[nodiscard]] constexpr std::string_view GeometryNameOf(const T*) noexcept
+{
+    return "geometry";
+}
 
-} // namespace Stereon
+[[nodiscard]] constexpr std::string_view GeometryNameOf(const Line*) noexcept
+{
+    return "Line";
+}
+[[nodiscard]] constexpr std::string_view GeometryNameOf(const Circle*) noexcept
+{
+    return "Circle";
+}
+[[nodiscard]] constexpr std::string_view GeometryNameOf(const Line2d*) noexcept
+{
+    return "Line2d";
+}
+[[nodiscard]] constexpr std::string_view GeometryNameOf(const Circle2d*) noexcept
+{
+    return "Circle2d";
+}
 
-// The names of the built-in types. Outside the export block: an explicit
-// specialization cannot be exported (MSVC enforces this; it is reachable
-// wherever the primary template is).
-namespace Stereon {
-
-template <>
-inline constexpr std::string_view GeometryTypeName<Line> = "Line";
-template <>
-inline constexpr std::string_view GeometryTypeName<Circle> = "Circle";
-template <>
-inline constexpr std::string_view GeometryTypeName<Line2d> = "Line2d";
-template <>
-inline constexpr std::string_view GeometryTypeName<Circle2d> = "Circle2d";
+template <typename T>
+inline constexpr std::string_view GeometryTypeName = GeometryNameOf(static_cast<const T*>(nullptr));
 
 } // namespace Stereon
 
