@@ -68,104 +68,104 @@ Workstreams overlap. For example, exchange and healing prototypes should expose 
 ## A. Foundations and geometric representation
 Source family mapping: [S1]. Acceptance requirements are proposed Stereon contracts.
 
-| ID | Capability / class | First stage | Required acceptance evidence  Maturity / comparison |
-|---|---|---|--- --- |
-| F01 | Numerical policy, units and tolerances / B | R0 | Explicit linear, angular and parametric tolerances; equivalent results after unit conversion; scale and conditioning limits documented  2 / — |
-| F02 | Ownership, allocation and object lifetime / B | R0 | Copy/share/mutation semantics tested; invalid handles detected; allocation failures preserve valid state  2 / — |
-| F03 | Errors, progress and cancellation / B | R0 | Typed outcomes identify failing operation and entities; cancellation leaves no partially committed model  1 / — |
-| F04 | Transforms, placements and spatial bounds / B | R1 | Composition/inverse identities; orientation behavior under reflection; bounds conservatively contain tested geometry  2 / — |
-| G01 | Analytic 2D/3D curves and surfaces / B | R1 | Values, derivatives, periods and domains checked against independent formulas, including seams and poles  2 / — |
-| G02 | Bézier, B-spline and rational geometry / B | R1 | Knot insertion and degree elevation preserve geometry within budget; repeated knots and extreme weights covered  0 / — |
-| G03 | Trimming, periodicity and curve-on-surface representation / B | R1 | 3D edge and surface parameter curve agree within declared tolerance; seam crossings and degenerate boundaries validated  1 / — |
-| G04 | Interpolation, approximation and conversion / B | R2 | Residuals and requested continuity measured; unmet fitting budgets return explicit failure or qualified output  0 / — |
+| ID | Capability / class | First stage | Required acceptance evidence | Maturity / comparison |
+|---|---|---|---|---|
+| F01 | Numerical policy, units and tolerances / B | R0 | Explicit linear, angular and parametric tolerances; equivalent results after unit conversion; scale and conditioning limits documented | 2 / — |
+| F02 | Ownership, allocation and object lifetime / B | R0 | Copy/share/mutation semantics tested; invalid handles detected; allocation failures preserve valid state | 2 / — |
+| F03 | Errors, progress and cancellation / B | R0 | Typed outcomes identify failing operation and entities; cancellation leaves no partially committed model | 1 / — |
+| F04 | Transforms, placements and spatial bounds / B | R1 | Composition/inverse identities; orientation behavior under reflection; bounds conservatively contain tested geometry | 2 / — |
+| G01 | Analytic 2D/3D curves and surfaces / B | R1 | Values, derivatives, periods and domains checked against independent formulas, including seams and poles | 2 / — |
+| G02 | Bézier, B-spline and rational geometry / B | R1 | Knot insertion and degree elevation preserve geometry within budget; repeated knots and extreme weights covered | 0 / — |
+| G03 | Trimming, periodicity and curve-on-surface representation / B | R1 | 3D edge and surface parameter curve agree within declared tolerance; seam crossings and degenerate boundaries validated | 1 / — |
+| G04 | Interpolation, approximation and conversion / B | R2 | Residuals and requested continuity measured; unmet fitting budgets return explicit failure or qualified output | 0 / — |
 
 ## B. Topology and geometric algorithms
 Source family mapping: [S1, S2].
 
-| ID | Capability / class | First stage | Required acceptance evidence  Maturity / comparison |
-|---|---|---|--- --- |
-| T01 | Boundary representation and incidence / B | R1 | Vertices through solids and mixed collections; orientation, shared entities and permitted non-manifold configurations have explicit invariants  0 / — |
-| T02 | Validation and point classification / B | R1 | Seeded defects detected; inside/outside/on-boundary classification checked on analytic cases and ambiguous neighborhoods  0 / — |
-| T03 | Construction, copying and traversal / B | R1 | Shared topology preserved when intended; deep copies independent; traversals terminate and respect occurrence orientation  0 / — |
-| T04 | Modification history / B | R2 | Generated, modified and deleted entity relations correct through chained operations, including splits and merges  0 / — |
-| Q01 | Projection and closest-point queries / B | R1 | Residual and distance checks; multiple solutions and singular points handled; global versus local guarantees stated  2 / — |
-| Q02 | Intersections / B | R2 | Curve/curve, curve/surface and surface/surface coverage enumerated; tangency, coincidence and small components included; returned geometry validated  0 / — |
-| Q03 | Extrema, distance and spatial acceleration / B | R2 | Analytic minima and independent references; acceleration produces no false exclusions relative to exhaustive tests  1 / — |
-| Q04 | Length, area, volume, centroid and inertia / B | R1 | Analytic references, rigid-transform identities and numerical convergence; invalid domains reported explicitly  0 / — |
+| ID | Capability / class | First stage | Required acceptance evidence | Maturity / comparison |
+|---|---|---|---|---|
+| T01 | Boundary representation and incidence / B | R1 | Vertices through solids and mixed collections; orientation, shared entities and permitted non-manifold configurations have explicit invariants | 0 / — |
+| T02 | Validation and point classification / B | R1 | Seeded defects detected; inside/outside/on-boundary classification checked on analytic cases and ambiguous neighborhoods | 0 / — |
+| T03 | Construction, copying and traversal / B | R1 | Shared topology preserved when intended; deep copies independent; traversals terminate and respect occurrence orientation | 0 / — |
+| T04 | Modification history / B | R2 | Generated, modified and deleted entity relations correct through chained operations, including splits and merges | 0 / — |
+| Q01 | Projection and closest-point queries / B | R1 | Residual and distance checks; multiple solutions and singular points handled; global versus local guarantees stated | 2 / — |
+| Q02 | Intersections / B | R2 | Curve/curve, curve/surface and surface/surface coverage enumerated; tangency, coincidence and small components included; returned geometry validated | 0 / — |
+| Q03 | Extrema, distance and spatial acceleration / B | R2 | Analytic minima and independent references; acceleration produces no false exclusions relative to exhaustive tests | 1 / — |
+| Q04 | Length, area, volume, centroid and inertia / B | R1 | Analytic references, rigid-transform identities and numerical convergence; invalid domains reported explicitly | 0 / — |
 
 ## C. Construction and modification
 Source family mapping: [S2]. Each operation must declare allowed input types and output semantics.
 
-| ID | Capability / class | First stage | Required acceptance evidence  Maturity / comparison |
-|---|---|---|--- --- |
-| M01 | Primitives, extrusions and revolutions / B | R2 | Closed valid results where promised; analytic mass properties; partial angles, reversed profiles and degenerate inputs covered  0 / — |
-| M02 | General sweeps, pipes and lofts / B | R3 | Frame/twist policy documented; section correspondence verified; continuity and self-intersection outcomes measured  0 / — |
-| M03 | Union, intersection, difference, section and splitting / B | R2 | Set membership and volume identities, valid boundaries, history and perturbation tests; touching and coincident cases explicit  0 / — |
-| M04 | Sewing and shell/solid assembly / B | R2 | Gaps assessed against budget; orientations consistent; open shells never silently promoted to closed solids  0 / — |
-| M05 | Offsets, thickening and hollowing / B | R3 | Offset distance checked away from singularities; feature collapse and self-intersection produce defined outcomes  0 / — |
-| M06 | Fillets and chamfers / B | R3 | Requested radius/chord policy and continuity checked; corner interactions, short edges and variable laws represented in corpus  0 / — |
-| M07 | Drafts and local feature construction / B | R3 | Geometric angle/depth constraints verified; adjacent boundaries reconstructed; failed edits roll back  0 / — |
-| M08 | Surface construction and filling / B | R3 | Boundary fit and requested continuity verified; multi-patch and incompatible constraints tested  0 / — |
-| M09 | Simplification and local feature removal / B | R3 | Removed feature scope declared; retained regions checked against displacement budget; topology and history validated  0 / — |
+| ID | Capability / class | First stage | Required acceptance evidence | Maturity / comparison |
+|---|---|---|---|---|
+| M01 | Primitives, extrusions and revolutions / B | R2 | Closed valid results where promised; analytic mass properties; partial angles, reversed profiles and degenerate inputs covered | 0 / — |
+| M02 | General sweeps, pipes and lofts / B | R3 | Frame/twist policy documented; section correspondence verified; continuity and self-intersection outcomes measured | 0 / — |
+| M03 | Union, intersection, difference, section and splitting / B | R2 | Set membership and volume identities, valid boundaries, history and perturbation tests; touching and coincident cases explicit | 0 / — |
+| M04 | Sewing and shell/solid assembly / B | R2 | Gaps assessed against budget; orientations consistent; open shells never silently promoted to closed solids | 0 / — |
+| M05 | Offsets, thickening and hollowing / B | R3 | Offset distance checked away from singularities; feature collapse and self-intersection produce defined outcomes | 0 / — |
+| M06 | Fillets and chamfers / B | R3 | Requested radius/chord policy and continuity checked; corner interactions, short edges and variable laws represented in corpus | 0 / — |
+| M07 | Drafts and local feature construction / B | R3 | Geometric angle/depth constraints verified; adjacent boundaries reconstructed; failed edits roll back | 0 / — |
+| M08 | Surface construction and filling / B | R3 | Boundary fit and requested continuity verified; multi-patch and incompatible constraints tested | 0 / — |
+| M09 | Simplification and local feature removal / B | R3 | Removed feature scope declared; retained regions checked against displacement budget; topology and history validated | 0 / — |
 
 ## D. Diagnosis and repair
 Source family mapping: [S3]. Repair changes must be observable.
 
-| ID | Capability / class | First stage | Required acceptance evidence  Maturity / comparison |
-|---|---|---|--- --- |
-| H01 | Shape diagnosis / B | R1 | Localized reports for gaps, missing parameter curves, orientation errors and degeneracies; clean fixtures avoid spurious errors  0 / — |
-| H02 | Wire, edge, face and shell repair / B | R2 | Before/after defect report; admissible displacement and tolerance inflation enforced; unrepairable cases remain explicit  0 / — |
-| H03 | Representation regularization / B | R3 | Splitting, merging and continuity adjustments preserve intended geometry within budget; all entity replacements recorded  0 / — |
-| H04 | Controlled repair pipelines / B | R3 | Configurations replayable; each repair step logged; no silent feature deletion or unit rescaling  0 / — |
+| ID | Capability / class | First stage | Required acceptance evidence | Maturity / comparison |
+|---|---|---|---|---|
+| H01 | Shape diagnosis / B | R1 | Localized reports for gaps, missing parameter curves, orientation errors and degeneracies; clean fixtures avoid spurious errors | 0 / — |
+| H02 | Wire, edge, face and shell repair / B | R2 | Before/after defect report; admissible displacement and tolerance inflation enforced; unrepairable cases remain explicit | 0 / — |
+| H03 | Representation regularization / B | R3 | Splitting, merging and continuity adjustments preserve intended geometry within budget; all entity replacements recorded | 0 / — |
+| H04 | Controlled repair pipelines / B | R3 | Configurations replayable; each repair step logged; no silent feature deletion or unit rescaling | 0 / — |
 
 ## E. Exchange and persistence
 Source family mapping: [S1, S4]. Format names are not sufficient coverage claims: track read/write direction, schema, entity class and attributes.
 
-| ID | Capability / class | First stage | Required acceptance evidence  Maturity / comparison |
-|---|---|---|--- --- |
-| X01 | Native model persistence / B | R1 | Geometry, topology and sharing round-trip; corrupt input rejected; version migration policy tested  0 / — |
-| X02 | STEP geometry read/write / B | R2 | Exact supported schema/entity inventory; cross-reader checks of dimensions, units, geometry and solid validity  0 / — |
-| X03 | STEP assemblies and engineering metadata / B | R4 | Placements, shared instances, names, colors and supported PMI semantics compared field by field; losses reported  0 / — |
-| X04 | IGES read/write / B | R3 | Supported entity inventory; trimmed surfaces and units checked; unsupported constructs diagnosed  0 / — |
-| X05 | Mesh and visualization exchange / B | R2 | Per-format coverage inventory, initially STL; orientation, scale and attributes checked where representable; additional baseline formats completed by R5  0 / — |
-| X06 | OCCT migration bridge / D | R2 | Bounded model conversion plus application porting example; provenance, conversion loss and runtime dependency disclosed  0 / — |
+| ID | Capability / class | First stage | Required acceptance evidence | Maturity / comparison |
+|---|---|---|---|---|
+| X01 | Native model persistence / B | R1 | Geometry, topology and sharing round-trip; corrupt input rejected; version migration policy tested | 0 / — |
+| X02 | STEP geometry read/write / B | R2 | Exact supported schema/entity inventory; cross-reader checks of dimensions, units, geometry and solid validity | 0 / — |
+| X03 | STEP assemblies and engineering metadata / B | R4 | Placements, shared instances, names, colors and supported PMI semantics compared field by field; losses reported | 0 / — |
+| X04 | IGES read/write / B | R3 | Supported entity inventory; trimmed surfaces and units checked; unsupported constructs diagnosed | 0 / — |
+| X05 | Mesh and visualization exchange / B | R2 | Per-format coverage inventory, initially STL; orientation, scale and attributes checked where representable; additional baseline formats completed by R5 | 0 / — |
+| X06 | OCCT migration bridge / D | R2 | Bounded model conversion plus application porting example; provenance, conversion loss and runtime dependency disclosed | 0 / — |
 
 ## F. Meshing, visualization and application services
 Source family mapping: [S1, S5]. Broad parity requires subfeature inventories within these rows.
 
-| ID | Capability / class | First stage | Required acceptance evidence  Maturity / comparison |
-|---|---|---|--- --- |
-| V01 | Boundary tessellation and mesh association / B | R1 | Stated chordal/angular targets measured; shared edges consistent; orientation and face association retained  0 / — |
-| V02 | CAD inspection and interactive selection / B | R1 | Wireframe/shaded inspection and subshape picking first; later instancing, clipping, transparency, materials and large-scene budgets  0 / — |
-| V03 | Drawing and annotation services / B | R4 | Hidden-line, section and dimension fixtures; visibility and placement checked on analytic scenes  0 / — |
-| A01 | Documents, attributes and transactions / B | R4 | Undo/redo, copy/paste and rollback recover geometry and metadata; transaction isolation contract documented  0 / — |
-| A02 | Persistent references and regeneration support / B | R3 | References survive defined edits; ambiguous or deleted targets reported; dependency update and failure propagation tested  0 / — |
-| A03 | Assemblies and document exchange integration / B | R4 | Shared prototypes, nested placements and metadata survive editing and persistence; large-assembly limits measured  0 / — |
-| A04 | Scripting and diagnostic harness / B | R1 | Reproducible headless operation scripts; fixtures emit machine-readable results; all advertised examples run in CI  1 / — |
+| ID | Capability / class | First stage | Required acceptance evidence | Maturity / comparison |
+|---|---|---|---|---|
+| V01 | Boundary tessellation and mesh association / B | R1 | Stated chordal/angular targets measured; shared edges consistent; orientation and face association retained | 0 / — |
+| V02 | CAD inspection and interactive selection / B | R1 | Wireframe/shaded inspection and subshape picking first; later instancing, clipping, transparency, materials and large-scene budgets | 0 / — |
+| V03 | Drawing and annotation services / B | R4 | Hidden-line, section and dimension fixtures; visibility and placement checked on analytic scenes | 0 / — |
+| A01 | Documents, attributes and transactions / B | R4 | Undo/redo, copy/paste and rollback recover geometry and metadata; transaction isolation contract documented | 0 / — |
+| A02 | Persistent references and regeneration support / B | R3 | References survive defined edits; ambiguous or deleted targets reported; dependency update and failure propagation tested | 0 / — |
+| A03 | Assemblies and document exchange integration / B | R4 | Shared prototypes, nested placements and metadata survive editing and persistence; large-assembly limits measured | 0 / — |
+| A04 | Scripting and diagnostic harness / B | R1 | Reproducible headless operation scripts; fixtures emit machine-readable results; all advertised examples run in CI | 1 / — |
 
 ## G. Product quality and deliberate advantages
 These are Stereon product requirements rather than claims about missing OCCT functionality.
 
-| ID | Capability / class | First stage | Required acceptance evidence  Maturity / comparison |
-|---|---|---|--- --- |
-| P01 | SDK packaging, interfaces and bindings / D | R1 | Clean consumer builds; stable C boundary and Python binding considered against existing ADRs; ownership and exception behavior tested  1 / — |
-| P02 | Concurrency and reproducibility / D | R0 | Shared-read/concurrent-edit rules explicit; race checks; repeated runs semantically equivalent; any bitwise guarantee separately bounded  1 / — |
-| P03 | Performance and memory discipline / D | R1 | Paired workloads report median/p95 time and peak memory; accuracy held constant; initialization and I/O separated  1 / — |
-| P04 | CI, fuzzing and regression maintenance / D | R0 | Sanitizers, malformed inputs, minimized reproducers, platform matrix and tracked failures; corpus licensing documented  2 / — |
-| P05 | Documentation, releases and support / D | R1 | Executable tutorials, migration notes, compatibility policy, issue triage and named maintainers before production claims  1 / — |
-| D01 | Shape-derivative contracts / D | R0 | Scalar/AD compatibility decided early; later gradient checks on smooth fixed-topology cases; topology events and undefined derivatives explicitly signaled  1 / — |
-| D02 | Operation provenance and automation / D | R0 | Inputs, configuration and entity lineage sufficient for replay; machine-readable diagnostics; bounded recovery avoids silent geometry changes  1 / — |
-| D03 | Simulation integration / D | R3 | CAD parameters → geometry → mesh association → solver sensitivities demonstrated; full-loop gradients validated on a named engineering problem  0 / — |
+| ID | Capability / class | First stage | Required acceptance evidence | Maturity / comparison |
+|---|---|---|---|---|
+| P01 | SDK packaging, interfaces and bindings / D | R1 | Clean consumer builds; stable C boundary and Python binding considered against existing ADRs; ownership and exception behavior tested | 1 / — |
+| P02 | Concurrency and reproducibility / D | R0 | Shared-read/concurrent-edit rules explicit; race checks; repeated runs semantically equivalent; any bitwise guarantee separately bounded | 1 / — |
+| P03 | Performance and memory discipline / D | R1 | Paired workloads report median/p95 time and peak memory; accuracy held constant; initialization and I/O separated | 1 / — |
+| P04 | CI, fuzzing and regression maintenance / D | R0 | Sanitizers, malformed inputs, minimized reproducers, platform matrix and tracked failures; corpus licensing documented | 2 / — |
+| P05 | Documentation, releases and support / D | R1 | Executable tutorials, migration notes, compatibility policy, issue triage and named maintainers before production claims | 1 / — |
+| D01 | Shape-derivative contracts / D | R0 | Scalar/AD compatibility decided early; later gradient checks on smooth fixed-topology cases; topology events and undefined derivatives explicitly signaled | 1 / — |
+| D02 | Operation provenance and automation / D | R0 | Inputs, configuration and entity lineage sufficient for replay; machine-readable diagnostics; bounded recovery avoids silent geometry changes | 1 / — |
+| D03 | Simulation integration / D | R3 | CAD parameters → geometry → mesh association → solver sensitivities demonstrated; full-loop gradients validated on a named engineering problem | 0 / — |
 
 ## H. Separately tracked ecosystem scope
 These remain expansion objectives. Their separate classification does not reduce the full-platform ambition.
 
-| ID | Capability / class | Initial planning position | Evidence required before commitment  Maturity / comparison |
-|---|---|---|--- --- |
-| E01 | Proprietary CAD translators / E | Evaluate after neutral exchange | Actual customer formats, access/licensing route, read/write coverage and external round-trip tests  0 / — |
-| E02 | Advanced volume meshing and specialist mesh processing / E | Integration study alongside R3 | Solver requirements, element quality and boundary fidelity; ownership of external dependencies  0 / — |
-| E03 | Full sketch constraints, feature authoring and assembly solving / E | Application-layer roadmap | Defined user workflows and solver integration; distinguish these from low-level geometric construction constraints  0 / — |
-| E04 | Specialized CAM, recognition and reconstruction tools / E | Demand-led modules | Named use cases and standalone acceptance corpora; separate product support commitments  0 / — |
+| ID | Capability / class | Initial planning position | Evidence required before commitment | Maturity / comparison |
+|---|---|---|---|---|
+| E01 | Proprietary CAD translators / E | Evaluate after neutral exchange | Actual customer formats, access/licensing route, read/write coverage and external round-trip tests | 0 / — |
+| E02 | Advanced volume meshing and specialist mesh processing / E | Integration study alongside R3 | Solver requirements, element quality and boundary fidelity; ownership of external dependencies | 0 / — |
+| E03 | Full sketch constraints, feature authoring and assembly solving / E | Application-layer roadmap | Defined user workflows and solver integration; distinguish these from low-level geometric construction constraints | 0 / — |
+| E04 | Specialized CAM, recognition and reconstruction tools / E | Demand-led modules | Named use cases and standalone acceptance corpora; separate product support commitments | 0 / — |
 
 ## Comparative acceptance protocol
 The following are proposed planning gates, not measured results or established industry standards.
