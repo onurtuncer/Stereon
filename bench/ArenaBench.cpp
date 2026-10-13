@@ -261,7 +261,7 @@ void ArenaLocalEdits(benchmark::State& state)
     for (auto _ : state) {
         FaceArena<N> builder = body;
         for (const std::size_t index : edits) {
-            builder.Modify(index).Tolerance *= 2.0;
+            builder.Modify(index, [](FaceRecord& face) { face.Tolerance *= 2.0; });
         }
         benchmark::DoNotOptimize(builder);
         copiedPages = builder.GetPageCount() - SharedPageCount(body, builder);
@@ -305,7 +305,7 @@ void ArenaEditHistory(benchmark::State& state)
         history.push_back(body);
         for (const std::size_t index : edits) {
             FaceArena<N> next = history.back();
-            next.Modify(index).Tolerance *= 2.0;
+            next.Modify(index, [](FaceRecord& face) { face.Tolerance *= 2.0; });
             history.push_back(std::move(next));
         }
         return history;

@@ -69,7 +69,7 @@ TEST_CASE("paged arenas have the layout ADR-0005 specifies", "[core][arena]")
     STATIC_REQUIRE_FALSE(ValidPageSize<100>);
     STATIC_REQUIRE_FALSE(ValidPageSize<0>);
 
-    // A read-only random-access range: writes go through Modify() and
+    // A read-only random-access range: writes go through Set(), Modify() and
     // ModifyPage(), which do the copy-on-write step.
     STATIC_REQUIRE(std::random_access_iterator<SmallArena::ConstIterator>);
     STATIC_REQUIRE(std::ranges::random_access_range<SmallArena>);
@@ -144,7 +144,7 @@ TEST_CASE("a copy shares every page and the first write to a page copies it", "[
 
     // Writing through the builder copies the page it writes to, and only that
     // one; the snapshot does not change.
-    builder.Modify(5) = 500;
+    builder.Set(5, 500);
     REQUIRE(builder[5] == 500);
     REQUIRE(frozen[5] == 5);
     REQUIRE(builder != frozen);
@@ -157,7 +157,7 @@ TEST_CASE("a copy shares every page and the first write to a page copies it", "[
 
     // A second write to the same page finds it unique and writes in place.
     const SmallArena::Page* const copied = builder.GetPage(1).get();
-    builder.Modify(6) = 600;
+    builder.Set(6, 600);
     REQUIRE(builder.GetPage(1).get() == copied);
     REQUIRE(builder[6] == 600);
     REQUIRE(frozen[6] == 6);
@@ -186,7 +186,7 @@ TEST_CASE("a held page keeps what it read while the arena writes", "[core][arena
     const std::shared_ptr<const SmallArena::Page> held = arena.GetPage(0);
     REQUIRE(arena.IsPageShared(0));
 
-    arena.Modify(0) = 42;
+    arena.Set(0, 42);
     REQUIRE((*held)[0] == 0);
     REQUIRE(arena[0] == 42);
     REQUIRE_FALSE(arena.IsPageShared(0));
@@ -198,11 +198,13 @@ TEST_CASE("page spans edit a page in one copy-on-write step", "[core][arena]")
     const SmallArena frozen = Filled(6);
     SmallArena builder = frozen;
 
-    const std::span<int> page = builder.ModifyPage(1);
-    REQUIRE(page.size() == 2);
-    for (int& value : page) {
-        value *= 100;
-    }
+    const std::size_t length = builder.ModifyPage(1, [](const std::span<int> page) {
+        for (int& value : page) {
+            value *= 100;
+        }
+        return page.size();
+    });
+    REQUIRE(length == 2);
     REQUIRE(ToVector(builder) == std::vector<int>{0, 1, 2, 3, 400, 500});
     REQUIRE(ToVector(frozen) == std::vector<int>{0, 1, 2, 3, 4, 5});
     REQUIRE(SharedPageCount(frozen, builder) == 1);
@@ -211,9 +213,50 @@ TEST_CASE("page spans edit a page in one copy-on-write step", "[core][arena]")
     // edited in place.
     SmallArena own = Filled(8);
     const int* const before = own.GetPageSpan(1).data();
-    own.ModifyPage(1)[0] = -4;
+    own.ModifyPage(1, [](const std::span<int> page) { page[0] = -4; });
     REQUIRE(own.GetPageSpan(1).data() == before);
     REQUIRE(own[4] == -4);
+}
+
+TEST_CASE("edits are scoped to a callback and never hand out a reference", "[core][arena]")
+{
+    const SmallArena frozen = Filled(6);
+    SmallArena builder = frozen;
+
+    // Modify returns what the callback returns, by value.
+    const int old = builder.Modify(5, [](int& entry) {
+        const int previous = entry;
+        entry = 50;
+        return previous;
+    });
+    REQUIRE(old == 5);
+    REQUIRE(builder[5] == 50);
+    REQUIRE(frozen[5] == 5);
+    REQUIRE(SharedPageCount(frozen, builder) == 1);
+
+    // The arena knows while a callback runs, and may be read meanwhile.
+    REQUIRE_FALSE(builder.IsEditing());
+    builder.Modify(0, [&builder](int& entry) {
+        REQUIRE(builder.IsEditing());
+        entry = builder[1] + builder[5]; // reads are allowed
+    });
+    REQUIRE_FALSE(builder.IsEditing());
+    REQUIRE(builder[0] == 51);
+
+    // A page edit returns its result the same way.
+    const int sum = builder.ModifyPage(0, [](const std::span<int> page) {
+        int total = 0;
+        for (int& value : page) {
+            value += 1;
+            total += value;
+        }
+        return total;
+    });
+    REQUIRE(sum == 52 + 2 + 3 + 4);
+    REQUIRE(ToVector(frozen) == std::vector<int>{0, 1, 2, 3, 4, 5});
+
+    // Copying, moving or resizing inside a callback is reported and stops
+    // the program; tests/probes/ContractProbe.cpp runs that case.
 }
 
 TEST_CASE("resizing grows with value-initialised entries and drops whole pages", "[core][arena]")
@@ -272,7 +315,7 @@ TEST_CASE("copying a page shares the payloads its entries point to", "[core][are
     REQUIRE(surface.use_count() == 2);
 
     // Copying the page copies the pointers, not what they point to.
-    builder.Modify(1) = std::make_shared<const std::string>("plane");
+    builder.Set(1, std::make_shared<const std::string>("plane"));
     REQUIRE(surface.use_count() == 3);
     REQUIRE(builder[0].get() == surface.get());
     REQUIRE(*builder[1] == "plane");
@@ -296,7 +339,7 @@ TEST_CASE("arenas compare by their entries", "[core][arena]")
     REQUIRE(SharedPageCount(a, b) == 0);
     REQUIRE(a == b);
 
-    b.Modify(5) = 55;
+    b.Set(5, 55);
     REQUIRE(a != b);
 
     SmallArena shorter = a;
@@ -337,7 +380,7 @@ TEST_CASE("a frozen arena is read from several threads while a copy is edited",
     threads.emplace_back([&frozen] {
         Arena builder = frozen;
         for (std::size_t i = 0; i < builder.GetSize(); ++i) {
-            builder.Modify(i) = 0;
+            builder.Set(i, 0);
         }
         builder.PushBack(7);
         builder.Resize(10);
@@ -375,7 +418,7 @@ void ModifyRandom(ArenaModel& m)
     }
     const auto index = *rc::gen::inRange<std::size_t>(0, m.Model.size());
     const int value = *rc::gen::arbitrary<int>();
-    m.Arena.Modify(index) = value;
+    m.Arena.Set(index, value);
     m.Model[index] = value;
 }
 
@@ -385,9 +428,11 @@ void BumpRandomPage(ArenaModel& m)
         return;
     }
     const auto page = *rc::gen::inRange<std::size_t>(0, m.Arena.GetPageCount());
-    for (int& value : m.Arena.ModifyPage(page)) {
-        ++value;
-    }
+    m.Arena.ModifyPage(page, [](const std::span<int> entries) {
+        for (int& value : entries) {
+            ++value;
+        }
+    });
     const std::size_t first = page * SmallArena::PageSize;
     const std::size_t last = std::min(first + SmallArena::PageSize, m.Model.size());
     for (std::size_t i = first; i < last; ++i) {
@@ -452,7 +497,7 @@ TEST_CASE("paged arenas behave as vectors with immutable snapshots", "[core][are
         std::set<std::size_t> touched;
         for (int edit = 0; edit < edits; ++edit) {
             const auto index = *rc::gen::inRange<std::size_t>(0, static_cast<std::size_t>(count));
-            builder.Modify(index) = -1;
+            builder.Set(index, -1);
             touched.insert(index / SmallArena::PageSize);
         }
 

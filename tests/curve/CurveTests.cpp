@@ -296,7 +296,7 @@ TEST_CASE("Curve stores small curves in place and shares large ones", "[curve][e
         pool.PushBack(i % 2 == 0 ? small : big);
     }
     const Stereon::PagedArena<Curve, 4> snapshot = pool;
-    pool.Modify(5) = Curve(TiltedCircle());
+    pool.Set(5, Curve(TiltedCircle()));
     REQUIRE(snapshot[5].Target<BigLine>() != nullptr);
     REQUIRE(pool[5].Target<Circle>() != nullptr);
 }

@@ -24,5 +24,6 @@ export import :Matrix;
 export import :Scalar;
 export import :Simd;
 export import :SmallBuffer;
+export import :Trigonometry;
 export import :Vector;
 export import :Version;
