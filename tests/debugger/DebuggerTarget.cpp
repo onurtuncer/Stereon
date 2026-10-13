@@ -52,10 +52,24 @@ UserCurve Transformed(const UserCurve& c, const Stereon::Transform& x)
 
 } // namespace
 
+#if defined(_MSC_VER)
+#define STEREON_DEBUGGER_NOINLINE __declspec(noinline)
+#else
+#define STEREON_DEBUGGER_NOINLINE [[gnu::noinline]]
+#endif
+
+namespace {
+
+/// Written by StereonDebuggerStop() so the call, and every value whose
+/// address it receives, survives optimisation.
+const void* volatile s_Anchor = nullptr;
+
+} // namespace
+
 // Not static and not inlined, so the debugger can stop in it.
-[[gnu::noinline]] void StereonDebuggerStop(const void* anchor)
+STEREON_DEBUGGER_NOINLINE void StereonDebuggerStop(const void* anchor)
 {
-    asm volatile("" : : "r"(anchor) : "memory");
+    s_Anchor = anchor;
 }
 
 int main()
