@@ -38,3 +38,5 @@ Open questions that have to be researched before they can be decided live in [`d
 | [0020](0020-cpp-c-abi-and-python-bindings.md) | C++ API, C ABI and Python bindings | 0 | Proposed |
 | [0021](0021-shape-derivatives.md) | Shape derivatives as an operation contract | 0 | Proposed |
 | [0022](0022-function-complexity.md) | Function complexity limits | 0 | Proposed |
+| [0025](0025-separate-topology-from-geometry.md) | Separate topology from geometry | 0 | Proposed |
+| [0026](0026-modelling-operations-by-contracts.md) | Specify modelling operations by contracts | 0 | Proposed |
