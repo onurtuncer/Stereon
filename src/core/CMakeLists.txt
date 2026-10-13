@@ -20,10 +20,14 @@ stereon_add_library(core
         Matrix.cppm
         Scalar.cppm
         Simd.cppm
+        SmallBuffer.cppm
+        Trigonometry.cppm
         Vector.cppm
         Version.cppm
     SOURCES
+        Arena.cpp
         Handle.cpp
+        Trigonometry.cpp
         Log.cpp)
 
 # stdexec is PUBLIC: <Stereon/Core/Exec.hpp> is a public header that includes

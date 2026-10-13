@@ -30,6 +30,8 @@ endfunction()
 stereon_add_tests(core)
 stereon_exec_sources(core/ExecTests.cpp)
 stereon_add_tests(robust)
+stereon_add_tests(curve)
+stereon_add_tests(surface)
 
 # Do contracts written in Stereon.Core fire in a unit that imports it? Each
 # probe violates one and must print the violation. GCC 16.2 checks the module's
@@ -59,6 +61,12 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT STEREON_CONTRACT_SEMANTIC STREQU
         COMMAND stereon_contract_probe predicate)
     set_tests_properties("robust: coordinates outside the predicate domain are reported"
         PROPERTIES PASS_REGULAR_EXPRESSION "Orient2D outside the predicate domain.*contract violation")
+    # The arena's borrow check is a plain branch that reports from Arena.cpp,
+    # so it fires in every build that evaluates contracts.
+    add_test(NAME "core: copying an arena inside its edit callback is reported"
+        COMMAND stereon_contract_probe arena)
+    set_tests_properties("core: copying an arena inside its edit callback is reported"
+        PROPERTIES PASS_REGULAR_EXPRESSION "PagedArena copy during an edit callback.*contract violation")
     if(STEREON_CHECKED_HANDLES)
         add_test(NAME "core: checked handles report a stale handle"
             COMMAND stereon_contract_probe handle)

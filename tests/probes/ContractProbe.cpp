@@ -57,6 +57,19 @@ int main(const int argc, char** argv)
             Stereon::Point2{tiny, tiny}, Stereon::Point2{huge, huge}, Stereon::Point2{});
         return sign == Stereon::Sign::Zero ? 0 : 1;
     }
+    if (std::strcmp(argv[1], "arena") == 0) {
+        // Copying an arena inside its own edit callback would let the
+        // callback's reference write into a page the copy shares.
+        Stereon::PagedArena<int, 4> arena;
+        arena.PushBack(argc);
+        int shared = 0;
+        arena.Modify(0, [&](int& entry) {
+            const Stereon::PagedArena<int, 4> snapshot = arena;
+            entry = 7;
+            shared = snapshot[0];
+        });
+        return shared == 7 ? 0 : 1;
+    }
     if (std::strcmp(argv[1], "template") == 0) {
         // Normalized, a template, requires a non-zero vector.
         const Stereon::Vec3 unit = Normalized(Stereon::Vec3{value - 2.0, 0.0, 0.0});

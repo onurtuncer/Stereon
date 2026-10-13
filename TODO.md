@@ -60,7 +60,7 @@
 - [x] `KernelError`, `ErrorCode`, `std::expected` aliases, `STEREON_TRY` macro (ADR-0006). `KernelError` carries code, message and tolerances; entities, `ValidityReport` and journal ID follow with handles, the checker and the journal
 - [x] `Context`: resolution, tolerance ceiling, scheduler, logger, journal sink (ADR-0001, ADR-0007). A value with `With...` modifiers; also the size box, the tolerance-growth policy (ADR-0006), the validity level (ADR-0018) and the compaction threshold (ADR-0004). The scheduler is a kind and a thread count, since stdexec types cannot appear in module code (docs/toolchain/gcc16-feature-probe.md)
 - [x] Logging and operation journal (inputs + parameters, replayable). Kernel-owned `LogSink` and `JournalSink` (ADR-0023), `MemoryJournal`, `JournalId` on `KernelError`; replay of a recorded entry lands with the first operation (the ADR-0001 prototype in section 10)
-- [ ] Unit and property tests for all of the above
+- [x] Unit and property tests for all of the above. Every core item has Catch2 cases and RapidCheck properties in `tests/core/`
 
 ## 5. `stereon::robust` (weeks 3–6)
 
@@ -72,9 +72,9 @@
 
 ## 6. Geometry scaffolding (weeks 4–8)
 
-- [ ] Concepts `CurveGeometry`, `Curve2dGeometry`, `SurfaceGeometry` (ADR-0003)
-- [ ] Type-erased `Curve`, `Curve2d`, `Surface` with 96-byte small-buffer storage and shared payloads
-- [ ] Two toy types per concept: `Line` + `Circle`, `Plane` + `Cylinder`
+- [x] Concepts `CurveGeometry`, `Curve2dGeometry`, `SurfaceGeometry` (ADR-0003). Tier 1; tiers 2 and 3 arrive with the intersection work
+- [x] Type-erased `Curve`, `Curve2d`, `Surface` with 96-byte small-buffer storage and shared payloads. `Stereon.Core:SmallBuffer`; types too large for the buffer are shared immutable
+- [x] Two toy types per concept: `Line` + `Circle`, `Plane` + `Cylinder`. Also `Line2d` + `Circle2d` for `Curve2dGeometry`; all scalar-generic (ADR-0021)
 - [ ] `VisitBuiltin` fast path generated with expansion statements and pack indexing (ADR-0016)
 - [ ] Type-pair dispatch table for binary operations (stub intersection handlers)
 - [ ] Contracts on all evaluator entry points (domain, finiteness)

@@ -49,13 +49,35 @@ Entity tables and geometry pools keep their entries in ``PagedArena<T, N>``
 (ADR-0005): fixed-size pages of ``N`` entries, 256 unless a table chooses
 otherwise, behind ``std::shared_ptr``. Copying an arena copies the page
 pointers, so a snapshot of a million-entry table costs a few thousand pointer
-copies and shares every page with its source. The first write to a page,
-through ``Modify(index)`` or ``ModifyPage(page)``, copies the page when
-another arena still holds it and writes in place when the arena holds it
-alone; memory grows with what an edit touched, not with the size of the
-table. ``PushBack`` appends, ``Resize`` grows with value-initialised entries
-or drops whole pages, and ``GetPageSpan(page)`` hands hot loops one page at a
-time, so the page lookup and the reference counting stay out of inner loops.
+copies and shares every page with its source. The first write to a page
+copies the page when another arena still holds it and writes in place when
+the arena holds it alone; memory grows with what an edit touched, not with
+the size of the table. ``PushBack`` appends, ``Resize`` grows with
+value-initialised entries or drops whole pages, and ``GetPageSpan(page)``
+hands hot loops one page at a time, so the page lookup and the reference
+counting stay out of inner loops.
+
+Writes are scoped. ``Set(index, value)`` replaces an entry, and
+``Modify(index, fn)`` and ``ModifyPage(page, fn)`` call ``fn`` with a
+reference to the entry or a span of the page, made unique first and valid
+only for the duration of the call; whatever ``fn`` returns, by value, is
+returned. No function returns a mutable reference. A reference kept past the
+copy-on-write step would otherwise write into a page that a later copy
+shares, and change a snapshot that is supposed to be immutable. While ``fn``
+runs, the arena may be read but not copied, moved, assigned, cleared,
+resized or edited again. Every build checks this with a plain branch and
+reports a violation from a module implementation unit, so the check does
+not depend on the compiler honouring contracts in imported templates
+(``docs/toolchain/gcc16-feature-probe.md``).
+
+.. code-block:: cpp
+
+   PagedArena<FaceRecord> faces = frozen;      // shares every page
+   faces.Set(17, record);                      // copies one page
+   faces.Modify(42, [](FaceRecord& f) { f.Tolerance *= 2.0; });
+   faces.ModifyPage(0, [](std::span<FaceRecord> page) {   // one copy-on-write step
+       for (FaceRecord& f : page) { f.Tolerance = 1e-5; }
+   });
 
 A ``const`` arena can be read, and copied, from any thread; the mutating
 operations belong to one thread, the builder's (ADR-0007).
