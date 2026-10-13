@@ -423,6 +423,69 @@ permanent and a compare; nearly degenerate points pay a few dozen error-free
 transformations; degenerate points pay the exact stage. Stereon's own
 numbers are in :ref:`predicate-benchmarks`.
 
+Numerical domain
+----------------
+
+Shewchuk's bounds and the error-free transformations assume that no
+operation underflows or overflows. A product that falls below
+:math:`2^{-1022}`, the smallest normal double, loses bits: its rounding error
+is no longer relative, and ``TwoProduct`` is no longer exact. Coordinates of
+everyday size never come near this, but the predicates promise exactness for
+every finite input, and a review of the first implementation found inputs
+where they broke it. With :math:`a = (2^{-600}, 0)`, :math:`b = (0, 2^{-600})`
+and :math:`c = (0, 0)`, the orientation determinant is :math:`2^{-1200} > 0`,
+yet both products of stage A underflow to zero, the error bound is zero too,
+and the first implementation accepted the zero.
+
+Two changes close this.
+
+**Stage A carries an absolute term.** Every stage-A bound adds
+:math:`2^{-1022}` to the relative bound. The few operations of stage A that
+can produce subnormal results each err by at most :math:`2^{-1075}`, so the
+term covers their total, and stage A is sound for any finite input. A zero
+determinant with a zero permanent no longer passes; it goes on to the
+adaptive stages.
+
+**The adaptive and exact stages work inside a domain.** Every intermediate
+value of a predicate of degree :math:`d` in the coordinates (2 for
+``Orient2D``, 3 for ``Orient3D``, 4 for ``InCircle``, 5 for ``InSphere``) is a
+multiple of :math:`2^{dL}`, where :math:`2^L` is the lowest set bit among the
+non-zero coordinates. Differences, products, the halves of ``Split`` and
+every roundoff term keep that granularity, because rounding only removes low
+bits. So if
+
+.. math::
+
+   d\,L \ge -1022 \qquad\text{and}\qquad d\,(E + 2) + 10 \le 1023,
+
+where :math:`2^{E+1}` bounds the coordinates and the 10 bits cover the sums
+of the at most :math:`2^{10}` terms of a determinant, every non-zero
+intermediate is a normal double, and Shewchuk's analysis holds. The
+determinants are homogeneous of degree :math:`d`: multiplying every
+coordinate by :math:`2^s` multiplies the determinant by :math:`2^{ds} > 0`
+and keeps its sign, and multiplying by a power of two is exact. The adaptive
+stages therefore check the domain first. Inputs outside it go to the exact
+stage, which multiplies the coordinates by the power of two that brings them
+in and evaluates the scaled points.
+
+A power of two exists whenever the coordinates' binary exponents span less
+than about :math:`2045 / d` orders: some 400 for ``InSphere`` and 1 000 for
+``Orient2D``, against fewer than 60 for coordinates inside ADR-0001's
+:math:`\pm 500` m size box at its :math:`10^{-5}` mm resolution. Inputs that
+no scaling brings in, and infinite or NaN coordinates, are a contract
+violation. It is reported from a module implementation unit
+(``src/robust/Robust.cpp``), so the report fires in every importer and does
+not depend on the compiler honouring contracts in imported templates. The
+check runs only on the adaptive path, so the cost for ordinary input is the
+one added term in stage A.
+
+``tests/robust/DomainTests.cpp`` holds the regression suite: the review's
+counterexample and its subnormal relatives, configurations shrunk to
+:math:`2^{-500}` and blown up to :math:`2^{200}`, and a RapidCheck property
+that scales random integer configurations by :math:`2^k` for every
+:math:`k` from :math:`-1074` to :math:`1013` and requires each predicate to
+agree with the integer oracle on the unscaled input.
+
 Interval filters
 ----------------
 
@@ -447,12 +510,12 @@ Implementation notes
 --------------------
 
 - **Module layout.** ``Stereon.Robust`` re-exports ``Stereon.Core`` and
-  four partitions: ``:Sign`` (the ``Sign`` enum, ``SignOf(double)``),
+  five partitions: ``:Sign`` (the ``Sign`` enum, ``SignOf(double)``),
   ``:Expansion`` (error-free transformations, ``Expansion<N>``, ``Sum``,
-  ``Scaled``, ``Product`` and the operators), ``:Predicates`` (the four
-  predicates and their ``...Exact`` variants) and ``:Filter``
-  (``SignOf(Interval)``, ``FilteredSign``). Everything is in namespace
-  ``Stereon``.
+  ``Scaled``, ``Product`` and the operators), ``:Domain`` (the domain check
+  and the exact power-of-two scaling), ``:Predicates`` (the four predicates
+  and their ``...Exact`` variants) and ``:Filter`` (``SignOf(Interval)``,
+  ``FilteredSign``). Everything is in namespace ``Stereon``.
 - **Signs, not values.** A predicate returns ``Sign``, never a double. A
   caller cannot compare it against an epsilon, and the clang-tidy and
   ``check_epsilon.py`` rules for ``topo``, ``boolean`` and ``mesh`` have

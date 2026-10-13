@@ -18,7 +18,7 @@
 #include <cstdlib>
 #include <cstring>
 
-import Stereon.Core;
+import Stereon.Robust;
 
 void handle_contract_violation(const std::contracts::contract_violation& violation)
 {
@@ -47,6 +47,15 @@ int main(const int argc, char** argv)
         table.Release(handle);
         table.Check(handle);
         return table.IsAlive(handle) ? 0 : 1;
+    }
+    if (std::strcmp(argv[1], "predicate") == 0) {
+        // Collinear points whose coordinates span from 2^-1000 to 2^500: no
+        // power of two keeps every intermediate of the exact stage normal.
+        const double tiny = 0x1p-1000 * (value - 1.0);
+        const double huge = 0x1p500 * (value - 1.0);
+        const Stereon::Sign sign = Stereon::Orient2D(
+            Stereon::Point2{tiny, tiny}, Stereon::Point2{huge, huge}, Stereon::Point2{});
+        return sign == Stereon::Sign::Zero ? 0 : 1;
     }
     if (std::strcmp(argv[1], "arena") == 0) {
         // Copying an arena inside its own edit callback would let the
