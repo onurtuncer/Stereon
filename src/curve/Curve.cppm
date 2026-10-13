@@ -16,3 +16,4 @@ export import :Circle;
 export import :Concepts;
 export import :Erased;
 export import :Line;
+export import :Visit;

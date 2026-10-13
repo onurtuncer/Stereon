@@ -32,6 +32,7 @@ stereon_exec_sources(core/ExecTests.cpp)
 stereon_add_tests(robust)
 stereon_add_tests(curve)
 stereon_add_tests(surface)
+stereon_add_tests(intersect)
 
 # Do contracts written in Stereon.Core fire in a unit that imports it? Each
 # probe violates one and must print the violation. GCC 16.2 checks the module's

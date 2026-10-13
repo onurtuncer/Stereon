@@ -12,5 +12,6 @@ stereon_add_library(curve
         Curve.cppm
         Erased.cppm
         Line.cppm
+        Visit.cppm
     DEPENDS
         robust)

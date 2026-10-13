@@ -75,11 +75,11 @@
 - [x] Concepts `CurveGeometry`, `Curve2dGeometry`, `SurfaceGeometry` (ADR-0003). Tier 1; tiers 2 and 3 arrive with the intersection work
 - [x] Type-erased `Curve`, `Curve2d`, `Surface` with 96-byte small-buffer storage and shared payloads. `Stereon.Core:SmallBuffer`; types too large for the buffer are shared immutable
 - [x] Two toy types per concept: `Line` + `Circle`, `Plane` + `Cylinder`. Also `Line2d` + `Circle2d` for `Curve2dGeometry`; all scalar-generic (ADR-0021)
-- [ ] `VisitBuiltin` fast path generated with expansion statements and pack indexing (ADR-0016)
-- [ ] Type-pair dispatch table for binary operations (stub intersection handlers)
+- [x] `VisitBuiltin` fast path generated with expansion statements and pack indexing (ADR-0016). Within 10% of direct calls in `bench/GeometryBench.cpp`; the virtual fallback is 2.6x direct for a line, 1.03x for a circle
+- [x] Type-pair dispatch table for binary operations (stub intersection handlers). `Stereon.Intersect`: compile-time tables over `BuiltinCurveTypes` and `BuiltinSurfaceTypes`, `NotImplemented` stubs, `NotSupported` for user types
 - [ ] Contracts on all evaluator entry points (domain, finiteness)
 - [ ] Reflection-based serialiser prototype for geometry structs (ADR-0012 groundwork)
-- [ ] Property tests comparing fast path and erased path on every type
+- [x] Property tests comparing fast path and erased path on every type. Bitwise agreement for every operation of every built-in curve and surface
 
 ## 7. Topology prototype (weeks 6–10)
 

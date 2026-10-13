@@ -7,7 +7,9 @@
 
 module;
 
+#include <array>
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <new>
 #include <type_traits>
@@ -31,6 +33,13 @@ export namespace Stereon {
 /// tuning constant fixed by the Phase 0 dispatch benchmark; not part of the
 /// API or ABI.
 inline constexpr std::size_t GeometryBufferSize = 96;
+
+/// A list of types, for the closed sets of built-in geometry that
+/// VisitBuiltin and the intersection tables are generated over.
+template <typename... Ts>
+struct TypeList {
+    static constexpr std::size_t Size = sizeof...(Ts);
+};
 
 } // namespace Stereon
 
@@ -200,5 +209,49 @@ private:
     alignas(std::max_align_t) std::byte m_Storage[Size];
     Concept* m_Model = nullptr;
 };
+
+/// 0, 1, ..., N - 1, for expansion statements over a type pack.
+template <std::size_t N>
+inline constexpr std::array<std::size_t, N> Indices = [] {
+    std::array<std::size_t, N> indices{};
+    for (std::size_t i = 0; i < N; ++i) {
+        indices[i] = i;
+    }
+    return indices;
+}();
+
+/// The position of the wrapped value's type in Ts..., or Size when it is not
+/// one of them. One virtual call; the comparisons are unrolled.
+template <typename Wrapper, typename... Ts>
+[[nodiscard]] std::size_t IndexIn(TypeList<Ts...>, const Wrapper& wrapper) noexcept
+{
+    const void* id = wrapper.GetModel().GetTypeId();
+    template for (constexpr std::size_t i : Indices<sizeof...(Ts)>)
+    {
+        if (id == TypeIdOf<Ts...[i]>()) {
+            return i;
+        }
+    }
+    return sizeof...(Ts);
+}
+
+/// Calls f with the wrapped value as its own type when that is one of Ts...,
+/// and with the wrapper otherwise (ADR-0003). The type test runs once, so a
+/// loop inside f runs on the concrete type with no virtual calls. Every call
+/// of f must return the same type.
+template <typename Wrapper, typename F, typename... Ts>
+decltype(auto) VisitErased(TypeList<Ts...>, const Wrapper& wrapper, F&& f)
+{
+    const auto& model = wrapper.GetModel();
+    const void* id = model.GetTypeId();
+    template for (constexpr std::size_t i : Indices<sizeof...(Ts)>)
+    {
+        using T = Ts...[i];
+        if (id == TypeIdOf<T>()) {
+            return std::invoke(f, *static_cast<const T*>(model.GetValue()));
+        }
+    }
+    return std::invoke(f, wrapper);
+}
 
 } // namespace Stereon::Detail
