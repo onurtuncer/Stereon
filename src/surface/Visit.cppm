@@ -27,10 +27,16 @@ export namespace Stereon {
 /// The built-in surface types, in the order the intersection tables use.
 using BuiltinSurfaceTypes = TypeList<Plane, Cylinder>;
 
-template <>
-inline constexpr std::string_view GeometryTypeName<Plane> = "Plane";
-template <>
-inline constexpr std::string_view GeometryTypeName<Cylinder> = "Cylinder";
+/// The diagnostic names of the built-in surfaces; see GeometryNameOf in
+/// Stereon.Curve:Visit.
+[[nodiscard]] constexpr std::string_view GeometryNameOf(const Plane*) noexcept
+{
+    return "Plane";
+}
+[[nodiscard]] constexpr std::string_view GeometryNameOf(const Cylinder*) noexcept
+{
+    return "Cylinder";
+}
 
 /// Calls f(geometry) with the wrapped built-in type, or f(surface) for any
 /// other type. Every call of f must return the same type.

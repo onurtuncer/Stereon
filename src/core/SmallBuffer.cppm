@@ -12,6 +12,7 @@ module;
 #include <functional>
 #include <memory>
 #include <new>
+#include <optional>
 #include <type_traits>
 #include <utility>
 
@@ -222,10 +223,17 @@ inline constexpr std::array<std::size_t, N> Indices = [] {
 
 /// The position of the wrapped value's type in Ts..., or Size when it is not
 /// one of them. One virtual call; the comparisons are unrolled.
+///
+/// Both functions below are generated with an expansion statement and pack
+/// indexing (ADR-0016) where the compiler has them, and with a fold
+/// expression otherwise: MSVC and Clang lack expansion statements so far,
+/// and they build in non-blocking CI. The two forms make the same
+/// comparisons in the same order.
 template <typename Wrapper, typename... Ts>
 [[nodiscard]] std::size_t IndexIn(TypeList<Ts...>, const Wrapper& wrapper) noexcept
 {
     const void* id = wrapper.GetModel().GetTypeId();
+#if defined(__cpp_expansion_statements)
     template for (constexpr std::size_t i : Indices<sizeof...(Ts)>)
     {
         if (id == TypeIdOf<Ts...[i]>()) {
@@ -233,17 +241,23 @@ template <typename Wrapper, typename... Ts>
         }
     }
     return sizeof...(Ts);
+#else
+    std::size_t index = 0;
+    const bool found = ((id == TypeIdOf<Ts>() || (++index, false)) || ...);
+    return found ? index : sizeof...(Ts);
+#endif
 }
 
 /// Calls f with the wrapped value as its own type when that is one of Ts...,
 /// and with the wrapper otherwise (ADR-0003). The type test runs once, so a
 /// loop inside f runs on the concrete type with no virtual calls. Every call
-/// of f must return the same type.
+/// of f must return the same type, by value.
 template <typename Wrapper, typename F, typename... Ts>
 decltype(auto) VisitErased(TypeList<Ts...>, const Wrapper& wrapper, F&& f)
 {
     const auto& model = wrapper.GetModel();
     const void* id = model.GetTypeId();
+#if defined(__cpp_expansion_statements)
     template for (constexpr std::size_t i : Indices<sizeof...(Ts)>)
     {
         using T = Ts...[i];
@@ -252,6 +266,27 @@ decltype(auto) VisitErased(TypeList<Ts...>, const Wrapper& wrapper, F&& f)
         }
     }
     return std::invoke(f, wrapper);
+#else
+    using Result = std::invoke_result_t<F&, const Wrapper&>;
+    if constexpr (std::is_void_v<Result>) {
+        const bool done = ((id == TypeIdOf<Ts>() &&
+                            (std::invoke(f, *static_cast<const Ts*>(model.GetValue())), true)) ||
+                           ...);
+        if (!done) {
+            std::invoke(f, wrapper);
+        }
+    } else {
+        std::optional<Result> result;
+        const bool done =
+            ((id == TypeIdOf<Ts>() &&
+              (result.emplace(std::invoke(f, *static_cast<const Ts*>(model.GetValue()))), true)) ||
+             ...);
+        if (!done) {
+            return Result(std::invoke(f, wrapper));
+        }
+        return Result(std::move(*result));
+    }
+#endif
 }
 
 } // namespace Stereon::Detail
