@@ -99,6 +99,27 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT STEREON_CONTRACT_SEMANTIC STREQU
     endif()
 endif()
 
+# The debugger pretty-printers (tools/debugger/): a target program with one
+# value of every printed type, inspected by scripted GDB and LLDB sessions
+# that must print the same summaries. Only unoptimised builds keep every
+# variable, so the checks run in Debug configurations; macOS is left out until
+# its LLDB has been verified on GCC's debug information. A missing debugger
+# makes the check exit 77, which CTest reports as skipped.
+add_executable(stereon_debugger_target debugger/DebuggerTarget.cpp)
+target_link_libraries(stereon_debugger_target PRIVATE stereon::surface stereon_options)
+stereon_anchor_contracts(stereon_debugger_target)
+find_package(Python3 3.9 COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND AND CMAKE_BUILD_TYPE STREQUAL "Debug" AND NOT APPLE)
+    foreach(debugger gdb lldb)
+        add_test(NAME "tools: ${debugger} pretty-printers"
+            COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/debugger/check_printers.py"
+                    --debugger ${debugger}
+                    --target $<TARGET_FILE:stereon_debugger_target>
+                    --printers "${PROJECT_SOURCE_DIR}/tools/debugger/stereon_${debugger}.py")
+        set_tests_properties("tools: ${debugger} pretty-printers" PROPERTIES SKIP_RETURN_CODE 77)
+    endforeach()
+endif()
+
 # Source checks that need only Python. CI runs the same scripts in its lint job.
 find_package(Python3 3.9 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)

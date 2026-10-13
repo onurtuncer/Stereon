@@ -98,8 +98,8 @@
 
 - [ ] Qt6 or Vulkan window drawing points, polylines, boxes and triangle soups
 - [ ] Load dumps written from any test (`STEREON_DUMP(obj)` macro)
-- [ ] Debugger pretty-printers for GDB (Python) and LLDB: handles resolved to the entity (e.g. `Edge#4711 [Line, tol 1e-5, faces 12|37]`), `Interval`, `Box3`, `Curve`, `Surface`
-- [ ] CI test for the pretty-printers using scripted GDB and LLDB sessions
+- [ ] Debugger pretty-printers for GDB (Python) and LLDB: handles resolved to the entity (e.g. `Edge#4711 [Line, tol 1e-5, faces 12|37]`), `Interval`, `Box3`, `Curve`, `Surface`. Done except resolving a handle to its entity, which needs the topology stores: `tools/debugger/stereon_gdb.py` and `stereon_lldb.py` print vectors, intervals, boxes, handles, the erased wrappers (built-in and user types), arenas, journal ids, signs and expansions as `std::format` does
+- [x] CI test for the pretty-printers using scripted GDB and LLDB sessions. `tests/debugger/check_printers.py` against one expected table for both debuggers; the Linux CI jobs install gdb and lldb
 - [ ] `stn-dump` prototype: JSON dump of any `Shape`, for diffing two versions (ADR-0012 groundwork)
 
 ## 9. Testing infrastructure (weeks 2–10)
@@ -133,7 +133,7 @@
 - [ ] `docs/architecture.md`: library layering diagram and data flow
 - [ ] `docs/contributing-with-ai.md`: how agents are given ADR context and tests
 - [ ] `docs/references.md`: reading list (Piegl & Tiller, Patrikalakis & Maekawa, Stroud, Golovanov, Shewchuk) with the chapters each module relies on
-- [ ] `docs/debugging.md`: checked handles, `Describe()`, pretty-printer setup, journals, viewer and `stn-dump`
+- [ ] `docs/debugging.md`: checked handles, `Describe()`, pretty-printer setup, journals, viewer and `stn-dump`. Started as `docs/debugging.rst`: pretty-printers, contract reports and journals; `Describe()`, the viewer and `stn-dump` follow when they exist
 - [ ] Update the README roadmap status at the end of the phase
 
 ---
