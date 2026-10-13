@@ -93,7 +93,11 @@ TEST_CASE("every built-in pair has a handler that names both types", "[intersect
                    Stereon::BuiltinSurfaceTypes::Size);
     for (const auto& row : Stereon::Detail::CurvePairTable) {
         for (const auto handler : row) {
-            REQUIRE(handler != nullptr);
+            // Compared outside REQUIRE: Catch2's wrapper around a pointer to a
+            // function returning std::expected sends libc++ into a recursive
+            // constraint check.
+            const bool present = handler != nullptr;
+            REQUIRE(present);
         }
     }
 

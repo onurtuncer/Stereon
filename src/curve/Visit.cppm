@@ -45,6 +45,13 @@ using BuiltinCurveTypesN = std::conditional_t<D == 2, BuiltinCurve2dTypes, Built
 template <typename T>
 inline constexpr std::string_view GeometryTypeName = "geometry";
 
+} // namespace Stereon
+
+// The names of the built-in types. Outside the export block: an explicit
+// specialization cannot be exported (MSVC enforces this; it is reachable
+// wherever the primary template is).
+namespace Stereon {
+
 template <>
 inline constexpr std::string_view GeometryTypeName<Line> = "Line";
 template <>
@@ -53,6 +60,10 @@ template <>
 inline constexpr std::string_view GeometryTypeName<Line2d> = "Line2d";
 template <>
 inline constexpr std::string_view GeometryTypeName<Circle2d> = "Circle2d";
+
+} // namespace Stereon
+
+export namespace Stereon {
 
 /// Calls f(geometry) with the wrapped built-in type, or f(curve) for any
 /// other type. Every call of f must return the same type.
