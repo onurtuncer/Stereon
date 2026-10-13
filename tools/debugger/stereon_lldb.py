@@ -122,7 +122,7 @@ def oriented_text(value) -> str:
 
 def short_geometry_name(full: str) -> str:
     name = MODULE_SUFFIX.sub("", full)
-    builtin = re.fullmatch(r"Stereon::Basic(Line|Circle)<double, (\d)(?:ull)?>", name)
+    builtin = re.fullmatch(r"Stereon::Basic(Line|Circle)<double, (\d)[uUlL]*>", name)
     if builtin:
         return builtin.group(1) + ("2d" if builtin.group(2) == "2" else "")
     builtin = re.fullmatch(r"Stereon::Basic(Plane|Cylinder)<double>", name)
@@ -166,6 +166,39 @@ def demangle(symbol: str) -> str:
     return text
 
 
+def without_integer_suffixes(text: str) -> str:
+    """3ull or 3ul (Windows and Linux spell size_t differently) becomes 3."""
+    return re.sub(r"\b(\d+)[uUlL]+\b", r"\1", text)
+
+
+TYPE_INDEX = {}
+
+
+def type_index(target):
+    """Every class and struct type of the target, by its name without module
+    decorations and spaces. Built once per target: LLDB's FindTypes does not
+    match a base name whose stored name carries a decoration."""
+    key = target.GetExecutable().fullpath
+    if key not in TYPE_INDEX:
+        index = {}
+        for m in range(target.GetNumModules()):
+            types = target.GetModuleAtIndex(m).GetTypes(lldb.eTypeClassClass | lldb.eTypeClassStruct)
+            for i in range(types.GetSize()):
+                t = types.GetTypeAtIndex(i)
+                index.setdefault(MODULE_SUFFIX.sub("", t.GetName()).replace(" ", ""), t)
+        TYPE_INDEX[key] = index
+    return TYPE_INDEX[key]
+
+
+def find_type(target, name: str):
+    """The SBType named name, ignoring module decorations; see find_type in
+    stereon_gdb.py."""
+    found = target.FindFirstType(name)
+    if found.IsValid():
+        return found
+    return type_index(target).get(MODULE_SUFFIX.sub("", name).replace(" ", ""))
+
+
 def wrapped_value(value, model_address: int):
     target = value.GetTarget()
     process = value.GetProcess()
@@ -177,11 +210,10 @@ def wrapped_value(value, model_address: int):
         return "?", None
     arguments = split_template_arguments(match.group(1))
     type_name = arguments[-2]
-    lookup_name = re.sub(r"(\d+)ull\b", r"\1", type_name)
-    value_type = target.FindFirstType(lookup_name)
-    if not value_type.IsValid():
+    value_type = find_type(target, without_integer_suffixes(type_name))
+    if value_type is None:
         return type_name, None
-    size = int(re.sub(r"ull$", "", arguments[-1]))
+    size = int(without_integer_suffixes(arguments[-1]))
     pointer_size = process.GetAddressByteSize()
     alignment = max(pointer_size, 8)
     address = model_address + alignment

@@ -88,6 +88,9 @@ def lldb_session(target: Path, printers: Path) -> list[str]:
     commands = [
         f"command script import {native_path(printers)}",
         "breakpoint set --name StereonDebuggerStop",
+        # Disabling ASLR needs the personality syscall, which container
+        # security profiles block ("personality set failed").
+        "settings set target.disable-aslr false",
         "process launch",
         "up",
     ] + [f'script print("@@{name}@@ ", end="")\nframe variable {name}' for name in EXPECTED]

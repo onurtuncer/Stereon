@@ -102,7 +102,7 @@ def handle_text(kind: str, index: int) -> str:
 def short_geometry_name(full: str) -> str:
     """Line, Circle2d, Cylinder, ... for built-in types; the name otherwise."""
     name = MODULE_SUFFIX.sub("", full)
-    builtin = re.fullmatch(r"Stereon::Basic(Line|Circle)<double, (\d)(?:ull)?>", name)
+    builtin = re.fullmatch(r"Stereon::Basic(Line|Circle)<double, (\d)[uUlL]*>", name)
     if builtin:
         return builtin.group(1) + ("2d" if builtin.group(2) == "2" else "")
     builtin = re.fullmatch(r"Stereon::Basic(Plane|Cylinder)<double>", name)
@@ -154,6 +154,43 @@ def split_template_arguments(text: str) -> list[str]:
     return parts
 
 
+def without_integer_suffixes(text: str) -> str:
+    """3ull or 3ul (Windows and Linux spell size_t differently) becomes 3."""
+    return re.sub(r"\b(\d+)[uUlL]+\b", r"\1", text)
+
+
+FOUND_TYPES = {}
+
+
+def find_type(name: str):
+    """The gdb.Type named name, ignoring module decorations.
+
+    A demangled vtable may name a type without the module it is attached to
+    (Linux) or with it (MinGW), while the debug information always has it, so
+    a direct lookup is tried first and then the type list is searched.
+    """
+    if name in FOUND_TYPES:
+        return FOUND_TYPES[name]
+    found = None
+    try:
+        found = gdb.lookup_type(name)
+    except gdb.error:
+        base = re.match(r"^([^<]*)", name).group(1).split("::")[-1]
+        wanted = MODULE_SUFFIX.sub("", name).replace(" ", "")
+        listing = gdb.execute(f"info types {base}", to_string=True)
+        for line in listing.splitlines():
+            candidate = re.sub(r"^\s*\d*:?\s*(?:struct|class|union|typedef)?\s*", "", line)
+            candidate = candidate.rstrip(";").strip()
+            if MODULE_SUFFIX.sub("", candidate).replace(" ", "") == wanted:
+                try:
+                    found = gdb.lookup_type(candidate)
+                    break
+                except gdb.error:
+                    continue
+    FOUND_TYPES[name] = found
+    return found
+
+
 def wrapped_value(model_pointer):
     """(type name, gdb value or None) of what a Curve or Surface model holds."""
     global VOID_PP
@@ -168,12 +205,10 @@ def wrapped_value(model_pointer):
     arguments = split_template_arguments(model)
     # CurveModel<D, T, Size> or SurfaceModel<T, Size>.
     type_name = arguments[-2]
-    lookup_name = re.sub(r"(\d+)ull\b", r"\1", type_name)
-    try:
-        value_type = gdb.lookup_type(lookup_name)
-    except gdb.error:
+    value_type = find_type(without_integer_suffixes(type_name))
+    if value_type is None:
         return type_name, None
-    size = int(re.sub(r"ull$", "", arguments[-1]))
+    size = int(without_integer_suffixes(arguments[-1]))
     pointer_size = VOID_PP.sizeof
     offset = max(pointer_size, value_type.alignof)
     address = int(model_pointer) + offset
