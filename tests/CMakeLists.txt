@@ -33,6 +33,22 @@ stereon_add_tests(robust)
 stereon_add_tests(curve)
 stereon_add_tests(surface)
 
+# Differential tests against OpenCASCADE (ADR-0015's independent referee).
+# OCCT is LGPL-2.1: it is linked into this test executable only, which is
+# built on request and never distributed, and no Stereon library depends on
+# it (ADR-0008). tools/occt/build_occt.sh builds the pinned version; pass its
+# install directory in CMAKE_PREFIX_PATH.
+if(STEREON_WITH_OCCT)
+    find_package(OpenCASCADE 8.0 CONFIG REQUIRED)
+    add_executable(stereon_occt_tests occt/GeometryDifferentialTests.cpp)
+    target_link_libraries(stereon_occt_tests
+        PRIVATE stereon::surface stereon_options Catch2::Catch2WithMain
+                TKernel TKMath TKG3d TKGeomBase)
+    target_include_directories(stereon_occt_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/support")
+    stereon_anchor_contracts(stereon_occt_tests)
+    catch_discover_tests(stereon_occt_tests TEST_PREFIX "occt: " DISCOVERY_MODE PRE_TEST)
+endif()
+
 # Do contracts written in Stereon.Core fire in a unit that imports it? Each
 # probe violates one and must print the violation. GCC 16.2 checks the module's
 # inline functions only with the contract anchor above, and drops the checks in

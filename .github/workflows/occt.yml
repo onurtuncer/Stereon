@@ -1,0 +1,61 @@
+# SPDX-FileCopyrightText: 2026 Onur Tuncer and Stereon contributors
+# SPDX-License-Identifier: MPL-2.0
+#
+# The pinned OpenCASCADE build that differential tests and OCCT benchmarks
+# compare against (docs/benchmarks.md). Building OCCT takes most of an hour,
+# so the installed tree is cached under a key derived from
+# tools/occt/build_occt.sh, which pins the tag, the commit and every option;
+# runs that hit the cache spend a minute restoring it. Not a required check
+# until it is added to branch protection.
+
+name: OCCT
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CTEST_OUTPUT_ON_FAILURE: "1"
+  CMAKE_BUILD_PARALLEL_LEVEL: "4"
+  OCCT_PREFIX: /opt/occt
+
+jobs:
+  occt:
+    name: OCCT differential tests (GCC 16)
+    runs-on: ubuntu-24.04
+    container: gcc:16.2
+    timeout-minutes: 150
+    steps:
+      - name: Install CMake and Ninja
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends cmake ninja-build zstd
+      - uses: actions/checkout@v4
+      - name: Restore the OCCT build
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.OCCT_PREFIX }}
+          key: occt-gcc16.2-${{ hashFiles('tools/occt/build_occt.sh') }}
+      - name: Build OCCT (cache miss only)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash tools/occt/build_occt.sh "$OCCT_PREFIX" "$RUNNER_TEMP/occt"
+      - name: Show the OCCT build
+        run: cat "$OCCT_PREFIX/stereon-occt-build.txt"
+      - name: Configure Stereon against OCCT
+        run: >
+          cmake --preset gcc16-release -DSTEREON_WARNINGS_AS_ERRORS=ON
+          -DSTEREON_WITH_OCCT=ON -DCMAKE_PREFIX_PATH="$OCCT_PREFIX"
+      - name: Build
+        run: cmake --build --preset gcc16-release --target stereon_occt_tests
+      - name: Differential tests
+        run: ctest --preset gcc16-release -R "^occt: "
