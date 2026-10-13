@@ -40,3 +40,4 @@ Open questions that have to be researched before they can be decided live in [`d
 | [0022](0022-function-complexity.md) | Function complexity limits | 0 | Proposed |
 | [0025](0025-separate-topology-from-geometry.md) | Separate topology from geometry | 0 | Proposed |
 | [0026](0026-modelling-operations-by-contracts.md) | Specify modelling operations by contracts | 0 | Proposed |
+| [0027](0027-controlled-topology-mutation-and-euler-operators.md) | Controlled topology mutation and Euler operators | 0 | Proposed |
