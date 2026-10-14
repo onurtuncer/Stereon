@@ -8,12 +8,16 @@
 stereon_add_library(surface
     MODULES
         Concepts.cppm
+        Cone.cppm
         Cylinder.cppm
         Erased.cppm
         Plane.cppm
+        Sphere.cppm
         Surface.cppm
+        Torus.cppm
         Visit.cppm
     SOURCES
+        Factories.cpp
         Surface.cpp
     DEPENDS
         curve)

@@ -43,6 +43,14 @@ using Circle2d = BasicCircle<double, 2>;
 /// The parameter period, 2 pi.
 inline constexpr double CirclePeriod = 2.0 * std::numbers::pi;
 
+/// The circle after validating data from outside the kernel (ADR-0006):
+/// InvalidInput unless every value is finite, Radius > 0 and the axes are
+/// orthonormal within FrameAllowance.
+[[nodiscard]] Result<Circle> MakeCircle(const Point3& center, const double radius,
+                                        const Vec3& xAxis, const Vec3& yAxis);
+[[nodiscard]] Result<Circle2d> MakeCircle(const Point2& center, const double radius,
+                                          const Vec2& xAxis, const Vec2& yAxis);
+
 template <Scalar T, std::size_t D>
 [[nodiscard]] constexpr BasicPointN<T, D> Eval(const BasicCircle<T, D>& circle, const T& t)
 {
@@ -64,18 +72,8 @@ template <Scalar T, std::size_t D>
     using std::sin;
     // cos and sin of t + n pi/2, by the quarter turn n mod 4, so that no
     // multiple of pi/2 is rounded into the argument.
-    const T c = cos(t);
-    const T s = sin(t);
-    switch (n % 4) {
-    case 1:
-        return circle.Radius * (-s * circle.XAxis + c * circle.YAxis);
-    case 2:
-        return circle.Radius * (-c * circle.XAxis - s * circle.YAxis);
-    case 3:
-        return circle.Radius * (s * circle.XAxis - c * circle.YAxis);
-    default:
-        return circle.Radius * (c * circle.XAxis + s * circle.YAxis);
-    }
+    const BasicCosSin<T> turned = QuarterTurned(T(cos(t)), T(sin(t)), n);
+    return circle.Radius * (turned.Cos * circle.XAxis + turned.Sin * circle.YAxis);
 }
 
 /// [0, 2 pi].
@@ -120,19 +118,7 @@ template <std::size_t D>
 {
     Detail::RequireFinite(p, "Project(Circle)", "a non-finite point");
     const BasicVecN<double, D> offset = p - circle.Center;
-    const double x = Dot(offset, circle.XAxis);
-    const double y = Dot(offset, circle.YAxis);
-    if (x == 0.0 && y == 0.0) {
-        return 0.0;
-    }
-    const double angle = std::atan2(y, x);
-    if (angle >= 0.0) {
-        return angle;
-    }
-    // A tiny negative angle plus 2 pi rounds to 2 pi itself, which is the
-    // same point as 0 and outside [0, 2 pi).
-    const double wrapped = angle + CirclePeriod;
-    return wrapped < CirclePeriod ? wrapped : 0.0;
+    return WrappedAngle(Dot(offset, circle.YAxis), Dot(offset, circle.XAxis));
 }
 
 /// The same circle traversed the other way:

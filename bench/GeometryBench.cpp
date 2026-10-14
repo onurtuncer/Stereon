@@ -36,9 +36,13 @@ import Stereon.Surface;
 namespace {
 
 using Stereon::Circle;
+using Stereon::Cone;
 using Stereon::Curve;
+using Stereon::Cylinder;
+using Stereon::Ellipse;
 using Stereon::Line;
 using Stereon::Point3;
+using Stereon::Torus;
 using Stereon::Vec3;
 
 constexpr std::size_t SampleCount = 1 << 16;
@@ -60,6 +64,26 @@ Line SomeLine()
 Circle SomeCircle()
 {
     return {Point3{1.0, 2.0, 3.0}, 2.5, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+}
+
+Ellipse SomeEllipse()
+{
+    return {Point3{1.0, 2.0, 3.0}, 2.5, 1.5, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+}
+
+Cylinder SomeCylinder()
+{
+    return {Point3{1.0, 2.0, 3.0}, 2.5, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+}
+
+Cone SomeCone()
+{
+    return {Point3{1.0, 2.0, 3.0}, 2.5, 0.5, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+}
+
+Torus SomeTorus()
+{
+    return {Point3{1.0, 2.0, 3.0}, 2.5, 0.5, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
 }
 
 void SetItems(benchmark::State& state)
@@ -139,6 +163,28 @@ void CopyWrapper(benchmark::State& state)
     state.counters["shared"] = Stereon::Detail::FitsInline<G, Size> ? 0.0 : 1.0;
 }
 
+/// Copying a Surface-style wrapper whose buffer is Size bytes. Cone and Torus
+/// take 96 bytes, so with the model's table pointer they fit only from 104.
+template <typename G, std::size_t Size>
+void CopySurfaceWrapper(benchmark::State& state)
+{
+    using Model = Stereon::Detail::SurfaceModel<G, Size>;
+    Stereon::Detail::SmallBuffer<Stereon::Detail::SurfaceConcept, Size> source;
+    if constexpr (std::is_same_v<G, Cylinder>) {
+        source.template Emplace<Model>(SomeCylinder());
+    } else if constexpr (std::is_same_v<G, Cone>) {
+        source.template Emplace<Model>(SomeCone());
+    } else {
+        source.template Emplace<Model>(SomeTorus());
+    }
+    for (auto _ : state) {
+        auto copy = source;
+        benchmark::DoNotOptimize(copy);
+    }
+    state.counters["sizeof"] = static_cast<double>(sizeof(G));
+    state.counters["shared"] = Stereon::Detail::FitsInline<G, Size> ? 0.0 : 1.0;
+}
+
 } // namespace
 
 BENCHMARK_CAPTURE(Direct, Line, SomeLine());
@@ -149,6 +195,9 @@ BENCHMARK_CAPTURE(Direct, Circle, SomeCircle());
 BENCHMARK_CAPTURE(Visit, Circle, Curve(SomeCircle()));
 BENCHMARK_CAPTURE(VisitPerCall, Circle, Curve(SomeCircle()));
 BENCHMARK_CAPTURE(Erased, Circle, Curve(SomeCircle()));
+BENCHMARK_CAPTURE(Direct, Ellipse, SomeEllipse());
+BENCHMARK_CAPTURE(Visit, Ellipse, Curve(SomeEllipse()));
+BENCHMARK_CAPTURE(Erased, Ellipse, Curve(SomeEllipse()));
 
 BENCHMARK(CopyWrapper<Line, 64>);
 BENCHMARK(CopyWrapper<Line, 96>);
@@ -156,3 +205,9 @@ BENCHMARK(CopyWrapper<Line, 128>);
 BENCHMARK(CopyWrapper<Circle, 64>);
 BENCHMARK(CopyWrapper<Circle, 96>);
 BENCHMARK(CopyWrapper<Circle, 128>);
+BENCHMARK(CopySurfaceWrapper<Cylinder, 96>);
+BENCHMARK(CopySurfaceWrapper<Cylinder, 128>);
+BENCHMARK(CopySurfaceWrapper<Cone, 96>);
+BENCHMARK(CopySurfaceWrapper<Cone, 128>);
+BENCHMARK(CopySurfaceWrapper<Torus, 96>);
+BENCHMARK(CopySurfaceWrapper<Torus, 128>);

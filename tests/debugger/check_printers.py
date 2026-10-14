@@ -51,6 +51,8 @@ EXPECTED = {
     "emptyCurve": "Curve (empty)",
     "planarCurve": "Curve2d(Line2d) {Origin = (0, 0), Direction = (0, 1)}",
     "cylinderSurface": "Surface(Cylinder) {Origin = (0, 0, 0), Radius = 1.5, XAxis = (1, 0, 0), YAxis = (0, 1, 0), RightHanded = false}",
+    "ellipseCurve": "Curve(Ellipse) {Center = (0, 0, 0), MajorRadius = 3, MinorRadius = 1, XAxis = (1, 0, 0), YAxis = (0, 1, 0)}",
+    "torusSurface": "Surface(Torus) {Center = (0, 0, 0), MajorRadius = 4, MinorRadius = 0.5, XAxis = (1, 0, 0), YAxis = (0, 1, 0), RightHanded = true}",
     "arena": "PagedArena of 6 entries in 2 pages, 1 shared",
     "snapshot": "PagedArena of 6 entries in 2 pages, 1 shared",
     "journal": "J#7",

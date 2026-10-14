@@ -33,6 +33,12 @@ struct BasicLine {
 using Line = BasicLine<double, 3>;
 using Line2d = BasicLine<double, 2>;
 
+/// The line after validating data from outside the kernel (ADR-0006):
+/// InvalidInput unless Origin and Direction are finite and Direction is not
+/// zero.
+[[nodiscard]] Result<Line> MakeLine(const Point3& origin, const Vec3& direction);
+[[nodiscard]] Result<Line2d> MakeLine(const Point2& origin, const Vec2& direction);
+
 template <Scalar T, std::size_t D>
 [[nodiscard]] constexpr BasicPointN<T, D> Eval(const BasicLine<T, D>& line, const T& t)
 {

@@ -122,10 +122,10 @@ def oriented_text(value) -> str:
 
 def short_geometry_name(full: str) -> str:
     name = MODULE_SUFFIX.sub("", full)
-    builtin = re.fullmatch(r"Stereon::Basic(Line|Circle)<double, (\d)[uUlL]*>", name)
+    builtin = re.fullmatch(r"Stereon::Basic(Line|Circle|Ellipse)<double, (\d)[uUlL]*>", name)
     if builtin:
         return builtin.group(1) + ("2d" if builtin.group(2) == "2" else "")
-    builtin = re.fullmatch(r"Stereon::Basic(Plane|Cylinder)<double>", name)
+    builtin = re.fullmatch(r"Stereon::Basic(Plane|Cylinder|Cone|Sphere|Torus)<double>", name)
     if builtin:
         return builtin.group(1)
     return name

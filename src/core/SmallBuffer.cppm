@@ -31,9 +31,11 @@ export module Stereon.Core:SmallBuffer;
 export namespace Stereon {
 
 /// Bytes of in-place storage in Curve, Curve2d and Surface (ADR-0003). A
-/// tuning constant fixed by the Phase 0 dispatch benchmark; not part of the
-/// API or ABI.
-inline constexpr std::size_t GeometryBufferSize = 96;
+/// tuning constant fixed by the copy benchmark in bench/GeometryBench.cpp;
+/// not part of the API or ABI. 128 holds Cone and Torus (96 bytes plus the
+/// model's table pointer), whose copies cost about 15 ns inline against 43 ns
+/// shared, for about 2.5 ns more on a Line or Circle copy than at 96.
+inline constexpr std::size_t GeometryBufferSize = 128;
 
 /// A list of types, for the closed sets of built-in geometry that
 /// VisitBuiltin and the intersection tables are generated over.

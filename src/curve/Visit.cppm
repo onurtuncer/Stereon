@@ -19,6 +19,7 @@ export module Stereon.Curve:Visit;
 import Stereon.Robust;
 import :Circle;
 import :Concepts;
+import :Ellipse;
 import :Erased;
 import :Line;
 
@@ -31,8 +32,8 @@ import :Line;
 export namespace Stereon {
 
 /// The built-in curve types, in the order the intersection tables use.
-using BuiltinCurveTypes = TypeList<Line, Circle>;
-using BuiltinCurve2dTypes = TypeList<Line2d, Circle2d>;
+using BuiltinCurveTypes = TypeList<Line, Circle, Ellipse>;
+using BuiltinCurve2dTypes = TypeList<Line2d, Circle2d, Ellipse2d>;
 
 template <std::size_t D>
 using BuiltinCurveTypesN = std::conditional_t<D == 2, BuiltinCurve2dTypes, BuiltinCurveTypes>;
@@ -58,6 +59,10 @@ template <typename T>
 {
     return "Circle";
 }
+[[nodiscard]] constexpr std::string_view GeometryNameOf(const Ellipse*) noexcept
+{
+    return "Ellipse";
+}
 [[nodiscard]] constexpr std::string_view GeometryNameOf(const Line2d*) noexcept
 {
     return "Line2d";
@@ -65,6 +70,10 @@ template <typename T>
 [[nodiscard]] constexpr std::string_view GeometryNameOf(const Circle2d*) noexcept
 {
     return "Circle2d";
+}
+[[nodiscard]] constexpr std::string_view GeometryNameOf(const Ellipse2d*) noexcept
+{
+    return "Ellipse2d";
 }
 
 template <typename T>

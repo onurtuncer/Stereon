@@ -39,6 +39,7 @@ Stereon
    tolerances
    predicates
    geometry
+   analytic
    topology
    intersection
    modeling

@@ -97,6 +97,8 @@ int main()
     const Line line{Point3{0.0, 0.0, 1.0}, Vec3{1.0, 0.0, 0.0}};
     const Circle circle{Point3{1.0, 2.0, 3.0}, 2.5, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
     const Cylinder cylinder{Point3{}, 1.5, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}, false};
+    const Ellipse ellipse{Point3{}, 3.0, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+    const Torus torus{Point3{}, 4.0, 0.5, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
 
     const Curve lineCurve(line);
     const Curve circleCurve(circle);
@@ -104,6 +106,8 @@ int main()
     const Curve emptyCurve;
     const Curve2d planarCurve(Line2d{Point2{0.0, 0.0}, Vec2{0.0, 1.0}});
     const Surface cylinderSurface(cylinder);
+    const Curve ellipseCurve(ellipse);
+    const Surface torusSurface(torus);
 
     PagedArena<int, 4> arena;
     for (int i = 0; i < 6; ++i) {
@@ -134,6 +138,8 @@ int main()
     StereonDebuggerStop(&emptyCurve);
     StereonDebuggerStop(&planarCurve);
     StereonDebuggerStop(&cylinderSurface);
+    StereonDebuggerStop(&ellipseCurve);
+    StereonDebuggerStop(&torusSurface);
     StereonDebuggerStop(&arena);
     StereonDebuggerStop(&snapshot);
     StereonDebuggerStop(&journal);

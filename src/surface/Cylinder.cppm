@@ -39,34 +39,27 @@ struct BasicCylinder {
 
 using Cylinder = BasicCylinder<double>;
 
+/// The cylinder after validating data from outside the kernel (ADR-0006):
+/// InvalidInput unless every value is finite, Radius > 0 and the axes are
+/// orthonormal within FrameAllowance.
+[[nodiscard]] Result<Cylinder> MakeCylinder(const Point3& origin, const double radius,
+                                            const Vec3& xAxis, const Vec3& yAxis,
+                                            const bool rightHanded = true);
+
 /// The direction of the cylinder's axis: the direction of growing v.
 template <Scalar T>
 [[nodiscard]] constexpr BasicVec3<T> Axis(const BasicCylinder<T>& cylinder)
 {
-    const BasicVec3<T> z = Cross(cylinder.XAxis, cylinder.YAxis);
-    return cylinder.RightHanded ? z : -z;
+    return FrameAxis(cylinder.XAxis, cylinder.YAxis, cylinder.RightHanded);
 }
 
 /// Radius * (cos u * XAxis + sin u * YAxis) turned by `quarterTurns` quarter
-/// turns: the u-derivatives of the cylinder, by n mod 4, so that no multiple
-/// of pi/2 is rounded into the argument.
+/// turns: the u-derivatives of the cylinder (RadialDirection).
 template <Scalar T>
 [[nodiscard]] constexpr BasicVec3<T> RadialTurned(const BasicCylinder<T>& cylinder, const T& u,
                                                   const int quarterTurns)
 {
-    // Not std::cos: see Stereon.Core:Trigonometry.
-    const T c = Cos(u);
-    const T s = Sin(u);
-    switch (quarterTurns % 4) {
-    case 1:
-        return cylinder.Radius * (-s * cylinder.XAxis + c * cylinder.YAxis);
-    case 2:
-        return cylinder.Radius * (-c * cylinder.XAxis - s * cylinder.YAxis);
-    case 3:
-        return cylinder.Radius * (s * cylinder.XAxis - c * cylinder.YAxis);
-    default:
-        return cylinder.Radius * (c * cylinder.XAxis + s * cylinder.YAxis);
-    }
+    return cylinder.Radius * RadialDirection(cylinder.XAxis, cylinder.YAxis, u, quarterTurns);
 }
 
 template <Scalar T>
@@ -123,18 +116,7 @@ template <Scalar T>
     Detail::RequireFinite(p, "Project(Cylinder)", "a non-finite point");
     const Vec3 offset = p - cylinder.Origin;
     const double v = Dot(offset, Axis(cylinder));
-    const double x = Dot(offset, cylinder.XAxis);
-    const double y = Dot(offset, cylinder.YAxis);
-    if (x == 0.0 && y == 0.0) {
-        return {0.0, v};
-    }
-    const double angle = Atan2(y, x);
-    if (angle >= 0.0) {
-        return {angle, v};
-    }
-    // As for the circle: a tiny negative angle plus 2 pi rounds to 2 pi.
-    const double wrapped = angle + CirclePeriod;
-    return {wrapped < CirclePeriod ? wrapped : 0.0, v};
+    return {WrappedAngle(Dot(offset, cylinder.YAxis), Dot(offset, cylinder.XAxis)), v};
 }
 
 /// The same cylinder with the opposite normal, by running u the other way:
