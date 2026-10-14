@@ -28,6 +28,7 @@ module;
 module Stereon.Surface;
 
 import :BSplineSurface;
+import :Conversion;
 
 /// The B-spline surface operations that are not evaluators. Like the curve
 /// operations they work on the homogeneous form (w P, w), in which knot
@@ -243,6 +244,61 @@ struct Patch {
         }
     }
     return patches;
+}
+
+/// Keeps the lines [first, first + count) of the poles in one direction:
+/// rows (fixed u index) for U, columns for V.
+void KeepLines(HSurface& h, const ParameterDirection direction, const std::size_t first,
+               const std::size_t count)
+{
+    const bool alongU = direction == ParameterDirection::U;
+    const std::size_t countU = alongU ? count : h.CountU;
+    const std::size_t countV = alongU ? h.CountV : count;
+    std::vector<HPoint> poles;
+    poles.reserve(countU * countV);
+    for (std::size_t i = 0; i < countU; ++i) {
+        for (std::size_t j = 0; j < countV; ++j) {
+            const std::size_t from = alongU ? (first + i) * h.CountV + j : i * h.CountV + first + j;
+            poles.push_back(h.Poles[from]);
+        }
+    }
+    h.Poles = std::move(poles);
+    h.CountU = countU;
+    h.CountV = countV;
+}
+
+/// Cuts one direction down to [low, high], inside its domain, as curve
+/// splitting does: each cut value is raised to multiplicity p, after which
+/// the poles and knots on its far side are dropped and the value is
+/// repeated once more to clamp the new end.
+void RestrictDirection(HSurface& h, const ParameterDirection direction, const double low,
+                       const double high)
+{
+    const bool alongU = direction == ParameterDirection::U;
+    const auto p = static_cast<std::size_t>(alongU ? h.DegreeU : h.DegreeV);
+    std::vector<double>* knots = alongU ? &h.KnotsU : &h.KnotsV;
+    const auto raise = [&](const double value) {
+        const std::size_t s = KnotMultiplicity(*knots, value);
+        if (s < p) {
+            InsertInPlace(h, direction, value, p - s);
+        }
+        return static_cast<std::size_t>(std::ranges::upper_bound(*knots, value) - knots->begin()) -
+               1;
+    };
+    if (low > (*knots)[p]) {
+        const std::size_t k = raise(low);
+        const std::size_t lines = alongU ? h.CountU : h.CountV;
+        KeepLines(h, direction, k - p, lines - (k - p));
+        knots->erase(knots->begin(), knots->begin() + static_cast<std::ptrdiff_t>(k - p + 1));
+        knots->insert(knots->begin(), low);
+    }
+    const std::size_t count = alongU ? h.CountU : h.CountV;
+    if (high < (*knots)[count]) {
+        const std::size_t k = raise(high);
+        KeepLines(h, direction, 0, k - p + 1);
+        knots->erase(knots->begin() + static_cast<std::ptrdiff_t>(k + 1), knots->end());
+        knots->push_back(high);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -677,6 +733,27 @@ std::vector<BSplineSurface> ToBezierPatches(const BSplineSurface& surface)
         patches.push_back(FromHomogeneous(std::move(h)));
     }
     return patches;
+}
+
+Result<BSplineSurface> ToBSpline(const BSplineSurface& surface, const Box2 range)
+{
+    const Box2 domain = Domain(surface);
+    const bool finite = std::isfinite(range.X.GetLower()) && std::isfinite(range.X.GetUpper()) &&
+                        std::isfinite(range.Y.GetLower()) && std::isfinite(range.Y.GetUpper());
+    const bool inside = range.X.GetLower() < range.X.GetUpper() &&
+                        range.Y.GetLower() < range.Y.GetUpper() && Contains(domain, range);
+    if (!finite || !inside) {
+        return Fail(ErrorCode::InvalidInput,
+                    "ToBSpline(BSplineSurface): the range must be finite, non-empty and inside "
+                    "the domain");
+    }
+    if (range == domain) {
+        return surface; // unchanged, without the rounding of a homogeneous round trip
+    }
+    HSurface h = ToHomogeneous(surface);
+    RestrictDirection(h, ParameterDirection::U, range.X.GetLower(), range.X.GetUpper());
+    RestrictDirection(h, ParameterDirection::V, range.Y.GetLower(), range.Y.GetUpper());
+    return FromHomogeneous(std::move(h));
 }
 
 Result<BSplineCurve> IsoCurve(const BSplineSurface& surface, const ParameterDirection direction,

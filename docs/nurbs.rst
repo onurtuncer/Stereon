@@ -377,6 +377,110 @@ is then equally good, and the result is still correct.
 does, requires a full grid of finite poles, and the weights to be absent or
 one positive finite weight per pole.
 
+Exact conversion of the analytic types
+--------------------------------------
+
+Every built-in curve and surface, restricted to a finite parameter range,
+*is* a NURBS curve or surface: ``ToBSpline(geometry, range)`` returns it
+exactly, not approximately. This is the tier-3 capability of ADR-0003 for
+the built-in types: an operation that only knows NURBS (a generic
+intersection, a tessellator, a STEP writer) can take any built-in geometry.
+The result's domain is the range itself, it runs the same way, and it agrees
+with the original at every knot; whether it agrees between knots depends on
+the type.
+
+**Lines and parabolas** are polynomial in their parameter, so their
+B-splines keep the parametrisation exactly. A line over :math:`[a, b]` is
+the degree-1 curve through :math:`C(a)` and :math:`C(b)`; a parabola is the
+quadratic Bezier curve with poles :math:`C(a)`,
+:math:`C(a) + \tfrac{b-a}{2} C'(a)` and :math:`C(b)`, the middle pole being
+where the end tangents meet.
+
+**Circular arcs** (algorithm A7.1). The rational quadratic Bezier curve
+with poles :math:`(\cos a, \sin a)`,
+:math:`(\cos m, \sin m) / \cos\delta` and :math:`(\cos b, \sin b)`, middle
+weight :math:`\cos\delta`, :math:`m = (a + b)/2` and
+:math:`\delta = (b - a)/2`, is exactly the unit circle's arc from angle
+:math:`a` to :math:`b`: its middle pole is where the end tangents meet, and
+at its parameter :math:`1/2` it passes through
+
+.. math::
+
+   \frac{\tfrac14 (\cos a, \sin a) + \tfrac12 \cos\delta \frac{(\cos m, \sin m)}{\cos\delta}
+         + \tfrac14 (\cos b, \sin b)}{\tfrac12 + \tfrac12 \cos\delta}
+   = (\cos m, \sin m),
+
+using :math:`\cos a + \cos b = 2 \cos m \cos\delta` and the same for
+:math:`\sin`. A conic is fixed by two points, their tangents and one more
+point, so the curve is the circle. An arc wider than a quarter turn is split
+into equal pieces of at most a quarter turn (``Detail::MakeUnitArc``), which
+keeps every middle weight at least :math:`\cos(\pi/4)` and every middle pole
+near the circle; a full turn is four pieces, nine poles, and its last pole
+is set to its first so that it closes exactly. The knots are the piece end
+angles, so the arc passes through the circle's point of angle :math:`t` at
+every knot :math:`t`. Between knots its parameter is not the angle: no
+rational polynomial is proportional to arc length on a circle.
+
+**Ellipses** are the image of the unit circle under the affine map
+:math:`(x, y) \mapsto \mathbf c + a x \mathbf x + b y \mathbf y`, and NURBS
+are affinely invariant, so an elliptic arc is the circular arc with mapped
+poles and the same weights.
+
+**Hyperbolic arcs** follow the hyperbolic analogue. With
+:math:`m = (t_0 + t_1)/2` and :math:`h = (t_1 - t_0)/2`, the rational
+quadratic Bezier curve with poles :math:`H(t_0)`,
+:math:`\mathbf c + (a\cosh m\, \mathbf x + b\sinh m\, \mathbf y) / \cosh h`
+and :math:`H(t_1)`, middle weight :math:`\cosh h`, passes through
+:math:`H(m)` at its parameter :math:`1/2`, by
+:math:`\cosh t_0 + \cosh t_1 = 2 \cosh m \cosh h` and
+:math:`\sinh t_0 + \sinh t_1 = 2 \sinh m \cosh h`. The range is split into
+pieces of parameter length at most 1, so that :math:`\cosh h` stays near 1.
+
+**Surfaces of revolution** (algorithm A8.1). The cylinder, cone, sphere and
+torus are all :math:`\mathbf o + \rho(v)\, \mathbf e(u) + h(v)\, \mathbf z`
+(:doc:`analytic`), a meridian :math:`(\rho, h)` swept around the axis. If
+the meridian is a NURBS curve with poles :math:`(\rho_j, h_j)` and weights
+:math:`w_j`, and the unit arc in :math:`u` has poles :math:`U_i` and weights
+:math:`\omega_i`, the tensor-product surface with poles
+:math:`\mathbf o + \rho_j U_i + h_j \mathbf z` and weights
+:math:`\omega_i w_j` is
+
+.. math::
+
+   \mathbf o
+   + \frac{\sum_j M_j w_j \rho_j}{\sum_j M_j w_j}\,
+     \frac{\sum_i N_i \omega_i U_i}{\sum_i N_i \omega_i}
+   + \frac{\sum_j M_j w_j h_j}{\sum_j M_j w_j}\, \mathbf z
+   = \mathbf o + \rho(v)\, \mathbf e(u) + h(v)\, \mathbf z,
+
+because the sums separate. The meridian is a line for the cylinder and the
+cone, and a circular arc for the sphere (about the axis) and the torus
+(about the centre of the tube). It holds for :math:`\rho < 0` as well, so a
+cone range may cross its apex.
+
+**Planes** over a box are the bilinear patch through the four corners, with
+their own parametrisation.
+
+**B-splines** convert to their restriction to the range: a curve is split at
+the range ends, a surface cut in each direction by raising the cut values
+to the degree and dropping the poles beyond them. A range equal to the
+domain returns the geometry unchanged.
+
+``ToBSpline`` validates the range as outside data: ``InvalidInput`` unless
+it is finite, non-empty and inside the domain, or in a periodic parameter at
+most one period long anywhere. Through the wrappers ``Curve`` and
+``Surface`` it dispatches with ``VisitBuiltin``; a user type gets
+``NotSupported``, since the kernel knows no exact form for it (ADR-0003
+expects such types to supply their own ``ToBSpline`` with a certified
+deviation).
+
+The tests check every type over random ranges. Every point of the
+conversion must lie on the original geometry inside the range, the two must
+agree on every knot (and knot pair), tangents and normals must point the same
+way, and every point of the original's range must project onto the
+conversion at distance zero, which also exercises the curve and surface
+projections on rational input.
+
 Checked construction
 --------------------
 

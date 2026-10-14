@@ -17,6 +17,7 @@ export import :BSplineBasis;
 export import :BSplineCurve;
 export import :Circle;
 export import :Concepts;
+export import :Conversion;
 export import :Ellipse;
 export import :Erased;
 export import :Hyperbola;
