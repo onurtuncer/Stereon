@@ -16,6 +16,7 @@ module;
 export module Stereon.Surface:Visit;
 
 import Stereon.Curve;
+import :BSplineSurface;
 import :Cone;
 import :Cylinder;
 import :Erased;
@@ -28,7 +29,7 @@ import :Torus;
 export namespace Stereon {
 
 /// The built-in surface types, in the order the intersection tables use.
-using BuiltinSurfaceTypes = TypeList<Plane, Cylinder, Cone, Sphere, Torus>;
+using BuiltinSurfaceTypes = TypeList<Plane, Cylinder, Cone, Sphere, Torus, BSplineSurface>;
 
 /// The diagnostic names of the built-in surfaces; see GeometryNameOf in
 /// Stereon.Curve:Visit.
@@ -51,6 +52,10 @@ using BuiltinSurfaceTypes = TypeList<Plane, Cylinder, Cone, Sphere, Torus>;
 [[nodiscard]] constexpr std::string_view GeometryNameOf(const Torus*) noexcept
 {
     return "Torus";
+}
+[[nodiscard]] constexpr std::string_view GeometryNameOf(const BSplineSurface*) noexcept
+{
+    return "BSplineSurface";
 }
 
 /// Calls f(geometry) with the wrapped built-in type, or f(surface) for any
