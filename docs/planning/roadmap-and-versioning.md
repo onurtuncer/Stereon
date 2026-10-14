@@ -1,6 +1,7 @@
 # Stereon roadmap and versioning
 
-**Planning revision:** 0.1 • 14 October 2026  
+**Planning revision:** 0.2 • 14 October 2026
+
 **Owner:** Onur Tuncer  
 **Status:** Proposed release plan; acceptance evidence is required before tagging a release.
 
@@ -69,14 +70,15 @@ The book motivates these acceptance requirements, not an automatic change of ADR
 
 | Concern | Existing record / planning action |
 | --- | --- |
-| Numerical policy and purpose-specific tolerances | ADR-0001/0002; track any missing angular, parametric, solver and approximation distinctions as reviewed extensions, without changing the tolerance-growth policy here. |
-| Intersection/classification outcomes | ADR-0010/0013 and RS-0001; retain explicit ambiguity, unsupported domains and topology-safe classification. |
-| Lineage and attribute propagation | ADR-0011; test split/merge relations, deterministic conflict policies and warnings. |
+| Numerical policy and purpose-specific tolerances | ADR-0001/0002 and [ADR-0028](../adr/0028-purpose-specific-numerical-tolerances.md): purpose-specific controls, dimensional conversions, observable changes and persisted numerical context; policy in M1/v0.1, intersection use in v0.2, native shape context by v0.3. |
+| Intersection/classification outcomes | ADR-0010/0013 and [ADR-0029](../adr/0029-intersection-and-classification-outcomes.md): dimension-aware results and independent side-transition evidence; v0.2 intersection gate, v0.3 queries and v0.4–v0.6 Booleans. RS-0001 remains research. |
+| Entity lineage | ADR-0011 and [ADR-0030](../adr/0030-entity-lineage-in-operation-results.md): qualified many-to-many relations, explicit split/merge events and composition by v0.3, extended through v0.4–v0.6. |
+| Attribute propagation | [ADR-0031](../adr/0031-attribute-propagation-and-conflicts.md): per-key split/merge/revalidation rules and conflict diagnostics in v0.3–v0.6; tagged engineering mesh gate in v0.7. |
 | Coincidence versus topology identification | ADR-0004/0009/0018 plus construction/sewing contracts; record identification rules before expanding sewing or simplification. |
 | Native schema and migrations | ADR-0012; prototype early, public shape persistence by v0.3. |
 | Derived tessellation and tags | ADR-0014; mesh generation must not alter authoritative B-rep geometry/topology. |
 | Reproducible failures | ADR-0006/0023; journals, dumps, numerical context and stage diagnostics accompany corpus failures. |
-| Controlled edits and operation contracts | Cross-check the topology-mutation and operation-contract proposals alongside ADR-0004/0005/0018 before phase acceptance. |
+| Controlled edits and operation contracts | ADR-0025/0026/0027 alongside ADR-0004/0005/0018 define association, operation and controlled-edit contracts; review before phase acceptance. |
 
 ## Versioning and release gates
 

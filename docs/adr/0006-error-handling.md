@@ -3,6 +3,7 @@
 - **Status:** Proposed
 - **Date:** 2026-09-28
 - **Revised:** 2026-10-10 (`OperationResult`; boundary between errors and contract violations)
+- **Revised:** 2026-10-14 (outcome, lineage and metadata extension references)
 - **Owner:** Onur Tuncer
 - **Phase:** 0
 
@@ -27,6 +28,15 @@ Adopt option 3.
 - **Errors versus contract violations.** Everything that enters the kernel from outside — user shapes, numeric parameters of public operations, files, geometry built from imported data — is *data* and is validated; invalid data yields `KernelError` (`InvalidInput`, `ParseError`, `NotSupported`), never a contract violation. Contracts (ADR-0016) guard what the kernel's own code is responsible for: handle validity and store membership, documented parameter domains of low-level evaluators, and internal invariants. A corrupt STEP file is a `ParseError`; a boolean on a shape that fails the validity checker is `InvalidInput`; an `EdgeId` from another shape is a contract violation. A public operation never has a precondition that user data can violate.
 - An operation either returns a shape that passes the validity checker (ADR-0018) or returns an error. Returning an invalid shape is a bug; where a post-check catches it, the error is `InvalidResult` with the report attached.
 - The C API maps `ErrorCode` to integer codes and exposes the message and entity list through accessor functions.
+
+## Related result contracts
+
+- [ADR-0028](0028-purpose-specific-numerical-tolerances.md): numerical diagnostics identify purpose and units; additional quantities are not unlabelled millimetre values.
+- [ADR-0029](0029-intersection-and-classification-outcomes.md): public complete-result queries distinguish established empty/boundary outcomes from unresolved computation; partial evidence accompanies failure.
+- [ADR-0030](0030-entity-lineage-in-operation-results.md): history references include owning input/output manifests and publish atomically with the shape.
+- [ADR-0031](0031-attribute-propagation-and-conflicts.md): conflicts, losses and strict required-key checks complete before publication; geometry success alone does not override metadata-policy failure.
+
+These proposals define future result requirements. Any additional enum codes are appended when implemented; current numeric error-code values are not changed here.
 
 ## Consequences
 

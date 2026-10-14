@@ -3,6 +3,7 @@
 - **Status:** Proposed (to be accepted before Phase 3)
 - **Date:** 2026-09-28
 - **Revised:** 2026-10-10 (required versus optional chunks; tombstones stored as-is)
+- **Revised:** 2026-10-14 (persist purpose-specific model policy and qualified provenance)
 - **Owner:** Onur Tuncer
 - **Phase:** 3
 
@@ -21,6 +22,8 @@ STEP is the exchange format, but it is slow to parse, loses kernel-specific data
 Adopt option 3, plus a JSON debug dump.
 
 - File extension `.stn`. Little-endian, chunked layout: header (magic, format version, kernel version, resolution and units), then one chunk per array (geometry pools, each topology entity type with its alive bitset, attributes, history), each with type tag, a **required** flag, length and checksum.
+- **Numerical context.** Required model-semantic metadata includes the purpose-specific policy needed to interpret tolerances and certificates (ADR-0028); migrations must not silently replace it with current defaults. Operation-specific solver/replay settings remain versioned provenance, not a raw Context memory image.
+- **History and attributes.** When present, history references identify owning snapshots/inputs under ADR-0030, and attribute keys carry schema/version information under ADR-0031. Serialize policy identifiers/configuration, never executable callbacks. Missing optional replay/attribute data is reported; applications requiring it may promote loss warnings to failure.
 - Chunks are optionally compressed (zstd).
 - The writer stores tables as they are, tombstones included (ADR-0004); it does not compact, so write/read is byte-exact. Callers compact explicitly before archiving if they want dense files.
 - Serialisers are generated with static reflection over the geometry and topology structs (ADR-0016); hand-written code is allowed only for version migrations.
