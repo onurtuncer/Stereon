@@ -122,16 +122,23 @@ stereon/
 
 ## Roadmap
 
-Each phase ends with an exit gate that is checked in CI.
+Each phase ends with an exit gate checked in CI. The [detailed roadmap and versioning plan](docs/planning/roadmap-and-versioning.md) embeds modelling subgates, acceptance evidence and compatibility rules into this release sequence.
 
-| Release | Scope | Status |
+| Release | Scope and milestone gates | Status |
 | --- | --- | --- |
-| Phase 0 | Build system, CI, core math, robust predicates, type-erasure scaffolding, debug viewer | 🚧 In progress |
-| v0.1 "Geometry" | NURBS and analytic curves/surfaces: evaluation, fitting, projection | Planned |
-| v0.3 "Solids" | B-rep topology, validity checker, primitives, extrude, revolve, sweep, loft | Planned |
-| v0.6 "Booleans" | Robust union, cut and common on real parts | Planned |
-| v0.8 "Exchange" | STEP AP242 read/write with healing, watertight meshing, Python bindings | Planned |
-| v1.0 | Fillets, chamfers, shelling, shape sensitivities, stable API | Planned |
+| Phase 0 / 0.0.x | Foundations (M1): build/CI, math, predicates, type erasure, controlled-edit prototype, debug viewer, diagnostics and minimal persistence prototype | 🚧 In progress |
+| v0.1 "Geometry" | Analytic/NURBS evaluation, fitting and projection; geometry persistence and numerical-domain checks (M1/M4) | Planned |
+| v0.2 "Intersections" | Curve/curve, curve/surface and surface/surface services; explicit tangency, overlap, coincidence and unresolved outcomes (M2/M4) | Planned |
+| v0.3 "Solids" | Planar construction, sectioning and imprinting (M2); curved/trimmed construction, primitives, extrude/revolve/sweep/loft, sewing, history and native persistence (M4/M6) | Planned |
+| v0.4 "Planar Booleans" | Validated union/cut/common on the declared planar/polyhedral subset, with lineage and tags (M3) | Planned |
+| v0.5 "Curved Booleans" | Bounded analytic/trimmed-spline Boolean integration; seams, poles, tangencies and certificates (M4) | Planned |
+| v0.6 "Booleans" | Broad declared real-part corpus, robustness, comparison, tolerance-growth and determinism gates (M3/M4) | Planned |
+| v0.7 "Meshing" | Derived display/analysis meshes, tagged engineering workflows, native migrations and usable Python operation calls (M4/M6) | Planned |
+| v0.8 "Exchange" | STEP AP242 with healing, derived watertight meshes, native migrations and usable Python/tagged engineering workflows (M4/M6) | Planned |
+| v0.9 "Finishing" | Bounded fillets, chamfers, shelling/thickening and shape sensitivities; history/tag integration (M5/M6) | Planned |
+| v1.0 "Stable kernel" | Stable public API, compatibility policy and supported-domain release qualification across M1–M6 | Planned |
+
+v0.2 carries the Phase 2 intersection gate. Phases 4–6 span several minor releases; phase numbers are not product version numbers. Milestones M1–M6 are dependency checkpoints, while the [capability matrix's R0–R5](docs/planning/stereon-capability-matrix.md) track broader long-term coverage. Drafting, variable-radius blends and full parametric history remain post-v1.0. Product, native-format and C ABI versions are separate; a planning change does not bump the current kernel version.
 
 ## Testing philosophy
 
