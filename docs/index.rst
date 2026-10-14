@@ -40,6 +40,7 @@ Stereon
    predicates
    geometry
    analytic
+   nurbs
    topology
    intersection
    modeling
