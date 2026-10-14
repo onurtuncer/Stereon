@@ -5,8 +5,8 @@
 .. License, v. 2.0. If a copy of the MPL was not distributed with this
 .. file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-B-spline and NURBS curves
-=========================
+B-spline and NURBS curves and surfaces
+======================================
 
 Free-form geometry in CAD is almost always a B-spline: a piecewise
 polynomial, or with weights a piecewise rational, curve controlled by a
@@ -16,10 +16,11 @@ rational form represents the conics exactly, so a kernel can carry circles,
 ellipses and free-form shapes in one representation when it has to.
 
 ``BSplineCurve`` (and ``BSplineCurve2d`` in a surface's parameter plane)
-implements the representation and the classical algorithms of Piegl and
+and ``BSplineSurface`` implement the representation and the classical algorithms of Piegl and
 Tiller :cite:p:`piegl1997nurbs`, which this chapter follows and cites by
-algorithm number (A2.1 and so on). It adds one algorithm of its own, a
-projection that finds the global closest point without a starting guess.
+algorithm number (A2.1 and so on). It adds a projection of its own that
+finds the global closest point of a curve without a starting guess, and a
+surface projection built on the same Bernstein-form reasoning.
 
 Knot vectors and basis functions
 --------------------------------
@@ -265,6 +266,117 @@ samples, and the OCCT differential tests require it to match
 ``GeomAPI_ProjectPointOnCurve`` on 1 372 probe points across clamped,
 unclamped, rational and degree-5 curves.
 
+Surfaces
+--------
+
+A ``BSplineSurface`` is the tensor product of two B-spline bases,
+
+.. math::
+
+   S(u, v) = \frac{\sum_{i=0}^{n} \sum_{j=0}^{m} N_{i,p}(u)\, M_{j,q}(v)\, w_{ij} P_{ij}}
+                  {\sum_{i=0}^{n} \sum_{j=0}^{m} N_{i,p}(u)\, M_{j,q}(v)\, w_{ij}},
+
+over :math:`[u_p, u_{n+1}] \times [v_q, v_{m+1}]`, with degree :math:`p`
+and knots ``KnotsU`` along :math:`u`, degree :math:`q` and ``KnotsV`` along
+:math:`v`, and the poles stored row by row, pole :math:`(i, j)` at index
+:math:`i (m + 1) + j`. Everything said about curves carries over per
+direction: local support on a pair of spans, the partition of unity, the
+convex hull (``BoundingBox`` is the widened pole box, with a margin of
+:math:`8 (p + q + 2)^2 \cdot 2^{-53}` times the largest coordinate), affine
+invariance, and the homogeneous form :math:`(w_{ij} P_{ij}, w_{ij})` in which
+a NURBS surface is a polynomial one. Rational surfaces represent the
+quadrics exactly; ``tests/surface/BSplineSurfaceTests.cpp`` builds a quarter
+cylinder from the rational quarter circle.
+
+**Derivatives** (A3.6 and A4.4). With
+:math:`A = \sum N_i M_j w_{ij} P_{ij}` and
+:math:`w = \sum N_i M_j w_{ij}`, the homogeneous derivatives are sums of
+products of basis derivatives,
+:math:`A^{(k,l)} = \sum_{ij} N^{(k)}_i M^{(l)}_j w_{ij} P_{ij}`. Leibniz's
+rule applied to :math:`A = w S` in both parameters gives
+
+.. math::
+
+   S^{(k,l)} = \frac{1}{w} \Biggl( A^{(k,l)}
+     - \sum_{\substack{i \le k,\ j \le l \\ (i,j) \ne (0,0)}}
+       \binom{k}{i}\binom{l}{j}\, w^{(i,j)} S^{(k-i,l-j)} \Biggr),
+
+which ``Deriv`` evaluates for the requested order from a table of the lower
+ones. Small tables stay on the stack (``Detail::SurfaceTable``).
+
+**Knot insertion** in :math:`u` is curve knot insertion applied to every
+column of poles (each column is a curve in :math:`u` with the same knots),
+and in :math:`v` to every row (A5.3). ``InsertKnot`` takes the direction,
+``ToBezierPatches`` raises every knot of both domains to its degree and
+returns the patches, and ``IsoCurve`` returns the curve
+:math:`v \mapsto S(u_0, v)` or :math:`u \mapsto S(u, v_0)`, whose
+homogeneous poles are :math:`\sum_i N_i(u_0) (w_{ij} P_{ij}, w_{ij})`.
+
+``Reversed`` reverses :math:`u`, which turns the normal
+:math:`S_u \times S_v` round; ``Transformed`` maps the poles.
+
+Surface projection
+~~~~~~~~~~~~~~~~~~
+
+The closest point of a surface to :math:`\mathbf p` is either on the
+boundary of the domain or an interior stationary point of the squared
+distance. ``Project(BSplineSurface, Point3)`` finds both kinds patch by
+patch, keeping the best candidate so far:
+
+1. **Pruning.** A Bezier patch whose pole box is farther from
+   :math:`\mathbf p` than the best candidate cannot hold a closer point
+   (convex hull) and is skipped.
+2. **Boundaries.** Each edge of a patch is a rational Bezier curve, a row or
+   column of its poles; the curve projection above finds its closest point
+   globally. Edges between patches are included, so a closest point on a
+   patch boundary is found directly.
+3. **Interior.** On a patch, with the homogeneous form :math:`A / w`,
+
+   .. math::
+
+      F = (A - w\mathbf p) \cdot (A_u w - A w_u), \qquad
+      G = (A - w\mathbf p) \cdot (A_v w - A w_v)
+
+   are, up to the positive factor :math:`2 / w^3`, the partial derivatives
+   of :math:`\norm{A/w - \mathbf p}^2`, so the interior stationary points are
+   the common zeros of :math:`F` and :math:`G`: polynomials of degree
+   :math:`(3p - 1, 3q)` and :math:`(3p, 3q - 1)` whose tensor-product
+   Bernstein coefficients follow from the bivariate product formula. The
+   search subdivides the patch at its midpoints, carrying the four
+   homogeneous coordinate polynomials and :math:`F` and :math:`G` along by
+   de Casteljau's algorithm, and discards any sub-patch on which :math:`F`
+   or :math:`G` has coefficients of one strict sign (then it has no zero
+   there) or whose pole box is too far. This is the exclusion test of the
+   Bernstein subdivision solvers of Patrikalakis and Maekawa
+   :cite:p:`patrikalakis2002shape`.
+4. **Refinement.** Sub-patches that survive six levels of subdivision
+   (``LeafDepth``, 1/64 of the patch per direction) start Newton's method
+   on :math:`(F, G) = 0` in the form
+   :math:`((S - \mathbf p)\cdot S_u, (S - \mathbf p)\cdot S_v) = 0`, whose
+   Jacobian is the Hessian of half the squared distance, from their centre,
+   kept inside the sub-patch.
+
+The boundary part is certified like the curve projection. The interior part
+is certified in what it excludes: a sub-patch is discarded only when it
+provably contains no stationary point or no closer point. It is not certified
+inside the surviving leaves, where Newton's method converges to the
+stationary point when the leaf lies in its basin of attraction; a leaf is a
+small fraction of a Bezier patch, but no bound on the basin is computed. The
+tests require the projected point to be no farther than the closest of
+6 561 grid samples on random surfaces, and the OCCT differential tests
+require it to be no farther than ``GeomAPI_ProjectPointOnSurf``'s on 1 029
+probes; neither has found a counterexample.
+
+One case is expensive rather than wrong: when many points of a patch are at
+almost the same distance, as from the centre of a spherical patch, the
+coefficients of :math:`F` and :math:`G` are rounding noise, nothing is
+excluded, and all :math:`4^6` leaves start Newton's method. Every candidate
+is then equally good, and the result is still correct.
+
+``MakeBSplineSurface`` validates each knot vector as ``MakeBSplineCurve``
+does, requires a full grid of finite poles, and the weights to be absent or
+one positive finite weight per pole.
+
 Checked construction
 --------------------
 
@@ -295,7 +407,10 @@ Current limits
 --------------
 
 - Periodic B-splines have no periodic flag; they are represented by their
-  unclamped equivalent and are not ``PeriodicCurve``\ s.
+  unclamped equivalent and are not ``PeriodicCurve``\ s or
+  ``PeriodicSurface``\ s.
+- Surface projection is not certified inside its final sub-patches (see
+  *Surface projection*).
 - Degree elevation, knot removal and curve fitting are not yet implemented;
   fitting is planned for v0.1.
 - Evaluation of a cubic costs about 105 ns (GCC 16.2, -O3, MinGW), measured
