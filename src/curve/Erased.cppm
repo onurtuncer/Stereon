@@ -11,6 +11,7 @@ module;
 
 #include <concepts>
 #include <cstddef>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 
@@ -57,6 +58,8 @@ struct CurveConcept : ErasedConcept<CurveConcept<D>> {
     [[nodiscard]] virtual BasicPointN<double, D> EvalAt(double t) const = 0;
     [[nodiscard]] virtual BasicVecN<double, D> DerivAt(double t, int n) const = 0;
     [[nodiscard]] virtual Interval GetDomain() const = 0;
+    /// Period(value) for a PeriodicCurve, 0 otherwise.
+    [[nodiscard]] virtual double GetPeriod() const = 0;
     [[nodiscard]] virtual BoxN<D> GetBoundingBox() const = 0;
     [[nodiscard]] virtual double ProjectPoint(const BasicPointN<double, D>& p) const = 0;
     [[nodiscard]] virtual BasicErasedCurve<D> MakeReversed() const = 0;
@@ -113,9 +116,32 @@ private:
     Detail::SmallBuffer<Detail::CurveConcept<D>, GeometryBufferSize> m_Storage;
 };
 
+} // namespace Stereon
+
+namespace Stereon::Detail {
+
+/// The checks every erased curve evaluation makes in checked builds: a
+/// finite parameter inside the domain of a non-periodic curve. They run
+/// here, at the boundary to user geometry, because a user type need not
+/// check anything itself.
+template <std::size_t D>
+void CheckCurveParameter(const CurveConcept<D>& model, const double t,
+                         const std::string_view function) noexcept
+{
+    if constexpr (EvaluatorChecks) {
+        RequireFinite(t, function, "a non-finite parameter");
+        RequireInDomain(model.GetDomain(), t, model.GetPeriod(), function);
+    }
+}
+
+} // namespace Stereon::Detail
+
+export namespace Stereon {
+
 template <std::size_t D>
 [[nodiscard]] BasicPointN<double, D> Eval(const BasicErasedCurve<D>& curve, const double t)
 {
+    Detail::CheckCurveParameter(curve.GetModel(), t, "Eval(Curve)");
     return curve.GetModel().EvalAt(t);
 }
 
@@ -123,7 +149,16 @@ template <std::size_t D>
 [[nodiscard]] BasicVecN<double, D> Deriv(const BasicErasedCurve<D>& curve, const double t,
                                          const int n)
 {
+    Detail::CheckCurveParameter(curve.GetModel(), t, "Deriv(Curve)");
+    Detail::Require(n >= 1, "Deriv(Curve)", "a derivative order below 1");
     return curve.GetModel().DerivAt(t, n);
+}
+
+/// The wrapped curve's period, or 0 when it is not periodic.
+template <std::size_t D>
+[[nodiscard]] double Period(const BasicErasedCurve<D>& curve)
+{
+    return curve.GetModel().GetPeriod();
 }
 
 template <std::size_t D>
@@ -141,6 +176,7 @@ template <std::size_t D>
 template <std::size_t D>
 [[nodiscard]] double Project(const BasicErasedCurve<D>& curve, const BasicPointN<double, D>& p)
 {
+    Detail::RequireFinite(p, "Project(Curve)", "a non-finite point");
     return curve.GetModel().ProjectPoint(p);
 }
 
@@ -177,6 +213,14 @@ public:
         return Deriv(this->Get(), t, n);
     }
     [[nodiscard]] Interval GetDomain() const override { return Domain(this->Get()); }
+    [[nodiscard]] double GetPeriod() const override
+    {
+        if constexpr (PeriodicCurve<T>) {
+            return Period(this->Get());
+        } else {
+            return 0.0;
+        }
+    }
     [[nodiscard]] BoxN<D> GetBoundingBox() const override { return BoundingBox(this->Get()); }
     [[nodiscard]] double ProjectPoint(const BasicPointN<double, D>& p) const override
     {

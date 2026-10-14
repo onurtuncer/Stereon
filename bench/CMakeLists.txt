@@ -10,5 +10,5 @@
 file(GLOB sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
 add_executable(stereon_bench ${sources})
 target_link_libraries(stereon_bench
-    PRIVATE stereon::core stereon::robust stereon_options benchmark::benchmark_main)
+    PRIVATE stereon::core stereon::robust stereon::surface stereon_options benchmark::benchmark_main)
 stereon_anchor_contracts(stereon_bench)

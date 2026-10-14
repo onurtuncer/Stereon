@@ -12,5 +12,8 @@ stereon_add_library(surface
         Erased.cppm
         Plane.cppm
         Surface.cppm
+        Visit.cppm
+    SOURCES
+        Surface.cpp
     DEPENDS
         curve)

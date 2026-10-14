@@ -40,7 +40,8 @@ jobs:
       - name: Install CMake and Ninja
         run: |
           apt-get update -qq
-          apt-get install -y -qq --no-install-recommends cmake ninja-build
+          # gdb and lldb run the pretty-printer checks (tests/debugger/).
+          apt-get install -y -qq --no-install-recommends cmake ninja-build gdb lldb python3
           g++ --version | head -1; cmake --version | head -1; ninja --version
       - uses: actions/checkout@v7
       - name: Configure

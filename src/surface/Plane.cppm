@@ -34,6 +34,7 @@ using Plane = BasicPlane<double>;
 template <Scalar T>
 [[nodiscard]] constexpr BasicPoint3<T> Eval(const BasicPlane<T>& plane, const BasicPoint2<T>& uv)
 {
+    Detail::RequireFinite(uv, "Eval(Plane)", "a non-finite parameter");
     return plane.Origin + uv.X * plane.XAxis + uv.Y * plane.YAxis;
 }
 
@@ -42,8 +43,10 @@ template <Scalar T>
 [[nodiscard]] constexpr BasicVec3<T> Deriv(const BasicPlane<T>& plane,
                                            [[maybe_unused]] const BasicPoint2<T>& uv, const int du,
                                            const int dv)
-    STEREON_HOT_PRE(du >= 0 && dv >= 0 && du + dv >= 1)
 {
+    Detail::RequireFinite(uv, "Deriv(Plane)", "a non-finite parameter");
+    Detail::Require(du >= 0 && dv >= 0 && du + dv >= 1, "Deriv(Plane)",
+                    "a derivative order that does not exist");
     if (du == 1 && dv == 0) {
         return plane.XAxis;
     }
@@ -69,6 +72,7 @@ template <Scalar T>
 /// The parameter of the foot of the perpendicular from p.
 [[nodiscard]] constexpr Point2 Project(const Plane& plane, const Point3& p)
 {
+    Detail::RequireFinite(p, "Project(Plane)", "a non-finite point");
     const Vec3 offset = p - plane.Origin;
     return {Dot(offset, plane.XAxis), Dot(offset, plane.YAxis)};
 }

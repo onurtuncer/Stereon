@@ -73,6 +73,7 @@ template <Scalar T>
 [[nodiscard]] constexpr BasicPoint3<T> Eval(const BasicCylinder<T>& cylinder,
                                             const BasicPoint2<T>& uv)
 {
+    Detail::RequireFinite(uv, "Eval(Cylinder)", "a non-finite parameter");
     return cylinder.Origin + RadialTurned(cylinder, uv.X, 0) + uv.Y * Axis(cylinder);
 }
 
@@ -81,8 +82,10 @@ template <Scalar T>
 template <Scalar T>
 [[nodiscard]] constexpr BasicVec3<T> Deriv(const BasicCylinder<T>& cylinder,
                                            const BasicPoint2<T>& uv, const int du, const int dv)
-    STEREON_HOT_PRE(du >= 0 && dv >= 0 && du + dv >= 1)
 {
+    Detail::RequireFinite(uv, "Deriv(Cylinder)", "a non-finite parameter");
+    Detail::Require(du >= 0 && dv >= 0 && du + dv >= 1, "Deriv(Cylinder)",
+                    "a derivative order that does not exist");
     if (dv == 0) {
         return RadialTurned(cylinder, uv.X, du);
     }
@@ -90,6 +93,13 @@ template <Scalar T>
         return Axis(cylinder);
     }
     return {};
+}
+
+/// The periods in u and v: 2 pi in u, none (0) in v.
+template <Scalar T>
+[[nodiscard]] constexpr Vec2 Periods([[maybe_unused]] const BasicCylinder<T>& cylinder) noexcept
+{
+    return {CirclePeriod, 0.0};
 }
 
 /// u in [0, 2 pi], v unbounded.
@@ -110,6 +120,7 @@ template <Scalar T>
 /// u = 0.
 [[nodiscard]] inline Point2 Project(const Cylinder& cylinder, const Point3& p)
 {
+    Detail::RequireFinite(p, "Project(Cylinder)", "a non-finite point");
     const Vec3 offset = p - cylinder.Origin;
     const double v = Dot(offset, Axis(cylinder));
     const double x = Dot(offset, cylinder.XAxis);
