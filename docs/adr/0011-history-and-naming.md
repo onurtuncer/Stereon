@@ -3,6 +3,7 @@
 - **Status:** Proposed (to be accepted before Phase 3)
 - **Date:** 2026-09-28
 - **Revised:** 2026-10-10 (`OperationResult`; remap from `Compact()`; attribute conflict policy)
+- **Revised:** 2026-10-14 (qualified lineage and per-key propagation extensions in ADR-0030/0031)
 - **Owner:** Onur Tuncer
 - **Phase:** 3
 
@@ -20,10 +21,10 @@ Applications built on a kernel need to know what happened to each entity during 
 
 Adopt option 2 now, designed so option 3 can be built on it later.
 
-- Every shape-producing operation returns a `History` inside its `OperationResult` (ADR-0006) that maps each input entity to output entities with a tag: `Generated`, `Modified`, `Deleted` or `Unchanged`.
+- Every shape-producing operation returns a `History` inside its `OperationResult` (ADR-0006). [ADR-0030](0030-entity-lineage-in-operation-results.md) defines qualified input/output references, many-to-many continuation and generation relations, Deleted dispositions, explicit split/merge event groups, creation roots for primitives/import, composition and atomic publication. The relation vocabulary remains `Generated`, `Modified`, `Deleted` and `Unchanged`; Deleted has no output target and may coexist with generation provenance.
 - `Freeze()` keeps indices (ADR-0004), so no remap is needed for it. The remap table produced by `Compact()` is composed into the history automatically, so algorithms only record their own semantic relations.
-- Generated entities record their generators (e.g. a fillet face records the edge it replaced and the two faces it joins; the wall of a drilled hole records the tool's cylindrical face).
-- **Attribute propagation policy.** Sparse attributes (ADR-0004) are propagated through history by default: `Modified` and `Unchanged` entities keep their attributes, and `Generated` entities inherit from their generators of the same entity kind. When an output entity has several ancestors with different values for one attribute key (two tagged faces merged into one, a hole wall generated from a tagged tool face into a tagged body), the kernel applies the `MergePolicy` for that key from the `Context`: `KeepFirst` (lowest input index, deterministic), `Drop`, or a user callback that receives the candidate values and the entities. Every conflict, however resolved, is reported as a warning in the `OperationResult`, so an application can refuse a result whose boundary-condition tags were decided by default.
+- Generated entities record their generators (e.g. a fillet face records the edge it replaced and the two faces it joins; the wall of a drilled hole records the tool's cylindrical face). Operations without input topology record an operation/import creation root, not a fictitious source entity. Generation is distinct from survival or a split.
+- **Attribute propagation policy.** [ADR-0031](0031-attribute-propagation-and-conflicts.md) defines the detailed per-key transfer contract. Passive same-kind continuations and Generated outputs inherit eligible attributes; semantic keys use registered split/merge, revalidation and required-coverage policies. For conflicting candidates, `MergePolicy` offers `KeepFirst` (ordered by input ordinal, kind, index and stable role/event key), `Drop`, or a deterministic custom resolver. Conflicts and nontrivial losses are structured warnings in `OperationResult`; strict policies promote them to failure before publication. Geometry-dependent data, conserved quantities and unique IDs are not generically guaranteed correct by passive copying.
 - A persistent-ID attribute slot is reserved but not interpreted by the kernel in v1.0.
 
 ## Consequences
@@ -34,4 +35,4 @@ Adopt option 2 now, designed so option 3 can be built on it later.
 
 ## Verification
 
-For every constructive operation and boolean in the corpus, check that each output entity is reachable from at least one input or is tagged `Generated` with generators, and that attributes survive `Modified` and `Unchanged` relations. The duct example (ADR-0014): a duct body with faces tagged `inlet`, `outlet` and `wall`, cut by a cylinder whose faces are tagged `wall`, yields a result in which every face carries exactly one tag, the hole wall is `wall`, the inlet and outlet keep their tags, and the `OperationResult` lists every conflict that was resolved by policy.
+For every constructive operation and boolean in the corpus, check that each output entity is covered by a qualified continuation or Generated provenance (input generators or an operation/import creation root), and that passive attributes survive eligible `Modified` and `Unchanged` relations, while registered semantic keys satisfy ADR-0031's transfer/revalidation rules. Exercise ADR-0030 split/merge composition, deletion and empty-result histories as well. The duct example (ADR-0014): a duct body with faces tagged `inlet`, `outlet` and `wall`, cut by a cylinder whose faces are tagged `wall`, yields a result in which every face carries exactly one tag, the hole wall is `wall`, the inlet and outlet keep their tags, and the `OperationResult` lists every conflict that was resolved by policy.

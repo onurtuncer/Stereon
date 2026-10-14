@@ -3,6 +3,7 @@
 - **Status:** Proposed
 - **Date:** 2026-09-28
 - **Revised:** 2026-10-10 (coincidence is not identity; merge policy; three tolerance concepts)
+- **Revised:** 2026-10-14 (purpose-specific policy extension in ADR-0028)
 - **Owner:** Onur Tuncer
 - **Phase:** 0
 
@@ -31,6 +32,10 @@ Adopt option 3.
 | **Healing budget** | How much a local tolerance may grow during one operation before it fails. The ceiling below, adjustable per `Context`. | this ADR, ADR-0006 |
 
 A construction's error bound must be at most the modelling tolerance of the entity it produces; otherwise the entity's tolerance grows (logged) or the operation fails.
+
+### Purpose-specific controls
+
+[ADR-0028](0028-purpose-specific-numerical-tolerances.md) extends this policy with distinct relative, parametric, solver-convergence and approximation controls, explicit dimensional conversions and persistence/replay requirements. Numerical error bounds remain evidence, not adjustable epsilons. Its additions preserve this ADR's resolution, containment, tolerance-growth ceiling and merge policy.
 
 ### Rules
 
