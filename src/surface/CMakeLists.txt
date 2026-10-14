@@ -10,6 +10,7 @@ stereon_add_library(surface
         BSplineSurface.cppm
         Concepts.cppm
         Cone.cppm
+        Conversion.cppm
         Cylinder.cppm
         Erased.cppm
         Plane.cppm
@@ -19,6 +20,7 @@ stereon_add_library(surface
         Visit.cppm
     SOURCES
         BSplineSurface.cpp
+        Conversion.cpp
         Factories.cpp
         Surface.cpp
     DEPENDS
