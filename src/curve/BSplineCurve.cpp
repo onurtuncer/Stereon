@@ -20,6 +20,7 @@ module;
 #include <cstddef>
 #include <expected>
 #include <limits>
+#include <span>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -568,6 +569,49 @@ ReparametrizedN(const BasicBSplineCurve<double, D>& curve, const Interval domain
 }
 
 } // namespace
+
+} // namespace Stereon
+
+namespace Stereon::Detail {
+
+std::vector<double> PolynomialRoots(const std::span<const double> coefficients,
+                                    const Interval range)
+{
+    // Taylor shift to t = a + h s on s in [0, 1]: d_j = sum_k c_k C(k, j)
+    // a^(k-j) h^j, then the Bernstein coefficients b_i = sum_{j<=i}
+    // C(i, j) / C(n, j) d_j.
+    const double a = range.GetLower();
+    const double h = range.GetUpper() - range.GetLower();
+    const std::size_t n = coefficients.empty() ? 0 : coefficients.size() - 1;
+    std::vector<double> shifted(n + 1, 0.0);
+    for (std::size_t k = 0; k <= n; ++k) {
+        for (std::size_t j = 0; j <= k; ++j) {
+            shifted[j] += coefficients[k] * Binomial(k, j) *
+                          std::pow(a, static_cast<double>(k - j)) *
+                          std::pow(h, static_cast<double>(j));
+        }
+    }
+    Bernstein bernstein(n + 1, 0.0);
+    for (std::size_t i = 0; i <= n; ++i) {
+        for (std::size_t j = 0; j <= i; ++j) {
+            bernstein[i] += Binomial(i, j) / Binomial(n, j) * shifted[j];
+        }
+    }
+    std::vector<double> local;
+    if (n > 0) {
+        IsolateRoots(bernstein, 0.0, 1.0, 0, local);
+    }
+    std::vector<double> roots;
+    for (const double s : local) {
+        roots.push_back(std::clamp(a + s * h, range.GetLower(), range.GetUpper()));
+    }
+    std::ranges::sort(roots);
+    return roots;
+}
+
+} // namespace Stereon::Detail
+
+namespace Stereon {
 
 Result<BSplineCurve> MakeBSplineCurve(const int degree, std::vector<double> knots,
                                       std::vector<Point3> poles, std::vector<double> weights)

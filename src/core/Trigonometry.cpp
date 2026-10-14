@@ -42,6 +42,31 @@ double Hypot(const double x, const double y) noexcept
     return std::hypot(x, y);
 }
 
+double Sinh(const double x) noexcept
+{
+    return std::sinh(x);
+}
+
+double Cosh(const double x) noexcept
+{
+    return std::cosh(x);
+}
+
+double Asinh(const double x) noexcept
+{
+    return std::asinh(x);
+}
+
+double Exp(const double x) noexcept
+{
+    return std::exp(x);
+}
+
+double Log(const double x) noexcept
+{
+    return std::log(x);
+}
+
 double WrappedAngle(const double y, const double x) noexcept
 {
     constexpr double period = 2.0 * std::numbers::pi;

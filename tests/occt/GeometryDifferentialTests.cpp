@@ -27,7 +27,9 @@
 #include <Geom_ConicalSurface.hxx>
 #include <Geom_CylindricalSurface.hxx>
 #include <Geom_Ellipse.hxx>
+#include <Geom_Hyperbola.hxx>
 #include <Geom_Line.hxx>
+#include <Geom_Parabola.hxx>
 #include <Geom_Plane.hxx>
 #include <Geom_SphericalSurface.hxx>
 #include <Geom_ToroidalSurface.hxx>
@@ -53,7 +55,9 @@ using Stereon::Circle;
 using Stereon::Cone;
 using Stereon::Cylinder;
 using Stereon::Ellipse;
+using Stereon::Hyperbola;
 using Stereon::Line;
+using Stereon::Parabola;
 using Stereon::Plane;
 using Stereon::Point2;
 using Stereon::Point3;
@@ -462,6 +466,54 @@ TEST_CASE("B-spline surface projections are as close as GeomAPI_ProjectPointOnSu
             }
         }
     }
+}
+
+/// Values, D1 to D3, and projections of the probe lattice by distance.
+template <typename C>
+void CheckOpenConic(const C& curve, const occ::handle<Geom_Curve>& occt, const Frame& f,
+                    const double range)
+{
+    for (int i = 0; i < SampleCount; ++i) {
+        const double t = -range + i * (2.0 * range / (SampleCount - 1));
+        gp_Pnt p;
+        gp_Vec d1;
+        gp_Vec d2;
+        gp_Vec d3;
+        occt->D3(t, p, d1, d2, d3);
+        REQUIRE(Agree(Eval(curve, t), p));
+        REQUIRE(Agree(Deriv(curve, t, 1), d1));
+        REQUIRE(Agree(Deriv(curve, t, 2), d2));
+        REQUIRE(Agree(Deriv(curve, t, 3), d3));
+    }
+    for (int i = 0; i < ProbeCount; ++i) {
+        for (int j = 0; j < ProbeCount; ++j) {
+            for (int k = 0; k < ProbeCount; ++k) {
+                const Point3 p = Probe(f, i, j, k);
+                GeomAPI_ProjectPointOnCurve extrema(ToOcct(p), occt);
+                REQUIRE(extrema.NbPoints() > 0);
+                const double ours = Distance(Eval(curve, Project(curve, p)), p);
+                REQUIRE(SameDistance(ours, extrema.LowerDistance()));
+            }
+        }
+    }
+}
+
+TEST_CASE("hyperbolas agree with Geom_Hyperbola", "[occt][curve]")
+{
+    const Frame f = TiltedFrame();
+    const Hyperbola hyperbola{f.Origin, 2.5, 1.5, f.X, f.Y};
+    const occ::handle<Geom_Hyperbola> occt =
+        new Geom_Hyperbola(gp_Ax2(ToOcct(f.Origin), ToOcctDir(f.Z), ToOcctDir(f.X)), 2.5, 1.5);
+    CheckOpenConic(hyperbola, occt, f, 3.0);
+}
+
+TEST_CASE("parabolas agree with Geom_Parabola", "[occt][curve]")
+{
+    const Frame f = TiltedFrame();
+    const Parabola parabola{f.Origin, 0.75, f.X, f.Y};
+    const occ::handle<Geom_Parabola> occt =
+        new Geom_Parabola(gp_Ax2(ToOcct(f.Origin), ToOcctDir(f.Z), ToOcctDir(f.X)), 0.75);
+    CheckOpenConic(parabola, occt, f, 8.0);
 }
 
 TEST_CASE("planes agree with Geom_Plane", "[occt][surface]")
