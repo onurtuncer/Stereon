@@ -7,6 +7,7 @@
 
 stereon_add_library(surface
     MODULES
+        BSplineSurface.cppm
         Concepts.cppm
         Cone.cppm
         Cylinder.cppm
@@ -17,6 +18,7 @@ stereon_add_library(surface
         Torus.cppm
         Visit.cppm
     SOURCES
+        BSplineSurface.cpp
         Factories.cpp
         Surface.cpp
     DEPENDS
