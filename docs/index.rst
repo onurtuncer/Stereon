@@ -63,6 +63,10 @@ The proposed capability baseline and its commit-pinned repository audit are
 maintained in the `planning index
 <https://github.com/onurtuncer/Stereon/tree/main/docs/planning>`_.
 They describe the long-term coverage target and do not replace the ADRs.
+The `roadmap and versioning plan
+<https://github.com/onurtuncer/Stereon/blob/main/docs/planning/roadmap-and-versioning.md>`_
+maps modelling milestones to product releases and separates native-format
+and C ABI compatibility policies.
 
 Open documentation tasks
 ------------------------

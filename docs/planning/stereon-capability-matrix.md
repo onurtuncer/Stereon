@@ -689,6 +689,8 @@ No CAM, recognition or reconstruction product modules found.
 
 ### Roadmap reconciliation
 
+The [roadmap and versioning plan](roadmap-and-versioning.md) now maps modelling milestones M1–M6 into the existing releases, including early diagnostic persistence, sectioning/imprinting before broad Booleans, and lineage/tag acceptance gates. These milestone IDs are distinct from this matrix's Mxx capability row IDs. This 14 October planning addition does not change the document's historical audit, row grades, or R0–R5 stages.
+
 The broader objective agreed in this conversation exceeds the repository's current v1.0 scope. Keep both visible rather than treating v1.0 as comprehensive OCCT parity.
 
 | Topic | Repository position | Matrix treatment |
@@ -699,7 +701,7 @@ The broader objective agreed in this conversation exceeds the repository's curre
 | C ABI and packaging | Proposed ADR-0019/0020; C++ first, initial direct Python bindings | P01 follows this sequencing; C ABI is not an early geometry prerequisite |
 | Volume meshing | External mesher integration boundary | E02 accepts a supported adapter; do not require an internal volume mesher |
 | IGES, full documents/assemblies, drawing services | Not established by current implementation roadmap | Explicit coverage additions required for comprehensive rivalry |
-| Release numbering | Repository Phase 0, v0.1/v0.3/v0.6/v0.8/v1.0 | Matrix R0–R5 are capability stages, not replacements for repository versions |
+| Release numbering | Phase 0, every minor v0.1–v0.9, then v1.0 (14 October plan) | Matrix R0–R5 are capability stages, not replacements for repository versions |
 
 ### Recommended next implementation sequence
 
