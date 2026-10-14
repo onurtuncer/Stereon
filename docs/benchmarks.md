@@ -5,6 +5,7 @@ Stereon is measured against OpenCASCADE (OCCT) on **speed, memory and robustness
 ## Methodology
 
 - **Same machine, pinned versions.** OCCT built from a pinned tag in Release mode with the same compiler (GCC 16) and flags (`-O2`, LTO off for both, same `-march`). Versions are recorded in every report.
+  The pin lives in `tools/occt/build_occt.sh` (OCCT `V8_0_1`, commit `b8f597c`, modelling modules only), which CI runs and caches; each install records its tag, commit and compiler in `stereon-occt-build.txt`. The OCCT build uses CMake's Release flags; matching them to Stereon's benchmark flags is part of the benchmark harness.
 - **Fair parallelism.** Each benchmark runs single-threaded and at 8 threads. OCCT's parallel switches are enabled where they exist (`BOPAlgo_Options::SetRunParallel`, `BRepMesh_IncrementalMesh` parallel flag, `OSD_ThreadPool`).
 - **Warm and cold.** Report the median and p95 of ≥ 20 warm runs; cold (first-run) time is reported separately for I/O benchmarks.
 - **Correctness gate.** Every result is checked: Stereon with its validity checker, OCCT with `BRepCheck_Analyzer`. Volumes/areas compared with `BRepGProp` and analytic values. Mismatches > 1e-6 relative are flagged, not averaged in.

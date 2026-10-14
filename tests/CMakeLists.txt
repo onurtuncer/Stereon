@@ -46,6 +46,28 @@ target_link_libraries(stereon_serialize_tests
 target_include_directories(stereon_serialize_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/support")
 catch_discover_tests(stereon_serialize_tests TEST_PREFIX "serialize: " DISCOVERY_MODE PRE_TEST)
 
+# Differential tests against OpenCASCADE (ADR-0015's independent referee).
+# OCCT is LGPL-2.1: it is linked into this test executable only, which is
+# built on request and never distributed, and no Stereon library depends on
+# it (ADR-0008). tools/occt/build_occt.sh builds the pinned version; pass its
+# install directory in CMAKE_PREFIX_PATH.
+if(STEREON_WITH_OCCT)
+    # No version in find_package: OCCT's version file accepts only an exact
+    # match, so "8.0" would reject 8.0.1. Any 8.0.x will do.
+    find_package(OpenCASCADE CONFIG REQUIRED)
+    if(NOT OpenCASCADE_VERSION VERSION_GREATER_EQUAL 8.0 OR OpenCASCADE_VERSION VERSION_GREATER_EQUAL 8.1)
+        message(FATAL_ERROR "the OCCT differential tests need OpenCASCADE 8.0.x, found "
+                            "${OpenCASCADE_VERSION}; see tools/occt/build_occt.sh")
+    endif()
+    add_executable(stereon_occt_tests occt/GeometryDifferentialTests.cpp)
+    target_link_libraries(stereon_occt_tests
+        PRIVATE stereon::surface stereon_options Catch2::Catch2WithMain
+                TKernel TKMath TKG3d TKGeomBase)
+    target_include_directories(stereon_occt_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/support")
+    stereon_anchor_contracts(stereon_occt_tests)
+    catch_discover_tests(stereon_occt_tests TEST_PREFIX "occt: " DISCOVERY_MODE PRE_TEST)
+endif()
+
 # Do contracts written in Stereon.Core fire in a unit that imports it? Each
 # probe violates one and must print the violation. GCC 16.2 checks the module's
 # inline functions only with the contract anchor above, and drops the checks in
