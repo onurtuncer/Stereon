@@ -77,8 +77,8 @@
 - [x] Two toy types per concept: `Line` + `Circle`, `Plane` + `Cylinder`. Also `Line2d` + `Circle2d` for `Curve2dGeometry`; all scalar-generic (ADR-0021)
 - [x] `VisitBuiltin` fast path generated with expansion statements and pack indexing (ADR-0016). Within 10% of direct calls in `bench/GeometryBench.cpp`; the virtual fallback is 2.6x direct for a line, 1.03x for a circle
 - [x] Type-pair dispatch table for binary operations (stub intersection handlers). `Stereon.Intersect`: compile-time tables over `BuiltinCurveTypes` and `BuiltinSurfaceTypes`, `NotImplemented` stubs, `NotSupported` for user types
-- [ ] Contracts on all evaluator entry points (domain, finiteness)
-- [ ] Reflection-based serialiser prototype for geometry structs (ADR-0012 groundwork)
+- [x] Contracts on all evaluator entry points (domain, finiteness). Plain branches reporting from `EvaluatorChecks.cpp`, because GCC 16.2 drops contracts in imported templates; domain checks honour `Period`/`Periods`; hot-path, so debug and sanitizer presets only
+- [x] Reflection-based serialiser prototype for geometry structs (ADR-0012 groundwork). `Serialized`, `Deserialized<T>` (ParseError on malformed input) and `ToJson` in `Stereon.Core:Serialize`
 - [x] Property tests comparing fast path and erased path on every type. Bitwise agreement for every operation of every built-in curve and surface
 
 ## 7. Topology prototype (weeks 6–10)
@@ -98,8 +98,8 @@
 
 - [ ] Qt6 or Vulkan window drawing points, polylines, boxes and triangle soups
 - [ ] Load dumps written from any test (`STEREON_DUMP(obj)` macro)
-- [ ] Debugger pretty-printers for GDB (Python) and LLDB: handles resolved to the entity (e.g. `Edge#4711 [Line, tol 1e-5, faces 12|37]`), `Interval`, `Box3`, `Curve`, `Surface`
-- [ ] CI test for the pretty-printers using scripted GDB and LLDB sessions
+- [ ] Debugger pretty-printers for GDB (Python) and LLDB: handles resolved to the entity (e.g. `Edge#4711 [Line, tol 1e-5, faces 12|37]`), `Interval`, `Box3`, `Curve`, `Surface`. Done except resolving a handle to its entity, which needs the topology stores: `tools/debugger/stereon_gdb.py` and `stereon_lldb.py` print vectors, intervals, boxes, handles, the erased wrappers (built-in and user types), arenas, journal ids, signs and expansions as `std::format` does
+- [x] CI test for the pretty-printers using scripted GDB and LLDB sessions. `tests/debugger/check_printers.py` against one expected table for both debuggers; the Linux CI jobs install gdb and lldb
 - [ ] `stn-dump` prototype: JSON dump of any `Shape`, for diffing two versions (ADR-0012 groundwork)
 
 ## 9. Testing infrastructure (weeks 2–10)
@@ -133,7 +133,7 @@
 - [ ] `docs/architecture.md`: library layering diagram and data flow
 - [ ] `docs/contributing-with-ai.md`: how agents are given ADR context and tests
 - [ ] `docs/references.md`: reading list (Piegl & Tiller, Patrikalakis & Maekawa, Stroud, Golovanov, Shewchuk) with the chapters each module relies on
-- [ ] `docs/debugging.md`: checked handles, `Describe()`, pretty-printer setup, journals, viewer and `stn-dump`
+- [ ] `docs/debugging.md`: checked handles, `Describe()`, pretty-printer setup, journals, viewer and `stn-dump`. Started as `docs/debugging.rst`: pretty-printers, contract reports and journals; `Describe()`, the viewer and `stn-dump` follow when they exist
 - [ ] Update the README roadmap status at the end of the phase
 
 ---

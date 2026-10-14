@@ -11,6 +11,7 @@ module;
 
 #include <concepts>
 #include <cstddef>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 
@@ -43,6 +44,8 @@ struct SurfaceConcept : ErasedConcept<SurfaceConcept> {
     [[nodiscard]] virtual Point3 EvalAt(const Point2& uv) const = 0;
     [[nodiscard]] virtual Vec3 DerivAt(const Point2& uv, int du, int dv) const = 0;
     [[nodiscard]] virtual Box2 GetDomain() const = 0;
+    /// Periods(value) for a PeriodicSurface, (0, 0) otherwise.
+    [[nodiscard]] virtual Vec2 GetPeriods() const = 0;
     [[nodiscard]] virtual Box3 GetBoundingBox() const = 0;
     [[nodiscard]] virtual Point2 ProjectPoint(const Point3& p) const = 0;
     [[nodiscard]] virtual Surface MakeReversed() const = 0;
@@ -90,15 +93,45 @@ private:
     Detail::SmallBuffer<Detail::SurfaceConcept, GeometryBufferSize> m_Storage;
 };
 
+} // namespace Stereon
+
+namespace Stereon::Detail {
+
+// The checked-build preconditions of the Surface functions below, defined in
+// Surface.cpp. Out of line, because instantiating core's check templates in
+// this partition's inline functions makes GCC 16.2 write a module file that
+// cannot be read back ("Bad file data"; docs/toolchain/gcc16-feature-probe.md).
+void CheckSurfaceParameter(const SurfaceConcept& model, const Point2& uv,
+                           std::string_view function) noexcept;
+void CheckDerivativeOrder(int du, int dv, std::string_view function) noexcept;
+void CheckSurfacePoint(const Point3& p, std::string_view function) noexcept;
+
+} // namespace Stereon::Detail
+
+export namespace Stereon {
+
 [[nodiscard]] inline Point3 Eval(const Surface& surface, const Point2& uv)
 {
+    if constexpr (Detail::EvaluatorChecks) {
+        Detail::CheckSurfaceParameter(surface.GetModel(), uv, "Eval(Surface)");
+    }
     return surface.GetModel().EvalAt(uv);
 }
 
 [[nodiscard]] inline Vec3 Deriv(const Surface& surface, const Point2& uv, const int du,
                                 const int dv)
 {
+    if constexpr (Detail::EvaluatorChecks) {
+        Detail::CheckSurfaceParameter(surface.GetModel(), uv, "Deriv(Surface)");
+        Detail::CheckDerivativeOrder(du, dv, "Deriv(Surface)");
+    }
     return surface.GetModel().DerivAt(uv, du, dv);
+}
+
+/// The wrapped surface's periods in u and v, 0 where it is not periodic.
+[[nodiscard]] inline Vec2 Periods(const Surface& surface)
+{
+    return surface.GetModel().GetPeriods();
 }
 
 [[nodiscard]] inline Box2 Domain(const Surface& surface)
@@ -113,6 +146,9 @@ private:
 
 [[nodiscard]] inline Point2 Project(const Surface& surface, const Point3& p)
 {
+    if constexpr (Detail::EvaluatorChecks) {
+        Detail::CheckSurfacePoint(p, "Project(Surface)");
+    }
     return surface.GetModel().ProjectPoint(p);
 }
 
@@ -143,6 +179,14 @@ public:
         return Deriv(this->Get(), uv, du, dv);
     }
     [[nodiscard]] Box2 GetDomain() const override { return Domain(this->Get()); }
+    [[nodiscard]] Vec2 GetPeriods() const override
+    {
+        if constexpr (PeriodicSurface<T>) {
+            return Periods(this->Get());
+        } else {
+            return {};
+        }
+    }
     [[nodiscard]] Box3 GetBoundingBox() const override { return BoundingBox(this->Get()); }
     [[nodiscard]] Point2 ProjectPoint(const Point3& p) const override
     {

@@ -30,6 +30,13 @@ export namespace Stereon {
 /// - Project(s, p): the parameter of a point of the surface closest to p;
 /// - Reversed(s): the same surface with the opposite normal;
 /// - Transformed(s, x): its image under a rigid motion or a similarity.
+/// A surface periodic in u or v provides Periods(s): the period in each
+/// parameter, 0 for none. Optional, as PeriodicCurve is for curves.
+template <typename S>
+concept PeriodicSurface = requires(const S s) {
+    { Periods(s) } -> std::same_as<Vec2>;
+};
+
 template <typename S>
 concept SurfaceGeometry =
     std::copyable<S> && requires(const S s, const Point2 uv, const int du, const int dv,
