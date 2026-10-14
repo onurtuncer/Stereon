@@ -12,8 +12,10 @@ stereon_add_library(core
         Context.cppm
         Core.cppm
         Enum.cppm
-        EvaluatorChecks.cppm
         Error.cppm
+        EvaluatorChecks.cppm
+        Frame.cppm
+        GeometryChecks.cppm
         Handle.cppm
         Interval.cppm
         Journal.cppm
@@ -29,6 +31,7 @@ stereon_add_library(core
     SOURCES
         Arena.cpp
         EvaluatorChecks.cpp
+        GeometryChecks.cpp
         Handle.cpp
         Serialize.cpp
         Trigonometry.cpp

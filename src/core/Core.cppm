@@ -17,6 +17,8 @@ export import :Context;
 export import :Enum;
 export import :EvaluatorChecks;
 export import :Error;
+export import :Frame;
+export import :GeometryChecks;
 export import :Handle;
 export import :Interval;
 export import :Journal;

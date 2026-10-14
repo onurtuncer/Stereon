@@ -8,9 +8,11 @@
 module;
 
 #include <cmath>
+#include <numbers>
 
 module Stereon.Core;
 
+import :Frame;
 import :Trigonometry;
 
 namespace Stereon {
@@ -28,6 +30,30 @@ double Cos(const double x) noexcept
 double Atan2(const double y, const double x) noexcept
 {
     return std::atan2(y, x);
+}
+
+double Sqrt(const double x) noexcept
+{
+    return std::sqrt(x);
+}
+
+double Hypot(const double x, const double y) noexcept
+{
+    return std::hypot(x, y);
+}
+
+double WrappedAngle(const double y, const double x) noexcept
+{
+    constexpr double period = 2.0 * std::numbers::pi;
+    if (x == 0.0 && y == 0.0) {
+        return 0.0;
+    }
+    const double angle = std::atan2(y, x);
+    if (angle >= 0.0) {
+        return angle;
+    }
+    const double wrapped = angle + period;
+    return wrapped < period ? wrapped : 0.0;
 }
 
 } // namespace Stereon

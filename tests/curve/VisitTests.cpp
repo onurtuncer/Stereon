@@ -21,6 +21,8 @@ using Stereon::Circle2d;
 using Stereon::CirclePeriod;
 using Stereon::Curve;
 using Stereon::Curve2d;
+using Stereon::Ellipse;
+using Stereon::Ellipse2d;
 using Stereon::Line;
 using Stereon::Line2d;
 using Stereon::Point2;
@@ -65,7 +67,7 @@ UserLine Transformed(const UserLine& c, const Transform& x)
 }
 
 /// Which path a visitor was given.
-enum class Path { Line, Circle, Erased };
+enum class Path { Line, Circle, Ellipse, Erased };
 
 Path PathOf(const Curve& curve)
 {
@@ -74,6 +76,8 @@ Path PathOf(const Curve& curve)
             return Path::Line;
         } else if constexpr (std::is_same_v<G, Circle>) {
             return Path::Circle;
+        } else if constexpr (std::is_same_v<G, Ellipse>) {
+            return Path::Ellipse;
         } else {
             static_assert(std::is_same_v<G, Curve>);
             return Path::Erased;
@@ -88,6 +92,13 @@ Circle SomeCircle(const double radius)
             Transformed(Vec3{0.0, 1.0, 0.0}, tilt)};
 }
 
+Ellipse SomeEllipse(const double minorRadius)
+{
+    const Transform tilt = Stereon::MakeRotation(Vec3{0.5, 1.0, -2.0}, 1.1);
+    return {Point3{-0.5, 2.0, 1.0}, minorRadius + 1.25, minorRadius,
+            Transformed(Vec3{1.0, 0.0, 0.0}, tilt), Transformed(Vec3{0.0, 1.0, 0.0}, tilt)};
+}
+
 } // namespace
 
 TEST_CASE("VisitBuiltin hands built-in curves to the visitor as themselves", "[curve][visit]")
@@ -95,17 +106,22 @@ TEST_CASE("VisitBuiltin hands built-in curves to the visitor as themselves", "[c
     const Line line{Point3{0.0, 0.0, 1.0}, Vec3{1.0, 1.0, 0.0}};
     const Curve lineCurve(line);
     const Curve circleCurve(SomeCircle(2.0));
+    const Curve ellipseCurve(SomeEllipse(0.5));
     const Curve userCurve(UserLine{line});
 
     REQUIRE(PathOf(lineCurve) == Path::Line);
     REQUIRE(PathOf(circleCurve) == Path::Circle);
+    REQUIRE(PathOf(ellipseCurve) == Path::Ellipse);
     REQUIRE(PathOf(userCurve) == Path::Erased);
 
     REQUIRE(BuiltinIndexOf(lineCurve) == 0);
     REQUIRE(BuiltinIndexOf(circleCurve) == 1);
+    REQUIRE(BuiltinIndexOf(ellipseCurve) == 2);
     REQUIRE(BuiltinIndexOf(userCurve) == Stereon::BuiltinCurveTypes::Size);
-    STATIC_REQUIRE(Stereon::BuiltinCurveTypes::Size == 2);
+    STATIC_REQUIRE(Stereon::BuiltinCurveTypes::Size == 3);
     STATIC_REQUIRE(Stereon::GeometryTypeName<Line> == std::string_view{"Line"});
+    STATIC_REQUIRE(Stereon::GeometryTypeName<Ellipse> == std::string_view{"Ellipse"});
+    STATIC_REQUIRE(Stereon::GeometryTypeName<Ellipse2d> == std::string_view{"Ellipse2d"});
     STATIC_REQUIRE(Stereon::GeometryTypeName<UserLine> == std::string_view{"geometry"});
 
     // The visitor's result comes back; a loop inside it runs on the type.
@@ -126,6 +142,8 @@ TEST_CASE("VisitBuiltin hands built-in curves to the visitor as themselves", "[c
     REQUIRE(BuiltinIndexOf(planar) == 1);
     REQUIRE(VisitBuiltin(planar, [](const auto& g) { return Eval(g, 0.0); }) == Point2{1.0, 0.0});
     REQUIRE(BuiltinIndexOf(Curve2d(Line2d{Point2{}, Vec2{1.0, 0.0}})) == 0);
+    REQUIRE(BuiltinIndexOf(
+                Curve2d(Ellipse2d{Point2{}, 2.0, 1.0, Vec2{1.0, 0.0}, Vec2{0.0, 1.0}})) == 2);
 }
 
 TEST_CASE("the fast path and the erased path give identical results", "[curve][visit][property]")
@@ -138,7 +156,8 @@ TEST_CASE("the fast path and the erased path give identical results", "[curve][v
         const Point3 p{*rc::gen::inRange(-50, 50) / 10.0, *rc::gen::inRange(-50, 50) / 10.0,
                        *rc::gen::inRange(-50, 50) / 10.0};
         for (const Curve& curve : {Curve(Line{Point3{1.0, 2.0, 3.0}, Vec3{0.5, -1.0, 2.0}}),
-                                   Curve(SomeCircle(*rc::gen::inRange(1, 40) / 8.0))}) {
+                                   Curve(SomeCircle(*rc::gen::inRange(1, 40) / 8.0)),
+                                   Curve(SomeEllipse(*rc::gen::inRange(1, 40) / 8.0))}) {
             RC_ASSERT(VisitBuiltin(curve, [&](const auto& g) { return Eval(g, t); }) ==
                       Eval(curve, t));
             RC_ASSERT(VisitBuiltin(curve, [&](const auto& g) { return Deriv(g, t, n); }) ==
@@ -155,7 +174,9 @@ TEST_CASE("periodic geometry reports its period through the wrappers", "[curve][
 {
     STATIC_REQUIRE(Stereon::PeriodicCurve<Circle>);
     STATIC_REQUIRE(Stereon::PeriodicCurve<Curve>);
+    STATIC_REQUIRE(Stereon::PeriodicCurve<Ellipse>);
     STATIC_REQUIRE_FALSE(Stereon::PeriodicCurve<Line>);
+    REQUIRE(Period(Curve(SomeEllipse(1.0))) == CirclePeriod);
     REQUIRE(Period(Curve(SomeCircle(1.0))) == CirclePeriod);
     REQUIRE(Period(Curve(Line{Point3{}, Vec3{1.0, 0.0, 0.0}})) == 0.0);
     // A periodic curve accepts every finite parameter, also through Curve.

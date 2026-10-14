@@ -16,16 +16,19 @@ module;
 export module Stereon.Surface:Visit;
 
 import Stereon.Curve;
+import :Cone;
 import :Cylinder;
 import :Erased;
 import :Plane;
+import :Sphere;
+import :Torus;
 
 /// The fast path of ADR-0003 for surfaces; see Stereon.Curve:Visit.
 
 export namespace Stereon {
 
 /// The built-in surface types, in the order the intersection tables use.
-using BuiltinSurfaceTypes = TypeList<Plane, Cylinder>;
+using BuiltinSurfaceTypes = TypeList<Plane, Cylinder, Cone, Sphere, Torus>;
 
 /// The diagnostic names of the built-in surfaces; see GeometryNameOf in
 /// Stereon.Curve:Visit.
@@ -36,6 +39,18 @@ using BuiltinSurfaceTypes = TypeList<Plane, Cylinder>;
 [[nodiscard]] constexpr std::string_view GeometryNameOf(const Cylinder*) noexcept
 {
     return "Cylinder";
+}
+[[nodiscard]] constexpr std::string_view GeometryNameOf(const Cone*) noexcept
+{
+    return "Cone";
+}
+[[nodiscard]] constexpr std::string_view GeometryNameOf(const Sphere*) noexcept
+{
+    return "Sphere";
+}
+[[nodiscard]] constexpr std::string_view GeometryNameOf(const Torus*) noexcept
+{
+    return "Torus";
 }
 
 /// Calls f(geometry) with the wrapped built-in type, or f(surface) for any

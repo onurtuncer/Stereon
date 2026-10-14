@@ -104,11 +104,14 @@ and three concepts name the set a type must provide:
 These are tier 1 of ADR-0003. The bounding operations of tier 2 and the
 intersection capability of tier 3 arrive with the intersection work.
 
-The built-in types so far are ``Line`` and ``Circle`` (and ``Line2d`` and
-``Circle2d`` in the plane), ``Plane`` and ``Cylinder``. A line is
+The built-in analytic types are ``Line``, ``Circle`` and ``Ellipse`` (and
+``Line2d``, ``Circle2d`` and ``Ellipse2d`` in the plane), and ``Plane``,
+``Cylinder``, ``Cone``, ``Sphere`` and ``Torus``. A line is
 ``Origin + t * Direction``; a circle is ``Center + Radius * (cos t * XAxis +
 sin t * YAxis)`` on ``[0, 2π]``; a plane is ``Origin + u * XAxis + v *
-YAxis``; a cylinder is the circle swept along its axis. Like the core math
+YAxis``; a cylinder is the circle swept along its axis. :doc:`analytic`
+gives every parametrisation with its derivatives, singular points and
+projection. Like the core math
 types they are instances of templates over the ``Scalar`` concept, so
 ``Eval``, ``Deriv``, ``Reversed`` and ``Transformed`` also run on the active
 scalar type of an automatic-differentiation backend (ADR-0021).
@@ -142,9 +145,14 @@ Some conventions worth knowing:
 - ``Transformed`` accepts similarities: rigid motions, reflections and
   uniform scaling. A non-uniform scaling would turn a circle into an
   ellipse, which the type cannot hold.
-- Circle bounding boxes are computed in ``Interval`` arithmetic, so they
-  enclose the exact circle. Lines, planes and cylinders are unbounded and
-  return ``Everything()``.
+- Bounding boxes of the bounded types (circle, ellipse, sphere, torus) are
+  computed in ``Interval`` arithmetic, so they enclose the exact geometry.
+  Lines, planes, cylinders and cones are unbounded and return
+  ``Everything()``.
+- Data from outside the kernel goes through a checked factory,
+  ``MakeCircle``, ``MakeCylinder`` and so on, which returns ``InvalidInput``
+  instead of building an invalid value (:doc:`analytic`, *Checked
+  construction*).
 
 Type-erased wrappers
 ~~~~~~~~~~~~~~~~~~~~
@@ -152,7 +160,7 @@ Type-erased wrappers
 ``Curve``, ``Curve2d`` and ``Surface`` hold any type satisfying the matching
 concept behind one copyable value type, and satisfy the concept themselves, so
 code written against the concept works on either. A wrapped value smaller
-than the 96-byte buffer, which every built-in type is, lives inside the
+than the 128-byte buffer, which every built-in analytic type is, lives inside the
 wrapper and allocates nothing; a larger one, such as a NURBS curve with many
 poles, is held immutable behind a shared pointer and shared between copies.
 ``Target<T>()`` returns the wrapped value when it is a ``T``.
@@ -214,8 +222,10 @@ Direct call on the concrete type     2.2     49
 virtual path misses its target of 2x for a line, where the evaluation costs
 about as much as the call; for a circle the trigonometry dominates. The copy
 benchmark settles the buffer size: at 64 bytes a circle no longer fits and a
-copy costs 42 ns instead of 12, while 128 bytes gains nothing, so
-``GeometryBufferSize`` stays at 96, which also holds ``Cylinder`` (88 bytes).
+copy costs 42 ns instead of 12, while 128 bytes gains nothing for these
+types, so ``GeometryBufferSize`` was set to 96, which also holds
+``Cylinder`` (88 bytes), until ``Cone`` and ``Torus`` arrived (see *The
+buffer size, revisited*).
 
 Evaluator preconditions
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -225,7 +235,8 @@ derivative orders that exist. The erased wrappers also require a parameter
 inside ``Domain`` unless the geometry is periodic in it: a type that is
 periodic provides ``Period(c)`` for curves or ``Periods(s)`` for surfaces
 (``PeriodicCurve``, ``PeriodicSurface``), and every finite parameter is then
-valid for it. ``Circle`` has period 2π, ``Cylinder`` periods (2π, 0).
+valid for it. ``Circle`` and ``Ellipse`` have period 2π; ``Cylinder``, ``Cone`` and
+``Sphere`` periods (2π, 0); ``Torus`` periods (2π, 2π).
 
 The evaluators are templates, and GCC 16.2 silently drops contracts in
 templates imported from a module, so these checks are not ``pre``
@@ -263,12 +274,26 @@ Compilers without reflection get the same functions reporting
 The buffer size, revisited
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-At 96 bytes the buffer holds every built-in type so far: ``Circle`` takes 88
-with the model's virtual table pointer, and ``Cylinder`` exactly 96. A
-``Cone`` or ``Torus`` laid out like ``Cylinder`` would take about 104 and be
-shared rather than stored inline. ADR-0003 fixes the constant by measurement,
-so the copy benchmark is re-run, and the constant moved to 128 if it pays,
-when the first of those types lands.
+``Cone`` and ``Torus`` take 96 bytes, 104 with the model's virtual table
+pointer, so at the original 96-byte buffer they were shared rather than
+stored inline. The copy benchmark settled it (GCC 16.2, -O3, nanoseconds per
+wrapper copy):
+
+========  =======  ========
+Type      96 B     128 B
+========  =======  ========
+Line      10.5     12.6
+Circle    12.4     15.0
+Cylinder  13.1     13.5
+Cone      45.1     17.3
+Torus     42.1     15.0
+========  =======  ========
+
+A shared payload costs an atomic reference count per copy, almost three
+times an inline copy of the same type, against about 2.5 ns more for the
+types that already fit. ``GeometryBufferSize`` is therefore 128, and every
+built-in analytic type is stored inline; ``static_assert``\ s next to each
+type keep it so.
 
 Related design decisions
 ------------------------

@@ -13,7 +13,8 @@ export module Stereon.Core:Trigonometry;
 
 import :Scalar;
 
-/// Sin, Cos and Atan2 for geometry modules above core.
+/// Sin, Cos, Atan2, Sqrt and Hypot for geometry modules above core, and
+/// QuarterTurned for the derivatives of every angle-parametrised type.
 ///
 /// A geometry module that includes <cmath> in its own global module fragment
 /// while importing another module that also did can produce a module file
@@ -30,6 +31,10 @@ export namespace Stereon {
 [[nodiscard]] double Cos(double x) noexcept;
 /// The angle of (x, y) in (-pi, pi].
 [[nodiscard]] double Atan2(double y, double x) noexcept;
+/// The square root; x must not be negative.
+[[nodiscard]] double Sqrt(double x) noexcept;
+/// sqrt(x^2 + y^2) without overflow or underflow in the squares.
+[[nodiscard]] double Hypot(double x, double y) noexcept;
 
 template <Scalar T>
 [[nodiscard]] T Sin(const T& x)
@@ -43,6 +48,36 @@ template <Scalar T>
 {
     using std::cos;
     return cos(x);
+}
+
+/// A cosine and sine pair, (cos a, sin a) for some angle a.
+template <Scalar T>
+struct BasicCosSin {
+    T Cos;
+    T Sin;
+
+    constexpr bool operator==(const BasicCosSin&) const = default;
+};
+
+/// (cos(t + n pi/2), sin(t + n pi/2)) from c = cos t and s = sin t, for
+/// n >= 0. Each quarter turn maps (c, s) to (-s, c), so the result is
+/// selected by n mod 4 with no rounded multiple of pi/2 in an argument.
+/// The n-th derivative of cos t is cos(t + n pi/2), and of sin t is
+/// sin(t + n pi/2), which is what the angle-parametrised curves and surfaces
+/// use it for.
+template <Scalar T>
+[[nodiscard]] constexpr BasicCosSin<T> QuarterTurned(const T& c, const T& s, const int n)
+{
+    switch (n % 4) {
+    case 1:
+        return {-s, c};
+    case 2:
+        return {-c, -s};
+    case 3:
+        return {s, -c};
+    default:
+        return {c, s};
+    }
 }
 
 } // namespace Stereon

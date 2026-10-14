@@ -6,20 +6,29 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 // Differential tests: Stereon's built-in geometry against OpenCASCADE's
-// (ADR-0015's independent referee). The same line, circle, plane and
-// cylinder are built in both kernels and evaluated, with first and second
-// derivatives, over a sweep of parameters; the two must agree to a few units
-// in the last place. Both kernels use the same parametrisations here: a
-// line by arc length along a unit direction, a circle and cylinder by angle
-// from the X axis around the normal, a plane by its X and Y axes.
+// (ADR-0015's independent referee). The same line, circle, ellipse, plane,
+// cylinder, cone, sphere and torus are built in both kernels and evaluated,
+// with first and second derivatives, over a sweep of parameters; the two
+// must agree to a few units in the last place. Both kernels use the same
+// parametrisations here: a line by arc length along a unit direction, the
+// conics and surfaces of revolution by angle from the X axis around the
+// normal, a plane by its X and Y axes, a cone by distance along a
+// generator. Projections are compared by distance with OCCT's extrema,
+// which reach the closest point by a different algorithm.
 //
 // OCCT is LGPL-2.1 and linked only into this test (ADR-0008); build it with
 // tools/occt/build_occt.sh and configure with -DSTEREON_WITH_OCCT=ON.
 
+#include <GeomAPI_ProjectPointOnCurve.hxx>
+#include <GeomAPI_ProjectPointOnSurf.hxx>
 #include <Geom_Circle.hxx>
+#include <Geom_ConicalSurface.hxx>
 #include <Geom_CylindricalSurface.hxx>
+#include <Geom_Ellipse.hxx>
 #include <Geom_Line.hxx>
 #include <Geom_Plane.hxx>
+#include <Geom_SphericalSurface.hxx>
+#include <Geom_ToroidalSurface.hxx>
 #include <gp_Ax2.hxx>
 #include <gp_Ax3.hxx>
 #include <gp_Dir.hxx>
@@ -34,11 +43,15 @@
 import Stereon.Surface;
 
 using Stereon::Circle;
+using Stereon::Cone;
 using Stereon::Cylinder;
+using Stereon::Ellipse;
 using Stereon::Line;
 using Stereon::Plane;
 using Stereon::Point2;
 using Stereon::Point3;
+using Stereon::Sphere;
+using Stereon::Torus;
 using Stereon::Vec3;
 
 namespace {
@@ -102,6 +115,62 @@ double Sample(const int i)
     return -2.0 * std::numbers::pi + i * (4.0 * std::numbers::pi / (SampleCount - 1));
 }
 
+/// Points around the geometry, inside and outside, on a lattice tilted
+/// against the frame: the probes for the projection comparisons.
+constexpr int ProbeCount = 7;
+
+Point3 Probe(const Frame& f, const int i, const int j, const int k)
+{
+    const auto at = [](const int n) { return -4.5 + 1.5 * n + 0.1 * n * n; };
+    return f.Origin + at(i) * f.X + at(j) * f.Y + at(k) * f.Z;
+}
+
+/// Our projection must find a point as close as OCCT's closest one: no
+/// farther than OCCT's distance plus round-off, and, since OCCT's is a true
+/// point of the geometry too, no closer than it minus round-off.
+bool SameDistance(const double ours, const double occt)
+{
+    return std::abs(ours - occt) <= 1e-9 * (1.0 + occt);
+}
+
+/// Every first and second partial of a Stereon surface against OCCT's D2,
+/// and one third-order partial against DN.
+template <typename S>
+void CheckSecondOrder(const S& surface, const Geom_Surface& occt, const Point2& uv)
+{
+    gp_Pnt p;
+    gp_Vec du;
+    gp_Vec dv;
+    gp_Vec duu;
+    gp_Vec dvv;
+    gp_Vec duv;
+    occt.D2(uv.X, uv.Y, p, du, dv, duu, dvv, duv);
+    REQUIRE(Agree(Eval(surface, uv), p));
+    REQUIRE(Agree(Deriv(surface, uv, 1, 0), du));
+    REQUIRE(Agree(Deriv(surface, uv, 0, 1), dv));
+    REQUIRE(Agree(Deriv(surface, uv, 2, 0), duu));
+    REQUIRE(Agree(Deriv(surface, uv, 0, 2), dvv));
+    REQUIRE(Agree(Deriv(surface, uv, 1, 1), duv));
+    REQUIRE(Agree(Deriv(surface, uv, 2, 1), occt.DN(uv.X, uv.Y, 2, 1)));
+}
+
+/// Projections of the probe lattice agree with OCCT's extrema by distance.
+template <typename S>
+void CheckProjections(const S& surface, const occ::handle<Geom_Surface>& occt, const Frame& f)
+{
+    for (int i = 0; i < ProbeCount; ++i) {
+        for (int j = 0; j < ProbeCount; ++j) {
+            for (int k = 0; k < ProbeCount; ++k) {
+                const Point3 p = Probe(f, i, j, k);
+                GeomAPI_ProjectPointOnSurf extrema(ToOcct(p), occt);
+                REQUIRE(extrema.NbPoints() > 0);
+                const double ours = Distance(Eval(surface, Project(surface, p)), p);
+                REQUIRE(SameDistance(ours, extrema.LowerDistance()));
+            }
+        }
+    }
+}
+
 } // namespace
 
 TEST_CASE("lines agree with Geom_Line", "[occt][curve]")
@@ -139,6 +208,36 @@ TEST_CASE("circles agree with Geom_Circle", "[occt][curve]")
         REQUIRE(Agree(Deriv(circle, t, 3), occt->DN(t, 3)));
     }
     REQUIRE(occt->Period() == Stereon::CirclePeriod);
+}
+
+TEST_CASE("ellipses agree with Geom_Ellipse", "[occt][curve]")
+{
+    const Frame f = TiltedFrame();
+    const Ellipse ellipse{f.Origin, 3.5, 1.25, f.X, f.Y};
+    const occ::handle<Geom_Ellipse> occt =
+        new Geom_Ellipse(gp_Ax2(ToOcct(f.Origin), ToOcctDir(f.Z), ToOcctDir(f.X)), 3.5, 1.25);
+    for (int i = 0; i < SampleCount; ++i) {
+        const double t = Sample(i);
+        gp_Pnt p;
+        gp_Vec d1;
+        gp_Vec d2;
+        occt->D2(t, p, d1, d2);
+        REQUIRE(Agree(Eval(ellipse, t), p));
+        REQUIRE(Agree(Deriv(ellipse, t, 1), d1));
+        REQUIRE(Agree(Deriv(ellipse, t, 2), d2));
+        REQUIRE(Agree(Deriv(ellipse, t, 3), occt->DN(t, 3)));
+    }
+    for (int i = 0; i < ProbeCount; ++i) {
+        for (int j = 0; j < ProbeCount; ++j) {
+            for (int k = 0; k < ProbeCount; ++k) {
+                const Point3 p = Probe(f, i, j, k);
+                GeomAPI_ProjectPointOnCurve extrema(ToOcct(p), occt);
+                REQUIRE(extrema.NbPoints() > 0);
+                const double ours = Distance(Eval(ellipse, Project(ellipse, p)), p);
+                REQUIRE(SameDistance(ours, extrema.LowerDistance()));
+            }
+        }
+    }
 }
 
 TEST_CASE("planes agree with Geom_Plane", "[occt][surface]")
@@ -182,6 +281,45 @@ TEST_CASE("cylinders agree with Geom_CylindricalSurface", "[occt][surface]")
         REQUIRE(Agree(Deriv(cylinder, uv, 1, 1), duv));
     }
     REQUIRE(occt->UPeriod() == Stereon::CirclePeriod);
+}
+
+TEST_CASE("cones agree with Geom_ConicalSurface", "[occt][surface]")
+{
+    const Frame f = TiltedFrame();
+    const Cone cone{f.Origin, 1.25, 0.6, f.X, f.Y};
+    const occ::handle<Geom_ConicalSurface> occt =
+        new Geom_ConicalSurface(ToOcctFrame(f), 0.6, 1.25);
+    for (int i = 0; i < SampleCount; ++i) {
+        CheckSecondOrder(cone, *occt, Point2{Sample(i), 0.75 * Sample(SampleCount - 1 - i)});
+    }
+    REQUIRE(Agree(Stereon::Apex(cone), occt->Apex()));
+    CheckProjections(cone, occt, f);
+}
+
+TEST_CASE("spheres agree with Geom_SphericalSurface", "[occt][surface]")
+{
+    const Frame f = TiltedFrame();
+    const Sphere sphere{f.Origin, 2.25, f.X, f.Y};
+    const occ::handle<Geom_SphericalSurface> occt = new Geom_SphericalSurface(ToOcctFrame(f), 2.25);
+    for (int i = 0; i < SampleCount; ++i) {
+        // Latitudes inside [-pi/2, pi/2].
+        CheckSecondOrder(sphere, *occt, Point2{Sample(i), 0.24 * Sample(SampleCount - 1 - i)});
+    }
+    CheckProjections(sphere, occt, f);
+}
+
+TEST_CASE("tori agree with Geom_ToroidalSurface", "[occt][surface]")
+{
+    const Frame f = TiltedFrame();
+    const Torus torus{f.Origin, 3.0, 0.8, f.X, f.Y};
+    const occ::handle<Geom_ToroidalSurface> occt =
+        new Geom_ToroidalSurface(ToOcctFrame(f), 3.0, 0.8);
+    for (int i = 0; i < SampleCount; ++i) {
+        CheckSecondOrder(torus, *occt, Point2{Sample(i), Sample(SampleCount - 1 - i)});
+    }
+    REQUIRE(occt->UPeriod() == Stereon::CirclePeriod);
+    REQUIRE(occt->VPeriod() == Stereon::CirclePeriod);
+    CheckProjections(torus, occt, f);
 }
 
 TEST_CASE("the erased wrappers agree with OCCT too", "[occt][erased]")

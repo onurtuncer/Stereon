@@ -31,6 +31,11 @@ struct BasicPlane {
 
 using Plane = BasicPlane<double>;
 
+/// The plane after validating data from outside the kernel (ADR-0006):
+/// InvalidInput unless Origin is finite and the axes are orthonormal within
+/// FrameAllowance.
+[[nodiscard]] Result<Plane> MakePlane(const Point3& origin, const Vec3& xAxis, const Vec3& yAxis);
+
 template <Scalar T>
 [[nodiscard]] constexpr BasicPoint3<T> Eval(const BasicPlane<T>& plane, const BasicPoint2<T>& uv)
 {

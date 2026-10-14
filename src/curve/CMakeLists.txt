@@ -10,8 +10,11 @@ stereon_add_library(curve
         Circle.cppm
         Concepts.cppm
         Curve.cppm
+        Ellipse.cppm
         Erased.cppm
         Line.cppm
         Visit.cppm
+    SOURCES
+        Factories.cpp
     DEPENDS
         robust)
