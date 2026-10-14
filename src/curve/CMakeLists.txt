@@ -11,6 +11,7 @@ stereon_add_library(curve
         BSplineCurve.cppm
         Circle.cppm
         Concepts.cppm
+        Conversion.cppm
         Curve.cppm
         Ellipse.cppm
         Erased.cppm
@@ -21,6 +22,7 @@ stereon_add_library(curve
         BSplineBasis.cpp
         BSplineCurve.cpp
         Conics.cpp
+        Conversion.cpp
         Factories.cpp
     DEPENDS
         robust)
