@@ -108,10 +108,10 @@ See the [roadmap and versioning plan](docs/planning/roadmap-and-versioning.md) f
 
 - [x] Catch2 + RapidCheck wiring; test naming and tagging conventions. One executable per library, cases tagged `[<library>]` plus topic tags and `[property]` for `rc::prop` tests ([`tests/CMakeLists.txt`](tests/CMakeLists.txt))
 - [ ] libFuzzer harness skeleton (for later STEP and primitive-placement fuzzing)
-- [ ] OCCT differential-testing harness: build OCCT in CI, compare volumes/areas/face counts on shared cases
+- [ ] OCCT differential-testing harness: build OCCT in CI, compare volumes/areas/face counts on shared cases. OCCT 8.0.1 is built and cached in CI (`tools/occt/build_occt.sh`, `.github/workflows/occt.yml`) and `stereon_occt_tests` compares the built-in curves and surfaces with OCCT's; volumes, areas and face counts follow the topology prototype
 - [x] `corpus/` layout, metadata format and `corpus/LICENSES.md` ([`corpus/README.md`](corpus/README.md)); cases validated by `tools/check_corpus.py` in CI
 - [ ] Regression-case workflow: failing case → minimal file + journal → never deleted
-- [ ] Benchmark harness against OCCT per `docs/benchmarks.md`: pinned OCCT build in CI, Phase 0 benchmarks B0.1–B0.5 running and reported
+- [ ] Benchmark harness against OCCT per `docs/benchmarks.md`: pinned OCCT build in CI, Phase 0 benchmarks B0.1–B0.5 running and reported. The pinned build exists; the OCCT side of B0.2–B0.5 is next
 - [ ] Seeded-fault test suite for handles and topology: stale handles, handles from another shape, off-by-one indices, wrong entity kinds, corrupted adjacency (ADR-0004 verification)
 
 ## 10. ADR prototypes (weeks 6–12)
