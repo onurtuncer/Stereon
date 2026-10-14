@@ -105,11 +105,15 @@ private:
 };
 
 /// True when a model holding T in place, plus its virtual table pointer,
-/// fits in `Size` bytes and can be moved without throwing.
+/// fits in `Size` bytes and T is trivially copyable. A type whose copy
+/// allocates, such as a B-spline with its pole and knot vectors, is shared
+/// however small its own footprint, so that copying a wrapper never copies
+/// its geometry (ADR-0003: "larger types store an immutable shared payload
+/// so copies stay cheap").
 template <typename T, std::size_t Size>
 inline constexpr bool FitsInline =
     sizeof(T) + sizeof(void*) <= Size && alignof(T) <= alignof(std::max_align_t) &&
-    std::is_nothrow_move_constructible_v<T>;
+    std::is_trivially_copyable_v<T>;
 
 /// InlineValue<T> when it fits, SharedValue<T> otherwise.
 template <typename T, std::size_t Size>

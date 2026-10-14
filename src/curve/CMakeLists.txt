@@ -7,6 +7,8 @@
 
 stereon_add_library(curve
     MODULES
+        BSplineBasis.cppm
+        BSplineCurve.cppm
         Circle.cppm
         Concepts.cppm
         Curve.cppm
@@ -15,6 +17,8 @@ stereon_add_library(curve
         Line.cppm
         Visit.cppm
     SOURCES
+        BSplineBasis.cpp
+        BSplineCurve.cpp
         Factories.cpp
     DEPENDS
         robust)
