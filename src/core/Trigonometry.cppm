@@ -13,7 +13,8 @@ export module Stereon.Core:Trigonometry;
 
 import :Scalar;
 
-/// Sin, Cos, Atan2, Sqrt and Hypot for geometry modules above core, and
+/// Sin, Cos, Atan2, Sqrt, Hypot and the hyperbolic and exponential functions
+/// for geometry modules above core, and
 /// QuarterTurned for the derivatives of every angle-parametrised type.
 ///
 /// A geometry module that includes <cmath> in its own global module fragment
@@ -35,6 +36,13 @@ export namespace Stereon {
 [[nodiscard]] double Sqrt(double x) noexcept;
 /// sqrt(x^2 + y^2) without overflow or underflow in the squares.
 [[nodiscard]] double Hypot(double x, double y) noexcept;
+/// The hyperbolic functions, for the hyperbola.
+[[nodiscard]] double Sinh(double x) noexcept;
+[[nodiscard]] double Cosh(double x) noexcept;
+[[nodiscard]] double Asinh(double x) noexcept;
+/// e^x and the natural logarithm; x > 0 for Log.
+[[nodiscard]] double Exp(double x) noexcept;
+[[nodiscard]] double Log(double x) noexcept;
 
 template <Scalar T>
 [[nodiscard]] T Sin(const T& x)
@@ -48,6 +56,20 @@ template <Scalar T>
 {
     using std::cos;
     return cos(x);
+}
+
+template <Scalar T>
+[[nodiscard]] T Sinh(const T& x)
+{
+    using std::sinh;
+    return sinh(x);
+}
+
+template <Scalar T>
+[[nodiscard]] T Cosh(const T& x)
+{
+    using std::cosh;
+    return cosh(x);
 }
 
 /// A cosine and sine pair, (cos a, sin a) for some angle a.

@@ -104,8 +104,9 @@ and three concepts name the set a type must provide:
 These are tier 1 of ADR-0003. The bounding operations of tier 2 and the
 intersection capability of tier 3 arrive with the intersection work.
 
-The built-in analytic types are ``Line``, ``Circle`` and ``Ellipse`` (and
-``Line2d``, ``Circle2d`` and ``Ellipse2d`` in the plane), and ``Plane``,
+The built-in analytic types are ``Line``, ``Circle``, ``Ellipse``,
+``Hyperbola`` and ``Parabola`` (and their ``2d`` forms in the plane), and
+``Plane``,
 ``Cylinder``, ``Cone``, ``Sphere`` and ``Torus``. A line is
 ``Origin + t * Direction``; a circle is ``Center + Radius * (cos t * XAxis +
 sin t * YAxis)`` on ``[0, 2π]``; a plane is ``Origin + u * XAxis + v *

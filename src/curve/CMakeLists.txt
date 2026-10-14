@@ -14,11 +14,13 @@ stereon_add_library(curve
         Curve.cppm
         Ellipse.cppm
         Erased.cppm
+        Hyperbola.cppm
         Line.cppm
         Visit.cppm
     SOURCES
         BSplineBasis.cpp
         BSplineCurve.cpp
+        Conics.cpp
         Factories.cpp
     DEPENDS
         robust)

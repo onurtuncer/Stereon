@@ -67,7 +67,7 @@ UserLine Transformed(const UserLine& c, const Transform& x)
 }
 
 /// Which path a visitor was given.
-enum class Path { Line, Circle, Ellipse, BSpline, Erased };
+enum class Path { Line, Circle, Ellipse, BSpline, OtherBuiltin, Erased };
 
 Path PathOf(const Curve& curve)
 {
@@ -80,6 +80,9 @@ Path PathOf(const Curve& curve)
             return Path::Ellipse;
         } else if constexpr (std::is_same_v<G, Stereon::BSplineCurve>) {
             return Path::BSpline;
+        } else if constexpr (std::is_same_v<G, Stereon::Hyperbola> ||
+                             std::is_same_v<G, Stereon::Parabola>) {
+            return Path::OtherBuiltin;
         } else {
             static_assert(std::is_same_v<G, Curve>);
             return Path::Erased;
@@ -125,6 +128,8 @@ TEST_CASE("VisitBuiltin hands built-in curves to the visitor as themselves", "[c
     REQUIRE(PathOf(circleCurve) == Path::Circle);
     REQUIRE(PathOf(ellipseCurve) == Path::Ellipse);
     REQUIRE(PathOf(Curve(SomeBSpline())) == Path::BSpline);
+    REQUIRE(PathOf(Curve(Stereon::Parabola{Point3{}, 1.0, Vec3{1.0, 0.0, 0.0},
+                                           Vec3{0.0, 1.0, 0.0}})) == Path::OtherBuiltin);
     REQUIRE(BuiltinIndexOf(Curve(SomeBSpline())) == 3);
     REQUIRE(PathOf(userCurve) == Path::Erased);
 
@@ -132,7 +137,7 @@ TEST_CASE("VisitBuiltin hands built-in curves to the visitor as themselves", "[c
     REQUIRE(BuiltinIndexOf(circleCurve) == 1);
     REQUIRE(BuiltinIndexOf(ellipseCurve) == 2);
     REQUIRE(BuiltinIndexOf(userCurve) == Stereon::BuiltinCurveTypes::Size);
-    STATIC_REQUIRE(Stereon::BuiltinCurveTypes::Size == 4);
+    STATIC_REQUIRE(Stereon::BuiltinCurveTypes::Size == 6);
     STATIC_REQUIRE(Stereon::GeometryTypeName<Line> == std::string_view{"Line"});
     STATIC_REQUIRE(Stereon::GeometryTypeName<Ellipse> == std::string_view{"Ellipse"});
     STATIC_REQUIRE(Stereon::GeometryTypeName<Ellipse2d> == std::string_view{"Ellipse2d"});
