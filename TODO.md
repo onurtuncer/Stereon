@@ -1,5 +1,7 @@
 # Phase 0 — Foundations: TODO
 
+See the [roadmap and versioning plan](docs/planning/roadmap-and-versioning.md) for the M1 foundation milestone, early persistence staging and downstream release gates. This checklist remains the Phase 0 implementation gate.
+
 **Goal:** a building, tested skeleton of Stereon with robust predicates, type-erased geometry scaffolding and the Phase 0 ADRs settled.
 **Duration:** ~12 weeks (8–10 with AI-assisted development).
 **Exit gate:** see the [last section](#exit-gate).

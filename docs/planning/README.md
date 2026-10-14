@@ -5,6 +5,7 @@
 **Publication review:** 2026-10-13  
 **Next review:** after the topology prototype lands, or before the next phase gate.
 
+- [Roadmap, modelling milestones and versioning](roadmap-and-versioning.md)
 - [Capability matrix and repository audit](stereon-capability-matrix.md)
 - [Placement and follow-up checklist](capability-matrix-checklist.md)
 - [Existing benchmark specification](../benchmarks.md)
@@ -20,3 +21,5 @@ An exact OCCT benchmark commit and build configuration have not yet been establi
 
 
 The matrix includes a publication update for main at `25effbdcf26d1f35e3e6ba3314bb54512b43b5bd`, distinguishing the now-passing CI from the original audit snapshot.
+
+The [14 October roadmap integration](roadmap-and-versioning.md) maps Stroud-derived M1–M6 checkpoints to the existing release sequence, adds exit evidence and distinguishes product, native-format and C ABI versions. It does not refresh the historical source audit or accept proposed ADRs.
