@@ -111,7 +111,8 @@ The built-in analytic types are ``Line``, ``Circle`` and ``Ellipse`` (and
 sin t * YAxis)`` on ``[0, 2π]``; a plane is ``Origin + u * XAxis + v *
 YAxis``; a cylinder is the circle swept along its axis. :doc:`analytic`
 gives every parametrisation with its derivatives, singular points and
-projection. Like the core math
+projection. Free-form curves are ``BSplineCurve`` and ``BSplineCurve2d``,
+polynomial or rational (NURBS), described in :doc:`nurbs`. Like the core math
 types they are instances of templates over the ``Scalar`` concept, so
 ``Eval``, ``Deriv``, ``Reversed`` and ``Transformed`` also run on the active
 scalar type of an automatic-differentiation backend (ADR-0021).

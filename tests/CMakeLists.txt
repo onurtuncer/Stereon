@@ -125,13 +125,15 @@ endif()
 # value of every printed type, inspected by scripted GDB and LLDB sessions
 # that must print the same summaries. Only unoptimised builds keep every
 # variable, so the checks run in Debug configurations; macOS is left out until
-# its LLDB has been verified on GCC's debug information. A missing debugger
-# makes the check exit 77, which CTest reports as skipped.
+# its LLDB has been verified on GCC's debug information, and MSVC builds
+# because GDB and LLDB cannot read their PDB debug information (the checks
+# failed there, LLDB after a 300 s timeout). A missing debugger makes the
+# check exit 77, which CTest reports as skipped.
 add_executable(stereon_debugger_target debugger/DebuggerTarget.cpp)
 target_link_libraries(stereon_debugger_target PRIVATE stereon::surface stereon_options)
 stereon_anchor_contracts(stereon_debugger_target)
 find_package(Python3 3.9 COMPONENTS Interpreter)
-if(Python3_Interpreter_FOUND AND CMAKE_BUILD_TYPE STREQUAL "Debug" AND NOT APPLE)
+if(Python3_Interpreter_FOUND AND CMAKE_BUILD_TYPE STREQUAL "Debug" AND NOT APPLE AND NOT MSVC)
     foreach(debugger gdb lldb)
         add_test(NAME "tools: ${debugger} pretty-printers"
             COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/debugger/check_printers.py"
