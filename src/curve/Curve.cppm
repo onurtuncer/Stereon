@@ -20,6 +20,7 @@ export import :Concepts;
 export import :Conversion;
 export import :Ellipse;
 export import :Erased;
+export import :Fitting;
 export import :Hyperbola;
 export import :Line;
 export import :Visit;

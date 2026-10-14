@@ -13,6 +13,7 @@ stereon_add_library(surface
         Conversion.cppm
         Cylinder.cppm
         Erased.cppm
+        Fitting.cppm
         Plane.cppm
         Sphere.cppm
         Surface.cppm
@@ -22,6 +23,7 @@ stereon_add_library(surface
         BSplineSurface.cpp
         Conversion.cpp
         Factories.cpp
+        Fitting.cpp
         Surface.cpp
     DEPENDS
         curve)
