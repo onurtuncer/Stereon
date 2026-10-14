@@ -46,6 +46,16 @@ target_link_libraries(stereon_serialize_tests
 target_include_directories(stereon_serialize_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/support")
 catch_discover_tests(stereon_serialize_tests TEST_PREFIX "serialize: " DISCOVERY_MODE PRE_TEST)
 
+# The data behind the manual's fitting figures (docs/figures/): built and
+# run with the tests so that it keeps compiling and the figures can always be
+# regenerated with docs/figures/make_fitting_figures.py.
+add_executable(stereon_figure_data ${PROJECT_SOURCE_DIR}/docs/figures/FigureData.cpp)
+target_link_libraries(stereon_figure_data PRIVATE stereon::surface stereon_options)
+stereon_anchor_contracts(stereon_figure_data)
+add_test(NAME "docs: the figure data generator runs" COMMAND stereon_figure_data)
+set_tests_properties("docs: the figure data generator runs"
+    PROPERTIES PASS_REGULAR_EXPRESSION "\"surface\":")
+
 # Differential tests against OpenCASCADE (ADR-0015's independent referee).
 # OCCT is LGPL-2.1: it is linked into this test executable only, which is
 # built on request and never distributed, and no Stereon library depends on
