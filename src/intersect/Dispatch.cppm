@@ -10,8 +10,9 @@ module;
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <format>
+#include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 export module Stereon.Intersect:Dispatch;
@@ -78,25 +79,27 @@ using SurfaceHandler = Result<SurfaceSurfaceIntersection> (*)(const Surface&, co
 template <typename A, typename B>
 Result<CurveCurveIntersection> CurveStub(const Curve&, const Curve&, const Context&)
 {
-    // constexpr copies: GCC 16.2 emits no definition for the explicit
-    // specializations of GeometryTypeName when another module odr-uses them.
+    // The names are read at compile time.
     constexpr std::string_view nameA = GeometryTypeName<A>;
     constexpr std::string_view nameB = GeometryTypeName<B>;
-    return Fail(
-        ErrorCode::NotImplemented,
-        std::format("{} x {} intersection is not implemented yet (ADR-0010)", nameA, nameB));
+    std::string message(nameA);
+    message += " x ";
+    message += nameB;
+    message += " intersection is not implemented yet (ADR-0010)";
+    return Fail(ErrorCode::NotImplemented, std::move(message));
 }
 
 template <typename A, typename B>
 Result<SurfaceSurfaceIntersection> SurfaceStub(const Surface&, const Surface&, const Context&)
 {
-    // constexpr copies: GCC 16.2 emits no definition for the explicit
-    // specializations of GeometryTypeName when another module odr-uses them.
+    // The names are read at compile time.
     constexpr std::string_view nameA = GeometryTypeName<A>;
     constexpr std::string_view nameB = GeometryTypeName<B>;
-    return Fail(
-        ErrorCode::NotImplemented,
-        std::format("{} x {} intersection is not implemented yet (ADR-0010)", nameA, nameB));
+    std::string message(nameA);
+    message += " x ";
+    message += nameB;
+    message += " intersection is not implemented yet (ADR-0010)";
+    return Fail(ErrorCode::NotImplemented, std::move(message));
 }
 
 /// One row of the table: type A against each of Ts.

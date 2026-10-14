@@ -12,6 +12,7 @@ stereon_add_library(core
         Context.cppm
         Core.cppm
         Enum.cppm
+        EvaluatorChecks.cppm
         Error.cppm
         Handle.cppm
         Interval.cppm
@@ -19,6 +20,7 @@ stereon_add_library(core
         Log.cppm
         Matrix.cppm
         Scalar.cppm
+        Serialize.cppm
         Simd.cppm
         SmallBuffer.cppm
         Trigonometry.cppm
@@ -26,7 +28,9 @@ stereon_add_library(core
         Version.cppm
     SOURCES
         Arena.cpp
+        EvaluatorChecks.cpp
         Handle.cpp
+        Serialize.cpp
         Trigonometry.cpp
         Log.cpp)
 

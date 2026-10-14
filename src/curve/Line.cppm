@@ -36,6 +36,7 @@ using Line2d = BasicLine<double, 2>;
 template <Scalar T, std::size_t D>
 [[nodiscard]] constexpr BasicPointN<T, D> Eval(const BasicLine<T, D>& line, const T& t)
 {
+    Detail::RequireFinite(t, "Eval(Line)", "a non-finite parameter");
     return line.Origin + t * line.Direction;
 }
 
@@ -43,8 +44,9 @@ template <Scalar T, std::size_t D>
 template <Scalar T, std::size_t D>
 [[nodiscard]] constexpr BasicVecN<T, D> Deriv(const BasicLine<T, D>& line,
                                               [[maybe_unused]] const T& t, const int n)
-    STEREON_HOT_PRE(n >= 1)
 {
+    Detail::RequireFinite(t, "Deriv(Line)", "a non-finite parameter");
+    Detail::Require(n >= 1, "Deriv(Line)", "a derivative order below 1");
     return n == 1 ? line.Direction : BasicVecN<T, D>{};
 }
 
@@ -66,8 +68,9 @@ template <std::size_t D>
 template <std::size_t D>
 [[nodiscard]] constexpr double Project(const BasicLine<double, D>& line,
                                        const BasicPointN<double, D>& p)
-    STEREON_HOT_PRE(LengthSquared(line.Direction) > 0.0)
 {
+    Detail::RequireFinite(p, "Project(Line)", "a non-finite point");
+    Detail::Require(LengthSquared(line.Direction) > 0.0, "Project(Line)", "a zero direction");
     return Dot(p - line.Origin, line.Direction) / LengthSquared(line.Direction);
 }
 

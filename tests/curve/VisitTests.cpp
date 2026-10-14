@@ -150,3 +150,16 @@ TEST_CASE("the fast path and the erased path give identical results", "[curve][v
         }
     });
 }
+
+TEST_CASE("periodic geometry reports its period through the wrappers", "[curve][periods]")
+{
+    STATIC_REQUIRE(Stereon::PeriodicCurve<Circle>);
+    STATIC_REQUIRE(Stereon::PeriodicCurve<Curve>);
+    STATIC_REQUIRE_FALSE(Stereon::PeriodicCurve<Line>);
+    REQUIRE(Period(Curve(SomeCircle(1.0))) == CirclePeriod);
+    REQUIRE(Period(Curve(Line{Point3{}, Vec3{1.0, 0.0, 0.0}})) == 0.0);
+    // A periodic curve accepts every finite parameter, also through Curve.
+    const Curve circle(SomeCircle(2.0));
+    REQUIRE(Eval(circle, 3.0 * CirclePeriod).X == Eval(circle, 3.0 * CirclePeriod).X);
+    REQUIRE(Stereon::Detail::EvaluatorChecks == static_cast<bool>(STEREON_HOT_CONTRACTS));
+}

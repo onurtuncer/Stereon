@@ -53,6 +53,7 @@ Stereon
    python
    api
    testing
+   debugging
    references
 
 Planning
