@@ -64,6 +64,8 @@ struct Dual {
     }
     friend Dual sin(const Dual& a) { return {std::sin(a.Value), std::cos(a.Value) * a.Deriv}; }
     friend Dual cos(const Dual& a) { return {std::cos(a.Value), -std::sin(a.Value) * a.Deriv}; }
+    friend Dual sinh(const Dual& a) { return {std::sinh(a.Value), std::cosh(a.Value) * a.Deriv}; }
+    friend Dual cosh(const Dual& a) { return {std::cosh(a.Value), std::sinh(a.Value) * a.Deriv}; }
 };
 
 /// The parameter being differentiated with respect to: value p, derivative 1.

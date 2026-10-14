@@ -84,6 +84,18 @@ export namespace Stereon::Detail {
 [[nodiscard]] Result<void> CheckKnotVector(int degree, std::span<const double> knots,
                                            std::size_t poleCount, std::string_view where);
 
+/// The real roots in `range` of the polynomial sum_k coefficients[k] t^k,
+/// in increasing order. The polynomial is converted to the Bernstein basis
+/// on the range and its roots are isolated by de Casteljau subdivision with
+/// Descartes' rule of signs, then refined by bisection, as in
+/// Project(BSplineCurve): simple roots are all found, to adjacent doubles. A
+/// root of even multiplicity, where the polynomial touches zero without
+/// changing sign, may be reported as a nearby parameter or missed; callers
+/// that minimise a distance evaluate every candidate anyway. The range must
+/// be finite and non-empty.
+[[nodiscard]] std::vector<double> PolynomialRoots(std::span<const double> coefficients,
+                                                  Interval range);
+
 /// InvalidInput unless there are no weights (a polynomial B-spline) or one
 /// finite, positive weight per pole. Positive weights keep a rational
 /// B-spline inside the convex hull of its poles and free of poles of its

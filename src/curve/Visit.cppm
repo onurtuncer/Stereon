@@ -22,6 +22,7 @@ import :Circle;
 import :Concepts;
 import :Ellipse;
 import :Erased;
+import :Hyperbola;
 import :Line;
 
 /// The fast path of ADR-0003 for curves. Hot loops call
@@ -33,8 +34,9 @@ import :Line;
 export namespace Stereon {
 
 /// The built-in curve types, in the order the intersection tables use.
-using BuiltinCurveTypes = TypeList<Line, Circle, Ellipse, BSplineCurve>;
-using BuiltinCurve2dTypes = TypeList<Line2d, Circle2d, Ellipse2d, BSplineCurve2d>;
+using BuiltinCurveTypes = TypeList<Line, Circle, Ellipse, BSplineCurve, Hyperbola, Parabola>;
+using BuiltinCurve2dTypes =
+    TypeList<Line2d, Circle2d, Ellipse2d, BSplineCurve2d, Hyperbola2d, Parabola2d>;
 
 template <std::size_t D>
 using BuiltinCurveTypesN = std::conditional_t<D == 2, BuiltinCurve2dTypes, BuiltinCurveTypes>;
@@ -83,6 +85,22 @@ template <typename T>
 [[nodiscard]] constexpr std::string_view GeometryNameOf(const BSplineCurve2d*) noexcept
 {
     return "BSplineCurve2d";
+}
+[[nodiscard]] constexpr std::string_view GeometryNameOf(const Hyperbola*) noexcept
+{
+    return "Hyperbola";
+}
+[[nodiscard]] constexpr std::string_view GeometryNameOf(const Parabola*) noexcept
+{
+    return "Parabola";
+}
+[[nodiscard]] constexpr std::string_view GeometryNameOf(const Hyperbola2d*) noexcept
+{
+    return "Hyperbola2d";
+}
+[[nodiscard]] constexpr std::string_view GeometryNameOf(const Parabola2d*) noexcept
+{
+    return "Parabola2d";
 }
 
 template <typename T>
