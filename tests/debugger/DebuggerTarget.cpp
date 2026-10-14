@@ -12,6 +12,10 @@
 // so the expected output is too.
 
 #include <memory>
+// GenerationTable keeps a std::vector<bool>. MSVC emits the helper behind its
+// push_back (std::_Fill_vbool) only in a unit that includes <vector> itself;
+// through the import alone the link fails.
+#include <vector>
 
 import Stereon.Surface;
 
