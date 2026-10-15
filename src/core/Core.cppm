@@ -11,6 +11,7 @@
 /// header, <Stereon/Core/Exec.hpp>, because of compiler bugs (see there).
 export module Stereon.Core;
 
+export import :Allowances;
 export import :Arena;
 export import :Box;
 export import :Context;

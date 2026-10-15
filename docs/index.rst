@@ -41,6 +41,7 @@ Stereon
    geometry
    analytic
    nurbs
+   fitting
    topology
    intersection
    modeling
