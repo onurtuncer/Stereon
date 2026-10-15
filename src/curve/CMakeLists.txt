@@ -18,6 +18,7 @@ stereon_add_library(curve
         Fitting.cppm
         Hyperbola.cppm
         Line.cppm
+        Properties.cppm
         Visit.cppm
     SOURCES
         BSplineBasis.cpp
@@ -26,5 +27,6 @@ stereon_add_library(curve
         Conversion.cpp
         Factories.cpp
         Fitting.cpp
+        Properties.cpp
     DEPENDS
         robust)

@@ -15,6 +15,7 @@ stereon_add_library(surface
         Erased.cppm
         Fitting.cppm
         Plane.cppm
+        Properties.cppm
         Sphere.cppm
         Surface.cppm
         Torus.cppm

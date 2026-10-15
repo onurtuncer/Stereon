@@ -23,4 +23,5 @@ export import :Erased;
 export import :Fitting;
 export import :Hyperbola;
 export import :Line;
+export import :Properties;
 export import :Visit;
