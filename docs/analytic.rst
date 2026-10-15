@@ -9,8 +9,8 @@ Analytic curves and surfaces
 ============================
 
 The analytic types are the curves and surfaces with a closed-form
-parametrisation: the line, circle and ellipse; the plane, cylinder, cone,
-sphere and torus. They are most of what a mechanical part is made of, they
+parametrisation: the line, circle, ellipse, hyperbola and parabola; the
+plane, cylinder, cone, sphere and torus. They are most of what a mechanical part is made of, they
 are what STEP files name explicitly, and their closed forms make evaluation,
 derivatives and projection exact up to rounding rather than up to the
 tolerance of an iteration. This chapter states each parametrisation, derives
@@ -151,6 +151,82 @@ The parameter is recovered from the closest point as the polar angle of
 ``WrappedAngle``. A tiny negative angle plus :math:`2\pi` rounds to
 :math:`2\pi` itself, the same direction as 0 but outside the half-open
 period, and is mapped to 0.
+
+The hyperbola
+~~~~~~~~~~~~~
+
+A ``Hyperbola`` with centre :math:`\mathbf{c}`, radii :math:`a, b > 0` (in
+either order) and frame :math:`(\mathbf{x}, \mathbf{y})` is the branch
+
+.. math::
+
+   C(t) = \mathbf{c} + a\cosh t\, \mathbf{x} + b\sinh t\, \mathbf{y},
+   \qquad t \in \R,
+
+of :math:`(x/a)^2 - (y/b)^2 = 1` on the side of :math:`+\mathbf{x}`, with
+asymptotes along :math:`a\mathbf{x} \pm b\mathbf{y}`. Differentiation swaps
+:math:`\cosh` and :math:`\sinh`, so even orders are
+:math:`a\cosh t\,\mathbf{x} + b\sinh t\,\mathbf{y}` and odd orders
+:math:`a\sinh t\,\mathbf{x} + b\cosh t\,\mathbf{y}`. The domain and the
+bounding box are everything.
+
+**Projection.** With :math:`(x, y)` the in-plane coordinates of
+:math:`\mathbf p`, the derivative of the squared distance vanishes where
+
+.. math::
+
+   (a^2 + b^2) \sinh t \cosh t = a x \sinh t + b y \cosh t.
+
+Substituting :math:`s = e^t`, :math:`\cosh t = (s + s^{-1})/2`,
+:math:`\sinh t = (s - s^{-1})/2`, and multiplying by :math:`4 s^2` turns it
+into a quartic,
+
+.. math::
+
+   (a^2 + b^2)\, s^4 - 2 (a x + b y)\, s^3 + 2 (a x - b y)\, s - (a^2 + b^2) = 0,
+
+whose positive roots are the stationary parameters. The closest point is no
+farther from :math:`\mathbf p` than the vertex, at distance :math:`d_0`, so
+its :math:`y` coordinate :math:`b\sinh t` lies within :math:`d_0` of
+:math:`y`, and :math:`\abs{t} \le \operatorname{asinh}((\abs{y} + d_0)/b)`.
+``Detail::PolynomialRoots`` converts the quartic to the Bernstein basis on
+that range of :math:`s` and isolates its roots with the subdivision method
+of :doc:`nurbs`; the nearest root wins. A point on the axis beyond the
+centre of curvature of the vertex, :math:`x = a + b^2/a`, has two mirror
+closest points.
+
+The parabola
+~~~~~~~~~~~~
+
+A ``Parabola`` with vertex :math:`\mathbf{o}`, focal length :math:`f > 0`
+and frame :math:`(\mathbf{x}, \mathbf{y})` is
+
+.. math::
+
+   C(t) = \mathbf{o} + \frac{t^2}{4f}\, \mathbf{x} + t\, \mathbf{y},
+   \qquad t \in \R,
+
+the parabola :math:`y^2 = 4 f x` with its focus at
+:math:`\mathbf o + f\mathbf x`; :math:`t` is the coordinate along
+:math:`\mathbf{y}`. Its derivatives are :math:`t/(2f)\,\mathbf x + \mathbf y`,
+then :math:`\mathbf x / (2f)`, then zero.
+
+**Projection.** The stationarity condition is the cubic
+
+.. math::
+
+   \frac{t^3}{8 f^2} + t \left(1 - \frac{x}{2f}\right) - y = 0,
+
+and since the closest point is no farther than the vertex and its :math:`y`
+coordinate is :math:`t` itself, its roots are searched on
+:math:`[y - d_0, y + d_0]`. On the axis, the vertex is closest up to the
+centre of curvature :math:`x = 2f`; beyond it two mirror points are.
+
+Both conics follow STEP's ``hyperbola`` and ``parabola`` and OCCT's
+``Geom_Hyperbola`` and ``Geom_Parabola``, with which the differential tests
+compare their values, three derivatives and projections. ``Transformed``
+takes similarities; for the parabola the parameter scales with the
+similarity, because it is a length along :math:`\mathbf y`.
 
 Surfaces
 --------
@@ -382,7 +458,7 @@ generated parameters and points (RapidCheck):
   that ``Transformed`` commutes with ``Eval`` for similarities and
   reflections, and that the bounding box contains every evaluated point;
 - that the factories accept valid data and reject each kind of invalid
-  data;
+  data, ``MakeHyperbola`` and ``MakeParabola`` included;
 - that the fast path and the erased wrapper agree to the bit.
 
 The OCCT differential tests compare the value and every first and second

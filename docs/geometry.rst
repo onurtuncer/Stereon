@@ -104,14 +104,17 @@ and three concepts name the set a type must provide:
 These are tier 1 of ADR-0003. The bounding operations of tier 2 and the
 intersection capability of tier 3 arrive with the intersection work.
 
-The built-in analytic types are ``Line``, ``Circle`` and ``Ellipse`` (and
-``Line2d``, ``Circle2d`` and ``Ellipse2d`` in the plane), and ``Plane``,
+The built-in analytic types are ``Line``, ``Circle``, ``Ellipse``,
+``Hyperbola`` and ``Parabola`` (and their ``2d`` forms in the plane), and
+``Plane``,
 ``Cylinder``, ``Cone``, ``Sphere`` and ``Torus``. A line is
 ``Origin + t * Direction``; a circle is ``Center + Radius * (cos t * XAxis +
 sin t * YAxis)`` on ``[0, 2π]``; a plane is ``Origin + u * XAxis + v *
 YAxis``; a cylinder is the circle swept along its axis. :doc:`analytic`
 gives every parametrisation with its derivatives, singular points and
-projection. Like the core math
+projection. Free-form geometry is ``BSplineCurve``, ``BSplineCurve2d`` and
+``BSplineSurface``, polynomial or rational (NURBS), described in
+:doc:`nurbs`. Like the core math
 types they are instances of templates over the ``Scalar`` concept, so
 ``Eval``, ``Deriv``, ``Reversed`` and ``Transformed`` also run on the active
 scalar type of an automatic-differentiation backend (ADR-0021).

@@ -17,11 +17,10 @@
 // - Erased: Eval(curve, t), one virtual call per evaluation. ADR-0003 asks
 //   for this within 2x of direct.
 //
-// The cubic B-spline of the ADR's verification and the OCCT side
-// (Geom_Curve::D0 through occ::handle) join when the B-spline type and the
-// OCCT build exist. The copy benchmarks measure the wrapper at buffer sizes
-// 64, 96 and 128 bytes against the built-in types' sizes, which is how
-// ADR-0003 fixes GeometryBufferSize.
+// The cubic B-spline of the ADR's verification is included; the OCCT side
+// (Geom_Curve::D0 through occ::handle) joins with the OCCT benchmark harness. The copy benchmarks
+// measure the wrapper at buffer sizes 64, 96 and 128 bytes against the built-in types' sizes, which
+// is how ADR-0003 fixes GeometryBufferSize.
 
 #include <benchmark/benchmark.h>
 
@@ -69,6 +68,19 @@ Circle SomeCircle()
 Ellipse SomeEllipse()
 {
     return {Point3{1.0, 2.0, 3.0}, 2.5, 1.5, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+}
+
+/// The cubic B-spline of ADR-0003's dispatch benchmark: eight poles over
+/// [0, 2 pi], the range Parameters() covers.
+Stereon::BSplineCurve SomeBSpline()
+{
+    constexpr double end = 2.0 * std::numbers::pi;
+    return {3,
+            {0.0, 0.0, 0.0, 0.0, 0.2 * end, 0.4 * end, 0.6 * end, 0.8 * end, end, end, end, end},
+            {Point3{0.0, 0.0, 0.0}, Point3{1.0, 2.0, 0.0}, Point3{2.0, -1.0, 1.0},
+             Point3{3.0, 1.0, 2.0}, Point3{4.0, 0.0, 0.0}, Point3{5.0, 2.0, 1.0},
+             Point3{6.0, -1.0, 0.0}, Point3{7.0, 0.0, 1.0}},
+            {}};
 }
 
 Cylinder SomeCylinder()
@@ -195,6 +207,10 @@ BENCHMARK_CAPTURE(Direct, Circle, SomeCircle());
 BENCHMARK_CAPTURE(Visit, Circle, Curve(SomeCircle()));
 BENCHMARK_CAPTURE(VisitPerCall, Circle, Curve(SomeCircle()));
 BENCHMARK_CAPTURE(Erased, Circle, Curve(SomeCircle()));
+BENCHMARK_CAPTURE(Direct, BSpline, SomeBSpline());
+BENCHMARK_CAPTURE(Visit, BSpline, Curve(SomeBSpline()));
+BENCHMARK_CAPTURE(VisitPerCall, BSpline, Curve(SomeBSpline()));
+BENCHMARK_CAPTURE(Erased, BSpline, Curve(SomeBSpline()));
 BENCHMARK_CAPTURE(Direct, Ellipse, SomeEllipse());
 BENCHMARK_CAPTURE(Visit, Ellipse, Curve(SomeEllipse()));
 BENCHMARK_CAPTURE(Erased, Ellipse, Curve(SomeEllipse()));

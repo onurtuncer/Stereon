@@ -67,7 +67,7 @@ UserLine Transformed(const UserLine& c, const Transform& x)
 }
 
 /// Which path a visitor was given.
-enum class Path { Line, Circle, Ellipse, Erased };
+enum class Path { Line, Circle, Ellipse, BSpline, OtherBuiltin, Erased };
 
 Path PathOf(const Curve& curve)
 {
@@ -78,6 +78,11 @@ Path PathOf(const Curve& curve)
             return Path::Circle;
         } else if constexpr (std::is_same_v<G, Ellipse>) {
             return Path::Ellipse;
+        } else if constexpr (std::is_same_v<G, Stereon::BSplineCurve>) {
+            return Path::BSpline;
+        } else if constexpr (std::is_same_v<G, Stereon::Hyperbola> ||
+                             std::is_same_v<G, Stereon::Parabola>) {
+            return Path::OtherBuiltin;
         } else {
             static_assert(std::is_same_v<G, Curve>);
             return Path::Erased;
@@ -99,6 +104,16 @@ Ellipse SomeEllipse(const double minorRadius)
             Transformed(Vec3{1.0, 0.0, 0.0}, tilt), Transformed(Vec3{0.0, 1.0, 0.0}, tilt)};
 }
 
+/// A cubic B-spline over [-7, 7], wide enough for the parameters below.
+Stereon::BSplineCurve SomeBSpline()
+{
+    return {3,
+            {-7.0, -7.0, -7.0, -7.0, 0.5, 7.0, 7.0, 7.0, 7.0},
+            {Point3{0.0, 0.0, 0.0}, Point3{1.0, 2.0, 0.0}, Point3{2.0, -1.0, 1.0},
+             Point3{3.0, 1.0, 2.0}, Point3{4.0, 0.0, 0.0}},
+            {1.0, 2.0, 0.5, 1.0, 1.5}};
+}
+
 } // namespace
 
 TEST_CASE("VisitBuiltin hands built-in curves to the visitor as themselves", "[curve][visit]")
@@ -112,13 +127,17 @@ TEST_CASE("VisitBuiltin hands built-in curves to the visitor as themselves", "[c
     REQUIRE(PathOf(lineCurve) == Path::Line);
     REQUIRE(PathOf(circleCurve) == Path::Circle);
     REQUIRE(PathOf(ellipseCurve) == Path::Ellipse);
+    REQUIRE(PathOf(Curve(SomeBSpline())) == Path::BSpline);
+    REQUIRE(PathOf(Curve(Stereon::Parabola{Point3{}, 1.0, Vec3{1.0, 0.0, 0.0},
+                                           Vec3{0.0, 1.0, 0.0}})) == Path::OtherBuiltin);
+    REQUIRE(BuiltinIndexOf(Curve(SomeBSpline())) == 3);
     REQUIRE(PathOf(userCurve) == Path::Erased);
 
     REQUIRE(BuiltinIndexOf(lineCurve) == 0);
     REQUIRE(BuiltinIndexOf(circleCurve) == 1);
     REQUIRE(BuiltinIndexOf(ellipseCurve) == 2);
     REQUIRE(BuiltinIndexOf(userCurve) == Stereon::BuiltinCurveTypes::Size);
-    STATIC_REQUIRE(Stereon::BuiltinCurveTypes::Size == 3);
+    STATIC_REQUIRE(Stereon::BuiltinCurveTypes::Size == 6);
     STATIC_REQUIRE(Stereon::GeometryTypeName<Line> == std::string_view{"Line"});
     STATIC_REQUIRE(Stereon::GeometryTypeName<Ellipse> == std::string_view{"Ellipse"});
     STATIC_REQUIRE(Stereon::GeometryTypeName<Ellipse2d> == std::string_view{"Ellipse2d"});
@@ -155,9 +174,10 @@ TEST_CASE("the fast path and the erased path give identical results", "[curve][v
         const int n = *rc::gen::inRange(1, 5);
         const Point3 p{*rc::gen::inRange(-50, 50) / 10.0, *rc::gen::inRange(-50, 50) / 10.0,
                        *rc::gen::inRange(-50, 50) / 10.0};
-        for (const Curve& curve : {Curve(Line{Point3{1.0, 2.0, 3.0}, Vec3{0.5, -1.0, 2.0}}),
-                                   Curve(SomeCircle(*rc::gen::inRange(1, 40) / 8.0)),
-                                   Curve(SomeEllipse(*rc::gen::inRange(1, 40) / 8.0))}) {
+        for (const Curve& curve :
+             {Curve(Line{Point3{1.0, 2.0, 3.0}, Vec3{0.5, -1.0, 2.0}}),
+              Curve(SomeCircle(*rc::gen::inRange(1, 40) / 8.0)),
+              Curve(SomeEllipse(*rc::gen::inRange(1, 40) / 8.0)), Curve(SomeBSpline())}) {
             RC_ASSERT(VisitBuiltin(curve, [&](const auto& g) { return Eval(g, t); }) ==
                       Eval(curve, t));
             RC_ASSERT(VisitBuiltin(curve, [&](const auto& g) { return Deriv(g, t, n); }) ==

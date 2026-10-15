@@ -7,14 +7,19 @@
 
 /// Stereon.Curve: curves in space and in a surface's parameter plane
 /// (ADR-0003): the CurveGeometry and Curve2dGeometry concepts, the built-in
-/// Line, Circle and Ellipse, and the type-erased Curve and Curve2d.
+/// Line, Circle, Ellipse, Hyperbola and Parabola, B-spline and NURBS curves,
+/// and the type-erased Curve and Curve2d.
 export module Stereon.Curve;
 
 export import Stereon.Robust;
 
+export import :BSplineBasis;
+export import :BSplineCurve;
 export import :Circle;
 export import :Concepts;
+export import :Conversion;
 export import :Ellipse;
 export import :Erased;
+export import :Hyperbola;
 export import :Line;
 export import :Visit;

@@ -7,6 +7,11 @@
 
 module;
 
+// The contract anchor (docs/toolchain/gcc16-feature-probe.md): every module
+// implementation unit of a geometry library includes it, because one that
+// calls core's inline functions with contracts and parses none itself
+// leaves __tu_has_violation undefined, which the macOS linker rejects.
+#include <Stereon/Core/Contracts.hpp>
 #include <Stereon/Core/Try.hpp>
 
 #include <cstddef>

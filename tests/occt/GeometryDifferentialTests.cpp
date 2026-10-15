@@ -21,14 +21,20 @@
 
 #include <GeomAPI_ProjectPointOnCurve.hxx>
 #include <GeomAPI_ProjectPointOnSurf.hxx>
+#include <Geom_BSplineCurve.hxx>
+#include <Geom_BSplineSurface.hxx>
 #include <Geom_Circle.hxx>
 #include <Geom_ConicalSurface.hxx>
 #include <Geom_CylindricalSurface.hxx>
 #include <Geom_Ellipse.hxx>
+#include <Geom_Hyperbola.hxx>
 #include <Geom_Line.hxx>
+#include <Geom_Parabola.hxx>
 #include <Geom_Plane.hxx>
 #include <Geom_SphericalSurface.hxx>
 #include <Geom_ToroidalSurface.hxx>
+#include <NCollection_Array1.hxx>
+#include <NCollection_Array2.hxx>
 #include <gp_Ax2.hxx>
 #include <gp_Ax3.hxx>
 #include <gp_Dir.hxx>
@@ -39,14 +45,19 @@
 
 #include <cmath>
 #include <numbers>
+#include <vector>
 
 import Stereon.Surface;
 
+using Stereon::BSplineCurve;
+using Stereon::BSplineSurface;
 using Stereon::Circle;
 using Stereon::Cone;
 using Stereon::Cylinder;
 using Stereon::Ellipse;
+using Stereon::Hyperbola;
 using Stereon::Line;
+using Stereon::Parabola;
 using Stereon::Plane;
 using Stereon::Point2;
 using Stereon::Point3;
@@ -238,6 +249,271 @@ TEST_CASE("ellipses agree with Geom_Ellipse", "[occt][curve]")
             }
         }
     }
+}
+
+/// Stereon's B-spline as OCCT's: distinct knots with multiplicities, and
+/// 1-based arrays.
+occ::handle<Geom_BSplineCurve> ToOcct(const BSplineCurve& c)
+{
+    std::vector<double> values;
+    std::vector<int> counts;
+    for (const double u : c.Knots) {
+        if (values.empty() || values.back() != u) {
+            values.push_back(u);
+            counts.push_back(0);
+        }
+        ++counts.back();
+    }
+    const int poleCount = static_cast<int>(c.Poles.size());
+    const int knotCount = static_cast<int>(values.size());
+    NCollection_Array1<gp_Pnt> poles(1, poleCount);
+    NCollection_Array1<double> weights(1, poleCount);
+    for (int i = 0; i < poleCount; ++i) {
+        const auto index = static_cast<std::size_t>(i);
+        poles(i + 1) = ToOcct(c.Poles[index]);
+        weights(i + 1) = c.Weights.empty() ? 1.0 : c.Weights[index];
+    }
+    NCollection_Array1<double> knots(1, knotCount);
+    NCollection_Array1<int> multiplicities(1, knotCount);
+    for (int i = 0; i < knotCount; ++i) {
+        const auto index = static_cast<std::size_t>(i);
+        knots(i + 1) = values[index];
+        multiplicities(i + 1) = counts[index];
+    }
+    return new Geom_BSplineCurve(poles, weights, knots, multiplicities, c.Degree);
+}
+
+/// Clamped and unclamped, polynomial and rational, low and high degree,
+/// with a double interior knot: the cases the algorithms branch on.
+std::vector<BSplineCurve> SomeBSplineCurves()
+{
+    const std::vector<Point3> poles{Point3{0.0, 0.0, 0.0},  Point3{1.0, 2.0, -1.0},
+                                    Point3{2.5, -1.0, 0.5}, Point3{3.0, 1.5, 2.0},
+                                    Point3{4.5, 0.0, 1.0},  Point3{5.0, 2.0, -0.5},
+                                    Point3{6.0, -1.5, 0.0}};
+    const std::vector<double> weights{1.0, 2.0, 0.5, 1.5, 3.0, 0.75, 1.0};
+    return {
+        {3, {0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0}, poles, {}},
+        {3, {0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0}, poles, weights},
+        {2, {-1.0, -0.5, 0.0, 0.75, 1.0, 2.0, 2.5, 3.0, 4.0, 5.0}, poles, weights},
+        {5, {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0}, poles, weights},
+    };
+}
+
+TEST_CASE("B-spline curves agree with Geom_BSplineCurve", "[occt][curve][bspline]")
+{
+    for (const BSplineCurve& curve : SomeBSplineCurves()) {
+        const occ::handle<Geom_BSplineCurve> occt = ToOcct(curve);
+        const Stereon::Interval domain = Domain(curve);
+        REQUIRE(occt->FirstParameter() == domain.GetLower());
+        REQUIRE(occt->LastParameter() == domain.GetUpper());
+        for (int i = 0; i < SampleCount; ++i) {
+            const double t =
+                domain.GetLower() + i * (domain.GetUpper() - domain.GetLower()) / (SampleCount - 1);
+            gp_Pnt p;
+            gp_Vec d1;
+            gp_Vec d2;
+            gp_Vec d3;
+            occt->D3(t, p, d1, d2, d3);
+            REQUIRE(Agree(Eval(curve, t), p));
+            // Derivatives grow with the knot spacing; compare relative to
+            // their size, a few ulps of the largest term.
+            REQUIRE(Agree(Deriv(curve, t, 1) / (1.0 + Length(Deriv(curve, t, 1))),
+                          d1 / (1.0 + d1.Magnitude())));
+            REQUIRE(Agree(Deriv(curve, t, 2) / (1.0 + Length(Deriv(curve, t, 2))),
+                          d2 / (1.0 + d2.Magnitude())));
+            REQUIRE(Agree(Deriv(curve, t, 3) / (1.0 + Length(Deriv(curve, t, 3))),
+                          d3 / (1.0 + d3.Magnitude())));
+        }
+    }
+}
+
+TEST_CASE("B-spline projections agree with GeomAPI_ProjectPointOnCurve", "[occt][curve][bspline]")
+{
+    const Frame f{Point3{3.0, 0.0, 0.5}, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0},
+                  Vec3{0.0, 0.0, 1.0}};
+    for (const BSplineCurve& curve : SomeBSplineCurves()) {
+        const occ::handle<Geom_BSplineCurve> occt = ToOcct(curve);
+        for (int i = 0; i < ProbeCount; ++i) {
+            for (int j = 0; j < ProbeCount; ++j) {
+                for (int k = 0; k < ProbeCount; ++k) {
+                    const Point3 p = Probe(f, i, j, k);
+                    GeomAPI_ProjectPointOnCurve extrema(ToOcct(p), occt);
+                    const double ours = Distance(Eval(curve, Project(curve, p)), p);
+                    // OCCT reports interior extrema only; the ends count too.
+                    double reference = std::min(Distance(Eval(curve, Domain(curve).GetLower()), p),
+                                                Distance(Eval(curve, Domain(curve).GetUpper()), p));
+                    if (extrema.NbPoints() > 0) {
+                        reference = std::min(reference, extrema.LowerDistance());
+                    }
+                    REQUIRE(ours <= reference + 1e-9 * (1.0 + reference));
+                    REQUIRE(SameDistance(ours, reference));
+                }
+            }
+        }
+    }
+}
+
+/// Distinct values and their multiplicities, 1-based, as OCCT stores knots.
+struct OcctKnots {
+    NCollection_Array1<double> Values;
+    NCollection_Array1<int> Multiplicities;
+};
+
+OcctKnots ToOcctKnots(const std::vector<double>& knots)
+{
+    std::vector<double> values;
+    std::vector<int> counts;
+    for (const double u : knots) {
+        if (values.empty() || values.back() != u) {
+            values.push_back(u);
+            counts.push_back(0);
+        }
+        ++counts.back();
+    }
+    const int n = static_cast<int>(values.size());
+    OcctKnots result{NCollection_Array1<double>(1, n), NCollection_Array1<int>(1, n)};
+    for (int i = 0; i < n; ++i) {
+        result.Values(i + 1) = values[static_cast<std::size_t>(i)];
+        result.Multiplicities(i + 1) = counts[static_cast<std::size_t>(i)];
+    }
+    return result;
+}
+
+occ::handle<Geom_BSplineSurface> ToOcct(const BSplineSurface& s)
+{
+    const auto countU = static_cast<int>(Stereon::PoleCountU(s));
+    const auto countV = static_cast<int>(Stereon::PoleCountV(s));
+    NCollection_Array2<gp_Pnt> poles(1, countU, 1, countV);
+    NCollection_Array2<double> weights(1, countU, 1, countV);
+    for (int i = 0; i < countU; ++i) {
+        for (int j = 0; j < countV; ++j) {
+            const auto k = static_cast<std::size_t>(i * countV + j);
+            poles(i + 1, j + 1) = ToOcct(s.Poles[k]);
+            weights(i + 1, j + 1) = s.Weights.empty() ? 1.0 : s.Weights[k];
+        }
+    }
+    const OcctKnots u = ToOcctKnots(s.KnotsU);
+    const OcctKnots v = ToOcctKnots(s.KnotsV);
+    return new Geom_BSplineSurface(poles, weights, u.Values, v.Values, u.Multiplicities,
+                                   v.Multiplicities, s.DegreeU, s.DegreeV);
+}
+
+/// Polynomial and rational, clamped and unclamped, with a double knot.
+std::vector<BSplineSurface> SomeBSplineSurfaces()
+{
+    std::vector<Point3> poles;
+    std::vector<double> weights;
+    for (int i = 0; i < 5; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            poles.push_back({1.5 * i, 1.25 * j, 0.5 * ((i * 7 + j * 3) % 5) - 1.0});
+            weights.push_back(1.0 + 0.25 * ((i + 2 * j) % 4));
+        }
+    }
+    const std::vector<double> clampedU{0.0, 0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0, 1.0};
+    const std::vector<double> clampedV{0.0, 0.0, 0.0, 0.4, 1.0, 1.0, 1.0};
+    const std::vector<double> openU{-1.0, -0.5, 0.0, 0.25, 0.25, 1.0, 1.5, 2.0};
+    return {
+        {3, 2, clampedU, clampedV, poles, {}},
+        {3, 2, clampedU, clampedV, poles, weights},
+        {2, 2, openU, clampedV, poles, weights},
+    };
+}
+
+TEST_CASE("B-spline surfaces agree with Geom_BSplineSurface", "[occt][surface][bspline]")
+{
+    for (const BSplineSurface& surface : SomeBSplineSurfaces()) {
+        const occ::handle<Geom_BSplineSurface> occt = ToOcct(surface);
+        const Stereon::Box2 d = Domain(surface);
+        double u0 = 0.0;
+        double u1 = 0.0;
+        double v0 = 0.0;
+        double v1 = 0.0;
+        occt->Bounds(u0, u1, v0, v1);
+        REQUIRE(u0 == d.X.GetLower());
+        REQUIRE(u1 == d.X.GetUpper());
+        REQUIRE(v0 == d.Y.GetLower());
+        REQUIRE(v1 == d.Y.GetUpper());
+        for (int i = 0; i < 11; ++i) {
+            for (int j = 0; j < 11; ++j) {
+                const Point2 uv{u0 + i * (u1 - u0) / 10.0, v0 + j * (v1 - v0) / 10.0};
+                CheckSecondOrder(surface, *occt, uv);
+            }
+        }
+    }
+}
+
+TEST_CASE("B-spline surface projections are as close as GeomAPI_ProjectPointOnSurf's",
+          "[occt][surface][bspline]")
+{
+    const Frame f{Point3{3.0, 2.0, 0.0}, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0},
+                  Vec3{0.0, 0.0, 1.0}};
+    for (const BSplineSurface& surface : SomeBSplineSurfaces()) {
+        const occ::handle<Geom_BSplineSurface> occt = ToOcct(surface);
+        for (int i = 0; i < ProbeCount; ++i) {
+            for (int j = 0; j < ProbeCount; ++j) {
+                for (int k = 0; k < ProbeCount; ++k) {
+                    const Point3 p = Probe(f, i, j, k);
+                    const double ours = Distance(Eval(surface, Project(surface, p)), p);
+                    // OCCT's extrema are interior stationary points and can
+                    // miss a closest point on the boundary, so ours must be
+                    // at least as close, not equal.
+                    GeomAPI_ProjectPointOnSurf extrema(ToOcct(p), occt);
+                    if (extrema.NbPoints() > 0) {
+                        REQUIRE(ours <= extrema.LowerDistance() + 1e-9 * (1.0 + ours));
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Values, D1 to D3, and projections of the probe lattice by distance.
+template <typename C>
+void CheckOpenConic(const C& curve, const occ::handle<Geom_Curve>& occt, const Frame& f,
+                    const double range)
+{
+    for (int i = 0; i < SampleCount; ++i) {
+        const double t = -range + i * (2.0 * range / (SampleCount - 1));
+        gp_Pnt p;
+        gp_Vec d1;
+        gp_Vec d2;
+        gp_Vec d3;
+        occt->D3(t, p, d1, d2, d3);
+        REQUIRE(Agree(Eval(curve, t), p));
+        REQUIRE(Agree(Deriv(curve, t, 1), d1));
+        REQUIRE(Agree(Deriv(curve, t, 2), d2));
+        REQUIRE(Agree(Deriv(curve, t, 3), d3));
+    }
+    for (int i = 0; i < ProbeCount; ++i) {
+        for (int j = 0; j < ProbeCount; ++j) {
+            for (int k = 0; k < ProbeCount; ++k) {
+                const Point3 p = Probe(f, i, j, k);
+                GeomAPI_ProjectPointOnCurve extrema(ToOcct(p), occt);
+                REQUIRE(extrema.NbPoints() > 0);
+                const double ours = Distance(Eval(curve, Project(curve, p)), p);
+                REQUIRE(SameDistance(ours, extrema.LowerDistance()));
+            }
+        }
+    }
+}
+
+TEST_CASE("hyperbolas agree with Geom_Hyperbola", "[occt][curve]")
+{
+    const Frame f = TiltedFrame();
+    const Hyperbola hyperbola{f.Origin, 2.5, 1.5, f.X, f.Y};
+    const occ::handle<Geom_Hyperbola> occt =
+        new Geom_Hyperbola(gp_Ax2(ToOcct(f.Origin), ToOcctDir(f.Z), ToOcctDir(f.X)), 2.5, 1.5);
+    CheckOpenConic(hyperbola, occt, f, 3.0);
+}
+
+TEST_CASE("parabolas agree with Geom_Parabola", "[occt][curve]")
+{
+    const Frame f = TiltedFrame();
+    const Parabola parabola{f.Origin, 0.75, f.X, f.Y};
+    const occ::handle<Geom_Parabola> occt =
+        new Geom_Parabola(gp_Ax2(ToOcct(f.Origin), ToOcctDir(f.Z), ToOcctDir(f.X)), 0.75);
+    CheckOpenConic(parabola, occt, f, 8.0);
 }
 
 TEST_CASE("planes agree with Geom_Plane", "[occt][surface]")
