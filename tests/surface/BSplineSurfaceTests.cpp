@@ -19,6 +19,7 @@
 #include <cmath>
 #include <cstddef>
 #include <numbers>
+#include <span>
 #include <vector>
 
 import Stereon.Surface;
@@ -403,4 +404,38 @@ TEST_CASE("MakeBSplineSurface validates data from outside the kernel",
     REQUIRE(Stereon::InsertKnot(good, ParameterDirection::V, 0.5, 4).error().GetCode() == invalid);
     REQUIRE(Stereon::IsoCurve(good, ParameterDirection::V, -0.5).error().GetCode() == invalid);
     REQUIRE(Stereon::ToBezierPatches(good).size() == 1);
+}
+
+TEST_CASE("Derivatives returns every partial at once", "[surface][bspline][property]")
+{
+    rc::prop("the same values as Eval and Deriv, partial by partial", [] {
+        const BSplineSurface s = RandomSurface(*rc::gen::arbitrary<bool>());
+        const Point2 uv = RandomParameter(s);
+        const int du = *rc::gen::inRange(0, 4);
+        const int dv = *rc::gen::inRange(0, 4);
+        std::vector<Vec3> all(static_cast<std::size_t>((du + 1) * (dv + 1)));
+        Stereon::Derivatives(s, uv, du, dv, std::span{all});
+        RC_ASSERT(Near(Stereon::ToPoint(all[0]), Eval(s, uv), 1e-13));
+        for (int k = 0; k <= du; ++k) {
+            for (int l = 0; l <= dv; ++l) {
+                if (k + l > 0) {
+                    RC_ASSERT(all[static_cast<std::size_t>(k * (dv + 1) + l)] ==
+                              Deriv(s, uv, k, l));
+                }
+            }
+        }
+    });
+}
+
+TEST_CASE("a SurfaceProjector answers as Project does", "[surface][bspline][property]")
+{
+    rc::prop("bit for bit, for several points on one prepared surface", [] {
+        const BSplineSurface s = RandomSurface(*rc::gen::arbitrary<bool>());
+        const Stereon::SurfaceProjector projector(s);
+        for (int i = 0; i < 4; ++i) {
+            const Point3 p{*rc::gen::inRange(-20, 60) / 10.0, *rc::gen::inRange(-20, 60) / 10.0,
+                           *rc::gen::inRange(-40, 40) / 10.0};
+            RC_ASSERT(projector.Project(p) == Project(s, p));
+        }
+    });
 }

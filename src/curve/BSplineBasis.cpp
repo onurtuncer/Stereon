@@ -34,6 +34,10 @@ namespace {
 
 constexpr std::size_t MaxBasis = static_cast<std::size_t>(BSplineMaxDegree) + 1;
 
+/// Work-array capacity for degrees below 8, which covers the curves and
+/// surfaces met in practice.
+constexpr std::size_t SmallCapacity = 8;
+
 /// "<where>: <problem>", concatenated (see EvaluatorChecks.cpp).
 [[nodiscard]] std::unexpected<KernelError> Invalid(const std::string_view where,
                                                    const std::string_view problem)
@@ -63,65 +67,88 @@ constexpr std::size_t MaxBasis = static_cast<std::size_t>(BSplineMaxDegree) + 1;
     return i;
 }
 
-/// The table of basis functions of every degree up to p on the span and the
-/// knot differences, ndu in algorithm A2.3: ndu[j][r] holds N_{span-j+r,j}
-/// on and above the diagonal and u_{span+r+1} - u_{span-j+r+... } below it.
-using BasisTable = std::array<std::array<double, MaxBasis>, MaxBasis>;
+/// The table of algorithm A2.3 for one evaluation: entry (j, r) holds the
+/// basis function N_{span-j+r,j} on and above the diagonal and a knot
+/// difference below it. Stored compactly with stride p + 1, so a low-degree
+/// evaluation touches a few cache lines, and not zeroed: every entry read
+/// is written first.
+template <std::size_t Capacity>
+class BasisTable {
+public:
+    explicit BasisTable(const std::size_t stride) noexcept
+        : m_Stride(stride)
+    {}
+    [[nodiscard]] double& operator()(const std::size_t i, const std::size_t j) noexcept
+    {
+        return m_Entries[i * m_Stride + j];
+    }
+    [[nodiscard]] double operator()(const std::size_t i, const std::size_t j) const noexcept
+    {
+        return m_Entries[i * m_Stride + j];
+    }
 
+private:
+    std::size_t m_Stride;
+    std::array<double, Capacity * Capacity> m_Entries; // NOLINT: written before read
+};
+
+template <std::size_t Capacity>
 void FillBasisTable(const std::span<const double> knots, const std::size_t p,
-                    const std::size_t span, const double t, BasisTable& ndu) noexcept
+                    const std::size_t span, const double t, BasisTable<Capacity>& ndu) noexcept
 {
     // Written before read, so not zeroed: these run in every evaluation.
-    std::array<double, MaxBasis> left;
-    std::array<double, MaxBasis> right;
-    ndu[0][0] = 1.0;
+    std::array<double, Capacity> left;
+    std::array<double, Capacity> right;
+    ndu(0, 0) = 1.0;
     for (std::size_t j = 1; j <= p; ++j) {
         left[j] = t - knots[span + 1 - j];
         right[j] = knots[span + j] - t;
         double saved = 0.0;
         for (std::size_t r = 0; r < j; ++r) {
-            ndu[j][r] = right[r + 1] + left[j - r]; // lower triangle: knot differences
-            const double temp = ndu[r][j - 1] / ndu[j][r];
-            ndu[r][j] = saved + right[r + 1] * temp; // upper triangle: basis functions
+            ndu(j, r) = right[r + 1] + left[j - r]; // lower triangle: knot differences
+            const double temp = ndu(r, j - 1) / ndu(j, r);
+            ndu(r, j) = saved + right[r + 1] * temp; // upper triangle: basis functions
             saved = left[j - r] * temp;
         }
-        ndu[j][j] = saved;
+        ndu(j, j) = saved;
     }
 }
 
-/// The k-th derivative of basis function r of the span from the table
-/// (the inner loop of A2.3), with a[0] and a[1] as the two rows of
-/// coefficients it alternates between.
-[[nodiscard]] double BasisDerivative(const BasisTable& ndu, const std::size_t p,
-                                     const std::size_t r, const std::size_t k,
-                                     std::array<std::array<double, MaxBasis>, 2>& a) noexcept
+/// The derivatives of orders 1 to n (n <= p) of basis function r of the span,
+/// unscaled, into values[k * (p + 1) + r]: the inner loops of A2.3, which
+/// build the coefficients a_{k,j} of each order from those of the order
+/// below, alternating between two rows.
+template <std::size_t Capacity>
+void BasisFunctionDerivatives(const BasisTable<Capacity>& ndu, const std::size_t p,
+                              const std::size_t r, const std::size_t n,
+                              const std::span<double> values) noexcept
 {
+    std::array<std::array<double, Capacity>, 2> a; // written before read
     std::size_t s1 = 0;
     std::size_t s2 = 1;
     a[0][0] = 1.0;
-    double d = 0.0;
-    for (std::size_t m = 1; m <= k; ++m) {
-        d = 0.0;
-        const auto rk = static_cast<long long>(r) - static_cast<long long>(m);
-        const std::size_t pk = p - m;
-        if (r >= m) {
-            a[s2][0] = a[s1][0] / ndu[pk + 1][static_cast<std::size_t>(rk)];
-            d = a[s2][0] * ndu[static_cast<std::size_t>(rk)][pk];
+    for (std::size_t k = 1; k <= n; ++k) {
+        double d = 0.0;
+        const auto rk = static_cast<long long>(r) - static_cast<long long>(k);
+        const std::size_t pk = p - k;
+        if (r >= k) {
+            a[s2][0] = a[s1][0] / ndu(pk + 1, static_cast<std::size_t>(rk));
+            d = a[s2][0] * ndu(static_cast<std::size_t>(rk), pk);
         }
         const std::size_t j1 = rk >= -1 ? 1 : static_cast<std::size_t>(-rk);
-        const std::size_t j2 = r <= pk + 1 ? m - 1 : p - r;
+        const std::size_t j2 = r <= pk + 1 ? k - 1 : p - r;
         for (std::size_t j = j1; j <= j2; ++j) {
             const auto row = static_cast<std::size_t>(rk + static_cast<long long>(j));
-            a[s2][j] = (a[s1][j] - a[s1][j - 1]) / ndu[pk + 1][row];
-            d += a[s2][j] * ndu[row][pk];
+            a[s2][j] = (a[s1][j] - a[s1][j - 1]) / ndu(pk + 1, row);
+            d += a[s2][j] * ndu(row, pk);
         }
         if (r <= pk) {
-            a[s2][m] = -a[s1][m - 1] / ndu[pk + 1][r];
-            d += a[s2][m] * ndu[r][pk];
+            a[s2][k] = -a[s1][k - 1] / ndu(pk + 1, r);
+            d += a[s2][k] * ndu(r, pk);
         }
+        values[k * (p + 1) + r] = d;
         std::swap(s1, s2);
     }
-    return k == 0 ? ndu[r][p] : d;
 }
 
 } // namespace
@@ -173,19 +200,58 @@ void BasisFunctions(const std::span<const double> knots, const int degree, const
     }
 }
 
+void BasisFunctionsOfAllDegrees(const std::span<const double> knots, const int degree,
+                                const std::size_t span, const double t,
+                                const std::span<double> table) noexcept
+{
+    const auto p = static_cast<std::size_t>(degree);
+    const std::size_t stride = p + 1;
+    // Written before read, so not zeroed: these run in every evaluation.
+    std::array<double, MaxBasis> left;
+    std::array<double, MaxBasis> right;
+    table[0] = 1.0;
+    for (std::size_t j = 1; j <= p; ++j) {
+        left[j] = t - knots[span + 1 - j];
+        right[j] = knots[span + j] - t;
+        double saved = 0.0;
+        for (std::size_t r = 0; r < j; ++r) {
+            const double temp = table[(j - 1) * stride + r] / (right[r + 1] + left[j - r]);
+            table[j * stride + r] = saved + right[r + 1] * temp;
+            saved = left[j - r] * temp;
+        }
+        table[j * stride + j] = saved;
+    }
+}
+
 void BasisDerivatives(const std::span<const double> knots, const int degree, const std::size_t span,
                       const double t, const int order, const std::span<double> values) noexcept
 {
     const auto p = static_cast<std::size_t>(degree);
     const auto n = static_cast<std::size_t>(order);
-    BasisTable ndu; // every entry read is written first (A2.3)
-    FillBasisTable(knots, p, span, t, ndu);
-    std::array<std::array<double, MaxBasis>, 2> a{};
-    for (std::size_t r = 0; r <= p; ++r) {
-        double factor = 1.0; // p! / (p - k)!
-        for (std::size_t k = 0; k <= n; ++k) {
-            values[k * (p + 1) + r] = k > p ? 0.0 : factor * BasisDerivative(ndu, p, r, k, a);
-            factor *= static_cast<double>(p - std::min(k, p));
+    const std::size_t computed = std::min(n, p);
+    // Small tables for the degrees met in practice: a table sized for degree
+    // 25 is 5 KB of stack, which costs more than the arithmetic.
+    if (p < SmallCapacity) {
+        BasisTable<SmallCapacity> ndu(p + 1);
+        FillBasisTable(knots, p, span, t, ndu);
+        for (std::size_t r = 0; r <= p; ++r) {
+            values[r] = ndu(r, p);
+            BasisFunctionDerivatives(ndu, p, r, computed, values);
+        }
+    } else {
+        BasisTable<MaxBasis> ndu(p + 1);
+        FillBasisTable(knots, p, span, t, ndu);
+        for (std::size_t r = 0; r <= p; ++r) {
+            values[r] = ndu(r, p);
+            BasisFunctionDerivatives(ndu, p, r, computed, values);
+        }
+    }
+    // Scale order k by p! / (p - k)!; orders above the degree vanish.
+    double factor = 1.0;
+    for (std::size_t k = 1; k <= n; ++k) {
+        factor *= static_cast<double>(p + 1 - std::min(k, p + 1));
+        for (std::size_t r = 0; r <= p; ++r) {
+            values[k * (p + 1) + r] = k > p ? 0.0 : values[k * (p + 1) + r] * factor;
         }
     }
 }

@@ -477,3 +477,35 @@ TEST_CASE("the knot operations validate their parameters", "[curve][bspline][fac
     REQUIRE_FALSE(Stereon::ExpandKnots(std::vector{0.0, 1.0}, std::vector{1, 0}).has_value());
     REQUIRE_FALSE(Stereon::ExpandKnots(std::vector{0.0}, std::vector{1, 2}).has_value());
 }
+
+TEST_CASE("Derivatives returns every order at once", "[curve][bspline][property]")
+{
+    rc::prop("the same values as Eval and Deriv, order by order", [] {
+        const BSplineCurve c = RandomCurve(*rc::gen::arbitrary<bool>());
+        const double t = RandomParameter(c);
+        const int n = *rc::gen::inRange(0, c.Degree + 3);
+        std::vector<Vec3> all(static_cast<std::size_t>(n) + 1);
+        Stereon::Derivatives(c, t, n, std::span{all});
+        RC_ASSERT(Near(Stereon::ToPoint(all[0]), Eval(c, t), 1e-13));
+        for (int k = 1; k <= n; ++k) {
+            RC_ASSERT(all[static_cast<std::size_t>(k)] == Deriv(c, t, k));
+        }
+    });
+}
+
+TEST_CASE("a CurveProjector answers as Project does", "[curve][bspline][property]")
+{
+    rc::prop("bit for bit, for many points on one prepared curve", [] {
+        const BSplineCurve c = RandomCurve(*rc::gen::arbitrary<bool>());
+        const Stereon::CurveProjector projector(c);
+        for (int i = 0; i < 8; ++i) {
+            const Point3 p{*rc::gen::inRange(-60, 60) / 10.0, *rc::gen::inRange(-60, 60) / 10.0,
+                           *rc::gen::inRange(-60, 60) / 10.0};
+            RC_ASSERT(projector.Project(p) == Project(c, p));
+        }
+    });
+    // A planar curve is projected in its plane.
+    const BSplineCurve2d planar{1, {0.0, 0.0, 1.0, 1.0}, {Point2{0.0, 0.0}, Point2{2.0, 0.0}}, {}};
+    REQUIRE(Stereon::CurveProjector(planar).Project(Point2{1.5, 1.0}) ==
+            Project(planar, Point2{1.5, 1.0}));
+}

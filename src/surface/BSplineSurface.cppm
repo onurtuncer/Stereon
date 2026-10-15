@@ -13,6 +13,7 @@ module;
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -132,8 +133,15 @@ template <Scalar T>
 }
 
 /// Small tables live on the stack, larger ones on the heap: the derivative
-/// tables of the rational recurrence are (du + 1)(dv + 1) entries.
-inline constexpr std::size_t SurfaceTableCapacity = 36;
+/// tables of the rational recurrence are (du + 1)(dv + 1) entries, 9 for the
+/// second-order partials. Vectors zero themselves on construction, so the
+/// capacity is kept small.
+inline constexpr std::size_t SurfaceTableCapacity = 16;
+
+/// Basis work arrays for degrees below 8 in both directions, which covers
+/// the surfaces met in practice; arrays sized for degree 25 would put 10 KB
+/// on the stack per evaluation.
+inline constexpr std::size_t SmallSurfaceDegree = 8;
 
 template <typename V>
 class SurfaceTable {
@@ -166,10 +174,10 @@ private:
 /// The homogeneous derivatives A^(k,l) = sum N_i^(k) M_j^(l) w P and
 /// w^(k,l) = sum N_i^(k) M_j^(l) w for k < ku, l < kv (algorithm A3.6 on the
 /// homogeneous form), into tables indexed k * kv + l.
-template <Scalar T>
-void HomogeneousSurfaceDerivatives(const BasicBSplineSurface<T>& surface, const Point2& uv,
-                                   const std::size_t ku, const std::size_t kv,
-                                   SurfaceTable<BasicVec3<T>>& a, SurfaceTable<T>& w)
+template <std::size_t Capacity, Scalar T>
+void HomogeneousSurfaceDerivativesWith(const BasicBSplineSurface<T>& surface, const Point2& uv,
+                                       const std::size_t ku, const std::size_t kv,
+                                       SurfaceTable<BasicVec3<T>>& a, SurfaceTable<T>& w)
 {
     const auto p = static_cast<std::size_t>(surface.DegreeU);
     const auto q = static_cast<std::size_t>(surface.DegreeV);
@@ -177,8 +185,8 @@ void HomogeneousSurfaceDerivatives(const BasicBSplineSurface<T>& surface, const 
     const std::size_t spanU = FindSpan(surface.KnotsU, surface.DegreeU, PoleCountU(surface), uv.X);
     const std::size_t spanV = FindSpan(surface.KnotsV, surface.DegreeV, countV, uv.Y);
     // Filled by BasisDerivatives for the orders asked.
-    std::array<double, SurfaceBasisCount * SurfaceBasisCount> nu;
-    std::array<double, SurfaceBasisCount * SurfaceBasisCount> nv;
+    std::array<double, Capacity * Capacity> nu;
+    std::array<double, Capacity * Capacity> nv;
     BasisDerivatives(surface.KnotsU, surface.DegreeU, spanU, uv.X, static_cast<int>(ku) - 1,
                      std::span{nu}.first(ku * (p + 1)));
     BasisDerivatives(surface.KnotsV, surface.DegreeV, spanV, uv.Y, static_cast<int>(kv) - 1,
@@ -202,6 +210,19 @@ void HomogeneousSurfaceDerivatives(const BasicBSplineSurface<T>& surface, const 
     }
 }
 
+template <Scalar T>
+void HomogeneousSurfaceDerivatives(const BasicBSplineSurface<T>& surface, const Point2& uv,
+                                   const std::size_t ku, const std::size_t kv,
+                                   SurfaceTable<BasicVec3<T>>& a, SurfaceTable<T>& w)
+{
+    if (surface.DegreeU < static_cast<int>(SmallSurfaceDegree) &&
+        surface.DegreeV < static_cast<int>(SmallSurfaceDegree)) {
+        HomogeneousSurfaceDerivativesWith<SmallSurfaceDegree>(surface, uv, ku, kv, a, w);
+    } else {
+        HomogeneousSurfaceDerivativesWith<SurfaceBasisCount>(surface, uv, ku, kv, a, w);
+    }
+}
+
 /// The rational mixed derivative S^(du,dv) from the homogeneous ones
 /// (The NURBS Book, eq. 4.20, algorithm A4.4): A = w S, differentiated by
 /// Leibniz's rule in both parameters and solved for the highest term,
@@ -209,11 +230,10 @@ void HomogeneousSurfaceDerivatives(const BasicBSplineSurface<T>& surface, const 
 ///            - sum_{i>=1} C(k,i) w^(i,0) S^(k-i,l)
 ///            - sum_{i,j>=1} C(k,i) C(l,j) w^(i,j) S^(k-i,l-j)) / w.
 template <Scalar T>
-[[nodiscard]] BasicVec3<T>
-RationalSurfaceDerivative(SurfaceTable<BasicVec3<T>>& a, SurfaceTable<T>& w, const std::size_t ku,
-                          const std::size_t kv, const std::size_t du, const std::size_t dv)
+void RationalSurfaceDerivatives(SurfaceTable<BasicVec3<T>>& a, SurfaceTable<T>& w,
+                                const std::size_t ku, const std::size_t kv, const std::size_t du,
+                                const std::size_t dv, std::span<BasicVec3<T>> s)
 {
-    SurfaceTable<BasicVec3<T>> s((du + 1) * (dv + 1));
     const auto at = [&](const std::size_t k, const std::size_t l) { return k * (dv + 1) + l; };
     for (std::size_t k = 0; k <= du; ++k) {
         for (std::size_t l = 0; l <= dv; ++l) {
@@ -229,7 +249,6 @@ RationalSurfaceDerivative(SurfaceTable<BasicVec3<T>>& a, SurfaceTable<T>& w, con
             s[at(k, l)] = v / w[0];
         }
     }
-    return s[at(du, dv)];
 }
 
 } // namespace Stereon::Detail
@@ -262,9 +281,40 @@ template <Scalar T>
     return IsRational(surface) ? ToPoint(numerator / denominator) : ToPoint(numerator);
 }
 
-/// The mixed partial derivative of order du in u and dv in v, du + dv >= 1
-/// (A3.6, and A4.4 for a rational surface). A polynomial surface's
-/// derivatives beyond its degree in either parameter are zero.
+/// The point and every partial derivative up to order du in u and dv in v,
+/// into out[k * (dv + 1) + l] = S^(k,l)(uv); out[0] is the position vector.
+/// Cheaper than separate calls, because all come from one pair of basis
+/// tables (A3.6, and A4.4 for a rational surface). `out` holds
+/// (du + 1)(dv + 1) entries.
+template <Scalar T>
+void Derivatives(const BasicBSplineSurface<T>& surface, const Point2& uv, const int du,
+                 const int dv, std::span<BasicVec3<T>> out)
+{
+    Detail::CheckSurfaceEvaluation(surface, uv, "Derivatives(BSplineSurface)");
+    Detail::Require(du >= 0 && dv >= 0 &&
+                        out.size() >= static_cast<std::size_t>((du + 1) * (dv + 1)),
+                    "Derivatives(BSplineSurface)", "a negative order or too small an output");
+    const auto ou = static_cast<std::size_t>(du);
+    const auto ov = static_cast<std::size_t>(dv);
+    const std::size_t ku = std::min(ou, static_cast<std::size_t>(surface.DegreeU)) + 1;
+    const std::size_t kv = std::min(ov, static_cast<std::size_t>(surface.DegreeV)) + 1;
+    Detail::SurfaceTable<BasicVec3<T>> a(ku * kv);
+    Detail::SurfaceTable<T> w(ku * kv);
+    Detail::HomogeneousSurfaceDerivatives(surface, uv, ku, kv, a, w);
+    if (IsRational(surface)) {
+        Detail::RationalSurfaceDerivatives(a, w, ku, kv, ou, ov, out);
+        return;
+    }
+    for (std::size_t k = 0; k <= ou; ++k) {
+        for (std::size_t l = 0; l <= ov; ++l) {
+            out[k * (ov + 1) + l] = (k < ku && l < kv) ? a[k * kv + l] : BasicVec3<T>{};
+        }
+    }
+}
+
+/// The mixed partial derivative of order du in u and dv in v, du + dv >= 1.
+/// A polynomial surface's derivatives beyond its degree in either parameter
+/// are zero.
 template <Scalar T>
 [[nodiscard]] BasicVec3<T> Deriv(const BasicBSplineSurface<T>& surface, const Point2& uv,
                                  const int du, const int dv)
@@ -275,17 +325,15 @@ template <Scalar T>
     if (!IsRational(surface) && (du > surface.DegreeU || dv > surface.DegreeV)) {
         return {};
     }
-    const auto ou = static_cast<std::size_t>(du);
-    const auto ov = static_cast<std::size_t>(dv);
-    const std::size_t ku = std::min(ou, static_cast<std::size_t>(surface.DegreeU)) + 1;
-    const std::size_t kv = std::min(ov, static_cast<std::size_t>(surface.DegreeV)) + 1;
-    Detail::SurfaceTable<BasicVec3<T>> a(ku * kv);
-    Detail::SurfaceTable<T> w(ku * kv);
-    Detail::HomogeneousSurfaceDerivatives(surface, uv, ku, kv, a, w);
-    if (!IsRational(surface)) {
-        return a[ou * kv + ov];
+    const auto size = static_cast<std::size_t>((du + 1) * (dv + 1));
+    if (size <= Detail::SurfaceTableCapacity) {
+        std::array<BasicVec3<T>, Detail::SurfaceTableCapacity> all;
+        Derivatives(surface, uv, du, dv, std::span{all}.first(size));
+        return all[size - 1];
     }
-    return Detail::RationalSurfaceDerivative(a, w, ku, kv, ou, ov);
+    std::vector<BasicVec3<T>> all(size); // high orders: rare
+    Derivatives(surface, uv, du, dv, std::span{all});
+    return all[size - 1];
 }
 
 /// The box of the poles, widened, as for B-spline curves, by a bound on
@@ -303,6 +351,34 @@ template <Scalar T>
 /// and the small sub-patches that remain are refined by Newton's method.
 /// The closest candidate wins (docs/nurbs.rst).
 [[nodiscard]] Point2 Project(const BSplineSurface& surface, const Point3& p);
+
+} // namespace Stereon
+
+export namespace Stereon::Detail {
+
+struct SurfaceProjectorData;
+
+} // namespace Stereon::Detail
+
+export namespace Stereon {
+
+/// Projects many points onto one B-spline surface, as CurveProjector does
+/// for curves. Construction prepares the Bezier patches, their coordinate
+/// polynomials, the point-independent parts of the two stationarity
+/// polynomials, and projectors for every patch edge; a query visits patches
+/// and sub-patches closest first and stops at the first that cannot hold a
+/// closer point. The answers are those of Project(surface, p), which builds
+/// a projector for one point. Copies share the prepared data.
+class SurfaceProjector {
+public:
+    explicit SurfaceProjector(const BSplineSurface& surface);
+
+    /// The parameter of a point of the surface closest to p.
+    [[nodiscard]] Point2 Project(const Point3& p) const;
+
+private:
+    std::shared_ptr<const Detail::SurfaceProjectorData> m_Data;
+};
 
 /// The same surface with the opposite normal, by reversing u:
 /// Eval(Reversed(s), (a + b - u, v)) == Eval(s, (u, v)) on the u domain
