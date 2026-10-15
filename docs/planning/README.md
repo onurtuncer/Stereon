@@ -7,6 +7,7 @@
 
 - [Roadmap, modelling milestones and versioning](roadmap-and-versioning.md)
 - [Capability matrix and repository audit](stereon-capability-matrix.md)
+- [v0.1 acceptance ledger](v0.1-acceptance-ledger.md): gates, evidence and the OCCT operations still to add
 - [Placement and follow-up checklist](capability-matrix-checklist.md)
 - [Existing benchmark specification](../benchmarks.md)
 - [Architecture decision records](../adr/README.md)
