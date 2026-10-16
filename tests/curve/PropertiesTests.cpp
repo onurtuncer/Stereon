@@ -33,6 +33,7 @@ using Stereon::Curvature;
 using Stereon::Curve;
 using Stereon::Ellipse;
 using Stereon::ErrorCode;
+using Stereon::FrenetFrame;
 using Stereon::Interval;
 using Stereon::Line;
 using Stereon::Parabola;
@@ -122,6 +123,7 @@ TEST_CASE("a line has no curvature and no osculating plane", "[curve][properties
     CHECK(PrincipalNormal(line, 2.0).error().GetCode() == ErrorCode::DegenerateResult);
     CHECK(Torsion(line, 2.0).error().GetCode() == ErrorCode::DegenerateResult);
     CHECK(CenterOfCurvature(line, 2.0).error().GetCode() == ErrorCode::DegenerateResult);
+    CHECK(FrenetFrame(line, 2.0).error().GetCode() == ErrorCode::DegenerateResult);
 }
 
 TEST_CASE("a helix has constant curvature and torsion", "[curve][properties]")
@@ -135,6 +137,13 @@ TEST_CASE("a helix has constant curvature and torsion", "[curve][properties]")
         const Point3 p = Eval(helix, t);
         CHECK(Near(*PrincipalNormal(helix, t), Vec3{-p.X, -p.Y, 0.0} / helix.Radius));
     }
+    // The frame from one evaluation agrees with the separate functions and
+    // is a right-handed orthonormal triple.
+    const auto frame = *FrenetFrame(helix, 1.0);
+    CHECK(Near(frame.Tangent, *UnitTangent(helix, 1.0)));
+    CHECK(Near(frame.Normal, *PrincipalNormal(helix, 1.0)));
+    CHECK(Near(frame.Binormal, Cross(frame.Tangent, frame.Normal)));
+    CHECK(Near(frame.Curvature, *Curvature(helix, 1.0)));
     // Its length is that of the hypotenuse of the unrolled cylinder.
     const auto length = *ArcLength(helix, Domain(helix));
     CHECK(Near(length.Length, 4.0 * Pi * std::sqrt(denominator)));
@@ -183,6 +192,10 @@ TEST_CASE("arc length matches closed forms", "[curve][properties][arclength]")
         // Its exact NURBS form has the same length, over its own parameter.
         const BSplineCurve nurbs = *ToBSpline(ellipse, Domain(ellipse));
         CHECK(Near(ArcLength(nurbs, Domain(nurbs))->Length, perimeter));
+        // Also when erased: the quadrature still finds the knots, where the
+        // speed has kinks that would fool its error estimate.
+        const Curve erased(nurbs);
+        CHECK(Near(ArcLength(erased, Domain(erased))->Length, perimeter));
         // A periodic curve's length counts every turn of the range.
         CHECK(Near(ArcLength(ellipse, Interval{-1.0, 4.0 * Pi - 1.0})->Length, 2.0 * perimeter));
     }

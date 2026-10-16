@@ -25,6 +25,7 @@ export module Stereon.Curve:Properties;
 import Stereon.Robust;
 import :BSplineCurve;
 import :Concepts;
+import :Visit;
 
 /// Local differential properties of curves (OCCT's GeomLProp_CLProps) and
 /// arc length (GCPnts_AbscissaPoint), for any curve type: the built-in ones,
@@ -47,6 +48,41 @@ using CurvePointOf = decltype(Eval(std::declval<const C&>(), 0.0));
 template <typename C>
 using CurveVectorOf = decltype(Deriv(std::declval<const C&>(), 0.0, 1));
 
+} // namespace Stereon
+
+export namespace Stereon::Detail {
+
+/// The position vector and the derivatives up to order N at t, out[k] =
+/// C^(k)(t): from one combined evaluation where the type has one
+/// (Derivatives of a B-spline: one basis table for every order), else from
+/// Eval and N calls of Deriv.
+template <std::size_t N, typename C>
+[[nodiscard]] std::array<CurveVectorOf<C>, N + 1> DerivativesTo(const C& curve, const double t)
+{
+    std::array<CurveVectorOf<C>, N + 1> out;
+    if constexpr (requires(std::span<CurveVectorOf<C>> s) { Derivatives(curve, t, 2, s); }) {
+        Derivatives(curve, t, static_cast<int>(N), std::span<CurveVectorOf<C>>{out});
+    } else {
+        out[0] = ToVec(Eval(curve, t));
+        for (std::size_t k = 1; k <= N; ++k) {
+            out[k] = Deriv(curve, t, static_cast<int>(k));
+        }
+    }
+    return out;
+}
+
+/// The component of d2 perpendicular to d1, d1 != 0: the direction of the
+/// principal normal, with length |d1 x d2| / |d1|.
+template <typename V>
+[[nodiscard]] V NormalPart(const V& d1, const V& d2)
+{
+    return d2 - (Dot(d2, d1) / LengthSquared(d1)) * d1;
+}
+
+} // namespace Stereon::Detail
+
+export namespace Stereon {
+
 /// The unit tangent C'(t) / |C'(t)|. DegenerateResult where C'(t) = 0.
 template <typename C>
 [[nodiscard]] Result<CurveVectorOf<C>> UnitTangent(const C& curve, const double t)
@@ -65,17 +101,16 @@ template <typename C>
 template <typename C>
 [[nodiscard]] Result<double> Curvature(const C& curve, const double t)
 {
-    const CurveVectorOf<C> d1 = Deriv(curve, t, 1);
-    const CurveVectorOf<C> d2 = Deriv(curve, t, 2);
-    const double speed = Length(d1);
+    const auto d = Detail::DerivativesTo<2>(curve, t);
+    const double speed = Length(d[1]);
     if (!(speed > 0.0)) {
         return Fail(ErrorCode::DegenerateResult, "Curvature: the curve has zero speed here");
     }
     const double cubed = speed * speed * speed;
     if constexpr (std::is_same_v<CurveVectorOf<C>, Vec2>) {
-        return Cross(d1, d2) / cubed;
+        return Cross(d[1], d[2]) / cubed;
     } else {
-        return Length(Cross(d1, d2)) / cubed;
+        return Length(Cross(d[1], d[2])) / cubed;
     }
 }
 
@@ -86,13 +121,11 @@ template <typename C>
     requires std::is_same_v<CurveVectorOf<C>, Vec3>
 [[nodiscard]] Result<Vec3> PrincipalNormal(const C& curve, const double t)
 {
-    const Vec3 d1 = Deriv(curve, t, 1);
-    const Vec3 d2 = Deriv(curve, t, 2);
-    const double speedSquared = LengthSquared(d1);
-    if (!(speedSquared > 0.0)) {
+    const auto d = Detail::DerivativesTo<2>(curve, t);
+    if (!(LengthSquared(d[1]) > 0.0)) {
         return Fail(ErrorCode::DegenerateResult, "PrincipalNormal: the curve has zero speed here");
     }
-    const Vec3 normal = d2 - (Dot(d2, d1) / speedSquared) * d1;
+    const Vec3 normal = Detail::NormalPart(d[1], d[2]);
     const double length = Length(normal);
     if (!(length > 0.0)) {
         return Fail(ErrorCode::DegenerateResult,
@@ -108,26 +141,71 @@ template <typename C>
     requires std::is_same_v<CurveVectorOf<C>, Vec3>
 [[nodiscard]] Result<double> Torsion(const C& curve, const double t)
 {
-    const Vec3 binormal = Cross(Deriv(curve, t, 1), Deriv(curve, t, 2));
+    const auto d = Detail::DerivativesTo<3>(curve, t);
+    const Vec3 binormal = Cross(d[1], d[2]);
     const double squared = LengthSquared(binormal);
     if (!(squared > 0.0)) {
         return Fail(ErrorCode::DegenerateResult,
                     "Torsion: the curve does not bend here (zero curvature)");
     }
-    return Dot(binormal, Deriv(curve, t, 3)) / squared;
+    return Dot(binormal, d[3]) / squared;
 }
 
-/// The centre of the osculating circle, C + N / kappa. DegenerateResult
-/// where the speed or the curvature is zero.
+/// The Frenet frame of a curve in space and its curvature, all from one
+/// evaluation of C, C' and C'': the counterpart of one SetParameter of
+/// OCCT's GeomLProp_CLProps.
+struct FrenetFrameResult {
+    /// The unit tangent T.
+    Vec3 Tangent;
+    /// The unit principal normal N, towards the centre of curvature.
+    Vec3 Normal;
+    /// The unit binormal B = T x N, the normal of the osculating plane.
+    Vec3 Binormal;
+    /// The curvature, 1/mm, positive.
+    double Curvature = 0.0;
+};
+
+/// The Frenet frame (T, N, B) and the curvature at t. DegenerateResult
+/// where the speed or the curvature is zero, where N is undefined.
+template <typename C>
+    requires std::is_same_v<CurveVectorOf<C>, Vec3>
+[[nodiscard]] Result<FrenetFrameResult> FrenetFrame(const C& curve, const double t)
+{
+    const auto d = Detail::DerivativesTo<2>(curve, t);
+    const double speed = Length(d[1]);
+    if (!(speed > 0.0)) {
+        return Fail(ErrorCode::DegenerateResult, "FrenetFrame: the curve has zero speed here");
+    }
+    const Vec3 binormal = Cross(d[1], d[2]);
+    const double bend = Length(binormal);
+    if (!(bend > 0.0)) {
+        return Fail(ErrorCode::DegenerateResult,
+                    "FrenetFrame: the curve does not bend here (zero curvature)");
+    }
+    const Vec3 tangent = d[1] / speed;
+    const Vec3 b = binormal / bend;
+    return FrenetFrameResult{.Tangent = tangent,
+                             .Normal = Cross(b, tangent),
+                             .Binormal = b,
+                             .Curvature = bend / (speed * speed * speed)};
+}
+
+/// The centre of the osculating circle, C + N / kappa. With n the part of
+/// C'' perpendicular to C', N / kappa = n |C'|^4 / |C' x C''|^2, since
+/// |n| = |C' x C''| / |C'|. DegenerateResult where the speed or the
+/// curvature is zero.
 template <typename C>
     requires std::is_same_v<CurveVectorOf<C>, Vec3>
 [[nodiscard]] Result<Point3> CenterOfCurvature(const C& curve, const double t)
 {
-    const Result<Vec3> normal = PrincipalNormal(curve, t);
-    if (!normal) {
-        return std::unexpected(normal.error());
+    const auto d = Detail::DerivativesTo<2>(curve, t);
+    const double speedSquared = LengthSquared(d[1]);
+    const double bend = LengthSquared(Cross(d[1], d[2]));
+    if (!(speedSquared > 0.0) || !(bend > 0.0)) {
+        return Fail(ErrorCode::DegenerateResult,
+                    "CenterOfCurvature: the curve has zero speed or zero curvature here");
     }
-    return Eval(curve, t) + (1.0 / *Curvature(curve, t)) * *normal;
+    return ToPoint(d[0]) + (speedSquared * speedSquared / bend) * Detail::NormalPart(d[1], d[2]);
 }
 
 /// An arc length with the error estimate of the quadrature that produced
@@ -194,12 +272,12 @@ void AdaptiveLength(const C& curve, const double a, const double b, const double
     AdaptiveLength(curve, mid, b, right, depth + 1, result);
 }
 
-/// The break points of the quadrature in (low, high): a B-spline's
-/// distinct knots, where its speed may have a kink; none for other types.
+/// Appends the knots of the curve in (breaks.back(), high): a B-spline's
+/// own, or those of a B-spline inside an erased wrapper, found through
+/// VisitBuiltin; nothing for other types.
 template <typename C>
-[[nodiscard]] std::vector<double> LengthBreaks(const C& curve, const double low, const double high)
+void AppendKnots(const C& curve, const double high, std::vector<double>& breaks)
 {
-    std::vector<double> breaks{low};
     if constexpr (requires {
                       curve.Knots;
                       curve.Degree;
@@ -209,7 +287,23 @@ template <typename C>
                 breaks.push_back(u);
             }
         }
+    } else if constexpr (requires { curve.IsEmpty(); }) {
+        VisitBuiltin(curve, [&](const auto& wrapped) {
+            if constexpr (!std::is_same_v<std::remove_cvref_t<decltype(wrapped)>, C>) {
+                AppendKnots(wrapped, high, breaks);
+            }
+        });
     }
+}
+
+/// The break points of the quadrature in [low, high]: the ends and the
+/// distinct knots between them, where a B-spline's speed may have a kink
+/// that would slow a high-order rule down, or fool its error estimate.
+template <typename C>
+[[nodiscard]] std::vector<double> LengthBreaks(const C& curve, const double low, const double high)
+{
+    std::vector<double> breaks{low};
+    AppendKnots(curve, high, breaks);
     breaks.push_back(high);
     return breaks;
 }
@@ -292,27 +386,35 @@ template <typename C>
     }
 }
 
+/// A parameter and the signed length to it from start.
+struct Station {
+    double Parameter = 0.0;
+    double Length = 0.0;
+};
+
 /// A parameter in the direction of `length` that the curve does not reach
 /// before covering it: the domain end of a bounded curve, else a whole
 /// number of periods or a doubling step. Empty if there is none.
 template <typename C>
-[[nodiscard]] std::optional<double> TravelEnd(const C& curve, const double start,
-                                              const double length)
+[[nodiscard]] std::optional<Station> TravelEnd(const C& curve, const double start,
+                                               const double length)
 {
     const Interval domain = Domain(curve);
     const double bound = length > 0.0 ? domain.GetUpper() : domain.GetLower();
     const double period = PeriodOrZero(curve);
     if (period <= 0.0 && std::isfinite(bound)) {
-        if (std::abs(SignedLength(curve, start, bound)) >= std::abs(length)) {
-            return bound;
+        const double reach = SignedLength(curve, start, bound);
+        if (std::abs(reach) >= std::abs(length)) {
+            return Station{bound, reach};
         }
         return std::nullopt;
     }
     const double sign = length > 0.0 ? 1.0 : -1.0;
     for (double step = period > 0.0 ? period : 1.0; std::isfinite(start + sign * step);
          step *= 2.0) {
-        if (std::abs(SignedLength(curve, start, start + sign * step)) >= std::abs(length)) {
-            return start + sign * step;
+        const double reach = SignedLength(curve, start, start + sign * step);
+        if (std::abs(reach) >= std::abs(length)) {
+            return Station{start + sign * step, reach};
         }
     }
     return std::nullopt;
@@ -333,19 +435,23 @@ Result<double> ParameterAtArcLength(const C& curve, const double start, const do
     if (length == 0.0) {
         return start;
     }
-    const std::optional<double> end = Detail::TravelEnd(curve, start, length);
+    const std::optional<Detail::Station> end = Detail::TravelEnd(curve, start, length);
     if (!end) {
         return Fail(ErrorCode::InvalidInput,
                     "ParameterAtArcLength: the curve is not that long in that direction");
     }
     // s(t) - length changes sign on [low, high]; Newton's steps converge to
-    // the root from inside it, and a step that would leave it bisects.
-    double low = std::min(start, *end);
-    double high = std::max(start, *end);
+    // the root from inside it, and a step that would leave it bisects. The
+    // length to each iterate is the length to the previous one plus the
+    // short stretch between them, so no step integrates from start again.
+    double low = std::min(start, end->Parameter);
+    double high = std::max(start, end->Parameter);
     const double settled = Detail::ArcLengthRelativeTarget * (high - low);
-    double t = start + (*end - start) * (length / Detail::SignedLength(curve, start, *end));
+    // The linear guess, kept inside the bracket against rounding.
+    double t = std::clamp(start + (end->Parameter - start) * (length / end->Length), low, high);
+    double reached = Detail::SignedLength(curve, start, t);
     for (int step = 0; step < Detail::ArcLengthNewtonSteps; ++step) {
-        const double residual = Detail::SignedLength(curve, start, t) - length;
+        const double residual = reached - length;
         if (residual == 0.0) {
             return t;
         }
@@ -358,6 +464,7 @@ Result<double> ParameterAtArcLength(const C& curve, const double start, const do
         if (std::abs(next - t) <= settled) {
             return next;
         }
+        reached += Detail::SignedLength(curve, t, next);
         t = next;
     }
     return t;

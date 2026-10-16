@@ -130,8 +130,14 @@ TEST_CASE("least squares satisfies its normal equations", "[curve][fitting][prop
                 gradient[span - p + a] += basis[a] * (Eval(c, t) - points[k]);
             }
         }
+        // A backward-stable solve leaves a residual of the normal equations
+        // proportional to the size of the solution, not of the data: near
+        // interpolation (as many poles as points) the system is
+        // ill-conditioned and the interior poles can be far larger than the
+        // points, and the bound has to grow with them.
+        const double scale = std::max(Scale(points), Scale(c.Poles));
         for (std::size_t i = 1; i + 1 < poles; ++i) {
-            RC_ASSERT(Length(gradient[i]) <= 1e-9 * Scale(points));
+            RC_ASSERT(Length(gradient[i]) <= 1e-9 * scale);
         }
     });
 }

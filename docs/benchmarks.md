@@ -44,6 +44,7 @@ Stereon is measured against OpenCASCADE (OCCT) on **speed, memory and robustness
 | B1.3 | Point projection / inversion on NURBS surfaces | `GeomAPI_ProjectPointOnSurf`, `Extrema_ExtPS` | time; % converged; max error | ≥ parity, 99.99% convergence |
 | B1.4 | Curve and surface fitting / interpolation | `GeomAPI_PointsToBSpline(Surface)`, `GeomAPI_Interpolate` | time; max deviation | ≥ parity at equal tolerance |
 | B1.5 | Knot insertion, degree elevation, Bézier decomposition | `Geom_BSplineCurve::InsertKnot`, `IncreaseDegree`, `GeomConvert` | time | ≥ parity |
+| B1.6 | Local properties (Frenet frame, principal curvatures), arc length, point at a length | `GeomLProp_CLProps`, `GeomLProp_SLProps`, `GCPnts_AbscissaPoint` | time; length agreement | ≥ parity at equal accuracy |
 
 ### Phase 2 — intersections
 

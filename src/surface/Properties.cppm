@@ -10,8 +10,11 @@ module;
 #include <Stereon/Core/Contracts.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <expected>
+#include <span>
+#include <utility>
 
 export module Stereon.Surface:Properties;
 
@@ -74,24 +77,93 @@ template <typename S>
     return normal / length;
 }
 
-/// Both fundamental forms at uv. DegenerateResult where the
-/// parametrisation is singular.
+} // namespace Stereon
+
+export namespace Stereon::Detail {
+
+/// The first and second partial derivatives at a point. A template only
+/// because GCC 16.2 fails to lazy-load BasicVec3 in importers of a module
+/// interface that defines a non-template struct of Vec3 members here
+/// (docs/toolchain/gcc16-feature-probe.md).
+template <typename V>
+struct SecondPartials {
+    V Su;
+    V Sv;
+    V Suu;
+    V Suv;
+    V Svv;
+};
+
+/// The partials from one combined evaluation where the type has one
+/// (Derivatives of a B-spline surface: one pair of basis tables), else from
+/// five calls of Deriv.
+template <typename S, typename V = decltype(Deriv(std::declval<const S&>(), Point2{}, 1, 0))>
+[[nodiscard]] SecondPartials<V> PartialsAt(const S& surface, const Point2& uv)
+{
+    if constexpr (requires(std::span<V> out) { Derivatives(surface, uv, 2, 2, out); }) {
+        // out[k * 3 + l] = S^(k,l).
+        std::array<V, 9> out;
+        Derivatives(surface, uv, 2, 2, std::span<V>{out});
+        return {out[3], out[1], out[6], out[4], out[2]};
+    } else {
+        return {Deriv(surface, uv, 1, 0), Deriv(surface, uv, 0, 1), Deriv(surface, uv, 2, 0),
+                Deriv(surface, uv, 1, 1), Deriv(surface, uv, 0, 2)};
+    }
+}
+
+/// Both fundamental forms from the partials. DegenerateResult where
+/// Su x Sv = 0.
+template <typename Partials>
+[[nodiscard]] Result<FundamentalFormsResult> FormsFrom(const Partials& d)
+{
+    const Vec3 cross = Cross(d.Su, d.Sv);
+    const double length = Length(cross);
+    if (!(length > 0.0)) {
+        return Fail(ErrorCode::DegenerateResult,
+                    "the parametrisation is singular here (Su x Sv = 0)");
+    }
+    const Vec3 normal = cross / length;
+    return FundamentalFormsResult{.E = Dot(d.Su, d.Su),
+                                  .F = Dot(d.Su, d.Sv),
+                                  .G = Dot(d.Sv, d.Sv),
+                                  .L = Dot(d.Suu, normal),
+                                  .M = Dot(d.Suv, normal),
+                                  .N = Dot(d.Svv, normal),
+                                  .Normal = normal};
+}
+
+/// A principal direction for the curvature kappa: a null vector (du, dv) of
+/// II - kappa I, from whichever row of that symmetric 2 x 2 matrix is
+/// larger, as a unit tangent vector. Su when both rows vanish, at an
+/// umbilic, where every direction is principal. A template only because
+/// GCC 16 cannot read back an inline function of a module interface that
+/// instantiates another module's templates
+/// (docs/toolchain/gcc16-feature-probe.md).
+template <typename Forms>
+[[nodiscard]] Vec3 PrincipalDirection(const Forms& f, const double kappa, const Vec3& su,
+                                      const Vec3& sv)
+{
+    const double a = f.L - kappa * f.E;
+    const double b = f.M - kappa * f.F;
+    const double c = f.N - kappa * f.G;
+    const bool firstRow = a * a + b * b >= b * b + c * c;
+    const double du = firstRow ? -b : -c;
+    const double dv = firstRow ? a : b;
+    const Vec3 direction = du * su + dv * sv;
+    const double length = Length(direction);
+    return length > 0.0 ? direction / length : su / Length(su);
+}
+
+} // namespace Stereon::Detail
+
+export namespace Stereon {
+
+/// Both fundamental forms at uv, from one evaluation of the partials.
+/// DegenerateResult where the parametrisation is singular.
 template <typename S>
 [[nodiscard]] Result<FundamentalFormsResult> FundamentalForms(const S& surface, const Point2& uv)
 {
-    const Result<Vec3> normal = UnitNormal(surface, uv);
-    if (!normal) {
-        return std::unexpected(normal.error());
-    }
-    const Vec3 su = Deriv(surface, uv, 1, 0);
-    const Vec3 sv = Deriv(surface, uv, 0, 1);
-    return FundamentalFormsResult{.E = Dot(su, su),
-                                  .F = Dot(su, sv),
-                                  .G = Dot(sv, sv),
-                                  .L = Dot(Deriv(surface, uv, 2, 0), *normal),
-                                  .M = Dot(Deriv(surface, uv, 1, 1), *normal),
-                                  .N = Dot(Deriv(surface, uv, 0, 2), *normal),
-                                  .Normal = *normal};
+    return Detail::FormsFrom(Detail::PartialsAt(surface, uv));
 }
 
 /// The Gaussian curvature (LN - M^2) / (EG - F^2), the product of the
@@ -122,45 +194,16 @@ template <typename S>
     return (f.E * f.N - 2.0 * f.F * f.M + f.G * f.L) / (2.0 * (f.E * f.G - f.F * f.F));
 }
 
-} // namespace Stereon
-
-export namespace Stereon::Detail {
-
-/// A principal direction for the curvature kappa: a null vector (du, dv) of
-/// II - kappa I, from whichever row of that symmetric 2 x 2 matrix is
-/// larger, as a unit tangent vector. Su when both rows vanish, at an
-/// umbilic, where every direction is principal. A template only because
-/// GCC 16 cannot read back an inline function of a module interface that
-/// instantiates another module's templates
-/// (docs/toolchain/gcc16-feature-probe.md).
-template <typename Forms>
-[[nodiscard]] Vec3 PrincipalDirection(const Forms& f, const double kappa, const Vec3& su,
-                                      const Vec3& sv)
-{
-    const double a = f.L - kappa * f.E;
-    const double b = f.M - kappa * f.F;
-    const double c = f.N - kappa * f.G;
-    const bool firstRow = a * a + b * b >= b * b + c * c;
-    const double du = firstRow ? -b : -c;
-    const double dv = firstRow ? a : b;
-    const Vec3 direction = du * su + dv * sv;
-    const double length = Length(direction);
-    return length > 0.0 ? direction / length : su / Length(su);
-}
-
-} // namespace Stereon::Detail
-
-export namespace Stereon {
-
 /// The principal curvatures and directions: the eigenvalues and
 /// eigenvectors of the shape operator I^-1 II, from H +- sqrt(H^2 - K)
-/// computed without cancellation. DegenerateResult where the
-/// parametrisation is singular.
+/// computed without cancellation, all from one evaluation of the partials.
+/// DegenerateResult where the parametrisation is singular.
 template <typename S>
 [[nodiscard]] Result<PrincipalCurvaturesResult> PrincipalCurvatures(const S& surface,
                                                                     const Point2& uv)
 {
-    const Result<FundamentalFormsResult> forms = FundamentalForms(surface, uv);
+    const auto d = Detail::PartialsAt(surface, uv);
+    const Result<FundamentalFormsResult> forms = Detail::FormsFrom(d);
     if (!forms) {
         return std::unexpected(forms.error());
     }
@@ -175,8 +218,7 @@ template <typename S>
     const double near = far != 0.0 ? gauss / far : 0.0;
     const double kMin = std::min(far, near);
     const double kMax = std::max(far, near);
-    const Vec3 maxDirection =
-        Detail::PrincipalDirection(f, kMax, Deriv(surface, uv, 1, 0), Deriv(surface, uv, 0, 1));
+    const Vec3 maxDirection = Detail::PrincipalDirection(f, kMax, d.Su, d.Sv);
     return PrincipalCurvaturesResult{.Min = kMin,
                                      .Max = kMax,
                                      .MinDirection = Cross(maxDirection, f.Normal),

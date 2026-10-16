@@ -92,6 +92,9 @@ positive where the curve turns counter-clockwise. ``Curvature`` of a
    const Result<double> tau = Torsion(curve, t);            // 1/mm
    const Result<Point3> centre = CenterOfCurvature(curve, t);
 
+   // T, N, B and the curvature from one evaluation of C, C' and C''.
+   const Result<FrenetFrameResult> frame = FrenetFrame(curve, t);
+
 .. _fig-properties-comb:
 
 .. figure:: figures/properties-comb.svg

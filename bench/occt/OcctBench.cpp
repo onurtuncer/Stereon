@@ -12,6 +12,7 @@
 //   B1.3  point projection onto B-spline curves and surfaces
 //   B1.4  curve interpolation and approximation
 //   B1.5  knot insertion and Bezier decomposition
+//   B1.6  local differential properties and arc length
 //
 // Each Stereon benchmark has an OCCT twin with the same name after the
 // slash, so the report pairs them. OCCT gets its best usage where it has
@@ -26,17 +27,22 @@
 //
 // OCCT is LGPL-2.1 and linked into this executable only (ADR-0008).
 
+#include <GCPnts_AbscissaPoint.hxx>
 #include <GeomAPI_Interpolate.hxx>
 #include <GeomAPI_PointsToBSpline.hxx>
 #include <GeomAPI_ProjectPointOnCurve.hxx>
 #include <GeomAPI_ProjectPointOnSurf.hxx>
+#include <GeomAdaptor_Curve.hxx>
 #include <GeomConvert_BSplineCurveToBezierCurve.hxx>
+#include <GeomLProp_CLProps.hxx>
+#include <GeomLProp_SLProps.hxx>
 #include <Geom_BSplineCurve.hxx>
 #include <Geom_BSplineSurface.hxx>
 #include <NCollection_Array1.hxx>
 #include <NCollection_Array2.hxx>
 #include <NCollection_HArray1.hxx>
 #include <benchmark/benchmark.h>
+#include <gp_Dir.hxx>
 #include <gp_Pnt.hxx>
 #include <gp_Vec.hxx>
 
@@ -549,6 +555,156 @@ void OcctBezierDecomposition(benchmark::State& state)
     Items(state, 1);
 }
 
+// ---------------------------------------------------------------------------
+// B1.6: local properties and arc length
+
+/// Normalised tolerance for the property evaluators of both libraries:
+/// OCCT treats derivatives shorter than this as zero, Stereon tests exactly.
+constexpr double PropertyResolution = 1e-9;
+
+/// Abscissas per iteration of the point-at-length benchmarks.
+constexpr int AbscissaCount = 64;
+
+/// The relative accuracy asked of OCCT's arc length, matching Stereon's
+/// internal target of about 1e-12 (Detail::ArcLengthRelativeTarget).
+constexpr double LengthTolerance = 1e-12;
+
+/// Tangent, principal normal and curvature at every parameter, from one
+/// evaluation in both libraries.
+void CurveProperties(benchmark::State& state)
+{
+    const BSplineCurve c = SomeCurve(3, true);
+    const std::vector<double> t = CurveParameters(c);
+    for (auto _ : state) {
+        double sum = 0.0;
+        for (const double u : t) {
+            const auto frame = Stereon::FrenetFrame(c, u);
+            sum += frame->Curvature + frame->Normal.X + frame->Tangent.X;
+        }
+        benchmark::DoNotOptimize(sum);
+    }
+    Items(state, t.size());
+}
+
+void OcctCurveProperties(benchmark::State& state)
+{
+    const BSplineCurve c = SomeCurve(3, true);
+    const occ::handle<Geom_BSplineCurve> occt = ToOcct(c);
+    const std::vector<double> t = CurveParameters(c);
+    GeomLProp_CLProps props(occt, 2, PropertyResolution);
+    for (auto _ : state) {
+        double sum = 0.0;
+        for (const double u : t) {
+            props.SetParameter(u);
+            sum += props.Curvature();
+            gp_Dir normal;
+            props.Normal(normal);
+            gp_Dir tangent;
+            props.Tangent(tangent);
+            sum += normal.X() + tangent.X();
+        }
+        benchmark::DoNotOptimize(sum);
+    }
+    Items(state, t.size());
+}
+
+/// Principal curvatures and directions at every parameter pair.
+void SurfaceProperties(benchmark::State& state)
+{
+    const BSplineSurface s = SomeSurface(false);
+    const std::vector<Point2> uv = SurfaceParameters(s);
+    for (auto _ : state) {
+        double sum = 0.0;
+        for (const Point2& p : uv) {
+            const auto k = Stereon::PrincipalCurvatures(s, p);
+            sum += k->Min + k->Max + k->MaxDirection.X;
+        }
+        benchmark::DoNotOptimize(sum);
+    }
+    Items(state, uv.size());
+}
+
+void OcctSurfaceProperties(benchmark::State& state)
+{
+    const BSplineSurface s = SomeSurface(false);
+    const occ::handle<Geom_BSplineSurface> occt = ToOcct(s);
+    const std::vector<Point2> uv = SurfaceParameters(s);
+    GeomLProp_SLProps props(occt, 2, PropertyResolution);
+    for (auto _ : state) {
+        double sum = 0.0;
+        for (const Point2& p : uv) {
+            props.SetParameters(p.X, p.Y);
+            sum += props.MinCurvature() + props.MaxCurvature();
+            gp_Dir maxDirection;
+            gp_Dir minDirection;
+            props.CurvatureDirections(maxDirection, minDirection);
+            sum += maxDirection.X();
+        }
+        benchmark::DoNotOptimize(sum);
+    }
+    Items(state, uv.size());
+}
+
+/// The length of the whole curve.
+void CurveLength(benchmark::State& state)
+{
+    const BSplineCurve c = SomeCurve(3, true);
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(Stereon::ArcLength(c, Domain(c))->Length);
+    }
+    Items(state, 1);
+    // The length itself, to compare the two libraries' answers.
+    state.counters["length_mm"] = Stereon::ArcLength(c, Domain(c))->Length;
+}
+
+void OcctCurveLength(benchmark::State& state)
+{
+    const BSplineCurve c = SomeCurve(3, true);
+    const GeomAdaptor_Curve occt(ToOcct(c));
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(GCPnts_AbscissaPoint::Length(
+            occt, occt.FirstParameter(), occt.LastParameter(), LengthTolerance));
+    }
+    Items(state, 1);
+    state.counters["length_mm"] = GCPnts_AbscissaPoint::Length(
+        occt, occt.FirstParameter(), occt.LastParameter(), LengthTolerance);
+}
+
+/// Parameters at evenly spaced lengths from the start, each from scratch.
+void PointAtLength(benchmark::State& state)
+{
+    const BSplineCurve c = SomeCurve(3, true);
+    const double length = Stereon::ArcLength(c, Domain(c))->Length;
+    const double start = Domain(c).GetLower();
+    for (auto _ : state) {
+        double sum = 0.0;
+        for (int i = 1; i <= AbscissaCount; ++i) {
+            sum += *Stereon::ParameterAtArcLength(c, start, length * i / (AbscissaCount + 1));
+        }
+        benchmark::DoNotOptimize(sum);
+    }
+    Items(state, AbscissaCount);
+}
+
+void OcctPointAtLength(benchmark::State& state)
+{
+    const BSplineCurve c = SomeCurve(3, true);
+    const GeomAdaptor_Curve occt(ToOcct(c));
+    const double start = occt.FirstParameter();
+    const double length =
+        GCPnts_AbscissaPoint::Length(occt, start, occt.LastParameter(), LengthTolerance);
+    for (auto _ : state) {
+        double sum = 0.0;
+        for (int i = 1; i <= AbscissaCount; ++i) {
+            const GCPnts_AbscissaPoint point(LengthTolerance, occt,
+                                             length * i / (AbscissaCount + 1), start);
+            sum += point.Parameter();
+        }
+        benchmark::DoNotOptimize(sum);
+    }
+    Items(state, AbscissaCount);
+}
+
 } // namespace
 
 BENCHMARK(CurveD0<3, false>)->Name("B1.1/CurveD0/cubic/Stereon");
@@ -579,3 +735,11 @@ BENCHMARK(KnotInsertion)->Name("B1.5/KnotInsertion/100/Stereon");
 BENCHMARK(OcctKnotInsertion)->Name("B1.5/KnotInsertion/100/OCCT");
 BENCHMARK(BezierDecomposition)->Name("B1.5/BezierDecomposition/Stereon");
 BENCHMARK(OcctBezierDecomposition)->Name("B1.5/BezierDecomposition/OCCT");
+BENCHMARK(CurveProperties)->Name("B1.6/CurveProperties/rational-cubic/Stereon");
+BENCHMARK(OcctCurveProperties)->Name("B1.6/CurveProperties/rational-cubic/OCCT");
+BENCHMARK(SurfaceProperties)->Name("B1.6/SurfaceProperties/bicubic/Stereon");
+BENCHMARK(OcctSurfaceProperties)->Name("B1.6/SurfaceProperties/bicubic/OCCT");
+BENCHMARK(CurveLength)->Name("B1.6/ArcLength/rational-cubic/Stereon");
+BENCHMARK(OcctCurveLength)->Name("B1.6/ArcLength/rational-cubic/OCCT");
+BENCHMARK(PointAtLength)->Name("B1.6/PointAtLength/64/Stereon");
+BENCHMARK(OcctPointAtLength)->Name("B1.6/PointAtLength/64/OCCT");
