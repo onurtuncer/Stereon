@@ -1,0 +1,2 @@
+# Native Stereon archives are binary: no line-ending conversion, no diffs.
+*.stn binary

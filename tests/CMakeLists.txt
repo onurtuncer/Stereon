@@ -33,6 +33,7 @@ stereon_add_tests(robust)
 stereon_add_tests(curve)
 stereon_add_tests(surface)
 stereon_add_tests(intersect)
+stereon_add_tests(io)
 
 # The reflection serialiser is instantiated in the test unit, which pulls the
 # module's <meta> declarations into it. GCC 16.2 then rejects the built-in

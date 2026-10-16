@@ -19,6 +19,8 @@ import Stereon.Surface;
 
 #include "Formatting.hpp"
 
+using Stereon::BSplineCurve;
+using Stereon::BSplineSurface;
 using Stereon::Circle;
 using Stereon::Cylinder;
 using Stereon::Deserialized;
@@ -127,4 +129,49 @@ TEST_CASE("the JSON view names every member", "[serialize]")
                           std::numeric_limits<double>::infinity(), 0.0},
                    Vec3{}};
     REQUIRE(ToJson(odd).starts_with(R"({"Origin":{"X":"nan","Y":"inf","Z":0})"));
+}
+
+TEST_CASE("vectors serialise as a count and their elements", "[serialize]")
+{
+    if constexpr (!Stereon::SerializationAvailable) {
+        return;
+    }
+    const BSplineCurve curve{3,
+                             {0.0, 0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0, 1.0},
+                             {Point3{0.0, 0.0, 0.0}, Point3{1.0, 2.0, 0.0}, Point3{2.0, -1.0, 1.0},
+                              Point3{3.0, 1.0, 2.0}, Point3{4.0, 0.0, 0.0}},
+                             {1.0, 0.5, 2.0, 0.75, 1.0}};
+    REQUIRE(RoundTrip(curve) == curve);
+    // The degree (4 bytes), then each vector as 8 bytes of count and its
+    // elements: 9 knots, 5 poles of 3 doubles, 5 weights.
+    REQUIRE(Serialized(curve).size() == 4 + (8 + 9 * 8) + (8 + 5 * 24) + (8 + 5 * 8));
+
+    const BSplineCurve polynomial{1, {0.0, 0.0, 1.0, 1.0}, {Point3{}, Point3{1.0, 1.0, 1.0}}, {}};
+    REQUIRE(RoundTrip(polynomial) == polynomial); // an empty vector reads back empty
+
+    const BSplineSurface surface{1,
+                                 1,
+                                 {0.0, 0.0, 1.0, 1.0},
+                                 {0.0, 0.0, 1.0, 1.0},
+                                 {Point3{0.0, 0.0, 0.0}, Point3{0.0, 1.0, 0.0},
+                                  Point3{1.0, 0.0, 0.0}, Point3{1.0, 1.0, 1.0}},
+                                 {}};
+    REQUIRE(RoundTrip(surface) == surface);
+    REQUIRE(
+        ToJson(polynomial) ==
+        R"({"Degree":1,"Knots":[0,0,1,1],"Poles":[{"X":0,"Y":0,"Z":0},{"X":1,"Y":1,"Z":1}],"Weights":[]})");
+}
+
+TEST_CASE("a corrupt element count is a parse error, not a huge allocation", "[serialize]")
+{
+    if constexpr (!Stereon::SerializationAvailable) {
+        return;
+    }
+    const BSplineCurve curve{1, {0.0, 0.0, 1.0, 1.0}, {Point3{}, Point3{1.0, 1.0, 1.0}}, {}};
+    std::vector<std::byte> bytes = Serialized(curve);
+    // The knot count follows the 4-byte degree; claim 2^62 knots.
+    bytes[4 + 7] = std::byte{0x40};
+    const auto back = Deserialized<BSplineCurve>(std::span<const std::byte>{bytes});
+    REQUIRE(back.error().GetCode() == ErrorCode::ParseError);
+    REQUIRE(std::string(back.error().GetMessage()).starts_with("element count"));
 }
