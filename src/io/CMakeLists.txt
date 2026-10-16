@@ -7,6 +7,11 @@
 
 stereon_add_library(io
     MODULES
+        GeometryArchive.cppm
         Io.cppm
+        Records.cppm
+    SOURCES
+        GeometryArchive.cpp
+        Records.cpp
     DEPENDS
         mesh)

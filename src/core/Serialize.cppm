@@ -37,11 +37,13 @@ import :SmallBuffer;
 /// arithmetic values and enumerations.
 ///
 /// - Serialized(value): the binary form, every value little-endian, doubles
-///   as their IEEE 754 bit pattern, bools as one byte. A new member changes
-///   the layout; the .stn format will version it (ADR-0012).
-/// - Deserialized<T>(bytes): the inverse. Truncated or overlong input and a
-///   bool byte other than 0 or 1 are a ParseError, never a contract
-///   violation, because file contents are data (ADR-0006).
+///   as their IEEE 754 bit pattern, bools as one byte, a std::vector as its
+///   element count (8 bytes) followed by its elements. A new member changes
+///   the layout; the .stn format versions it (ADR-0012).
+/// - Deserialized<T>(bytes): the inverse. Truncated or overlong input, a
+///   bool byte other than 0 or 1 and an element count larger than the
+///   bytes left could hold are a ParseError, never a contract violation or
+///   a huge allocation, because file contents are data (ADR-0006).
 /// - ToJson(value): a JSON view with member names, for debugging and diffs.
 ///   Non-finite doubles become the strings "nan", "inf" and "-inf".
 ///
@@ -65,6 +67,8 @@ namespace Stereon::Detail {
                                                 std::size_t available);
 [[nodiscard]] std::string InvalidBoolMessage(std::uint64_t value, std::size_t offset);
 [[nodiscard]] std::string LeftoverBytesMessage(std::size_t count);
+[[nodiscard]] std::string ElementCountMessage(std::uint64_t count, std::size_t offset,
+                                              std::size_t available);
 void AppendJsonDouble(double x, std::string& out);
 void AppendJsonInteger(long long x, std::string& out);
 void AppendJsonUnsigned(unsigned long long x, std::string& out);
@@ -76,6 +80,13 @@ namespace Stereon::Detail {
 
 template <typename T>
 inline constexpr bool IsLeaf = std::is_arithmetic_v<T> || std::is_enum_v<T>;
+
+/// std::vector, stored as its size and then its elements. std::vector<bool>
+/// is not a container of bools and is not supported.
+template <typename T>
+inline constexpr bool IsVector = false;
+template <typename E, typename A>
+inline constexpr bool IsVector<std::vector<E, A>> = !std::is_same_v<E, bool>;
 
 /// The non-static data members of T, private ones included: the serialiser
 /// stores a value's whole state, as the .stn tables will.
@@ -109,7 +120,12 @@ template <typename T>
 template <typename T>
 void WriteValue(const T& value, std::vector<std::byte>& out)
 {
-    if constexpr (IsLeaf<T>) {
+    if constexpr (IsVector<T>) {
+        WriteValue(static_cast<std::uint64_t>(value.size()), out);
+        for (const auto& element : value) {
+            WriteValue(element, out);
+        }
+    } else if constexpr (IsLeaf<T>) {
         const auto bits = BitsOf(value);
         for (std::size_t i = 0; i < sizeof(bits); ++i) {
             out.push_back(static_cast<std::byte>((bits >> (8 * i)) & 0xFFu));
@@ -172,9 +188,39 @@ void ReadLeaf(T& value, ByteReader& reader)
 }
 
 template <typename T>
+void ReadValue(T& value, ByteReader& reader);
+
+/// A vector: its count, checked against the bytes left (every element takes
+/// at least one) before anything is allocated, then its elements.
+template <typename T>
+void ReadVector(T& value, ByteReader& reader)
+{
+    std::uint64_t count = 0;
+    ReadLeaf(count, reader);
+    if (!reader.Error.empty()) {
+        return;
+    }
+    const std::size_t available = reader.Bytes.size() - reader.Offset;
+    if (count > available) {
+        reader.Error = ElementCountMessage(count, reader.Offset - sizeof(count), available);
+        return;
+    }
+    value.clear();
+    value.resize(static_cast<std::size_t>(count));
+    for (auto& element : value) {
+        ReadValue(element, reader);
+        if (!reader.Error.empty()) {
+            return;
+        }
+    }
+}
+
+template <typename T>
 void ReadValue(T& value, ByteReader& reader)
 {
-    if constexpr (IsLeaf<T>) {
+    if constexpr (IsVector<T>) {
+        ReadVector(value, reader);
+    } else if constexpr (IsLeaf<T>) {
         ReadLeaf(value, reader);
     } else {
         constexpr auto members = MembersOf<T>();
@@ -199,6 +245,15 @@ void AppendJson(const T& value, std::string& out)
         AppendJsonInteger(static_cast<long long>(value), out);
     } else if constexpr (std::is_integral_v<T>) {
         AppendJsonUnsigned(static_cast<unsigned long long>(value), out);
+    } else if constexpr (IsVector<T>) {
+        out += '[';
+        for (std::size_t i = 0; i < value.size(); ++i) {
+            if (i > 0) {
+                out += ',';
+            }
+            AppendJson(value[i], out);
+        }
+        out += ']';
     } else {
         constexpr auto members = MembersOf<T>();
         out += '{';

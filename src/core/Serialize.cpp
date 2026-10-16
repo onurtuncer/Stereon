@@ -30,6 +30,13 @@ std::string InvalidBoolMessage(const std::uint64_t value, const std::size_t offs
     return std::format("invalid bool byte {} at offset {}", value, offset);
 }
 
+std::string ElementCountMessage(const std::uint64_t count, const std::size_t offset,
+                                const std::size_t available)
+{
+    return std::format("element count {} at offset {} exceeds the {} bytes left", count, offset,
+                       available);
+}
+
 std::string LeftoverBytesMessage(const std::size_t count)
 {
     return std::format("{} bytes left over after the value", count);
