@@ -16,6 +16,7 @@
 #include <GCPnts_AbscissaPoint.hxx>
 #include <GeomAPI_ProjectPointOnSurf.hxx>
 #include <GeomAdaptor_Curve.hxx>
+#include <GeomLProp_SLProps.hxx>
 #include <Geom_BSplineCurve.hxx>
 #include <Geom_BSplineSurface.hxx>
 #include <NCollection_Array1.hxx>
@@ -38,6 +39,8 @@ using Stereon::BSplineSurface;
 using Stereon::Interval;
 using Stereon::Point2;
 using Stereon::Point3;
+using Stereon::Sphere;
+using Stereon::Vec3;
 using StereonTest::PolylineLength;
 using StereonTest::PolylineReference;
 using StereonTest::ToOcct;
@@ -150,4 +153,63 @@ TEST_CASE("the closest point on the flank of a narrow bump", "[occt][robustness]
     GeomAPI_ProjectPointOnSurf occt(ToOcct(p), ToOcct(surface));
     REQUIRE(occt.NbPoints() > 0);
     CHECK(occt.LowerDistance() > ours + 0.04); // OCCT 8.0.1: 0.278
+}
+
+namespace {
+
+/// A sphere of radius 2.5 in a tilted frame with exact rational axes, and
+/// its exact NURBS form: the shape the pole cases below use.
+Sphere TiltedSphere()
+{
+    return {Point3{1.0, -2.0, 0.5}, 2.5, Vec3{1.0 / 3.0, 2.0 / 3.0, 2.0 / 3.0},
+            Vec3{2.0 / 3.0, 1.0 / 3.0, -2.0 / 3.0}};
+}
+
+} // namespace
+
+TEST_CASE("the closest point near the pole of a NURBS sphere", "[occt][robustness][surface]")
+{
+    // A point 1e-2 from the axis near a pole, where the NURBS form of the
+    // sphere collapses a row of poles to a point. The distance is exactly
+    // | |p - c| - R |; GeomAPI_ProjectPointOnSurf is 3.1e-7 mm farther.
+    const Sphere sphere = TiltedSphere();
+    const BSplineSurface nurbs = *ToBSpline(sphere, Domain(sphere));
+    const Point3 p{2.3307455186486497, -3.3305348520605293, 1.1658263961305297};
+    const double exact = std::abs(Distance(p, sphere.Center) - sphere.Radius);
+
+    CHECK(std::abs(Distance(Eval(nurbs, Project(nurbs, p)), p) - exact) <= 1e-9);
+
+    GeomAPI_ProjectPointOnSurf occt(ToOcct(p), ToOcct(nurbs));
+    REQUIRE(occt.NbPoints() > 0);
+    CHECK(occt.LowerDistance() > exact + 1e-7); // OCCT 8.0.1: 3.1e-7 farther
+}
+
+TEST_CASE("principal curvatures next to the collapsed edge of a NURBS sphere",
+          "[occt][robustness][surface]")
+{
+    // At 1e-8 of the parameter range from the edge where the poles
+    // collapse, both principal curvatures are -1/R. GeomLProp_SLProps
+    // reports them defined but off by up to 50 %. Closer than about 1e-10
+    // the parametrisation itself limits any double-precision method: S_u
+    // shrinks with the distance d, and the error grows like eps / d.
+    const Sphere sphere = TiltedSphere();
+    const BSplineSurface nurbs = *ToBSpline(sphere, Domain(sphere));
+    const occ::handle<Geom_BSplineSurface> occt = ToOcct(nurbs);
+    const Stereon::Box2 d = Domain(nurbs);
+    double occtWorst = 0.0;
+    for (const double u : {0.4, 1.7, 3.0, 4.6, 6.1}) {
+        for (const double v :
+             {d.Y.GetLower() + 1e-8 * Width(d.Y), d.Y.GetUpper() - 1e-8 * Width(d.Y)}) {
+            const auto ours = Stereon::PrincipalCurvatures(nurbs, Point2{u, v});
+            REQUIRE(ours.has_value());
+            CHECK(std::abs(ours->Min * sphere.Radius + 1.0) <= 1e-7);
+            CHECK(std::abs(ours->Max * sphere.Radius + 1.0) <= 1e-7);
+
+            GeomLProp_SLProps props(occt, u, v, 2, 1e-9);
+            REQUIRE(props.IsCurvatureDefined());
+            occtWorst = std::max({occtWorst, std::abs(props.MinCurvature() * sphere.Radius + 1.0),
+                                  std::abs(props.MaxCurvature() * sphere.Radius + 1.0)});
+        }
+    }
+    CHECK(occtWorst > 0.1); // OCCT 8.0.1: up to 0.50
 }

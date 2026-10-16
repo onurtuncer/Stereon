@@ -223,27 +223,70 @@ struct Patch {
     return spans;
 }
 
-[[nodiscard]] std::vector<Patch> BezierPatchesOf(const BSplineSurface& s)
+/// Where one Bezier patch lies in a surface whose every interior knot has
+/// full multiplicity: its parameter range and the knot spans I (in u) and
+/// J (in v) whose last p + 1 by q + 1 poles are its poles.
+struct PatchSlot {
+    Box2 Range;
+    std::size_t I = 0;
+    std::size_t J = 0;
+};
+
+/// A surface in Bezier form: its homogeneous poles with every interior
+/// knot raised to full multiplicity, and where each patch lies in them.
+struct BezierForm {
+    HSurface Surface;
+    std::vector<PatchSlot> Slots;
+};
+
+[[nodiscard]] BezierForm BezierFormOf(const BSplineSurface& s)
 {
     const Box2 domain = Domain(s);
-    HSurface h = ToHomogeneous(s);
+    BezierForm form{ToHomogeneous(s), {}};
+    HSurface& h = form.Surface;
     RaiseToDegree(h, ParameterDirection::U, domain.X);
     RaiseToDegree(h, ParameterDirection::V, domain.Y);
     const auto p = static_cast<std::size_t>(h.DegreeU);
     const auto q = static_cast<std::size_t>(h.DegreeV);
-    std::vector<Patch> patches;
     for (const std::size_t i : SpansOf(h.KnotsU, p, h.CountU, domain.X)) {
         for (const std::size_t j : SpansOf(h.KnotsV, q, h.CountV, domain.Y)) {
-            Patch patch{
-                {Interval{h.KnotsU[i], h.KnotsU[i + 1]}, Interval{h.KnotsV[j], h.KnotsV[j + 1]}},
-                {}};
-            for (std::size_t r = 0; r <= p; ++r) {
-                for (std::size_t c = 0; c <= q; ++c) {
-                    patch.Poles.push_back(h.Poles[(i - p + r) * h.CountV + (j - q + c)]);
-                }
-            }
-            patches.push_back(std::move(patch));
+            form.Slots.push_back(
+                {{Interval{h.KnotsU[i], h.KnotsU[i + 1]}, Interval{h.KnotsV[j], h.KnotsV[j + 1]}},
+                 i,
+                 j});
         }
+    }
+    return form;
+}
+
+/// The pole of row r, column c of a slot's patch.
+[[nodiscard]] const HPoint& SlotPole(const HSurface& h, const PatchSlot& slot, const std::size_t r,
+                                     const std::size_t c)
+{
+    const auto p = static_cast<std::size_t>(h.DegreeU);
+    const auto q = static_cast<std::size_t>(h.DegreeV);
+    return h.Poles[(slot.I - p + r) * h.CountV + (slot.J - q + c)];
+}
+
+/// A slot's patch with its own copy of its poles.
+[[nodiscard]] Patch PatchAt(const HSurface& h, const PatchSlot& slot)
+{
+    Patch patch{slot.Range, {}};
+    for (std::size_t r = 0; r <= static_cast<std::size_t>(h.DegreeU); ++r) {
+        for (std::size_t c = 0; c <= static_cast<std::size_t>(h.DegreeV); ++c) {
+            patch.Poles.push_back(SlotPole(h, slot, r, c));
+        }
+    }
+    return patch;
+}
+
+[[nodiscard]] std::vector<Patch> BezierPatchesOf(const BSplineSurface& s)
+{
+    const BezierForm form = BezierFormOf(s);
+    std::vector<Patch> patches;
+    patches.reserve(form.Slots.size());
+    for (const PatchSlot& slot : form.Slots) {
+        patches.push_back(PatchAt(form.Surface, slot));
     }
     return patches;
 }
@@ -929,18 +972,26 @@ void SearchPatchFor(const BSplineSurface& surface, const Detail::PreparedPatch& 
     Search(surface, p, search, 0, patch.Range, best);
 }
 
-/// The squared distance from p to the box of a raw patch's poles.
-[[nodiscard]] double PatchBound(const Patch& patch, const Point3& p)
+/// The squared distance from p to the box of a slot's poles, read in
+/// place: no copy of the patch.
+[[nodiscard]] double SlotBound(const HSurface& h, const PatchSlot& slot, const Point3& p)
 {
+    std::array<double, 3> low{};
+    std::array<double, 3> high{};
+    low.fill(std::numeric_limits<double>::infinity());
+    high.fill(-std::numeric_limits<double>::infinity());
+    for (std::size_t r = 0; r <= static_cast<std::size_t>(h.DegreeU); ++r) {
+        for (std::size_t c = 0; c <= static_cast<std::size_t>(h.DegreeV); ++c) {
+            const HPoint& q = SlotPole(h, slot, r, c);
+            for (std::size_t d = 0; d < 3; ++d) {
+                low[d] = std::min(low[d], q[d] / q[3]);
+                high[d] = std::max(high[d], q[d] / q[3]);
+            }
+        }
+    }
     double total = 0.0;
     for (std::size_t d = 0; d < 3; ++d) {
-        double low = std::numeric_limits<double>::infinity();
-        double high = -low;
-        for (const HPoint& q : patch.Poles) {
-            low = std::min(low, q[d] / q[3]);
-            high = std::max(high, q[d] / q[3]);
-        }
-        const double gap = std::max({low - p[d], p[d] - high, 0.0});
+        const double gap = std::max({low[d] - p[d], p[d] - high[d], 0.0});
         total += gap * gap;
     }
     return total;
@@ -979,11 +1030,13 @@ Point2 Project(const BSplineSurface& surface, const Point3& p)
     // One point: prepare only the patches the best-first search reaches,
     // rather than all of them as a SurfaceProjector does for many points.
     Detail::RequireFinite(p, "Project(BSplineSurface)", "a non-finite point");
-    const std::vector<Patch> patches = BezierPatchesOf(surface);
+    // Bounds are read in place; a patch is copied out of the Bezier form
+    // only when the search reaches it.
+    const BezierForm form = BezierFormOf(surface);
     std::vector<std::pair<double, std::size_t>> order;
-    order.reserve(patches.size());
-    for (std::size_t i = 0; i < patches.size(); ++i) {
-        order.emplace_back(PatchBound(patches[i], p), i);
+    order.reserve(form.Slots.size());
+    for (std::size_t i = 0; i < form.Slots.size(); ++i) {
+        order.emplace_back(SlotBound(form.Surface, form.Slots[i], p), i);
     }
     std::ranges::sort(order);
     const Box2 domain = Domain(surface);
@@ -993,7 +1046,8 @@ Point2 Project(const BSplineSurface& surface, const Point3& p)
         if (bound > best.DistanceSquared) {
             break;
         }
-        SearchPatchFor(surface, Prepared(patches[index], surface), p, best);
+        SearchPatchFor(surface, Prepared(PatchAt(form.Surface, form.Slots[index]), surface), p,
+                       best);
     }
     return best.Parameter;
 }

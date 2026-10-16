@@ -444,6 +444,32 @@ OCCT 8.0.1.
      - The polylines above
      - 0 of 400
      - 0
+   * - Principal curvatures (``GeomLProp_SLProps``)
+     - The exact NURBS sphere, :math:`10^{-14}` to :math:`10^{-2}` of the
+       parameter range from an edge where a row of poles collapses to the
+       pole
+     - 114 of 300 wrong (by up to 50 % already at :math:`10^{-8}`), 116 no
+       answer
+     - 107 of 300 beyond :math:`10^{-6}`, all closer than :math:`10^{-10}`;
+       worst 1.1 %
+   * - Surface projection
+     - Points within :math:`10^{-12}` to :math:`10^{-1}` of the axis of the
+       NURBS sphere
+     - 8 of 300, worst :math:`3.1 \cdot 10^{-7}` mm too far
+     - 0
+   * - Surface projection
+     - The same points on the analytic sphere
+     - 0 of 300
+     - 0
+   * - Curve and surface projection
+     - Points within :math:`10^{-15}` to :math:`10^{-3}` rad of the seam of a
+       circle, a closed NURBS circle, a cylinder and a torus
+     - 0 of 1 200
+     - 0
+   * - Arc length and point at a length
+     - A circle, starting just before its seam, over up to five turns
+     - 0 of 600
+     - 0
 
 The tests record what OCCT returns, not why. The pattern fits the two
 designs. Stereon's arc length halves every piece until the halves agree,
@@ -455,6 +481,28 @@ surface and refine with Newton's method, so a bump between samples can hide
 the closest point, and the refinement settles at a farther local minimum;
 Stereon's Bernstein subdivision discards a region only once it has shown
 that the region holds no stationary point or no closer point.
+
+The curvature row needs a word. Near an edge where the poles collapse,
+:math:`\mathbf S_u` shrinks with the distance :math:`d` to the edge while
+the second fundamental form keeps its size, so a curvature computed from
+this parametrisation in double precision carries an error of order
+:math:`\varepsilon / d` at best. Stereon reaches that bound: within
+:math:`10^{-6}` down to :math:`10^{-10}` of the range from the edge, 1.1 %
+at :math:`10^{-14}`. Getting there took two fixes the hunt forced, both
+recorded as regression tests:
+
+- ``ToBSpline(sphere)`` did not collapse the pole rows exactly. Its meridian
+  ended at :math:`\cos(\pi/2) = 6.1 \cdot 10^{-17}` rather than 0, so the
+  converted sphere had a ring of radius :math:`1.5 \cdot 10^{-16} R` at each
+  pole, whose real curvature grows like :math:`10^{-16} / d^2`: errors up to
+  :math:`2 \cdot 10^{11}` at :math:`d = 10^{-14}`. Unit-circle points are
+  now reduced by quarter turns before their cosine and sine are taken, so
+  arcs that end on a quarter turn end exactly on it.
+- The surface evaluator worked in absolute coordinates, where a difference
+  of poles near the point carries an error of order :math:`\varepsilon
+  \lvert \mathbf P \rvert` however small the difference is. It now works
+  relative to the pole with the largest basis product at the point, so near
+  a collapsed edge every term shrinks with :math:`d`.
 
 The hunt also found a weakness in Stereon: ``ParameterAtArcLength`` used to
 stop when its Newton step was small relative to the whole parameter range,

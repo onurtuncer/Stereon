@@ -772,13 +772,14 @@ double CurveProjector::Project(const Point3& p) const
     const BSplineCurve& curve = m_Data->Curve;
     const double start = Domain(curve).GetLower();
     Closest best{start, DistanceSquared(Eval(curve, start), p)};
+    std::vector<double> roots; // reused by every segment: one allocation per query
     for (const auto& [bound, index] : SegmentsByBound(m_Data->Segments, p)) {
         if (bound > best.DistanceSquared) {
             break; // every later segment is at least as far
         }
         const Detail::ProjectionSegment& segment = m_Data->Segments[index];
         Consider(curve, p, segment.End, best);
-        std::vector<double> roots;
+        roots.clear();
         IsolateRoots(StationarityFor(segment, p), 0.0, 1.0, 0, roots);
         for (const double r : roots) {
             const double t = segment.Start + r * (segment.End - segment.Start);

@@ -402,7 +402,9 @@ struct Station {
 
 /// A parameter in the direction of `length` that the curve does not reach
 /// before covering it: the domain end of a bounded curve, else a whole
-/// number of periods or a doubling step. Empty if there is none.
+/// number of periods or a doubling step. Empty if there is none. Each
+/// doubling integrates only the stretch it adds, so the whole search
+/// integrates its final range once.
 template <typename C>
 [[nodiscard]] std::optional<Station> TravelEnd(const C& curve, const double start,
                                                const double length)
@@ -418,11 +420,15 @@ template <typename C>
         return std::nullopt;
     }
     const double sign = length > 0.0 ? 1.0 : -1.0;
+    double reach = 0.0;
+    double reached = start;
     for (double step = period > 0.0 ? period : 1.0; std::isfinite(start + sign * step);
          step *= 2.0) {
-        const double reach = SignedLength(curve, start, start + sign * step);
+        const double end = start + sign * step;
+        reach += SignedLength(curve, reached, end);
+        reached = end;
         if (std::abs(reach) >= std::abs(length)) {
-            return Station{start + sign * step, reach};
+            return Station{end, reach};
         }
     }
     return std::nullopt;

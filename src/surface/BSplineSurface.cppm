@@ -268,15 +268,43 @@ void CombineLevel(const std::array<double, Capacity * Capacity>& triangle, const
     }
 }
 
+/// The pole of the window with the largest basis product N_r M_s at the
+/// point: the evaluation works relative to it. Derivatives do not depend on
+/// a translation, but their rounding does: in absolute coordinates a
+/// difference of poles near the point carries an error of the order of
+/// eps |P|, and where the true derivative is small that error dominates.
+/// Next to a collapsed edge, such as the pole of a NURBS sphere, S_u is of
+/// the order of the distance d to the edge, so absolute coordinates lose
+/// curvature like eps / d^2; relative to the collapsed pole every term
+/// shrinks with d as well.
+template <std::size_t Capacity, Scalar T>
+[[nodiscard]] BasicVec3<T> WindowOrigin(const BasicBSplineSurface<T>& surface,
+                                        const SurfaceWindow<Capacity>& window)
+{
+    const auto p = static_cast<std::size_t>(surface.DegreeU);
+    const auto q = static_cast<std::size_t>(surface.DegreeV);
+    std::size_t r = 0;
+    std::size_t c = 0;
+    for (std::size_t i = 1; i <= p; ++i) {
+        r = window.Nu[p * (p + 1) + i] > window.Nu[p * (p + 1) + r] ? i : r;
+    }
+    for (std::size_t j = 1; j <= q; ++j) {
+        c = window.Nv[q * (q + 1) + j] > window.Nv[q * (q + 1) + c] ? j : c;
+    }
+    const std::size_t index = (window.SpanU - p + r) * PoleCountV(surface) + (window.SpanV - q + c);
+    return ToVec(surface.Poles[index]);
+}
+
 /// Stage one of the tensor-product contraction: for each of the p + 1
 /// active rows of poles and each v order l < kv, the l-th v derivative of
 /// the row's curve, rows[r * kv + l], from the row's poles differenced l
-/// times and level q - l of the v triangle; and its weights. A polynomial
-/// surface skips the weights.
+/// times and level q - l of the v triangle; and its weights. The poles are
+/// taken relative to `origin` (WindowOrigin). A polynomial surface skips
+/// the weights.
 template <bool Rational, std::size_t Capacity, std::size_t Rows, Scalar T>
 void ContractRows(const BasicBSplineSurface<T>& surface, const SurfaceWindow<Capacity>& window,
-                  const std::size_t kv, std::array<BasicVec3<T>, Rows>& rows,
-                  std::array<T, Rows>& rowWeights)
+                  const BasicVec3<T>& origin, const std::size_t kv,
+                  std::array<BasicVec3<T>, Rows>& rows, std::array<T, Rows>& rowWeights)
 {
     const auto p = static_cast<std::size_t>(surface.DegreeU);
     const auto q = static_cast<std::size_t>(surface.DegreeV);
@@ -287,9 +315,9 @@ void ContractRows(const BasicBSplineSurface<T>& surface, const SurfaceWindow<Cap
         for (std::size_t s = 0; s <= q; ++s) {
             if constexpr (Rational) {
                 row.Weights[s] = surface.Weights[first + s];
-                row.Points[s] = row.Weights[s] * ToVec(surface.Poles[first + s]);
+                row.Points[s] = row.Weights[s] * (ToVec(surface.Poles[first + s]) - origin);
             } else {
-                row.Points[s] = ToVec(surface.Poles[first + s]);
+                row.Points[s] = ToVec(surface.Poles[first + s]) - origin;
             }
         }
         for (std::size_t l = 0; l < kv; ++l) {
@@ -339,47 +367,53 @@ void CombineRows(const BasicBSplineSurface<T>& surface, const SurfaceWindow<Capa
 /// the basis triangles rather than from basis derivatives. Rows bounds
 /// (p + 1) kv.
 template <std::size_t Capacity, std::size_t Rows, Scalar T>
-void HomogeneousSurfaceDerivativesWith(const BasicBSplineSurface<T>& surface, const Point2& uv,
-                                       const std::size_t ku, const std::size_t kv,
-                                       const std::size_t maxTotal, SurfaceTable<BasicVec3<T>>& a,
-                                       SurfaceTable<T>& w)
+[[nodiscard]] BasicVec3<T>
+HomogeneousSurfaceDerivativesWith(const BasicBSplineSurface<T>& surface, const Point2& uv,
+                                  const std::size_t ku, const std::size_t kv,
+                                  const std::size_t maxTotal, SurfaceTable<BasicVec3<T>>& a,
+                                  SurfaceTable<T>& w)
 {
     SurfaceWindow<Capacity> window;
     FillWindow(surface, uv, ku, kv, window);
+    const BasicVec3<T> origin = WindowOrigin(surface, window);
     std::array<BasicVec3<T>, Rows> rows;
     std::array<T, Rows> rowWeights;
     if (IsRational(surface)) {
-        ContractRows<true>(surface, window, kv, rows, rowWeights);
+        ContractRows<true>(surface, window, origin, kv, rows, rowWeights);
         CombineRows<true>(surface, window, rows, rowWeights, ku, kv, maxTotal, a, w);
     } else {
-        ContractRows<false>(surface, window, kv, rows, rowWeights);
+        ContractRows<false>(surface, window, origin, kv, rows, rowWeights);
         CombineRows<false>(surface, window, rows, rowWeights, ku, kv, maxTotal, a, w);
     }
+    return origin;
 }
 
 /// Orders up to second in each direction, the common case of Newton steps
 /// and curvature, keep the row buffer small.
 inline constexpr std::size_t LowSurfaceOrders = 3;
 
+/// The homogeneous derivatives relative to the returned origin: A^(0,0) / w
+/// is S - origin, and every derivative is that of S.
 template <Scalar T>
-void HomogeneousSurfaceDerivatives(const BasicBSplineSurface<T>& surface, const Point2& uv,
-                                   const std::size_t ku, const std::size_t kv,
-                                   const std::size_t maxTotal, SurfaceTable<BasicVec3<T>>& a,
-                                   SurfaceTable<T>& w)
+[[nodiscard]] BasicVec3<T>
+HomogeneousSurfaceDerivatives(const BasicBSplineSurface<T>& surface, const Point2& uv,
+                              const std::size_t ku, const std::size_t kv,
+                              const std::size_t maxTotal, SurfaceTable<BasicVec3<T>>& a,
+                              SurfaceTable<T>& w)
 {
     constexpr std::size_t small = SmallSurfaceDegree;
     constexpr std::size_t large = SurfaceBasisCount;
     if (surface.DegreeU < static_cast<int>(small) && surface.DegreeV < static_cast<int>(small)) {
         if (kv <= LowSurfaceOrders) {
-            HomogeneousSurfaceDerivativesWith<small, small * LowSurfaceOrders>(surface, uv, ku, kv,
-                                                                               maxTotal, a, w);
+            return HomogeneousSurfaceDerivativesWith<small, small * LowSurfaceOrders>(
+                surface, uv, ku, kv, maxTotal, a, w);
         } else {
-            HomogeneousSurfaceDerivativesWith<small, small * small>(surface, uv, ku, kv, maxTotal,
-                                                                    a, w);
+            return HomogeneousSurfaceDerivativesWith<small, small * small>(surface, uv, ku, kv,
+                                                                           maxTotal, a, w);
         }
     } else {
-        HomogeneousSurfaceDerivativesWith<large, large * large>(surface, uv, ku, kv, maxTotal, a,
-                                                                w);
+        return HomogeneousSurfaceDerivativesWith<large, large * large>(surface, uv, ku, kv,
+                                                                       maxTotal, a, w);
     }
 }
 
@@ -458,16 +492,17 @@ void SurfaceDerivativesUpTo(const BasicBSplineSurface<T>& surface, const Point2&
     const std::size_t kv = std::min(dv, static_cast<std::size_t>(surface.DegreeV)) + 1;
     SurfaceTable<BasicVec3<T>> a(ku * kv);
     SurfaceTable<T> w(ku * kv);
-    HomogeneousSurfaceDerivatives(surface, uv, ku, kv, maxTotal, a, w);
+    const BasicVec3<T> origin = HomogeneousSurfaceDerivatives(surface, uv, ku, kv, maxTotal, a, w);
     if (IsRational(surface)) {
         RationalSurfaceDerivatives(a, w, ku, kv, du, dv, maxTotal, out);
-        return;
-    }
-    for (std::size_t k = 0; k <= du; ++k) {
-        for (std::size_t l = 0; l <= dv && k + l <= maxTotal; ++l) {
-            out[k * (dv + 1) + l] = (k < ku && l < kv) ? a[k * kv + l] : BasicVec3<T>{};
+    } else {
+        for (std::size_t k = 0; k <= du; ++k) {
+            for (std::size_t l = 0; l <= dv && k + l <= maxTotal; ++l) {
+                out[k * (dv + 1) + l] = (k < ku && l < kv) ? a[k * kv + l] : BasicVec3<T>{};
+            }
         }
     }
+    out[0] += origin; // the point back in absolute coordinates
 }
 
 } // namespace Stereon::Detail

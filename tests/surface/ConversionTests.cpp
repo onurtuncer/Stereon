@@ -136,6 +136,35 @@ TEST_CASE("analytic surfaces convert exactly to NURBS", "[surface][conversion][p
     });
 }
 
+TEST_CASE("a converted sphere collapses exactly to a point at each pole",
+          "[surface][conversion][regression]")
+{
+    // The meridian must end exactly on the axis. With cos(pi/2) = 6.1e-17
+    // it ended 1.5e-16 off it, and the revolved surface had a ring of that
+    // radius at each pole, around which its curvature grew like
+    // 1e-16 / d^2: the hunt in tests/occt/RobustnessHunt.cpp found it.
+    const Sphere sphere{Point3{1.0, -2.0, 0.5}, 2.5, Vec3{1.0 / 3.0, 2.0 / 3.0, 2.0 / 3.0},
+                        Vec3{2.0 / 3.0, 1.0 / 3.0, -2.0 / 3.0}};
+    const BSplineSurface s = *ToBSpline(sphere, Domain(sphere));
+    const std::size_t countU = Stereon::PoleCountU(s);
+    const std::size_t countV = Stereon::PoleCountV(s);
+    for (const std::size_t column : {std::size_t{0}, countV - 1}) {
+        for (std::size_t row = 1; row < countU; ++row) {
+            CHECK(s.Poles[row * countV + column] == s.Poles[column]);
+        }
+    }
+    // Principal curvatures stay -1/R right next to the poles.
+    const Box2 d = Domain(s);
+    for (const double offset : {1e-6, 1e-9, 1e-12}) {
+        for (const double v : {d.Y.GetLower() + offset, d.Y.GetUpper() - offset}) {
+            const auto k = Stereon::PrincipalCurvatures(s, Point2{1.3, v});
+            REQUIRE(k.has_value());
+            CHECK(std::abs(k->Min * sphere.Radius + 1.0) <= 1e-3);
+            CHECK(std::abs(k->Max * sphere.Radius + 1.0) <= 1e-3);
+        }
+    }
+}
+
 TEST_CASE("a plane converts with its own parametrisation", "[surface][conversion]")
 {
     const Plane plane{Point3{1.0, 2.0, 3.0}, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
