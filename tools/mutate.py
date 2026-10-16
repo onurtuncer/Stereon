@@ -21,21 +21,26 @@ the CTest selection that should detect it. The harness
 3. applies each mutant alone, rebuilds incrementally, runs its tests and
    restores the file, classifying the result as ADR-0032 section 3 defines:
 
-   Killed       the tests fail, reproducibly (run twice);
+   Killed       the tests fail, reproducibly (run twice), or a compile-time
+                test (a static_assert in a file under tests/) rejects the
+                mutant;
    Survived     the tests pass, and an execution trap at the same site shows
                 the tests reach it;
    Uncovered    the tests pass, and also pass with the trap: never reached;
    Equivalent   the catalogue records an expert rationale that the mutant
                 cannot be observed, and it survived (a kill refutes the
                 claim and is reported as such);
-   Invalid      the mutant does not build, or its source text is not unique;
+   Invalid      the production code does not build, or the mutant's source
+                text is not unique;
    Inconclusive a timeout, an infrastructure failure or a flaky result.
 
 The mutation score is killed / (killed + survived + uncovered); equivalent,
 invalid and inconclusive mutants are excluded and listed. A critical mutant
 must be killed with its declared diagnostic: the failing tests must include
-the named one. The exit status is non-zero if the baseline fails or any
-critical mutant is not killed as declared.
+one of the named ones ("diagnostic" is a string or a list). Each mutant's
+build and test output is kept in <work>/logs as diagnostic evidence. The
+exit status is non-zero if the baseline fails or any critical mutant is not
+killed as declared.
 
 Mutants never touch tests or oracles, and nothing is committed: the
 worktree is removed at the end. Run from anywhere inside the repository:
@@ -90,6 +95,29 @@ def targets_of(mutant):
     """The build targets of a mutant: "target" is one name or a list."""
     target = mutant["target"]
     return [target] if isinstance(target, str) else list(target)
+
+
+def diagnostics_of(mutant):
+    """The declared diagnostics: "diagnostic" is one string or a list."""
+    declared = mutant.get("diagnostic", [])
+    return [declared] if isinstance(declared, str) else list(declared)
+
+
+def compile_time_failures(output):
+    """The static assertions in test files that a build rejected: a
+    compile-time test detecting the mutant, not a broken build."""
+    found = []
+    for line in output.splitlines():
+        match = re.search(r"([^\s:]*tests[/\\][^\s:]+):(\d+):\d+: error: static assertion "
+                          r"failed(.*)", line)
+        if match:
+            name = Path(match.group(1)).name
+            found.append(f"compile-time: {name}:{match.group(2)}{match.group(3)}".strip())
+    return found
+
+
+def no_tests(output):
+    return "No tests were found" in output
 
 
 def failed_tests(output):
@@ -160,15 +188,20 @@ class Harness:
         return True
 
     def build_and_test(self, mutant):
-        """('invalid'|'timeout'|'pass'|'fail', output) for the current source."""
+        """('invalid'|'compile-killed'|'timeout'|'empty'|'pass'|'fail', output) for
+        the current source."""
         status, output = self.tree.build_targets(targets_of(mutant), self.args.build_timeout)
         if status is None:
             return "timeout", output
         if status != 0:
-            return "invalid", output
+            return ("compile-killed" if compile_time_failures(output) else "invalid"), output
         test_timeout = mutant.get("testTimeout", self.args.test_timeout)
-        status, output = self.tree.test(mutant["tests"], test_timeout, self.args.run_timeout)
-        if status is None or any(kind == "Timeout" for _, kind in failed_tests(output)):
+        status, test_output = self.tree.test(mutant["tests"], test_timeout,
+                                             self.args.run_timeout)
+        output += test_output
+        if no_tests(test_output):
+            return "empty", output
+        if status is None or any(kind == "Timeout" for _, kind in failed_tests(test_output)):
             return "timeout", output
         return ("pass" if status == 0 else "fail"), output
 
@@ -185,9 +218,9 @@ class Harness:
             result, _ = self.build_and_test(mutant)
         finally:
             self.tree.restore(mutant["file"])
-        if result in ("invalid", "timeout"):
+        if result in ("invalid", "timeout", "empty"):
             return None
-        return result == "fail"
+        return result in ("fail", "compile-killed")
 
     def classify(self, mutant, outcome):
         if not self.apply(mutant, mutant["replace"]):
@@ -200,20 +233,29 @@ class Harness:
                 result = "fail" if again == "fail" else "flaky"
         finally:
             self.tree.restore(mutant["file"])
+        self.keep_log(mutant, output)
         self.record(mutant, outcome, result, output)
+
+    def keep_log(self, mutant, output):
+        logs = self.tree.root.parent / "logs"
+        logs.mkdir(parents=True, exist_ok=True)
+        (logs / f"{mutant['id']}.txt").write_text(output, encoding="utf-8")
 
     def record(self, mutant, outcome, result, output):
         if result == "invalid":
             first = next((l for l in output.splitlines() if "error" in l), "build failed")
             outcome.outcome, outcome.detail = "invalid", first.strip()[:300]
-        elif result in ("timeout", "flaky"):
+        elif result in ("timeout", "flaky", "empty"):
             outcome.outcome = "inconclusive"
-            outcome.detail = "a test timed out" if result == "timeout" else \
-                "failed once, passed once"
-        elif result == "fail":
-            outcome.failed_tests = [name for name, _ in failed_tests(output)]
-            outcome.diagnostic_found = mutant.get("diagnostic") in outcome.failed_tests \
-                if mutant.get("diagnostic") else True
+            outcome.detail = {"timeout": "a test timed out",
+                              "flaky": "failed once, passed once",
+                              "empty": "the test selection matches no test"}[result]
+        elif result in ("fail", "compile-killed"):
+            outcome.failed_tests = compile_time_failures(output) + \
+                [name for name, _ in failed_tests(output)]
+            declared = diagnostics_of(mutant)
+            outcome.diagnostic_found = not declared or any(
+                d in failed for d in declared for failed in outcome.failed_tests)
             outcome.outcome = "killed"
             if mutant.get("equivalent"):
                 outcome.detail = "the equivalence claim is refuted by this kill"
@@ -242,6 +284,8 @@ def baseline(tree, mutants, args):
         sys.exit("baseline: the targets do not build:\n" + output[-4000:])
     for selection in sorted({m["tests"] for m in mutants}):
         status, output = tree.test(selection, args.test_timeout, args.run_timeout * 2)
+        if no_tests(output):
+            sys.exit(f"baseline: the selection '{selection}' matches no test")
         if status != 0:
             sys.exit(f"baseline: tests '{selection}' fail unmodified:\n" + output[-4000:])
 

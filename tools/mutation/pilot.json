@@ -32,7 +32,10 @@
         "stereon_contract_probe"
       ],
       "tests": "^robust: ",
-      "diagnostic": "robust: predicates agree with exact integer arithmetic on random points"
+      "diagnostic": [
+        "PredicateTests.cpp",
+        "robust: predicates agree with exact integer arithmetic on random points"
+      ]
     },
     {
       "id": "HANDLE-STALE",
@@ -64,7 +67,11 @@
         "stereon_contract_probe"
       ],
       "tests": "^core: ",
-      "diagnostic": "core: intervals are closed and may be empty"
+      "diagnostic": [
+        "IntervalTests.cpp",
+        "BoxTests.cpp",
+        "core: intervals are closed and may be empty"
+      ]
     },
     {
       "id": "CHECK-KNOTS",
@@ -92,10 +99,10 @@
       "replace": "return std::abs(x) < FrameAllowance;",
       "site": "statement",
       "target": [
-        "stereon_core_tests",
+        "stereon_curve_tests",
         "stereon_contract_probe"
       ],
-      "tests": "^core: "
+      "tests": "^curve: "
     },
     {
       "id": "ARITH-BASIS",
@@ -171,7 +178,7 @@
         "stereon_curve_tests",
         "stereon_contract_probe"
       ],
-      "tests": "^curve: B-spline",
+      "tests": "^curve: FindSpan",
       "testTimeout": 60
     }
   ]
