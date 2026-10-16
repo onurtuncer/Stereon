@@ -124,8 +124,8 @@ def failed_tests(output):
     """The names of the failed tests in CTest's summary."""
     names = []
     for line in output.splitlines():
-        match = re.match(r"\s*\d+ - (.*?) \((Failed|Timeout|SEGFAULT|Subprocess aborted|"
-                         r"Exception|Child aborted|Not Run|[A-Za-z ]+)\)\s*$", line)
+        # e.g. "105 - curve: ... (Failed)", "(Timeout)", "(Exit code 0xc0000409)"
+        match = re.match(r"\s*\d+ - (.*) \(([^()]+)\)\s*$", line)
         if match:
             names.append((match.group(1).strip(), match.group(2)))
     return names
