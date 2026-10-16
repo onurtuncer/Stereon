@@ -11,7 +11,10 @@
       "find": "return Detail::Orient2DAdaptive(a, b, c, detSum);",
       "replace": "return SignOf(det);",
       "site": "statement",
-      "target": "stereon_robust_tests",
+      "target": [
+        "stereon_robust_tests",
+        "stereon_contract_probe"
+      ],
       "tests": "^robust: ",
       "diagnostic": "robust: the orientation grid of Kettner et al. is decided exactly"
     },
@@ -24,7 +27,10 @@
       "find": "    if (Detail::Magnitude(det) > errorBound) {\n        return SignOf(det);\n    }\n    return Detail::Orient2DAdaptive(a, b, c, detSum);",
       "replace": "    if (Detail::Magnitude(det) > errorBound) {\n        return SignOf(-det);\n    }\n    return Detail::Orient2DAdaptive(a, b, c, detSum);",
       "site": "statement",
-      "target": "stereon_robust_tests",
+      "target": [
+        "stereon_robust_tests",
+        "stereon_contract_probe"
+      ],
       "tests": "^robust: ",
       "diagnostic": "robust: predicates agree with exact integer arithmetic on random points"
     },
@@ -37,7 +43,10 @@
       "find": "        return index < m_Generations.size() && m_Alive[index] &&\n               m_Generations[index] == h.GetGeneration();",
       "replace": "        return index < m_Generations.size() && m_Alive[index];",
       "site": "statement",
-      "target": "stereon_core_tests",
+      "target": [
+        "stereon_core_tests",
+        "stereon_contract_probe"
+      ],
       "tests": "^core: ",
       "diagnostic": "core: generation tables detect stale handles"
     },
@@ -50,7 +59,10 @@
       "find": "return i.GetLower() <= x && x <= i.GetUpper();",
       "replace": "return i.GetLower() < x && x <= i.GetUpper();",
       "site": "statement",
-      "target": "stereon_core_tests",
+      "target": [
+        "stereon_core_tests",
+        "stereon_contract_probe"
+      ],
       "tests": "^core: ",
       "diagnostic": "core: intervals are closed and may be empty"
     },
@@ -63,7 +75,10 @@
       "find": "    if (m.Inside > p) {",
       "replace": "    if (m.Inside > p + 1) {",
       "site": "statement",
-      "target": "stereon_curve_tests",
+      "target": [
+        "stereon_curve_tests",
+        "stereon_contract_probe"
+      ],
       "tests": "^curve: ",
       "diagnostic": "curve: MakeBSplineCurve validates data from outside the kernel"
     },
@@ -76,7 +91,10 @@
       "find": "return std::abs(x) <= FrameAllowance;",
       "replace": "return std::abs(x) < FrameAllowance;",
       "site": "statement",
-      "target": "stereon_core_tests",
+      "target": [
+        "stereon_core_tests",
+        "stereon_contract_probe"
+      ],
       "tests": "^core: "
     },
     {
@@ -88,7 +106,10 @@
       "find": "            values[r] = saved + right[r + 1] * temp;",
       "replace": "            values[r] = saved - right[r + 1] * temp;",
       "site": "statement",
-      "target": "stereon_curve_tests",
+      "target": [
+        "stereon_curve_tests",
+        "stereon_contract_probe"
+      ],
       "tests": "^curve: "
     },
     {
@@ -100,7 +121,10 @@
       "find": "    while (t < knots[mid] || t >= knots[mid + 1]) {",
       "replace": "    while (t < knots[mid] || t > knots[mid + 1]) {",
       "site": "statement",
-      "target": "stereon_curve_tests",
+      "target": [
+        "stereon_curve_tests",
+        "stereon_contract_probe"
+      ],
       "tests": "^curve: "
     },
     {
@@ -112,7 +136,10 @@
       "find": "        if (bound > best.DistanceSquared) {",
       "replace": "        if (bound >= best.DistanceSquared) {",
       "site": "statement",
-      "target": "stereon_curve_tests",
+      "target": [
+        "stereon_curve_tests",
+        "stereon_contract_probe"
+      ],
       "tests": "^curve: ",
       "equivalent": "A segment whose lower bound equals the best squared distance can at best tie it, and a tie keeps the earlier parameter (ADR-0007), which the search already holds unless the tied point has a smaller parameter in a later segment; segments are ordered by bound, not parameter, so the result can differ only in an exact tie of distances between two segments, which the supported semantics leave to either answer. Expert review: no observable difference within the declared semantics."
     },
@@ -125,7 +152,10 @@
       "find": "    if (m.Inside > p) {",
       "replace": "    if (m.Inside > p) { undeclared_identifier;",
       "site": "statement",
-      "target": "stereon_curve_tests",
+      "target": [
+        "stereon_curve_tests",
+        "stereon_contract_probe"
+      ],
       "tests": "^curve: "
     },
     {
@@ -137,7 +167,10 @@
       "find": "        mid = (low + high) / 2;\n    }\n    return mid;",
       "replace": "        mid = low;\n    }\n    return mid;",
       "site": "statement",
-      "target": "stereon_curve_tests",
+      "target": [
+        "stereon_curve_tests",
+        "stereon_contract_probe"
+      ],
       "tests": "^curve: B-spline",
       "testTimeout": 60
     }

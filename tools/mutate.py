@@ -10,8 +10,8 @@
 
 Each mutant in a catalogue (tools/mutation/*.json) is one conceptual fault:
 an exact, unique piece of production source and its replacement, the
-contract it challenges, the test target to build and the CTest selection
-that should detect it. The harness
+contract it challenges, the test targets to build (one name or a list) and
+the CTest selection that should detect it. The harness
 
 1. checks out the current commit into a disposable git worktree (never the
    developer's tree or a branch) and configures it with the reference GCC
@@ -86,6 +86,12 @@ def run(command, cwd, timeout):
         return None, output
 
 
+def targets_of(mutant):
+    """The build targets of a mutant: "target" is one name or a list."""
+    target = mutant["target"]
+    return [target] if isinstance(target, str) else list(target)
+
+
 def failed_tests(output):
     """The names of the failed tests in CTest's summary."""
     names = []
@@ -125,8 +131,8 @@ class Worktree:
         if status != 0:
             sys.exit("cannot configure the worktree:\n" + output[-4000:])
 
-    def build_target(self, target, timeout):
-        return run(["cmake", "--build", str(self.build), "--target", target], self.root,
+    def build_targets(self, targets, timeout):
+        return run(["cmake", "--build", str(self.build), "--target", *targets], self.root,
                    timeout)
 
     def test(self, selection, test_timeout, timeout):
@@ -155,7 +161,7 @@ class Harness:
 
     def build_and_test(self, mutant):
         """('invalid'|'timeout'|'pass'|'fail', output) for the current source."""
-        status, output = self.tree.build_target(mutant["target"], self.args.build_timeout)
+        status, output = self.tree.build_targets(targets_of(mutant), self.args.build_timeout)
         if status is None:
             return "timeout", output
         if status != 0:
@@ -230,10 +236,10 @@ class Harness:
 
 def baseline(tree, mutants, args):
     """Every target builds and every selection passes, unmodified."""
-    for target in sorted({m["target"] for m in mutants}):
-        status, output = tree.build_target(target, args.build_timeout * 4)
-        if status != 0:
-            sys.exit(f"baseline: {target} does not build:\n" + output[-4000:])
+    targets = sorted({t for m in mutants for t in targets_of(m)})
+    status, output = tree.build_targets(targets, args.build_timeout * 4)
+    if status != 0:
+        sys.exit("baseline: the targets do not build:\n" + output[-4000:])
     for selection in sorted({m["tests"] for m in mutants}):
         status, output = tree.test(selection, args.test_timeout, args.run_timeout * 2)
         if status != 0:
