@@ -69,7 +69,8 @@ if(STEREON_WITH_OCCT)
         message(FATAL_ERROR "the OCCT differential tests need OpenCASCADE 8.0.x, found "
                             "${OpenCASCADE_VERSION}; see tools/occt/build_occt.sh")
     endif()
-    add_executable(stereon_occt_tests occt/GeometryDifferentialTests.cpp)
+    add_executable(stereon_occt_tests occt/GeometryDifferentialTests.cpp
+                                      occt/OcctRobustnessTests.cpp occt/RobustnessHunt.cpp)
     target_link_libraries(stereon_occt_tests
         PRIVATE stereon::surface stereon_options Catch2::Catch2WithMain
                 TKernel TKMath TKG3d TKGeomBase TKGeomAlgo)

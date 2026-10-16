@@ -396,8 +396,19 @@ patch, keeping the best candidate so far:
    (``LeafDepth``, 1/64 of the patch per direction) start Newton's method
    on :math:`(F, G) = 0` in the form
    :math:`((S - \mathbf p)\cdot S_u, (S - \mathbf p)\cdot S_v) = 0`, whose
-   Jacobian is the Hessian of half the squared distance, from their centre,
-   kept inside the sub-patch.
+   Jacobian is the Hessian of half the squared distance, from their centre.
+   The iteration is safeguarded: where the Hessian is not positive definite
+   it uses the first fundamental form instead (Gauss–Newton), every step is
+   halved until it does not increase the distance, and a coordinate on the
+   patch boundary that the step would push outward stays there while the
+   other moves. It is kept inside the Bezier patch, not the leaf: a step
+   clamped to a leaf edge can settle there, pinned at a point that is no
+   stationary point, which is how a property test once found a surface point
+   projecting 3.2e-3 mm away from itself. A run that stalls, stopping
+   strictly inside the patch at no stationary point, subdivides its leaf up
+   to two more levels (``ExtraLeafDepth``) and restarts from the quarters'
+   centres; a run that ends on the patch boundary does not, since the
+   boundary's minima come from the certified edge projections.
 
 The boundary part is certified like the curve projection. The interior part
 is certified in what it excludes: a sub-patch is discarded only when it
@@ -406,9 +417,11 @@ inside the surviving leaves, where Newton's method converges to the
 stationary point when the leaf lies in its basin of attraction; a leaf is a
 small fraction of a Bezier patch, but no bound on the basin is computed. The
 tests require the projected point to be no farther than the closest of
-6 561 grid samples on random surfaces, and the OCCT differential tests
-require it to be no farther than ``GeomAPI_ProjectPointOnSurf``'s on 1 029
-probes; neither has found a counterexample.
+6 561 grid samples on random surfaces, and every surface point to project
+to itself within 1e-8 mm; the OCCT differential tests require it to be no
+farther than ``GeomAPI_ProjectPointOnSurf``'s on 1 029 probes. The one
+counterexample found so far, the pinned Newton run above, is a regression
+test.
 
 **Preparation and order.** As for curves, the point enters :math:`F` and
 :math:`G` linearly,
@@ -420,7 +433,8 @@ quarters at every level, are searched in increasing order of their distance
 bound, and the search stops at the first that cannot hold a closer point.
 ``Project(surface, p)`` prepares only the patches its search reaches. Each
 Newton step takes the point and all five partials it needs from one
-``Derivatives(surface, uv, 2, 2, out)`` call.
+``TotalDerivatives(surface, uv, 2, out)`` call, which computes only the
+partials of total order at most 2.
 
 ``bench/reports/phase1-2026-10-15.md`` measures the evaluators, projectors
 and knot operations against OCCT 8.0.1 (benchmarks B1.1–B1.5): evaluation is

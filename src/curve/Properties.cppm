@@ -362,6 +362,14 @@ template <typename C>
 
 export namespace Stereon::Detail {
 
+/// The relative residual at which ParameterAtArcLength stops: the length
+/// to its parameter matches the request to about 1.5e-11, some 16 times
+/// ArcLengthRelativeTarget, so the quadrature's own error cannot keep the
+/// iteration going. The test is on the length, not the parameter: a
+/// parameter step small for the whole range can still be large on a short
+/// knot span where the curve is fast.
+inline constexpr double ArcLengthResidualTarget = 0x1p-36;
+
 /// Newton steps for ParameterAtArcLength; the iteration converges
 /// quadratically from inside the bracket, so the bound only limits the work
 /// on degenerate input.
@@ -394,7 +402,9 @@ struct Station {
 
 /// A parameter in the direction of `length` that the curve does not reach
 /// before covering it: the domain end of a bounded curve, else a whole
-/// number of periods or a doubling step. Empty if there is none.
+/// number of periods or a doubling step. Empty if there is none. Each
+/// doubling integrates only the stretch it adds, so the whole search
+/// integrates its final range once.
 template <typename C>
 [[nodiscard]] std::optional<Station> TravelEnd(const C& curve, const double start,
                                                const double length)
@@ -410,11 +420,15 @@ template <typename C>
         return std::nullopt;
     }
     const double sign = length > 0.0 ? 1.0 : -1.0;
+    double reach = 0.0;
+    double reached = start;
     for (double step = period > 0.0 ? period : 1.0; std::isfinite(start + sign * step);
          step *= 2.0) {
-        const double reach = SignedLength(curve, start, start + sign * step);
+        const double end = start + sign * step;
+        reach += SignedLength(curve, reached, end);
+        reached = end;
         if (std::abs(reach) >= std::abs(length)) {
-            return Station{start + sign * step, reach};
+            return Station{end, reach};
         }
     }
     return std::nullopt;
@@ -446,13 +460,12 @@ Result<double> ParameterAtArcLength(const C& curve, const double start, const do
     // short stretch between them, so no step integrates from start again.
     double low = std::min(start, end->Parameter);
     double high = std::max(start, end->Parameter);
-    const double settled = Detail::ArcLengthRelativeTarget * (high - low);
     // The linear guess, kept inside the bracket against rounding.
     double t = std::clamp(start + (end->Parameter - start) * (length / end->Length), low, high);
     double reached = Detail::SignedLength(curve, start, t);
     for (int step = 0; step < Detail::ArcLengthNewtonSteps; ++step) {
         const double residual = reached - length;
-        if (residual == 0.0) {
+        if (std::abs(residual) <= Detail::ArcLengthResidualTarget * std::abs(length)) {
             return t;
         }
         (residual > 0.0 ? high : low) = t;
@@ -461,8 +474,8 @@ Result<double> ParameterAtArcLength(const C& curve, const double start, const do
         if (!(next > low && next < high)) {
             next = 0.5 * (low + high);
         }
-        if (std::abs(next - t) <= settled) {
-            return next;
+        if (next == t) {
+            return t; // the bracket has shrunk to adjacent doubles
         }
         reached += Detail::SignedLength(curve, t, next);
         t = next;

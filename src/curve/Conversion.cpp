@@ -219,19 +219,43 @@ Result<BSplineCurve> ToBSpline(const Curve& curve, const Interval range)
 
 namespace Stereon::Detail {
 
+namespace {
+
+/// (cos a, sin a), exact where a is a multiple of the double nearest pi/2:
+/// the angle is reduced by quarter turns first, and the turns applied
+/// exactly (QuarterTurned). Cos(pi/2) itself is 6.1e-17, not 0, so an arc
+/// ending at a quarter turn would end 6e-17 off its axis: a sphere's
+/// meridian would miss the poles and the revolved surface would have a
+/// ring of radius 1e-16 R at each pole instead of a point, whose curvature
+/// grows like 1e-16 / d^2 at a distance d from it.
+[[nodiscard]] Point2 UnitPoint(const double angle)
+{
+    constexpr double quarter = 0.5 * std::numbers::pi;
+    const double turns = std::round(angle / quarter);
+    // The exact difference angle - turns * quarter, rounded once.
+    const double rest = std::fma(-turns, quarter, angle);
+    const auto n = static_cast<long long>(turns) % 4;
+    const BasicCosSin<double> point =
+        QuarterTurned(Cos(rest), Sin(rest), static_cast<int>((n + 4) % 4));
+    return {point.Cos, point.Sin};
+}
+
+} // namespace
+
 UnitArc MakeUnitArc(const double start, const double end)
 {
     const std::vector<double> breaks = Breaks(start, end, SegmentCount(start, end, MaxArcAngle));
     UnitArc arc{QuadraticKnots(breaks), {}, {}};
-    arc.Poles.push_back({Cos(start), Sin(start)});
+    arc.Poles.push_back(UnitPoint(start));
     arc.Weights.push_back(1.0);
     for (std::size_t k = 0; k + 1 < breaks.size(); ++k) {
         const double half = 0.5 * (breaks[k + 1] - breaks[k]);
         const double mid = breaks[k] + half;
         const double weight = Cos(half);
-        arc.Poles.push_back({Cos(mid) / weight, Sin(mid) / weight});
+        const Point2 middle = UnitPoint(mid);
+        arc.Poles.push_back({middle.X / weight, middle.Y / weight});
         arc.Weights.push_back(weight);
-        arc.Poles.push_back({Cos(breaks[k + 1]), Sin(breaks[k + 1])});
+        arc.Poles.push_back(UnitPoint(breaks[k + 1]));
         arc.Weights.push_back(1.0);
     }
     // A full turn closes exactly: cos and sin of start + 2 pi round

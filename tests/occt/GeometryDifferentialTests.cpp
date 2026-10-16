@@ -49,6 +49,8 @@
 
 import Stereon.Surface;
 
+#include "OcctConversion.hpp"
+
 using Stereon::BSplineCurve;
 using Stereon::BSplineSurface;
 using Stereon::Circle;
@@ -64,6 +66,7 @@ using Stereon::Point3;
 using Stereon::Sphere;
 using Stereon::Torus;
 using Stereon::Vec3;
+using StereonTest::ToOcct;
 
 namespace {
 
@@ -85,11 +88,6 @@ bool Agree(const Vec3& a, const gp_Vec& b)
     return std::abs(a.X - b.X()) <= RelativeTolerance * scale &&
            std::abs(a.Y - b.Y()) <= RelativeTolerance * scale &&
            std::abs(a.Z - b.Z()) <= RelativeTolerance * scale;
-}
-
-gp_Pnt ToOcct(const Point3& p)
-{
-    return {p.X, p.Y, p.Z};
 }
 
 gp_Dir ToOcctDir(const Vec3& v)
@@ -251,38 +249,6 @@ TEST_CASE("ellipses agree with Geom_Ellipse", "[occt][curve]")
     }
 }
 
-/// Stereon's B-spline as OCCT's: distinct knots with multiplicities, and
-/// 1-based arrays.
-occ::handle<Geom_BSplineCurve> ToOcct(const BSplineCurve& c)
-{
-    std::vector<double> values;
-    std::vector<int> counts;
-    for (const double u : c.Knots) {
-        if (values.empty() || values.back() != u) {
-            values.push_back(u);
-            counts.push_back(0);
-        }
-        ++counts.back();
-    }
-    const int poleCount = static_cast<int>(c.Poles.size());
-    const int knotCount = static_cast<int>(values.size());
-    NCollection_Array1<gp_Pnt> poles(1, poleCount);
-    NCollection_Array1<double> weights(1, poleCount);
-    for (int i = 0; i < poleCount; ++i) {
-        const auto index = static_cast<std::size_t>(i);
-        poles(i + 1) = ToOcct(c.Poles[index]);
-        weights(i + 1) = c.Weights.empty() ? 1.0 : c.Weights[index];
-    }
-    NCollection_Array1<double> knots(1, knotCount);
-    NCollection_Array1<int> multiplicities(1, knotCount);
-    for (int i = 0; i < knotCount; ++i) {
-        const auto index = static_cast<std::size_t>(i);
-        knots(i + 1) = values[index];
-        multiplicities(i + 1) = counts[index];
-    }
-    return new Geom_BSplineCurve(poles, weights, knots, multiplicities, c.Degree);
-}
-
 /// Clamped and unclamped, polynomial and rational, low and high degree,
 /// with a double interior knot: the cases the algorithms branch on.
 std::vector<BSplineCurve> SomeBSplineCurves()
@@ -352,51 +318,6 @@ TEST_CASE("B-spline projections agree with GeomAPI_ProjectPointOnCurve", "[occt]
             }
         }
     }
-}
-
-/// Distinct values and their multiplicities, 1-based, as OCCT stores knots.
-struct OcctKnots {
-    NCollection_Array1<double> Values;
-    NCollection_Array1<int> Multiplicities;
-};
-
-OcctKnots ToOcctKnots(const std::vector<double>& knots)
-{
-    std::vector<double> values;
-    std::vector<int> counts;
-    for (const double u : knots) {
-        if (values.empty() || values.back() != u) {
-            values.push_back(u);
-            counts.push_back(0);
-        }
-        ++counts.back();
-    }
-    const int n = static_cast<int>(values.size());
-    OcctKnots result{NCollection_Array1<double>(1, n), NCollection_Array1<int>(1, n)};
-    for (int i = 0; i < n; ++i) {
-        result.Values(i + 1) = values[static_cast<std::size_t>(i)];
-        result.Multiplicities(i + 1) = counts[static_cast<std::size_t>(i)];
-    }
-    return result;
-}
-
-occ::handle<Geom_BSplineSurface> ToOcct(const BSplineSurface& s)
-{
-    const auto countU = static_cast<int>(Stereon::PoleCountU(s));
-    const auto countV = static_cast<int>(Stereon::PoleCountV(s));
-    NCollection_Array2<gp_Pnt> poles(1, countU, 1, countV);
-    NCollection_Array2<double> weights(1, countU, 1, countV);
-    for (int i = 0; i < countU; ++i) {
-        for (int j = 0; j < countV; ++j) {
-            const auto k = static_cast<std::size_t>(i * countV + j);
-            poles(i + 1, j + 1) = ToOcct(s.Poles[k]);
-            weights(i + 1, j + 1) = s.Weights.empty() ? 1.0 : s.Weights[k];
-        }
-    }
-    const OcctKnots u = ToOcctKnots(s.KnotsU);
-    const OcctKnots v = ToOcctKnots(s.KnotsV);
-    return new Geom_BSplineSurface(poles, weights, u.Values, v.Values, u.Multiplicities,
-                                   v.Multiplicities, s.DegreeU, s.DegreeV);
 }
 
 /// Polynomial and rational, clamped and unclamped, with a double knot.
