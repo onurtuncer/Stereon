@@ -377,9 +377,9 @@ TEST_CASE("a point on a rational bilinear surface projects to itself",
         1, 1, std::vector<double>{0.25, 0.5, 1.25, 1.5, 2.0, 2.25},
         std::vector<double>{0.25, 0.5, 0.75, 1.0},
         std::vector<Point3>{Point3{-0.5, -0.2, -3.0}, Point3{0.0, 0.5, -0.4},
-                            Point3{0.5, -0.2, 0.0}, Point3{0.5, 0.7, 0.2},
-                            Point3{1.5, -0.5, -3.0}, Point3{1.5, 0.5, -3.0},
-                            Point3{2.5, -0.5, -3.0}, Point3{2.5, 0.5, -3.0}},
+                            Point3{0.5, -0.2, 0.0}, Point3{0.5, 0.7, 0.2}, Point3{1.5, -0.5, -3.0},
+                            Point3{1.5, 0.5, -3.0}, Point3{2.5, -0.5, -3.0},
+                            Point3{2.5, 0.5, -3.0}},
         std::vector<double>{1.6, 0.3, 0.3, 2.0, 0.3, 0.3, 0.3, 0.3});
     const Point3 on = Eval(s, Point2{0.557, 0.652});
     const Point2 foot = Project(s, on);
