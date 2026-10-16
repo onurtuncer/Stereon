@@ -95,15 +95,16 @@ struct SecondPartials {
 };
 
 /// The partials from one combined evaluation where the type has one
-/// (Derivatives of a B-spline surface: one pair of basis tables), else from
+/// (TotalDerivatives of a B-spline surface: one pair of basis tables, and
+/// only the partials of total order at most 2), else from
 /// five calls of Deriv.
 template <typename S, typename V = decltype(Deriv(std::declval<const S&>(), Point2{}, 1, 0))>
 [[nodiscard]] SecondPartials<V> PartialsAt(const S& surface, const Point2& uv)
 {
-    if constexpr (requires(std::span<V> out) { Derivatives(surface, uv, 2, 2, out); }) {
+    if constexpr (requires(std::span<V> out) { TotalDerivatives(surface, uv, 2, out); }) {
         // out[k * 3 + l] = S^(k,l).
         std::array<V, 9> out;
-        Derivatives(surface, uv, 2, 2, std::span<V>{out});
+        TotalDerivatives(surface, uv, 2, std::span<V>{out});
         return {out[3], out[1], out[6], out[4], out[2]};
     } else {
         return {Deriv(surface, uv, 1, 0), Deriv(surface, uv, 0, 1), Deriv(surface, uv, 2, 0),

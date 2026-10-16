@@ -21,6 +21,7 @@ module;
 #include <expected>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -566,6 +567,34 @@ constexpr int LeafDepth = 6;
 /// the bound keeps the work finite from starts outside it.
 constexpr int NewtonSteps = 32;
 
+/// Halvings of a Newton step before it is given up as not descending.
+constexpr int NewtonHalvings = 8;
+
+/// The relative increase of the squared distance that a step may show and
+/// still count as descending, about 16 units in the last place. Near
+/// convergence a correct step changes the squared distance by less than its
+/// rounding error, so an exact test would reject it and the run would
+/// stall a few digits short.
+constexpr double NewtonDescentSlack = 0x1p-48;
+
+[[nodiscard]] bool Descends(const double reached, const double from)
+{
+    return reached <= from * (1.0 + NewtonDescentSlack);
+}
+
+/// A full Newton step this small, relative to the patch's parameter range,
+/// means the stationarity equations hold to rounding: the run has
+/// converged.
+constexpr double NewtonSettled = 0x1p-40;
+
+/// Further levels of subdivision for a leaf whose Newton run stalls: stops
+/// strictly inside the patch, at no stationary point. Its quarters start
+/// Newton from closer centres. A run that ends on the patch boundary needs
+/// none, since the boundary's own minima come from the certified edge
+/// projections. Bounded, so a stalling leaf costs at most 4^ExtraLeafDepth
+/// more runs.
+constexpr int ExtraLeafDepth = 2;
+
 struct Closest {
     Point2 Parameter;
     double DistanceSquared;
@@ -587,35 +616,138 @@ void Consider(const BSplineSurface& s, const Point3& p, const Point2& uv, Closes
             std::clamp(uv.Y, box.Y.GetLower(), box.Y.GetUpper())};
 }
 
-/// Newton's method on (S - p) . S_u = 0, (S - p) . S_v = 0 from uv, kept
-/// inside `box`: the Jacobian is the Hessian of half the squared distance,
-/// [[S_u.S_u + r.S_uu, S_u.S_v + r.S_uv], [., S_v.S_v + r.S_vv]]. Each step
-/// takes every partial it needs from one Derivatives call.
-[[nodiscard]] Point2 Newton(const BSplineSurface& s, const Point3& p, Point2 uv, const Box2& box)
+[[nodiscard]] bool StrictlyInside(const Point2& uv, const Box2& box)
+{
+    return uv.X > box.X.GetLower() && uv.X < box.X.GetUpper() && uv.Y > box.Y.GetLower() &&
+           uv.Y < box.Y.GetUpper();
+}
+
+/// True when x sits on the end of its range that the step points out of.
+[[nodiscard]] bool Blocked(const double x, const Interval& range, const double step)
+{
+    return (x <= range.GetLower() && step < 0.0) || (x >= range.GetUpper() && step > 0.0);
+}
+
+/// Where a Newton run stopped, and whether it stalled there: stopped
+/// strictly inside the patch without converging.
+struct NewtonResult {
+    Point2 Parameter;
+    bool Stalled;
+};
+
+/// A parameter and its squared distance to the point.
+struct NewtonState {
+    Point2 Parameter;
+    double DistanceSquared;
+};
+
+/// The Newton step on (S - p) . S_u = 0, (S - p) . S_v = 0 at uv, from the
+/// point and partials d (d[k * 3 + l] = S^(k,l)) and r = S - p. The matrix
+/// is the Hessian of half the squared distance,
+/// [[S_u.S_u + r.S_uu, S_u.S_v + r.S_uv], [., S_v.S_v + r.S_vv]], where
+/// that is positive definite, and the Gauss-Newton matrix, the first
+/// fundamental form, elsewhere, so the step always descends. A coordinate
+/// on the boundary of `box` that the step would push outward stays, and
+/// the other takes its one-dimensional step. The zero step means there is
+/// none: a degenerate matrix, or both coordinates blocked.
+[[nodiscard]] Vec2 NewtonStep(const std::array<Vec3, 9>& d, const Vec3& r, const Point2& uv,
+                              const Box2& box)
+{
+    const Vec3& su = d[3];
+    const Vec3& sv = d[1];
+    double a = Dot(su, su);
+    double b = Dot(su, sv);
+    double c = Dot(sv, sv);
+    const double ha = a + Dot(r, d[6]);
+    const double hb = b + Dot(r, d[4]);
+    const double hc = c + Dot(r, d[2]);
+    if (ha > 0.0 && ha * hc - hb * hb > 0.0) {
+        a = ha;
+        b = hb;
+        c = hc;
+    }
+    const double det = a * c - b * b;
+    if (!(det > 0.0) || !std::isfinite(det)) {
+        return {};
+    }
+    const double f = Dot(r, su);
+    const double g = Dot(r, sv);
+    const Vec2 full{(b * g - c * f) / det, (b * f - a * g) / det};
+    const bool uBlocked = Blocked(uv.X, box.X, full.X);
+    const bool vBlocked = Blocked(uv.Y, box.Y, full.Y);
+    if (uBlocked && vBlocked) {
+        return {};
+    }
+    if (uBlocked) {
+        return {0.0, -g / c};
+    }
+    return vBlocked ? Vec2{-f / a, 0.0} : full;
+}
+
+/// The step from `from`, halved until it does not increase the distance;
+/// empty when none of NewtonHalvings halvings does, or the clamped step
+/// goes nowhere. The full step has been tried already; this starts at its
+/// half.
+[[nodiscard]] std::optional<NewtonState> Backtracked(const BSplineSurface& s, const Point3& p,
+                                                     const NewtonState& from, Vec2 step,
+                                                     const Box2& box)
+{
+    step = 0.5 * step;
+    for (int halving = 1; halving < NewtonHalvings; ++halving) {
+        const Point2 next =
+            Clamped(Point2{from.Parameter.X + step.X, from.Parameter.Y + step.Y}, box);
+        const double d = DistanceSquared(Eval(s, next), p);
+        if (next != from.Parameter && Descends(d, from.DistanceSquared)) {
+            return NewtonState{next, d};
+        }
+        step = 0.5 * step;
+    }
+    return std::nullopt;
+}
+
+/// Safeguarded Newton from `start`, kept inside `box`, the Bezier patch's
+/// range: every step descends (NewtonStep, Backtracked), and the run has
+/// converged when the full step is NewtonSettled times the range and the
+/// point is strictly inside the box. It stops short, not converged, when
+/// no descending step exists. Clamping to anything smaller than the patch,
+/// such as the leaf, would be wrong: a step clamped to a leaf edge can
+/// settle there, pinned, at a point that is no stationary point.
+[[nodiscard]] NewtonResult Newton(const BSplineSurface& s, const Point3& p, const Point2& start,
+                                  const Box2& box)
 {
     std::array<Vec3, 9> d; // d[k * 3 + l] = S^(k,l)
+    TotalDerivatives(s, start, 2, std::span<Vec3>{d});
+    NewtonState state{start, DistanceSquared(ToPoint(d[0]), p)};
+    std::array<Vec3, 9> trial;
     for (int step = 0; step < NewtonSteps; ++step) {
-        Derivatives(s, uv, 2, 2, std::span<Vec3>{d});
-        const Vec3 r = d[0] - ToVec(p);
-        const Vec3& su = d[3];
-        const Vec3& sv = d[1];
-        const double a = Dot(su, su) + Dot(r, d[6]);
-        const double b = Dot(su, sv) + Dot(r, d[4]);
-        const double c = Dot(sv, sv) + Dot(r, d[2]);
-        const double f = Dot(r, su);
-        const double g = Dot(r, sv);
-        const double det = a * c - b * b;
-        if (!(det != 0.0) || !std::isfinite(det)) {
-            break;
+        const Vec2 full = NewtonStep(d, d[0] - ToVec(p), state.Parameter, box);
+        // Settled before stepping: at convergence a step this small can
+        // raise the distance by rounding, and must not count as a stall.
+        // The zero step, at an exact stationary point or a degenerate
+        // matrix, is settled too.
+        if (std::abs(full.X) <= NewtonSettled * Width(box.X) &&
+            std::abs(full.Y) <= NewtonSettled * Width(box.Y)) {
+            return {state.Parameter, false};
         }
-        const Point2 next =
-            Clamped(Point2{uv.X + (b * g - c * f) / det, uv.Y + (b * f - a * g) / det}, box);
-        if (next == uv) {
-            break;
+        // The full step usually descends, and the partials at its end are
+        // the next step's: evaluate them once and keep them if accepted.
+        const Point2 target =
+            Clamped(Point2{state.Parameter.X + full.X, state.Parameter.Y + full.Y}, box);
+        TotalDerivatives(s, target, 2, std::span<Vec3>{trial});
+        const double reached = DistanceSquared(ToPoint(trial[0]), p);
+        if (target != state.Parameter && Descends(reached, state.DistanceSquared)) {
+            state = {target, reached};
+            d = trial;
+        } else {
+            const std::optional<NewtonState> next = Backtracked(s, p, state, full, box);
+            if (!next) {
+                return {state.Parameter, StrictlyInside(state.Parameter, box)};
+            }
+            state = *next;
+            TotalDerivatives(s, state.Parameter, 2, std::span<Vec3>{d});
         }
-        uv = next;
     }
-    return uv;
+    return {state.Parameter, StrictlyInside(state.Parameter, box)};
 }
 
 /// The quarters of a sub-patch in increasing order of their distance bound,
@@ -632,21 +764,28 @@ void Consider(const BSplineSurface& s, const Point3& p, const Point2& uv, Closes
     return {order[0].second, order[1].second, order[2].second, order[3].second};
 }
 
+/// Searches the sub-patch for interior stationary points: excluded where
+/// its pole box is farther than the best point or F or G keeps one sign;
+/// at a leaf, Newton from its centre over the whole patch `range`, with a
+/// few more levels of subdivision if that stalls.
 void Search(const BSplineSurface& s, const Point3& p, const SearchPatch& patch, const int depth,
-            Closest& best)
+            const Box2& range, Closest& best)
 {
     if (LowerBoundSquared(patch.Coordinates, p) > best.DistanceSquared || OneSigned(patch.F) ||
         OneSigned(patch.G)) {
         return;
     }
-    if (depth == LeafDepth) {
+    if (depth >= LeafDepth) {
         const Point2 centre{Midpoint(patch.Range.X), Midpoint(patch.Range.Y)};
-        Consider(s, p, Newton(s, p, centre, patch.Range), best);
-        return;
+        const NewtonResult newton = Newton(s, p, centre, range);
+        Consider(s, p, newton.Parameter, best);
+        if (!newton.Stalled || depth >= LeafDepth + ExtraLeafDepth) {
+            return;
+        }
     }
     const std::array<SearchPatch, 4> quarters = Quarters(patch);
     for (const std::size_t k : ClosestFirst(quarters, p)) {
-        Search(s, p, quarters[k], depth + 1, best);
+        Search(s, p, quarters[k], depth + 1, range, best);
     }
 }
 
@@ -787,7 +926,7 @@ void SearchPatchFor(const BSplineSurface& surface, const Detail::PreparedPatch& 
 {
     ConsiderEdges(surface, p, patch, best);
     const SearchPatch search{patch.Coordinates, For(patch.F, p), For(patch.G, p), patch.Range};
-    Search(surface, p, search, 0, best);
+    Search(surface, p, search, 0, patch.Range, best);
 }
 
 /// The squared distance from p to the box of a raw patch's poles.

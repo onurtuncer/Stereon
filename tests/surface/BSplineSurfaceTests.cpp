@@ -366,6 +366,26 @@ TEST_CASE("Project finds the closest point of a B-spline surface", "[surface][bs
     });
 }
 
+TEST_CASE("a point on a rational bilinear surface projects to itself",
+          "[surface][bspline][regression]")
+{
+    // The shrunk counterexample of a property run (RapidCheck seed
+    // 1556740052594640537, CI 2026-10-16): an unclamped bilinear patch whose
+    // pole weights range from 0.3 to 2.0, and a surface point near its low-u
+    // edge, which projected 3.2e-3 away.
+    const BSplineSurface s = *Stereon::MakeBSplineSurface(
+        1, 1, std::vector<double>{0.25, 0.5, 1.25, 1.5, 2.0, 2.25},
+        std::vector<double>{0.25, 0.5, 0.75, 1.0},
+        std::vector<Point3>{Point3{-0.5, -0.2, -3.0}, Point3{0.0, 0.5, -0.4},
+                            Point3{0.5, -0.2, 0.0}, Point3{0.5, 0.7, 0.2},
+                            Point3{1.5, -0.5, -3.0}, Point3{1.5, 0.5, -3.0},
+                            Point3{2.5, -0.5, -3.0}, Point3{2.5, 0.5, -3.0}},
+        std::vector<double>{1.6, 0.3, 0.3, 2.0, 0.3, 0.3, 0.3, 0.3});
+    const Point3 on = Eval(s, Point2{0.557, 0.652});
+    const Point2 foot = Project(s, on);
+    CHECK(Distance(Eval(s, foot), on) <= 1e-8);
+}
+
 TEST_CASE("projection onto a NURBS cylinder matches the analytic one", "[surface][bspline]")
 {
     const BSplineSurface s = QuarterCylinder();
@@ -422,6 +442,27 @@ TEST_CASE("Derivatives returns every partial at once", "[surface][bspline][prope
                     RC_ASSERT(all[static_cast<std::size_t>(k * (dv + 1) + l)] ==
                               Deriv(s, uv, k, l));
                 }
+            }
+        }
+    });
+}
+
+TEST_CASE("TotalDerivatives returns the partials of bounded total order",
+          "[surface][bspline][property]")
+{
+    rc::prop("bit for bit those of Derivatives with k + l <= n", [] {
+        const BSplineSurface s = RandomSurface(*rc::gen::arbitrary<bool>());
+        const Point2 uv = RandomParameter(s);
+        const int n = *rc::gen::inRange(0, 5);
+        const auto size = static_cast<std::size_t>((n + 1) * (n + 1));
+        std::vector<Vec3> square(size);
+        std::vector<Vec3> total(size);
+        Stereon::Derivatives(s, uv, n, n, std::span{square});
+        Stereon::TotalDerivatives(s, uv, n, std::span{total});
+        for (int k = 0; k <= n; ++k) {
+            for (int l = 0; k + l <= n; ++l) {
+                const auto i = static_cast<std::size_t>(k * (n + 1) + l);
+                RC_ASSERT(total[i] == square[i]);
             }
         }
     });
