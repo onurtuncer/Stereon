@@ -137,15 +137,36 @@ non-negative and sum to 1. Two consequences:
 Derivatives
 -----------
 
-For a polynomial curve the derivatives are those of the basis functions
-(A3.2):
+For a polynomial curve the derivatives are those of the basis functions,
 
 .. math::
 
    C^{(k)}(t) = \sum_{j=0}^{p} N^{(k)}_{s-p+j,p}(t)\, P_{s-p+j},
 
-on the span :math:`s` containing :math:`t`, and zero for :math:`k > p`. A
-rational curve :math:`C = A / w` with :math:`A = \sum N_i w_i P_i` and
+on the span :math:`s` containing :math:`t`, and zero for :math:`k > p`.
+``Deriv`` does not differentiate the basis functions, though (A3.2); it uses
+the fact that the derivative of a B-spline is again a B-spline, one degree
+lower, on the same knots (eq. 3.8):
+
+.. math::
+
+   C'(t) = \sum_{i=0}^{n-1} N_{i+1,p-1}(t)\, Q_i, \qquad
+   Q_i = \frac{p}{u_{i+p+1} - u_{i+1}}\, (P_{i+1} - P_i).
+
+Applied :math:`k` times to the :math:`p + 1` poles active on the span, this
+gives the poles of :math:`C^{(k)}` there (A3.3). Their basis functions, of
+degree :math:`p - k`, are a level of the triangle that the recurrence for
+the point builds anyway, so ``BasisFunctionsOfAllDegrees`` keeps the whole
+triangle and every derivative costs only :math:`O(p^2)` pole differences
+after it. On a non-empty span every denominator is positive. The combined
+call ``Derivatives(curve, t, n, out)`` returns the point and all
+derivatives up to order :math:`n` from one evaluation, the counterpart of
+OCCT's ``D1``, ``D2`` and ``D3``; ``Deriv`` is that call for one order. The
+work arrays are sized for degrees below 8, which covers the curves met in
+practice, because vectors zero themselves and arrays sized for degree 25
+would cost more to clear than the arithmetic.
+
+A rational curve :math:`C = A / w` with :math:`A = \sum N_i w_i P_i` and
 :math:`w = \sum N_i w_i` has :math:`A = w C`; differentiating with Leibniz's
 rule and solving for the highest term gives (A4.2)
 
@@ -186,7 +207,10 @@ Repeated insertion builds the other operations:
 - **Bezier extraction** (A5.6). Once every knot in the domain has
   multiplicity :math:`p`, the :math:`p + 1` poles of each span are the
   Bernstein coefficients of that span: ``ToBezierSegments`` returns one
-  clamped single-span curve per non-empty span.
+  clamped single-span curve per non-empty span. For a curve clamped at both
+  ends it walks the knots once, raising each to multiplicity :math:`p` by
+  updating only the current segment's poles and copying the shared ones
+  forward, rather than inserting knot by knot into the whole pole array.
 - **Splitting.** With :math:`\bar t` raised to multiplicity :math:`p`, the
   poles before and after it form two curves meeting at
   :math:`C(\bar t)`; ``Split`` returns them with the original
@@ -251,12 +275,31 @@ multiple roots (where the distance function has an inflection) stop at a
 depth of 53 halvings, the precision of a double, and contribute the
 midpoint as a candidate.
 
+**Preparation.** The point enters the stationarity polynomial only through
+:math:`g`, and
+
+.. math::
+
+   g = \sum_d A_d^2 - 2 \sum_d p_d\, (A_d w) + \norm{\mathbf p}^2 w^2
+
+is linear in the four polynomials :math:`\sum_d A_d^2`, :math:`A_d w` and
+:math:`w^2` with the coordinates of :math:`\mathbf p` as weights. The map
+:math:`L(X) = X' w - 2 X w'` that turns :math:`g` into :math:`h` is linear
+too, so :math:`h` is the same combination of :math:`L` of those four,
+which do not depend on the point. A ``CurveProjector`` extracts the Bezier
+segments and computes them once; a query only forms the combination, a few
+multiply-adds per coefficient. Build one to project many points onto the
+same curve; ``Project(curve, p)`` builds one for its single point.
+
 **Assembly.** ``Project`` extracts the Bezier segments, skips any whose
 pole box is farther from :math:`\mathbf p` than the best candidate so far
 (the convex hull property makes that a valid lower bound), and evaluates
 the actual distance at every isolated root and at the segment ends. The
-smallest wins; an exact tie goes to the smaller parameter, which keeps the
-result deterministic (ADR-0007).
+segments are visited in increasing order of their bound, so the closest
+ones are searched first and the search stops at the first segment whose
+bound exceeds the best distance found. The smallest distance wins; an exact
+tie goes to the smaller parameter, which keeps the result deterministic
+(ADR-0007).
 
 Every candidate is a true stationary point or end point, and every
 stationary point is a candidate, so the result is the global minimum up to
@@ -366,6 +409,24 @@ tests require the projected point to be no farther than the closest of
 6 561 grid samples on random surfaces, and the OCCT differential tests
 require it to be no farther than ``GeomAPI_ProjectPointOnSurf``'s on 1 029
 probes; neither has found a counterexample.
+
+**Preparation and order.** As for curves, the point enters :math:`F` and
+:math:`G` linearly,
+:math:`F = \sum_d A_d H_d - \sum_d p_d (w H_d)` with
+:math:`H = A_u w - A w_u`, so a ``SurfaceProjector`` computes the constant
+and the three linear parts of both polynomials once per patch, with
+projectors for its four edges. Patches, and within a patch its four
+quarters at every level, are searched in increasing order of their distance
+bound, and the search stops at the first that cannot hold a closer point.
+``Project(surface, p)`` prepares only the patches its search reaches. Each
+Newton step takes the point and all five partials it needs from one
+``Derivatives(surface, uv, 2, 2, out)`` call.
+
+``bench/reports/phase1-2026-10-15.md`` measures the evaluators, projectors
+and knot operations against OCCT 8.0.1 (benchmarks B1.1–B1.5): evaluation is
+2.5–3 times faster, evaluation with derivatives 1.1–1.6 times, curve
+projection about 4 times, and surface projection, interpolation and Bezier
+decomposition are at parity.
 
 One case is expensive rather than wrong: when many points of a patch are at
 almost the same distance, as from the centre of a spherical patch, the
@@ -517,9 +578,9 @@ Current limits
   *Surface projection*).
 - Degree elevation, knot removal and curve fitting are not yet implemented;
   fitting is planned for v0.1.
-- Evaluation of a cubic costs about 105 ns (GCC 16.2, -O3, MinGW), measured
-  by ``bench/GeometryBench.cpp``; the comparison with OCCT that benchmark
-  B1.1 asks for is not yet made.
+- The SIMD batch evaluation and grid evaluation of benchmarks B1.1 and B1.2
+  are not implemented; single-point evaluation is measured against OCCT in
+  ``bench/reports/phase1-2026-10-15.md``.
 
 Related design decisions
 ------------------------

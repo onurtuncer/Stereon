@@ -15,6 +15,7 @@ stereon_add_library(curve
         Curve.cppm
         Ellipse.cppm
         Erased.cppm
+        Fitting.cppm
         Hyperbola.cppm
         Line.cppm
         Visit.cppm
@@ -24,5 +25,6 @@ stereon_add_library(curve
         Conics.cpp
         Conversion.cpp
         Factories.cpp
+        Fitting.cpp
     DEPENDS
         robust)

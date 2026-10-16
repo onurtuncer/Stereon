@@ -20,6 +20,7 @@ module;
 #include <cstddef>
 #include <expected>
 #include <limits>
+#include <memory>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -178,9 +179,68 @@ struct Segment {
     std::vector<HPoint<D>> Poles;
 };
 
+/// The Bezier segments of a curve clamped at both ends in one pass
+/// (algorithm A5.6): walking the distinct interior knots, each is raised to
+/// multiplicity p by updating only the current segment's poles in place,
+/// and the poles it shares with the next segment are copied forward. No
+/// pole array is reallocated, unlike repeated knot insertion.
+template <std::size_t D>
+[[nodiscard]] std::vector<Segment<D>> ClampedBezierSegments(const Homogeneous<D>& h)
+{
+    const auto p = static_cast<std::size_t>(h.Degree);
+    const std::vector<double>& u = h.Knots;
+    const std::size_t m = u.size() - 1;
+    std::vector<Segment<D>> segments;
+    Segment<D> current{
+        u[p], 0.0, {h.Poles.begin(), h.Poles.begin() + static_cast<std::ptrdiff_t>(p + 1)}};
+    std::vector<double> alphas(p);
+    std::size_t a = p;
+    std::size_t b = p + 1;
+    while (b < m) {
+        const std::size_t first = b;
+        while (b < m && u[b + 1] == u[b]) {
+            ++b;
+        }
+        const std::size_t mult = b - first + 1;
+        if (b == m) {
+            break; // the clamped end: the current segment is the last
+        }
+        current.End = u[b];
+        Segment<D> next{u[b], 0.0, std::vector<HPoint<D>>(p + 1)};
+        if (mult < p) {
+            for (std::size_t j = p; j > mult; --j) {
+                alphas[j - mult - 1] = (u[b] - u[a]) / (u[a + j] - u[a]);
+            }
+            const std::size_t r = p - mult;
+            for (std::size_t j = 1; j <= r; ++j) {
+                for (std::size_t k = p; k >= mult + j; --k) {
+                    current.Poles[k] = Blend<D>(current.Poles[k], current.Poles[k - 1],
+                                                alphas[k - mult - j], h.Rational);
+                }
+                next.Poles[r - j] = current.Poles[p];
+            }
+        }
+        for (std::size_t i = p - std::min(mult, p); i <= p; ++i) {
+            next.Poles[i] = h.Poles[b - p + i];
+        }
+        segments.push_back(std::move(current));
+        current = std::move(next);
+        a = b;
+        ++b;
+    }
+    current.End = u[m];
+    segments.push_back(std::move(current));
+    return segments;
+}
+
 template <std::size_t D>
 [[nodiscard]] std::vector<Segment<D>> BezierSegmentsOf(const BasicBSplineCurve<double, D>& curve)
 {
+    const auto degree = static_cast<std::size_t>(curve.Degree);
+    const std::vector<double>& knots = curve.Knots;
+    if (knots[0] == knots[degree] && knots[knots.size() - 1] == knots[knots.size() - 1 - degree]) {
+        return ClampedBezierSegments(ToHomogeneous(curve));
+    }
     const Interval domain = Domain(curve);
     const auto p = static_cast<std::size_t>(curve.Degree);
     Homogeneous<D> h = ToHomogeneous(curve);
@@ -232,13 +292,23 @@ using Bernstein = std::vector<double>;
     const std::size_t m = a.size() - 1;
     const std::size_t n = b.size() - 1;
     Bernstein c(m + n + 1, 0.0);
+    std::vector<double> rm(m + 1, 1.0);
+    std::vector<double> rn(n + 1, 1.0);
+    for (std::size_t i = 1; i <= m; ++i) {
+        rm[i] = rm[i - 1] * static_cast<double>(m - i + 1) / static_cast<double>(i);
+    }
+    for (std::size_t j = 1; j <= n; ++j) {
+        rn[j] = rn[j - 1] * static_cast<double>(n - j + 1) / static_cast<double>(j);
+    }
     for (std::size_t i = 0; i <= m; ++i) {
         for (std::size_t j = 0; j <= n; ++j) {
-            c[i + j] += Binomial(m, i) * Binomial(n, j) * a[i] * b[j];
+            c[i + j] += rm[i] * rn[j] * a[i] * b[j];
         }
     }
+    double rmn = 1.0; // C(m + n, k), stepped along k
     for (std::size_t k = 0; k <= m + n; ++k) {
-        c[k] /= Binomial(m + n, k);
+        c[k] /= rmn;
+        rmn = rmn * static_cast<double>(m + n - k) / static_cast<double>(k + 1);
     }
     return c;
 }
@@ -373,57 +443,110 @@ void IsolateRoots(const Bernstein& a, const double low, const double high, const
     IsolateRoots(right, mid, high, depth + 1, roots);
 }
 
-/// The numerator of the derivative of the squared distance from p to a
-/// rational Bezier segment, in Bernstein form on [0, 1]. With
-/// A(s) = sum B_i w_i P_i, w(s) = sum B_i w_i and g = |A - w p|^2,
-/// d/ds |A/w - p|^2 = (g' w - 2 g w') / w^3, and w > 0, so the stationary
-/// parameters are the roots of h = g' w - 2 g w', of degree 3p - 1.
-template <std::size_t D>
-[[nodiscard]] Bernstein StationarityPolynomial(const Segment<D>& segment,
-                                               const BasicPointN<double, D>& p)
+/// L(X) = X' w - 2 X w', the operator that turns the squared distance's
+/// numerator g into the numerator of its derivative: with A = sum B_i w_i P_i
+/// and w = sum B_i w_i on a segment, d/ds |A/w - p|^2 = L(g) / w^3 for
+/// g = |A - w p|^2. L is linear, and
+/// g = sum_d A_d^2 - 2 sum_d p_d (A_d w) + |p|^2 w^2, so the stationarity
+/// polynomial h = L(g), of degree 3p - 1, is a combination of four
+/// point-independent polynomials per segment with the point's coordinates as
+/// weights. CurveProjector computes those once.
+[[nodiscard]] Bernstein Stationary(const Bernstein& x, const Bernstein& w, const Bernstein& dw)
 {
-    const std::size_t count = segment.Poles.size();
-    Bernstein w(count);
-    for (std::size_t i = 0; i < count; ++i) {
-        w[i] = segment.Poles[i][D];
-    }
-    Bernstein g(2 * count - 1, 0.0);
-    for (std::size_t d = 0; d < D; ++d) {
-        Bernstein offset(count);
-        for (std::size_t i = 0; i < count; ++i) {
-            offset[i] = segment.Poles[i][d] - w[i] * p[d];
-        }
-        const Bernstein square = Product(offset, offset);
-        for (std::size_t k = 0; k < g.size(); ++k) {
-            g[k] += square[k];
-        }
-    }
-    Bernstein h = Product(Derivative(g), w);
-    const Bernstein correction = Product(g, Derivative(w));
+    Bernstein h = Product(Derivative(x), w);
+    const Bernstein correction = Product(x, dw);
     for (std::size_t k = 0; k < h.size(); ++k) {
         h[k] -= 2.0 * correction[k];
     }
     return h;
 }
 
-/// The squared distance from p to the box of the segment's poles: a lower
-/// bound on its squared distance to the segment, which lies in their
-/// convex hull.
-template <std::size_t D>
-[[nodiscard]] double LowerBoundSquared(const Segment<D>& segment, const BasicPointN<double, D>& p)
+} // namespace
+
+} // namespace Stereon
+
+namespace Stereon::Detail {
+
+/// One Bezier segment, prepared for projection: its parameter range, the box
+/// of its Euclidean poles, and the point-independent parts of its
+/// stationarity polynomial (see Stationary).
+struct ProjectionSegment {
+    double Start = 0.0;
+    double End = 0.0;
+    std::array<double, 3> Low{};
+    std::array<double, 3> High{};
+    Bernstein Constant;              // L(sum_d A_d^2)
+    std::array<Bernstein, 3> Linear; // L(A_d w)
+    Bernstein Quadratic;             // L(w^2)
+};
+
+struct CurveProjectorData {
+    BSplineCurve Curve;
+    std::vector<ProjectionSegment> Segments;
+};
+
+} // namespace Stereon::Detail
+
+namespace Stereon {
+
+namespace {
+
+[[nodiscard]] Detail::ProjectionSegment Prepared(const Segment<3>& segment)
+{
+    const std::size_t count = segment.Poles.size();
+    Bernstein w(count);
+    std::array<Bernstein, 3> a{Bernstein(count), Bernstein(count), Bernstein(count)};
+    Detail::ProjectionSegment prepared{segment.Start, segment.End, {}, {}, {}, {}, {}};
+    prepared.Low.fill(std::numeric_limits<double>::infinity());
+    prepared.High.fill(-std::numeric_limits<double>::infinity());
+    for (std::size_t i = 0; i < count; ++i) {
+        const HPoint<3>& q = segment.Poles[i];
+        w[i] = q[3];
+        for (std::size_t d = 0; d < 3; ++d) {
+            a[d][i] = q[d];
+            prepared.Low[d] = std::min(prepared.Low[d], q[d] / q[3]);
+            prepared.High[d] = std::max(prepared.High[d], q[d] / q[3]);
+        }
+    }
+    const Bernstein dw = Derivative(w);
+    Bernstein squares = Product(a[0], a[0]);
+    for (std::size_t d = 1; d < 3; ++d) {
+        const Bernstein square = Product(a[d], a[d]);
+        for (std::size_t k = 0; k < squares.size(); ++k) {
+            squares[k] += square[k];
+        }
+    }
+    prepared.Constant = Stationary(squares, w, dw);
+    for (std::size_t d = 0; d < 3; ++d) {
+        prepared.Linear[d] = Stationary(Product(a[d], w), w, dw);
+    }
+    prepared.Quadratic = Stationary(Product(w, w), w, dw);
+    return prepared;
+}
+
+/// The squared distance from p to the segment's pole box: a lower bound on
+/// its squared distance to the segment, which lies in their convex hull.
+[[nodiscard]] double LowerBoundSquared(const Detail::ProjectionSegment& segment, const Point3& p)
 {
     double total = 0.0;
-    for (std::size_t d = 0; d < D; ++d) {
-        double low = std::numeric_limits<double>::infinity();
-        double high = -low;
-        for (const HPoint<D>& q : segment.Poles) {
-            low = std::min(low, q[d] / q[D]);
-            high = std::max(high, q[d] / q[D]);
-        }
-        const double gap = std::max({low - p[d], p[d] - high, 0.0});
+    for (std::size_t d = 0; d < 3; ++d) {
+        const double gap = std::max({segment.Low[d] - p[d], p[d] - segment.High[d], 0.0});
         total += gap * gap;
     }
     return total;
+}
+
+/// The stationarity polynomial of the segment for the point p.
+[[nodiscard]] Bernstein StationarityFor(const Detail::ProjectionSegment& segment, const Point3& p)
+{
+    Bernstein h = segment.Constant;
+    const double square = p.X * p.X + p.Y * p.Y + p.Z * p.Z;
+    for (std::size_t k = 0; k < h.size(); ++k) {
+        h[k] += square * segment.Quadratic[k] -
+                2.0 * (p.X * segment.Linear[0][k] + p.Y * segment.Linear[1][k] +
+                       p.Z * segment.Linear[2][k]);
+    }
+    return h;
 }
 
 /// The best parameter found so far and its squared distance.
@@ -432,9 +555,7 @@ struct Closest {
     double DistanceSquared;
 };
 
-template <std::size_t D>
-void Consider(const BasicBSplineCurve<double, D>& curve, const BasicPointN<double, D>& p,
-              const double t, Closest& best)
+void Consider(const BSplineCurve& curve, const Point3& p, const double t, Closest& best)
 {
     const double d = DistanceSquared(Eval(curve, t), p);
     if (d < best.DistanceSquared || (d == best.DistanceSquared && t < best.Parameter)) {
@@ -442,26 +563,38 @@ void Consider(const BasicBSplineCurve<double, D>& curve, const BasicPointN<doubl
     }
 }
 
-template <std::size_t D>
-[[nodiscard]] double ProjectOnCurve(const BasicBSplineCurve<double, D>& curve,
-                                    const BasicPointN<double, D>& p)
+/// The segments in increasing order of their lower bound for p, ties by
+/// index, so the search meets close candidates first and can stop at the
+/// first segment that cannot improve on them.
+[[nodiscard]] std::vector<std::pair<double, std::size_t>>
+SegmentsByBound(const std::vector<Detail::ProjectionSegment>& segments, const Point3& p)
 {
-    Detail::RequireFinite(p, "Project(BSplineCurve)", "a non-finite point");
-    const double start = Domain(curve).GetLower();
-    Closest best{start, DistanceSquared(Eval(curve, start), p)};
-    for (const Segment<D>& segment : BezierSegmentsOf(curve)) {
-        if (LowerBoundSquared(segment, p) > best.DistanceSquared) {
-            continue;
-        }
-        Consider(curve, p, segment.End, best);
-        std::vector<double> roots;
-        IsolateRoots(StationarityPolynomial(segment, p), 0.0, 1.0, 0, roots);
-        for (const double s : roots) {
-            const double t = segment.Start + s * (segment.End - segment.Start);
-            Consider(curve, p, std::clamp(t, segment.Start, segment.End), best);
-        }
+    std::vector<std::pair<double, std::size_t>> order;
+    order.reserve(segments.size());
+    for (std::size_t i = 0; i < segments.size(); ++i) {
+        order.emplace_back(LowerBoundSquared(segments[i], p), i);
     }
-    return best.Parameter;
+    std::ranges::sort(order);
+    return order;
+}
+
+[[nodiscard]] BSplineCurve Lifted(const BSplineCurve2d& curve)
+{
+    BSplineCurve lifted{curve.Degree, curve.Knots, {}, curve.Weights};
+    for (const Point2& pole : curve.Poles) {
+        lifted.Poles.push_back({pole.X, pole.Y, 0.0});
+    }
+    return lifted;
+}
+
+[[nodiscard]] std::shared_ptr<const Detail::CurveProjectorData> Prepare(BSplineCurve curve)
+{
+    auto data = std::make_shared<Detail::CurveProjectorData>();
+    for (const Segment<3>& segment : BezierSegmentsOf(curve)) {
+        data->Segments.push_back(Prepared(segment));
+    }
+    data->Curve = std::move(curve);
+    return data;
 }
 
 // ---------------------------------------------------------------------------
@@ -625,14 +758,49 @@ Result<BSplineCurve2d> MakeBSplineCurve(const int degree, std::vector<double> kn
     return MakeCurve<2>(degree, std::move(knots), std::move(poles), std::move(weights));
 }
 
+CurveProjector::CurveProjector(const BSplineCurve& curve)
+    : m_Data(Prepare(curve))
+{}
+
+CurveProjector::CurveProjector(const BSplineCurve2d& curve)
+    : m_Data(Prepare(Lifted(curve)))
+{}
+
+double CurveProjector::Project(const Point3& p) const
+{
+    Detail::RequireFinite(p, "Project(BSplineCurve)", "a non-finite point");
+    const BSplineCurve& curve = m_Data->Curve;
+    const double start = Domain(curve).GetLower();
+    Closest best{start, DistanceSquared(Eval(curve, start), p)};
+    for (const auto& [bound, index] : SegmentsByBound(m_Data->Segments, p)) {
+        if (bound > best.DistanceSquared) {
+            break; // every later segment is at least as far
+        }
+        const Detail::ProjectionSegment& segment = m_Data->Segments[index];
+        Consider(curve, p, segment.End, best);
+        std::vector<double> roots;
+        IsolateRoots(StationarityFor(segment, p), 0.0, 1.0, 0, roots);
+        for (const double r : roots) {
+            const double t = segment.Start + r * (segment.End - segment.Start);
+            Consider(curve, p, std::clamp(t, segment.Start, segment.End), best);
+        }
+    }
+    return best.Parameter;
+}
+
+double CurveProjector::Project(const Point2& p) const
+{
+    return Project(Point3{p.X, p.Y, 0.0});
+}
+
 double Project(const BSplineCurve& curve, const Point3& p)
 {
-    return ProjectOnCurve(curve, p);
+    return CurveProjector(curve).Project(p);
 }
 
 double Project(const BSplineCurve2d& curve, const Point2& p)
 {
-    return ProjectOnCurve(curve, p);
+    return CurveProjector(curve).Project(p);
 }
 
 Result<BSplineCurve> InsertKnot(const BSplineCurve& curve, const double t, const int times)

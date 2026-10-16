@@ -18,6 +18,7 @@ export import :Cone;
 export import :Conversion;
 export import :Cylinder;
 export import :Erased;
+export import :Fitting;
 export import :Plane;
 export import :Sphere;
 export import :Torus;

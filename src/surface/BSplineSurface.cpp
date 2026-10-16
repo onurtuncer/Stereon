@@ -20,6 +20,7 @@ module;
 #include <cstddef>
 #include <expected>
 #include <limits>
+#include <memory>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -325,24 +326,47 @@ struct Bernstein2 {
     return {m, n, std::vector<double>((m + 1) * (n + 1), 0.0)};
 }
 
-[[nodiscard]] double Binomial(const std::size_t n, const std::size_t k)
-{
-    return Detail::SurfaceBinomial(n, k);
-}
-
 /// The product in the tensor-product Bernstein basis of degree
 /// (Ma + Mb, Na + Nb), the bivariate form of the univariate product
 /// formula, applied in each parameter.
+/// C(n, 0), ..., C(n, n).
+[[nodiscard]] std::vector<double> BinomialRow(const std::size_t n)
+{
+    std::vector<double> row(n + 1, 1.0);
+    for (std::size_t k = 1; k <= n; ++k) {
+        row[k] = row[k - 1] * static_cast<double>(n - k + 1) / static_cast<double>(k);
+    }
+    return row;
+}
+
+/// The factors C(m, i) C(n, j) / C(m + n, i + j) of the product formula in
+/// one parameter, indexed i * (n + 1) + j.
+[[nodiscard]] std::vector<double> ProductFactors(const std::size_t m, const std::size_t n)
+{
+    const std::vector<double> rm = BinomialRow(m);
+    const std::vector<double> rn = BinomialRow(n);
+    const std::vector<double> rmn = BinomialRow(m + n);
+    std::vector<double> factors((m + 1) * (n + 1));
+    for (std::size_t i = 0; i <= m; ++i) {
+        for (std::size_t j = 0; j <= n; ++j) {
+            factors[i * (n + 1) + j] = rm[i] * rn[j] / rmn[i + j];
+        }
+    }
+    return factors;
+}
+
 [[nodiscard]] Bernstein2 Product(const Bernstein2& a, const Bernstein2& b)
 {
     Bernstein2 c = Zero2(a.M + b.M, a.N + b.N);
+    const std::vector<double> fu = ProductFactors(a.M, b.M);
+    const std::vector<double> fv = ProductFactors(a.N, b.N);
     for (std::size_t i = 0; i <= a.M; ++i) {
         for (std::size_t k = 0; k <= b.M; ++k) {
-            const double cu = Binomial(a.M, i) * Binomial(b.M, k) / Binomial(c.M, i + k);
+            const double cu = fu[i * (b.M + 1) + k];
             for (std::size_t j = 0; j <= a.N; ++j) {
+                const double aij = cu * a.At(i, j);
                 for (std::size_t l = 0; l <= b.N; ++l) {
-                    const double cv = Binomial(a.N, j) * Binomial(b.N, l) / Binomial(c.N, j + l);
-                    c.At(i + k, j + l) += cu * cv * a.At(i, j) * b.At(k, l);
+                    c.At(i + k, j + l) += aij * fv[j * (b.N + 1) + l] * b.At(k, l);
                 }
             }
         }
@@ -424,44 +448,60 @@ struct SearchPatch {
     Box2 Range;
 };
 
-/// F = (A - w p) . (A_s w - A w_s), and G likewise in t: up to the positive
-/// factor 2 / w^3 the partial derivatives of the squared distance
-/// |A / w - p|^2, so the interior stationary points are their common zeros.
-[[nodiscard]] Bernstein2 Stationarity(const std::array<Bernstein2, 4>& a, const Point3& p,
-                                      const bool alongU)
+/// The point-independent parts of the stationarity polynomials. With the
+/// homogeneous patch A / w and H = A_s w - A w_s,
+/// F = (A - w p) . H = sum_d A_d H_d - sum_d p_d (w H_d), and G likewise in
+/// t: up to the positive factor 2 / w^3 the partial derivatives of the
+/// squared distance |A / w - p|^2, so the interior stationary points are
+/// their common zeros. The point enters linearly, so a projector computes
+/// the constant part and the three linear parts once per patch.
+struct StationarityParts {
+    Bernstein2 Constant;
+    std::array<Bernstein2, 3> Linear;
+};
+
+[[nodiscard]] StationarityParts PartsOf(const std::array<Bernstein2, 4>& a, const bool alongU)
 {
     const Bernstein2& w = a[3];
     const Bernstein2 dw = Derivative(w, alongU);
-    Bernstein2 result;
+    StationarityParts parts;
     for (std::size_t d = 0; d < 3; ++d) {
-        Bernstein2 offset = a[d];
-        Accumulate(offset, w, -p[d]);
         Bernstein2 velocity = Product(Derivative(a[d], alongU), w);
         Accumulate(velocity, Product(a[d], dw), -1.0);
-        const Bernstein2 term = Product(offset, velocity);
+        const Bernstein2 term = Product(a[d], velocity);
         if (d == 0) {
-            result = term;
+            parts.Constant = term;
         } else {
-            Accumulate(result, term, 1.0);
+            Accumulate(parts.Constant, term, 1.0);
         }
+        parts.Linear[d] = Product(w, velocity);
+    }
+    return parts;
+}
+
+/// The stationarity polynomial for the point p from its parts.
+[[nodiscard]] Bernstein2 For(const StationarityParts& parts, const Point3& p)
+{
+    Bernstein2 result = parts.Constant;
+    for (std::size_t d = 0; d < 3; ++d) {
+        Accumulate(result, parts.Linear[d], -p[d]);
     }
     return result;
 }
 
-[[nodiscard]] SearchPatch SearchPatchOf(const Patch& patch, const std::size_t p,
-                                        const std::size_t q, const Point3& point)
+/// The homogeneous coordinate polynomials (x, y, z, w) of a Bezier patch.
+[[nodiscard]] std::array<Bernstein2, 4> CoordinatesOf(const Patch& patch, const std::size_t p,
+                                                      const std::size_t q)
 {
-    SearchPatch search{{Zero2(p, q), Zero2(p, q), Zero2(p, q), Zero2(p, q)}, {}, {}, patch.Range};
+    std::array<Bernstein2, 4> a{Zero2(p, q), Zero2(p, q), Zero2(p, q), Zero2(p, q)};
     for (std::size_t i = 0; i <= p; ++i) {
         for (std::size_t j = 0; j <= q; ++j) {
             for (std::size_t d = 0; d < 4; ++d) {
-                search.Coordinates[d].At(i, j) = patch.Poles[i * (q + 1) + j][d];
+                a[d].At(i, j) = patch.Poles[i * (q + 1) + j][d];
             }
         }
     }
-    search.F = Stationarity(search.Coordinates, point, true);
-    search.G = Stationarity(search.Coordinates, point, false);
-    return search;
+    return a;
 }
 
 /// The squared distance from p to the box of the (sub-)patch's poles, a
@@ -549,16 +589,19 @@ void Consider(const BSplineSurface& s, const Point3& p, const Point2& uv, Closes
 
 /// Newton's method on (S - p) . S_u = 0, (S - p) . S_v = 0 from uv, kept
 /// inside `box`: the Jacobian is the Hessian of half the squared distance,
-/// [[S_u.S_u + r.S_uu, S_u.S_v + r.S_uv], [., S_v.S_v + r.S_vv]].
+/// [[S_u.S_u + r.S_uu, S_u.S_v + r.S_uv], [., S_v.S_v + r.S_vv]]. Each step
+/// takes every partial it needs from one Derivatives call.
 [[nodiscard]] Point2 Newton(const BSplineSurface& s, const Point3& p, Point2 uv, const Box2& box)
 {
+    std::array<Vec3, 9> d; // d[k * 3 + l] = S^(k,l)
     for (int step = 0; step < NewtonSteps; ++step) {
-        const Vec3 r = Eval(s, uv) - p;
-        const Vec3 su = Deriv(s, uv, 1, 0);
-        const Vec3 sv = Deriv(s, uv, 0, 1);
-        const double a = Dot(su, su) + Dot(r, Deriv(s, uv, 2, 0));
-        const double b = Dot(su, sv) + Dot(r, Deriv(s, uv, 1, 1));
-        const double c = Dot(sv, sv) + Dot(r, Deriv(s, uv, 0, 2));
+        Derivatives(s, uv, 2, 2, std::span<Vec3>{d});
+        const Vec3 r = d[0] - ToVec(p);
+        const Vec3& su = d[3];
+        const Vec3& sv = d[1];
+        const double a = Dot(su, su) + Dot(r, d[6]);
+        const double b = Dot(su, sv) + Dot(r, d[4]);
+        const double c = Dot(sv, sv) + Dot(r, d[2]);
         const double f = Dot(r, su);
         const double g = Dot(r, sv);
         const double det = a * c - b * b;
@@ -575,6 +618,20 @@ void Consider(const BSplineSurface& s, const Point3& p, const Point2& uv, Closes
     return uv;
 }
 
+/// The quarters of a sub-patch in increasing order of their distance bound,
+/// ties in their fixed order, so the closest region is searched first and
+/// its result prunes the others.
+[[nodiscard]] std::array<std::size_t, 4> ClosestFirst(const std::array<SearchPatch, 4>& quarters,
+                                                      const Point3& p)
+{
+    std::array<std::pair<double, std::size_t>, 4> order;
+    for (std::size_t k = 0; k < 4; ++k) {
+        order[k] = {LowerBoundSquared(quarters[k].Coordinates, p), k};
+    }
+    std::ranges::sort(order);
+    return {order[0].second, order[1].second, order[2].second, order[3].second};
+}
+
 void Search(const BSplineSurface& s, const Point3& p, const SearchPatch& patch, const int depth,
             Closest& best)
 {
@@ -587,8 +644,9 @@ void Search(const BSplineSurface& s, const Point3& p, const SearchPatch& patch, 
         Consider(s, p, Newton(s, p, centre, patch.Range), best);
         return;
     }
-    for (const SearchPatch& quarter : Quarters(patch)) {
-        Search(s, p, quarter, depth + 1, best);
+    const std::array<SearchPatch, 4> quarters = Quarters(patch);
+    for (const std::size_t k : ClosestFirst(quarters, p)) {
+        Search(s, p, quarters[k], depth + 1, best);
     }
 }
 
@@ -611,26 +669,6 @@ void Search(const BSplineSurface& s, const Point3& p, const SearchPatch& patch, 
         }
     }
     return edge;
-}
-
-/// The closest points of the patch's four boundary curves, which the
-/// search for interior stationary points does not cover.
-void ConsiderEdges(const BSplineSurface& s, const Point3& point, const Patch& patch, Closest& best)
-{
-    const auto p = static_cast<std::size_t>(s.DegreeU);
-    const auto q = static_cast<std::size_t>(s.DegreeV);
-    const Box2& r = patch.Range;
-    const bool rational = IsRational(s);
-    // The u parameter of the closest point on the edges v = V0 and v = V1,
-    // and the v parameter on the edges u = U0 and u = U1.
-    const double onV0 = Project(EdgeCurve(patch, p, q, true, 0, rational), point);
-    const double onV1 = Project(EdgeCurve(patch, p, q, true, q, rational), point);
-    const double onU0 = Project(EdgeCurve(patch, p, q, false, 0, rational), point);
-    const double onU1 = Project(EdgeCurve(patch, p, q, false, p, rational), point);
-    Consider(s, point, Point2{onV0, r.Y.GetLower()}, best);
-    Consider(s, point, Point2{onV1, r.Y.GetUpper()}, best);
-    Consider(s, point, Point2{r.X.GetLower(), onU0}, best);
-    Consider(s, point, Point2{r.X.GetUpper(), onU1}, best);
 }
 
 // ---------------------------------------------------------------------------
@@ -679,21 +717,144 @@ Box3 BoundingBox(const BSplineSurface& surface)
     return Inflated(box, 8.0 * terms * terms * 0x1p-53 * magnitude);
 }
 
-Point2 Project(const BSplineSurface& surface, const Point3& p)
+} // namespace Stereon
+
+namespace Stereon::Detail {
+
+/// One Bezier patch prepared for projection: its range, coordinate
+/// polynomials, the parts of F and G, and projectors for its four edges
+/// (v = V0, v = V1, u = U0, u = U1).
+struct PreparedPatch {
+    Box2 Range;
+    std::array<Bernstein2, 4> Coordinates;
+    StationarityParts F;
+    StationarityParts G;
+    std::vector<CurveProjector> Edges;
+};
+
+struct SurfaceProjectorData {
+    BSplineSurface Surface;
+    std::vector<PreparedPatch> Patches;
+};
+
+} // namespace Stereon::Detail
+
+namespace Stereon {
+
+namespace {
+
+[[nodiscard]] Detail::PreparedPatch Prepared(const Patch& patch, const BSplineSurface& surface)
+{
+    const auto p = static_cast<std::size_t>(surface.DegreeU);
+    const auto q = static_cast<std::size_t>(surface.DegreeV);
+    const bool rational = IsRational(surface);
+    std::array<Bernstein2, 4> a = CoordinatesOf(patch, p, q);
+    Detail::PreparedPatch prepared{patch.Range, a, PartsOf(a, true), PartsOf(a, false), {}};
+    prepared.Edges.emplace_back(EdgeCurve(patch, p, q, true, 0, rational));
+    prepared.Edges.emplace_back(EdgeCurve(patch, p, q, true, q, rational));
+    prepared.Edges.emplace_back(EdgeCurve(patch, p, q, false, 0, rational));
+    prepared.Edges.emplace_back(EdgeCurve(patch, p, q, false, p, rational));
+    return prepared;
+}
+
+/// The closest points of the patch's four boundary curves, which the
+/// search for interior stationary points does not cover.
+void ConsiderEdges(const BSplineSurface& s, const Point3& point, const Detail::PreparedPatch& patch,
+                   Closest& best)
+{
+    const Box2& r = patch.Range;
+    Consider(s, point, Point2{patch.Edges[0].Project(point), r.Y.GetLower()}, best);
+    Consider(s, point, Point2{patch.Edges[1].Project(point), r.Y.GetUpper()}, best);
+    Consider(s, point, Point2{r.X.GetLower(), patch.Edges[2].Project(point)}, best);
+    Consider(s, point, Point2{r.X.GetUpper(), patch.Edges[3].Project(point)}, best);
+}
+
+[[nodiscard]] std::vector<std::pair<double, std::size_t>>
+PatchesByBound(const std::vector<Detail::PreparedPatch>& patches, const Point3& p)
+{
+    std::vector<std::pair<double, std::size_t>> order;
+    order.reserve(patches.size());
+    for (std::size_t i = 0; i < patches.size(); ++i) {
+        order.emplace_back(LowerBoundSquared(patches[i].Coordinates, p), i);
+    }
+    std::ranges::sort(order);
+    return order;
+}
+
+/// The edges and the interior of one prepared patch, for the point p.
+void SearchPatchFor(const BSplineSurface& surface, const Detail::PreparedPatch& patch,
+                    const Point3& p, Closest& best)
+{
+    ConsiderEdges(surface, p, patch, best);
+    const SearchPatch search{patch.Coordinates, For(patch.F, p), For(patch.G, p), patch.Range};
+    Search(surface, p, search, 0, best);
+}
+
+/// The squared distance from p to the box of a raw patch's poles.
+[[nodiscard]] double PatchBound(const Patch& patch, const Point3& p)
+{
+    double total = 0.0;
+    for (std::size_t d = 0; d < 3; ++d) {
+        double low = std::numeric_limits<double>::infinity();
+        double high = -low;
+        for (const HPoint& q : patch.Poles) {
+            low = std::min(low, q[d] / q[3]);
+            high = std::max(high, q[d] / q[3]);
+        }
+        const double gap = std::max({low - p[d], p[d] - high, 0.0});
+        total += gap * gap;
+    }
+    return total;
+}
+
+} // namespace
+
+SurfaceProjector::SurfaceProjector(const BSplineSurface& surface)
+{
+    auto data = std::make_shared<Detail::SurfaceProjectorData>();
+    for (const Patch& patch : BezierPatchesOf(surface)) {
+        data->Patches.push_back(Prepared(patch, surface));
+    }
+    data->Surface = surface;
+    m_Data = std::move(data);
+}
+
+Point2 SurfaceProjector::Project(const Point3& p) const
 {
     Detail::RequireFinite(p, "Project(BSplineSurface)", "a non-finite point");
+    const BSplineSurface& surface = m_Data->Surface;
     const Box2 domain = Domain(surface);
     const Point2 corner{domain.X.GetLower(), domain.Y.GetLower()};
     Closest best{corner, DistanceSquared(Eval(surface, corner), p)};
-    const auto du = static_cast<std::size_t>(surface.DegreeU);
-    const auto dv = static_cast<std::size_t>(surface.DegreeV);
-    for (const Patch& patch : BezierPatchesOf(surface)) {
-        SearchPatch search = SearchPatchOf(patch, du, dv, p);
-        if (LowerBoundSquared(search.Coordinates, p) > best.DistanceSquared) {
-            continue;
+    for (const auto& [bound, index] : PatchesByBound(m_Data->Patches, p)) {
+        if (bound > best.DistanceSquared) {
+            break; // every later patch is at least as far
         }
-        ConsiderEdges(surface, p, patch, best);
-        Search(surface, p, search, 0, best);
+        SearchPatchFor(surface, m_Data->Patches[index], p, best);
+    }
+    return best.Parameter;
+}
+
+Point2 Project(const BSplineSurface& surface, const Point3& p)
+{
+    // One point: prepare only the patches the best-first search reaches,
+    // rather than all of them as a SurfaceProjector does for many points.
+    Detail::RequireFinite(p, "Project(BSplineSurface)", "a non-finite point");
+    const std::vector<Patch> patches = BezierPatchesOf(surface);
+    std::vector<std::pair<double, std::size_t>> order;
+    order.reserve(patches.size());
+    for (std::size_t i = 0; i < patches.size(); ++i) {
+        order.emplace_back(PatchBound(patches[i], p), i);
+    }
+    std::ranges::sort(order);
+    const Box2 domain = Domain(surface);
+    const Point2 corner{domain.X.GetLower(), domain.Y.GetLower()};
+    Closest best{corner, DistanceSquared(Eval(surface, corner), p)};
+    for (const auto& [bound, index] : order) {
+        if (bound > best.DistanceSquared) {
+            break;
+        }
+        SearchPatchFor(surface, Prepared(patches[index], surface), p, best);
     }
     return best.Parameter;
 }

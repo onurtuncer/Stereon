@@ -12,6 +12,7 @@ module;
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <memory>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -140,6 +141,77 @@ template <Scalar T, std::size_t D>
     return c[static_cast<std::size_t>(n)];
 }
 
+/// Work arrays sized for low degrees. Vectors zero themselves on
+/// construction, so arrays sized for the largest degree would clear about
+/// 2 KB per evaluation; degrees up to SmallDegreeCapacity - 1, which covers
+/// the curves met in practice, use arrays of this size instead.
+inline constexpr std::size_t SmallDegreeCapacity = 8;
+
+/// The derivatives A^(k) = sum N^(k) w P and w^(k) = sum N^(k) w of the
+/// homogeneous curve for k < known (known <= p + 1 <= Capacity), by
+/// differencing the active poles rather than differentiating the basis (The
+/// NURBS Book, eq. 3.8 and A3.3): the k-th derivative of a degree-p
+/// B-spline is the degree-(p - k) B-spline on the same knots whose poles are
+/// Q^(k)_i = (p - k + 1) (Q^(k-1)_(i+1) - Q^(k-1)_i) / (u_(i+p+1) - u_(i+k)),
+/// and its basis functions on the span are a level of the triangle that
+/// BasisFunctionsOfAllDegrees computes for the point anyway. On a non-empty
+/// span every denominator is positive.
+template <std::size_t Capacity, Scalar T, std::size_t D>
+void HomogeneousDerivatives(const BasicBSplineCurve<T, D>& curve, const double t,
+                            const std::size_t known, std::array<BasicVecN<T, D>, Capacity>& aw,
+                            std::array<T, Capacity>& w)
+{
+    const auto p = static_cast<std::size_t>(curve.Degree);
+    const std::size_t span = FindSpan(curve.Knots, curve.Degree, curve.Poles.size(), t);
+    std::array<double, Capacity * Capacity> table; // filled below
+    BasisFunctionsOfAllDegrees(curve.Knots, curve.Degree, span, t,
+                               std::span{table}.first((p + 1) * (p + 1)));
+    // The active window of homogeneous poles, differenced in place.
+    std::array<BasicVecN<T, D>, Capacity> qv;
+    std::array<T, Capacity> qw;
+    for (std::size_t i = 0; i <= p; ++i) {
+        const T weight = WeightOf(curve, span - p + i);
+        qv[i] = weight * ToVec(curve.Poles[span - p + i]);
+        qw[i] = weight;
+    }
+    for (std::size_t k = 0; k < known; ++k) {
+        const std::size_t degree = p - k;
+        aw[k] = {};
+        w[k] = T{};
+        for (std::size_t i = 0; i <= degree; ++i) {
+            const T basis{table[degree * (p + 1) + i]};
+            aw[k] += basis * qv[i];
+            w[k] = w[k] + basis * qw[i];
+        }
+        for (std::size_t i = 0; k + 1 < known && i < degree; ++i) {
+            const double scale = static_cast<double>(degree) /
+                                 (curve.Knots[span + i + 1] - curve.Knots[span - p + i + k + 1]);
+            qv[i] = T{scale} * (qv[i + 1] - qv[i]);
+            qw[i] = T{scale} * (qw[i + 1] - qw[i]);
+        }
+    }
+}
+
+/// Derivatives with work arrays of the given capacity, Capacity > degree.
+template <std::size_t Capacity, Scalar T, std::size_t D>
+void DerivativesWithCapacity(const BasicBSplineCurve<T, D>& curve, const double t,
+                             const std::size_t order, std::span<BasicVecN<T, D>> out)
+{
+    const std::size_t known = std::min(order, static_cast<std::size_t>(curve.Degree)) + 1;
+    std::array<BasicVecN<T, D>, Capacity> aw;
+    std::array<T, Capacity> w;
+    HomogeneousDerivatives<Capacity>(curve, t, known, aw, w);
+    if (!IsRational(curve)) {
+        for (std::size_t k = 0; k <= order; ++k) {
+            out[k] = k < known ? aw[k] : BasicVecN<T, D>{};
+        }
+        return;
+    }
+    static_cast<void>(RationalDerivative<T, D>(std::span{aw}.first(known),
+                                               std::span{w}.first(known), static_cast<int>(order),
+                                               out.first(order + 1)));
+}
+
 } // namespace Stereon::Detail
 
 export namespace Stereon {
@@ -163,10 +235,28 @@ template <Scalar T, std::size_t D>
     return IsRational(curve) ? ToPoint(numerator / denominator) : ToPoint(numerator);
 }
 
-/// The n-th derivative, n >= 1, from the derivatives of the basis
-/// functions (algorithm A3.2), and for a rational curve from those of its
-/// homogeneous form (algorithm A4.2). A polynomial curve's derivatives
-/// above its degree are zero; a rational curve's are not.
+/// The point and its derivatives up to order n, into out[0], ..., out[n]:
+/// out[0] is the position vector of C(t), out[k] = C^(k)(t). Cheaper than
+/// n + 1 separate calls, because every order comes from one table of basis
+/// functions (see Detail::HomogeneousDerivatives). `out` holds n + 1
+/// entries.
+template <Scalar T, std::size_t D>
+void Derivatives(const BasicBSplineCurve<T, D>& curve, const double t, const int n,
+                 std::span<BasicVecN<T, D>> out)
+{
+    Detail::CheckEvaluation(curve, t, "Derivatives(BSplineCurve)");
+    Detail::Require(n >= 0 && out.size() > static_cast<std::size_t>(n), "Derivatives(BSplineCurve)",
+                    "an order below 0 or too small an output");
+    const auto order = static_cast<std::size_t>(n);
+    if (static_cast<std::size_t>(curve.Degree) < Detail::SmallDegreeCapacity) {
+        Detail::DerivativesWithCapacity<Detail::SmallDegreeCapacity>(curve, t, order, out);
+    } else {
+        Detail::DerivativesWithCapacity<Detail::BSplineBasisCount>(curve, t, order, out);
+    }
+}
+
+/// The n-th derivative, n >= 1. A polynomial curve's derivatives above its
+/// degree are zero; a rational curve's are not (algorithm A4.2).
 template <Scalar T, std::size_t D>
 [[nodiscard]] BasicVecN<T, D> Deriv(const BasicBSplineCurve<T, D>& curve, const double t,
                                     const int n)
@@ -176,37 +266,15 @@ template <Scalar T, std::size_t D>
     if (!IsRational(curve) && n > curve.Degree) {
         return {};
     }
-    const std::size_t span = FindSpan(curve.Knots, curve.Degree, curve.Poles.size(), t);
-    const auto p = static_cast<std::size_t>(curve.Degree);
-    const std::size_t known = std::min(static_cast<std::size_t>(n), p) + 1;
-    std::array<double, Detail::BSplineBasisCount * Detail::BSplineBasisCount> ders; // filled below
-    BasisDerivatives(curve.Knots, curve.Degree, span, t, static_cast<int>(known) - 1,
-                     std::span{ders}.first(known * (p + 1)));
-    std::array<BasicVecN<T, D>, Detail::BSplineBasisCount> aw;
-    std::array<T, Detail::BSplineBasisCount> w;
-    for (std::size_t k = 0; k < known; ++k) {
-        aw[k] = {};
-        w[k] = T{};
-        for (std::size_t j = 0; j <= p; ++j) {
-            const std::size_t i = span - p + j;
-            const T weighted = T{ders[k * (p + 1) + j]} * Detail::WeightOf(curve, i);
-            aw[k] += weighted * ToVec(curve.Poles[i]);
-            w[k] = w[k] + weighted;
-        }
-    }
-    if (!IsRational(curve)) {
-        return aw[static_cast<std::size_t>(n)];
-    }
     const auto order = static_cast<std::size_t>(n);
-    if (order < Detail::BSplineBasisCount) {
-        std::array<BasicVecN<T, D>, Detail::BSplineBasisCount> c;
-        return Detail::RationalDerivative<T, D>(std::span{aw}.first(known),
-                                                std::span{w}.first(known), n,
-                                                std::span{c}.first(order + 1));
+    if (order < Detail::SmallDegreeCapacity) {
+        std::array<BasicVecN<T, D>, Detail::SmallDegreeCapacity> all;
+        Derivatives(curve, t, n, std::span{all}.first(order + 1));
+        return all[order];
     }
-    std::vector<BasicVecN<T, D>> c(order + 1); // orders beyond any degree: rare
-    return Detail::RationalDerivative<T, D>(std::span{aw}.first(known), std::span{w}.first(known),
-                                            n, c);
+    std::vector<BasicVecN<T, D>> all(order + 1); // high orders: rare
+    Derivatives(curve, t, n, std::span{all});
+    return all[order];
 }
 
 } // namespace Stereon
@@ -260,6 +328,37 @@ template <std::size_t D>
 /// the global closest point up to rounding (docs/nurbs.rst).
 [[nodiscard]] double Project(const BSplineCurve& curve, const Point3& p);
 [[nodiscard]] double Project(const BSplineCurve2d& curve, const Point2& p);
+
+} // namespace Stereon
+
+export namespace Stereon::Detail {
+
+struct CurveProjectorData;
+
+} // namespace Stereon::Detail
+
+export namespace Stereon {
+
+/// Projects many points onto one B-spline curve. Construction does the work
+/// that does not depend on the point: the Bezier segments, their pole boxes,
+/// and the point-independent parts of each segment's stationarity
+/// polynomial, of which the polynomial for a point is a linear combination.
+/// A query then visits the segments in order of their distance bound and
+/// stops at the first that cannot hold a closer point. The answers are those
+/// of Project(curve, p), which builds a projector for one point. A planar
+/// curve is projected in the plane z = 0. Copies share the prepared data.
+class CurveProjector {
+public:
+    explicit CurveProjector(const BSplineCurve& curve);
+    explicit CurveProjector(const BSplineCurve2d& curve);
+
+    /// The parameter of a point of the curve closest to p.
+    [[nodiscard]] double Project(const Point3& p) const;
+    [[nodiscard]] double Project(const Point2& p) const;
+
+private:
+    std::shared_ptr<const Detail::CurveProjectorData> m_Data;
+};
 
 /// The same curve traversed the other way:
 /// Eval(Reversed(c), a + b - t) == Eval(c, t) on the domain [a, b], up to

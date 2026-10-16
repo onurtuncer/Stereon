@@ -53,6 +53,15 @@ inline constexpr int BSplineMaxDegree = 25;
 void BasisFunctions(std::span<const double> knots, int degree, std::size_t span, double t,
                     std::span<double> values) noexcept;
 
+/// The basis functions of every degree j = 0, ..., degree that are non-zero
+/// on the span: table[j * (degree + 1) + r] = N_{span-j+r,j}(t) for r <= j.
+/// They are the intermediate levels of BasisFunctions' triangle, kept: the
+/// k-th derivative of a B-spline of degree p is a B-spline of degree p - k
+/// on the same knots, so the levels below p are what derivatives need
+/// (see Deriv(BSplineCurve)). `table` holds (degree + 1)^2 entries.
+void BasisFunctionsOfAllDegrees(std::span<const double> knots, int degree, std::size_t span,
+                                double t, std::span<double> table) noexcept;
+
 /// The basis functions of the span and their derivatives up to `order`:
 /// values[k * (degree + 1) + j] is the k-th derivative of
 /// N_{span-degree+j,degree} at t (algorithm A2.3). Derivatives above the

@@ -58,6 +58,9 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # page by ``.. todolist::``. Switch this off for a release build.
 todo_include_todos = True
 
+# Figures are numbered, so chapters can refer to them with :numref:.
+numfig = True
+
 # -- Options for HTML output -------------------------------------------------
 
 html_theme = 'sphinx_rtd_theme'
