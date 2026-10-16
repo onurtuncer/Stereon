@@ -5,8 +5,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-// Writes, as JSON on standard output, the data behind the fitting figures of
-// the manual (docs/fitting.rst): every curve and number in them is what
+// Writes, as JSON on standard output, the data behind the figures of the
+// manual (docs/fitting.rst, docs/properties.rst): every curve and number in them is what
 // Stereon computes, not a sketch. docs/figures/make_fitting_figures.py runs
 // this program and renders the SVG files next to it:
 //
@@ -222,6 +222,63 @@ void SurfaceGrid()
     std::printf("]}");
 }
 
+/// The curvature comb of a uniformly parametrised interpolant, and stations
+/// at equal steps of its parameter and of its arc length.
+void PropertiesFigure()
+{
+    const BSplineCurve curve = Interpolate(TurningPoints(), 3, Parametrization::Uniform)->Curve;
+    const Interval d = Domain(curve);
+    const double length = ArcLength(curve, d)->Length;
+    // Teeth at equal steps of arc length, the longest 1.5 mm long.
+    constexpr int teeth = 240;
+    constexpr double longestTooth = 1.5;
+    std::vector<double> parameters;
+    double kappaMax = 0.0;
+    for (int i = 0; i <= teeth; ++i) {
+        const double s = std::min(i * length / teeth, length);
+        parameters.push_back(*ParameterAtArcLength(curve, d.GetLower(), s));
+        kappaMax = std::max(kappaMax, *Curvature(curve, parameters.back()));
+    }
+    std::vector<Point3> base;
+    std::vector<Point3> tips;
+    for (const double t : parameters) {
+        const Point3 p = Eval(curve, t);
+        base.push_back(p);
+        // The tooth points away from the centre of curvature; a straight
+        // stretch has no normal and no tooth.
+        const auto normal = PrincipalNormal(curve, t);
+        const double tooth = longestTooth * *Curvature(curve, t) / kappaMax;
+        tips.push_back(normal ? p - tooth * *normal : p);
+    }
+    constexpr int stations = 12;
+    std::vector<Point3> byParameter;
+    std::vector<Point3> byLength;
+    std::vector<double> lengths;
+    for (int i = 0; i <= stations; ++i) {
+        const double t = d.GetLower() + i * (d.GetUpper() - d.GetLower()) / stations;
+        byParameter.push_back(Eval(curve, std::min(t, d.GetUpper())));
+        lengths.push_back(
+            ArcLength(curve, Interval{d.GetLower(), std::min(t, d.GetUpper())})->Length);
+        const double s = std::min(i * length / stations, length);
+        byLength.push_back(Eval(curve, *ParameterAtArcLength(curve, d.GetLower(), s)));
+    }
+    std::printf("\"properties\":{\"points\":");
+    Points(TurningPoints());
+    std::printf(",\"curve\":");
+    Points(base);
+    std::printf(",\"comb\":");
+    Points(tips);
+    std::printf(",\"length\":");
+    Number(length);
+    std::printf(",\"by_parameter\":");
+    Points(byParameter);
+    std::printf(",\"lengths_at_parameter\":");
+    Numbers(lengths);
+    std::printf(",\"by_length\":");
+    Points(byLength);
+    std::printf("}");
+}
+
 } // namespace
 
 int main()
@@ -236,6 +293,8 @@ int main()
     Collocation();
     std::printf(",");
     SurfaceGrid();
+    std::printf(",");
+    PropertiesFigure();
     std::printf("}\n");
     return 0;
 }

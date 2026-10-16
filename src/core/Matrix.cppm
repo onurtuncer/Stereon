@@ -320,6 +320,76 @@ template <Scalar T>
     return {r, {}};
 }
 
+/// The map that fixes `point` and acts as `linear` around it:
+/// x -> linear * (x - point) + point.
+template <Scalar T>
+[[nodiscard]] constexpr BasicTransform<T> AboutPoint(const BasicMat<T, 3>& linear,
+                                                     const BasicPoint3<T>& point)
+{
+    return {linear, ToVec(point) - linear * ToVec(point)};
+}
+
+/// Rotation by `angle` radians about the line through `point` along `axis`,
+/// right-handed. The axis need not be unit length, only non-zero.
+template <Scalar T>
+[[nodiscard]] constexpr BasicTransform<T> MakeRotation(const BasicPoint3<T>& point,
+                                                       const BasicVec3<T>& axis, const T& angle)
+    STEREON_HOT_PRE(T{} < LengthSquared(axis))
+{
+    return AboutPoint(MakeRotation(axis, angle).Linear, point);
+}
+
+/// Uniform scaling by `factor` about `point`, which stays fixed.
+template <Scalar T>
+[[nodiscard]] constexpr BasicTransform<T> MakeScaling(const BasicPoint3<T>& point, const T& factor)
+{
+    return AboutPoint(BasicMat<T, 3>::Diagonal({factor, factor, factor}), point);
+}
+
+/// The point reflection through `point`: x -> 2 point - x. In space it
+/// reverses orientation (determinant -1).
+template <Scalar T>
+[[nodiscard]] constexpr BasicTransform<T> MakePointMirror(const BasicPoint3<T>& point)
+{
+    return AboutPoint(BasicMat<T, 3>::Diagonal({T{-1}, T{-1}, T{-1}}), point);
+}
+
+/// The reflection in the line through `point` along `axis`: the half-turn
+/// about it, linear part 2 k k^T - I for the unit axis k. It preserves
+/// orientation (determinant +1). The axis need not be unit length.
+template <Scalar T>
+[[nodiscard]] constexpr BasicTransform<T> MakeAxisMirror(const BasicPoint3<T>& point,
+                                                         const BasicVec3<T>& axis)
+    STEREON_HOT_PRE(T{} < LengthSquared(axis))
+{
+    const BasicVec3<T> k = Normalized(axis);
+    BasicMat<T, 3> m;
+    for (std::size_t i = 0; i < 3; ++i) {
+        for (std::size_t j = 0; j < 3; ++j) {
+            m(i, j) = T{2} * k[i] * k[j] - (i == j ? T{1} : T{});
+        }
+    }
+    return AboutPoint(m, point);
+}
+
+/// The reflection in the plane through `point` with normal `normal`: linear
+/// part I - 2 n n^T for the unit normal n, orientation-reversing
+/// (determinant -1). The normal need not be unit length.
+template <Scalar T>
+[[nodiscard]] constexpr BasicTransform<T> MakePlaneMirror(const BasicPoint3<T>& point,
+                                                          const BasicVec3<T>& normal)
+    STEREON_HOT_PRE(T{} < LengthSquared(normal))
+{
+    const BasicVec3<T> n = Normalized(normal);
+    BasicMat<T, 3> m;
+    for (std::size_t i = 0; i < 3; ++i) {
+        for (std::size_t j = 0; j < 3; ++j) {
+            m(i, j) = (i == j ? T{1} : T{}) - T{2} * n[i] * n[j];
+        }
+    }
+    return AboutPoint(m, point);
+}
+
 /// The homogeneous 4×4 form, for graphics pipelines and other consumers that
 /// expect one matrix.
 template <Scalar T>

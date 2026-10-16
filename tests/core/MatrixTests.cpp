@@ -295,3 +295,47 @@ TEST_CASE("rotation derivatives agree with central differences", "[core][math][a
         RC_ASSERT(Length(derivative - centralDifference) < 1e-8 * (1.0 + Length(ToVec(p))));
     });
 }
+
+TEST_CASE("mirrors and transforms about a point fix what they should", "[core][math][property]")
+{
+    rc::prop("each mirror is an involution with the right determinant and fixed set", [] {
+        const auto coordinate = [] { return *rc::gen::inRange(-50, 50) / 10.0; };
+        const Point3 origin{coordinate(), coordinate(), coordinate()};
+        const Vec3 direction{coordinate(), coordinate(), coordinate()};
+        RC_PRE(LengthSquared(direction) > 0.01);
+        const Point3 x{coordinate(), coordinate(), coordinate()};
+        const Vec3 unit = Normalized(direction);
+
+        // Plane mirror: fixes the plane, flips the normal component.
+        const Transform plane = Stereon::MakePlaneMirror(origin, direction);
+        RC_ASSERT(ApproxEqual(Transformed(Transformed(x, plane), plane), x, 1e-12));
+        RC_ASSERT(std::abs(Stereon::Determinant(plane.Linear) + 1.0) <= 1e-12);
+        const Point3 onPlane = x - Dot(x - origin, unit) * unit;
+        RC_ASSERT(ApproxEqual(Transformed(onPlane, plane), onPlane, 1e-12));
+        RC_ASSERT(std::abs(Dot(Transformed(x, plane) - origin, unit) + Dot(x - origin, unit)) <=
+                  1e-12);
+
+        // Axis mirror: the half-turn about the line; fixes the line.
+        const Transform axis = Stereon::MakeAxisMirror(origin, direction);
+        RC_ASSERT(ApproxEqual(Transformed(Transformed(x, axis), axis), x, 1e-12));
+        RC_ASSERT(std::abs(Stereon::Determinant(axis.Linear) - 1.0) <= 1e-12);
+        const Point3 onLine = origin + Dot(x - origin, unit) * unit;
+        RC_ASSERT(ApproxEqual(Transformed(onLine, axis), onLine, 1e-12));
+        const Transform halfTurn = Stereon::MakeRotation(origin, direction, std::numbers::pi);
+        RC_ASSERT(ApproxEqual(Transformed(x, axis), Transformed(x, halfTurn), 1e-12));
+
+        // Point mirror: x -> 2 origin - x.
+        const Transform point = Stereon::MakePointMirror(origin);
+        RC_ASSERT(ApproxEqual(Transformed(x, point), origin + (origin - x), 1e-12));
+        RC_ASSERT(std::abs(Stereon::Determinant(point.Linear) + 1.0) <= 1e-12);
+
+        // Rotation and scaling about a point keep it fixed.
+        const Transform rotation = Stereon::MakeRotation(origin, direction, coordinate());
+        RC_ASSERT(ApproxEqual(Transformed(origin, rotation), origin, 1e-12));
+        RC_ASSERT(std::abs(Distance(Transformed(x, rotation), origin) - Distance(x, origin)) <=
+                  1e-12 * (1.0 + Distance(x, origin)));
+        const Transform scaling = Stereon::MakeScaling(origin, 2.5);
+        RC_ASSERT(ApproxEqual(Transformed(origin, scaling), origin, 1e-12));
+        RC_ASSERT(ApproxEqual(Transformed(x, scaling), origin + 2.5 * (x - origin), 1e-12));
+    });
+}

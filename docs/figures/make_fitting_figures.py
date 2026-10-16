@@ -5,12 +5,13 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Renders the fitting figures of the manual (docs/fitting.rst).
+"""Renders the fitting and curve-property figures of the manual
+(docs/fitting.rst, docs/properties.rst).
 
 Every curve and number comes from Stereon itself: the program
 stereon_figure_data (docs/figures/FigureData.cpp, built with the tests)
 prints them as JSON, and this script draws them. Run it after a change to
-the fitting code, from the repository root:
+the fitting or property code, from the repository root:
 
     python docs/figures/make_fitting_figures.py build/gcc16-debug/tests/stereon_figure_data
 
@@ -261,6 +262,60 @@ def surface(data):
     save(fig, "fitting-surface.svg")
 
 
+def curvature_comb(data):
+    """The curvature comb: teeth along the principal normal, scaled by curvature."""
+    d = data["properties"]
+    fig, ax = plt.subplots(figsize=(7.0, 3.6))
+    for base, tip in zip(d["curve"], d["comb"]):
+        ax.plot([base[0], tip[0]], [base[1], tip[1]], color=SERIES[0], linewidth=0.6,
+                alpha=0.7)
+    x, y = xy(d["comb"])
+    ax.plot(x, y, color=SERIES[0], linewidth=1.2, label="curvature comb")
+    x, y = xy(d["curve"])
+    ax.plot(x, y, color=INK, linewidth=2.0, label="cubic interpolant")
+    data_points(ax, d["points"], color=INK_SECONDARY)
+    ax.set_aspect("equal", adjustable="datalim")
+    ax.set_title("Curvature comb of a cubic through eight points (longest tooth 1.5 mm)",
+                 loc="left", fontsize=10)
+    ax.set_xlabel("x (mm)")
+    ax.set_ylabel("y (mm)")
+    ax.legend(loc="lower right")
+    fig.tight_layout()
+    save(fig, "properties-comb.svg")
+
+
+def arc_length(data):
+    """Stations at equal parameter steps and at equal arc length, and s(t)."""
+    d = data["properties"]
+    fig, (left, right) = plt.subplots(
+        1, 2, figsize=(7.4, 3.4), gridspec_kw={"width_ratios": [1.7, 1.0]})
+    x, y = xy(d["curve"])
+    left.plot(x, y, color=INK_MUTED, linewidth=1.4, zorder=1)
+    x, y = xy(d["by_parameter"])
+    left.scatter(x, y, s=34, color=SERIES[1], marker="s", zorder=4, edgecolors=SURFACE,
+                 label="equal steps of t")
+    x, y = xy(d["by_length"])
+    left.scatter(x, y, s=30, color=SERIES[0], zorder=5, edgecolors=SURFACE,
+                 label="equal steps of arc length")
+    left.set_aspect("equal", adjustable="datalim")
+    left.set_title("Thirteen stations, two ways", loc="left", fontsize=10)
+    left.set_xlabel("x (mm)")
+    left.set_ylabel("y (mm)")
+    left.legend(loc="lower right")
+    lengths = d["lengths_at_parameter"]
+    t = [i / (len(lengths) - 1) for i in range(len(lengths))]
+    right.plot(t, lengths, "-", color=SERIES[1], linewidth=2.0, marker="s", markersize=4,
+               label="s(t)")
+    right.plot([0, 1], [0, d["length"]], "--", color=INK_MUTED, linewidth=1.0,
+               label="constant speed")
+    right.set_title(f"Arc length, total {d['length']:.4f} mm", loc="left", fontsize=10)
+    right.set_xlabel("parameter t")
+    right.set_ylabel("s (mm)")
+    right.legend(loc="upper left")
+    fig.tight_layout()
+    save(fig, "properties-arclength.svg")
+
+
 def main():
     if len(sys.argv) != 2:
         sys.exit(__doc__)
@@ -271,6 +326,8 @@ def main():
     approximation(data)
     collocation(data)
     surface(data)
+    curvature_comb(data)
+    arc_length(data)
 
 
 if __name__ == "__main__":

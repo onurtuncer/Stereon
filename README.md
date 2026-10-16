@@ -19,6 +19,18 @@ Stereon is an open-source solid modeling kernel: NURBS and analytic geometry, B-
 
 ---
 
+## The name
+
+*Stereon* (στερεόν) is the ancient Greek word for "a solid": the neuter of *stereós*, "firm, solid". It is the word Euclid uses in the *Elements*, where Books XI–XIII treat solid geometry. Book XI opens with two definitions:
+
+> Στερεόν ἐστι τὸ μῆκος καὶ πλάτος καὶ βάθος ἔχον. Στερεοῦ δὲ πέρας ἐπιφάνεια.
+>
+> *A solid is that which has length, breadth and depth. And the boundary of a solid is a surface.*
+>
+> — Euclid, *Elements* XI, Defs. 1–2 (ed. J. L. Heiberg, *Euclidis Elementa*, vol. IV, Leipzig: Teubner, 1885)
+
+The second definition is the idea behind boundary representation: a solid is fully described by the surfaces that bound it. That is how Stereon models shapes. The same root survives in *stereometry*, the old name for the measurement of solids.
+
 ## Why Stereon
 
 Mature kernels such as OpenCASCADE carry decades of design history: reference-counted handle graphs, global state, and tolerance behaviour that is hard to predict. Stereon aims to be narrower and sharper:

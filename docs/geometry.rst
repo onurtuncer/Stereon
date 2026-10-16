@@ -36,6 +36,19 @@ compile. ``ToVec`` and ``ToPoint`` convert explicitly.
    const Point3 moved = Transformed(corner, lift);
    const Vec3 direction = Transformed(up, lift); // vectors ignore the translation
 
+Every transform that fixes a point is a linear map conjugated by a
+translation, :math:`x \mapsto A(x - p) + p`, which ``AboutPoint(A, p)``
+builds. The helpers that OCCT's ``gp_Trsf`` offers are built on it:
+``MakeRotation(point, axis, angle)`` turns about an arbitrary line,
+``MakeScaling(point, factor)`` scales about a point, and the three mirrors
+reflect through a point (:math:`A = -I`), in a line
+(:math:`A = 2\mathbf k\mathbf k^\mathsf{T} - I`, the half-turn about it) and
+in a plane (:math:`A = I - 2\mathbf n\mathbf n^\mathsf{T}`):
+``MakePointMirror(point)``, ``MakeAxisMirror(point, axis)`` and
+``MakePlaneMirror(point, normal)``. The axis and the normal need not be unit
+vectors. The point and plane mirrors reverse orientation (determinant
+:math:`-1`); ``Transformed`` takes all of them.
+
 Each type is the ``double`` instance of a scalar-generic template
 (``BasicVec3<T>``, ``BasicMat<T, N>``, ``BasicTransform<T>``) constrained by
 the ``Scalar`` concept, so the same code runs on the active scalar type of an

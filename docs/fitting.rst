@@ -375,9 +375,11 @@ What is not yet there:
 - parameter correction, which re-projects the points onto the fitted curve
   and refits to reduce the deviation further.
 
-Benchmark B1.4 of ``docs/benchmarks.md`` compares these functions with OCCT's ``GeomAPI_Interpolate`` and
-``GeomAPI_PointsToBSpline``; the comparison is planned with the OCCT
-benchmark harness.
+Benchmark B1.4 compares these functions with OCCT's ``GeomAPI_Interpolate``
+and ``GeomAPI_PointsToBSpline``; ``bench/reports/phase1-2026-10-15.md``
+has the measurements: interpolation runs at parity, and approximation is
+faster but not like for like, since OCCT also optimises parameters and
+continuity.
 
 Related design decisions
 ------------------------

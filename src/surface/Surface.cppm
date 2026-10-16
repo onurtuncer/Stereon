@@ -20,6 +20,7 @@ export import :Cylinder;
 export import :Erased;
 export import :Fitting;
 export import :Plane;
+export import :Properties;
 export import :Sphere;
 export import :Torus;
 export import :Visit;

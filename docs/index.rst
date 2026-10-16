@@ -42,6 +42,8 @@ Stereon
    analytic
    nurbs
    fitting
+   properties
+   performance
    topology
    intersection
    modeling
