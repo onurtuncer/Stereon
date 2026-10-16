@@ -93,7 +93,7 @@ triangles and a :math:`(p + 1) \times (q + 1)` combination:
    \quad\text{(surface)}.
 
 The arithmetic is the same in both libraries; Stereon's lead of
-:math:`\rho \approx 2.5` comes from what surrounds it: poles in one
+:math:`\rho \approx 2`–:math:`3` comes from what surrounds it: poles in one
 contiguous array of plain structs, work arrays on the stack sized to the
 degree, and no handle or adaptor indirection.
 
@@ -110,7 +110,7 @@ degree, so all derivatives up to order :math:`k \le p` cost
 after one span search: one triangle, :math:`k` rounds of pole
 differences, and one combination per order (:doc:`nurbs`). A rational
 curve then applies the quotient rule (A4.2), :math:`O(k^2 d)` more. The
-lead over OCCT is smaller here, :math:`\rho \approx 1.4`–:math:`1.6`, as
+lead over OCCT is smaller here, :math:`\rho \approx 1.2`–:math:`1.6`, as
 the arithmetic both libraries must do is a larger share of the work.
 
 Projection (B1.3)
@@ -135,10 +135,11 @@ then isolates its roots. Segments are visited best-first by a lower bound
 on their distance, and a segment whose bound exceeds the best distance so
 far is never expanded. OCCT's ``Extrema`` package instead samples the
 curve and refines candidates with Newton's method, evaluating the curve
-many times per query; the measured ratio is :math:`\rho \approx 4`.
+many times per query; the measured ratio is :math:`\rho \approx 3.5`–:math:`4`.
 
-On surfaces both libraries are dominated by the subdivision search, and
-they are at parity.
+On surfaces both libraries are dominated by the search, and OCCT is
+slightly ahead, :math:`\rho \approx 0.9`, since the leaf Newton iteration
+became safeguarded (see the results below).
 
 Fitting (B1.4)
 ~~~~~~~~~~~~~~
@@ -179,8 +180,8 @@ Frenet frame and the curvature (:doc:`properties`)
 cost two cross products, two square roots and a few divisions on top of
 :math:`\mathrm{cost}_{D2}`. ``FrenetFrame`` is that one evaluation, as is
 one ``SetParameter`` of OCCT's ``GeomLProp_CLProps``; the ratio,
-:math:`\rho \approx 1.8`, is close to the one for D0–D2 evaluation, which
-dominates both. Every property function evaluates the curve once, through
+:math:`\rho \approx 1.4`–:math:`1.8` across runs, is close to the one for
+D0–D2 evaluation, which dominates both. Every property function evaluates the curve once, through
 the type's combined ``Derivatives`` where it has one; a first version
 called ``Deriv`` once per order and was twice as slow as OCCT.
 
@@ -188,11 +189,52 @@ On surfaces the principal curvatures need
 :math:`\mathbf S_u, \mathbf S_v, \mathbf S_{uu}, \mathbf S_{uv}, \mathbf
 S_{vv}`, the fundamental forms (six dot products), and the roots
 :math:`H \pm \sqrt{H^2 - K}`. Stereon obtains the partials from one call of
-``Derivatives(surface, uv, 2, 2, out)``, which also computes
-:math:`\mathbf S_{uuv}, \mathbf S_{uvv}, \mathbf S_{uuvv}`, three partials
-the curvature does not use. That surplus is why this is the one row where
-OCCT is ahead (:math:`\rho \approx 0.8`); a triangular evaluator returning
-only orders :math:`k + l \le 2` would remove it.
+``TotalDerivatives(surface, uv, 2, out)``, which computes only the partials
+of total order :math:`k + l \le 2`, through the surface evaluator below.
+
+A first version called ``Derivatives(surface, uv, 2, 2, out)``, which also
+computes :math:`\mathbf S_{uuv}, \mathbf S_{uvv}, \mathbf S_{uuvv}`, and
+formed each of the nine partials as a full sum over the
+:math:`(p + 1)(q + 1)` window: :math:`\rho = 0.79`. Measuring it stage by
+stage (``bench/SurfaceDerivativeBench.cpp``) showed the basis derivatives
+of algorithm A2.3 taking over half the time, most of it in divisions that
+depend on one another.
+
+**Surface derivatives without basis derivatives.** A tensor-product surface
+:math:`\mathbf S(u, v) = \sum_r \sum_s N_r(u) M_s(v)\, \mathbf P_{rs}` is
+differentiated one direction at a time. For each of the :math:`p + 1`
+active rows :math:`r`, the row is a curve in :math:`v`; its :math:`l`-th
+derivative is a B-spline of degree :math:`q - l` on the same knots whose
+poles are the row's poles differenced :math:`l` times (eq. 3.8),
+
+.. math::
+
+   \mathbf R_{r,l}(v) = \sum_{s} M_{s,q-l}(v)\, \Delta_v^{l} \mathbf P_{rs},
+   \qquad
+   \Delta_v \mathbf Q_s = \frac{q - k}{v_{s+q+1} - v_{s+k+1}}
+                          (\mathbf Q_{s+1} - \mathbf Q_s)
+
+at difference level :math:`k`, and its basis functions are a level of the
+triangle that Cox–de Boor builds for the point anyway. The values
+:math:`\mathbf R_{r,l}` are in turn the poles in :math:`u` of
+:math:`\partial^l \mathbf S / \partial v^l`, so the same step along
+:math:`u` gives
+
+.. math::
+
+   \frac{\partial^{k+l} \mathbf S}{\partial u^k\, \partial v^l}
+   = \sum_r N_{r,p-k}(u)\, \Delta_u^{k} \mathbf R_{r,l}(v).
+
+A rational surface does the same on homogeneous poles
+:math:`(w \mathbf P, w)` and applies the quotient rule (A4.4). The cost is
+two basis triangles, about :math:`p^2 + q^2`, a few divisions for the
+difference factors, which depend only on the knots and are computed once
+per point, and a contraction of about
+:math:`(p + 1)(q + 1)\, k_v + k_u k_v (p + 1)` vector multiply–adds instead
+of :math:`k_u k_v (p + 1)(q + 1)`. With it, principal curvatures went from
+:math:`\rho = 0.79` to :math:`\rho \approx 1.1`, and every other surface
+derivative (``Deriv``, ``Derivatives``, the projection's Newton steps)
+became faster too.
 
 Arc length (B1.6)
 ~~~~~~~~~~~~~~~~~
@@ -225,13 +267,16 @@ two iterates, whose length shrinks quadratically as Newton converges:
 
 Integrating from the start at every step, as a first version did, cost
 more than twice as much and was slower than OCCT; accumulated, it is
-:math:`\rho \approx 1.5`.
+:math:`\rho \approx 1.5`–:math:`1.7`.
 
 Results
 -------
 
 Median CPU time per item, GCC 16.2 ``-O3``, OCCT 8.0.1, Intel Core
-i5-10210U (Windows 11 laptop), single thread, 2026-10-16.
+i5-10210U (Windows 11 laptop), single thread, 2026-10-16. The surface
+projection, interpolation and Bezier decomposition rows, whose ratios moved
+by more than 10 % between runs, are the medians of 15 repetitions with
+the two libraries' runs interleaved (``--benchmark_enable_random_interleaving``).
 
 .. list-table::
    :header-rows: 1
@@ -244,94 +289,100 @@ i5-10210U (Windows 11 laptop), single thread, 2026-10-16.
      - :math:`\rho`
    * - B1.1
      - Curve D0, cubic, 24 poles
-     - 110 ns
-     - 291 ns
-     - 2.6
+     - 94 ns
+     - 314 ns
+     - 3.4
    * - B1.1
      - Curve D0, rational cubic
-     - 126 ns
-     - 360 ns
-     - 2.9
+     - 129 ns
+     - 307 ns
+     - 2.4
    * - B1.1
      - Curve D0, degree 7
-     - 238 ns
-     - 627 ns
-     - 2.6
+     - 244 ns
+     - 587 ns
+     - 2.4
    * - B1.1
      - Curve D0–D2, cubic
-     - 266 ns
-     - 383 ns
-     - 1.4
+     - 279 ns
+     - 322 ns
+     - 1.2
    * - B1.1
      - Curve D0–D2, rational cubic
-     - 327 ns
-     - 523 ns
-     - 1.6
+     - 214 ns
+     - 293 ns
+     - 1.4
    * - B1.1
      - Surface D0, bicubic 12 × 12
-     - 286 ns
-     - 665 ns
-     - 2.3
+     - 179 ns
+     - 384 ns
+     - 2.1
    * - B1.1
      - Surface D0, rational bicubic
-     - 293 ns
-     - 734 ns
-     - 2.5
+     - 187 ns
+     - 441 ns
+     - 2.4
    * - B1.1
      - Surface D0–D1, bicubic
-     - 959 ns
-     - 991 ns
+     - 619 ns
+     - 663 ns
      - parity
    * - B1.3
      - Curve projection, rational cubic
-     - 18.8 µs
-     - 76.3 µs
-     - 4.1
+     - 12.9 µs
+     - 45.8 µs
+     - 3.6
    * - B1.3
      - Surface projection, bicubic
-     - 537 µs
-     - 519 µs
-     - parity
+     - 353 µs
+     - 312 µs
+     - 0.88
    * - B1.4
      - Interpolation, 1000 points, cubic
-     - 0.49 ms
-     - 0.48 ms
+     - 0.34 ms
+     - 0.31 ms
      - parity
    * - B1.4
      - Approximation, 1000 points, 1e-3 mm
-     - 6.0 ms
-     - 234 ms
-     - 39 (not like for like)
+     - 3.8 ms
+     - 141 ms
+     - 37 (not like for like)
    * - B1.5
      - 100 knot insertions
-     - 6.0 µs
-     - 11.2 µs
-     - 1.9
+     - 3.5 µs
+     - 7.5 µs
+     - 2.2
    * - B1.5
      - Bezier decomposition, 21 segments
-     - 36.8 µs
-     - 44.3 µs
-     - 1.2
+     - 22.9 µs
+     - 25.7 µs
+     - 1.1
    * - B1.6
      - Frenet frame and curvature, rational cubic
-     - 375 ns
-     - 692 ns
-     - 1.8
+     - 276 ns
+     - 383 ns
+     - 1.4
    * - B1.6
      - Principal curvatures and directions, bicubic
-     - 1.88 µs
-     - 1.49 µs
-     - 0.79
+     - 861 ns
+     - 938 ns
+     - 1.1
    * - B1.6
      - Arc length of the whole curve, rational cubic
-     - 356 µs
-     - 399 µs
+     - 197 µs
+     - 225 µs
      - 1.1
    * - B1.6
      - Parameter at a given length
-     - 617 µs
-     - 922 µs
-     - 1.5
+     - 350 µs
+     - 583 µs
+     - 1.7
+
+Surface projection is the one row where OCCT is ahead. A correctness fix
+costs about 10 % there: the safeguards of the leaf Newton iteration
+(:doc:`nurbs`, *Surface projection*), which made a surface point project
+3.2e-3 mm away from itself in one property-test case before they existed.
+Being farther from the right answer is not on offer at any speed.
 
 Not yet measured: the SIMD batch evaluation of B1.1, grid evaluation
 (B1.2), B1.3's convergence rate over a corpus, and degree elevation (B1.5),
