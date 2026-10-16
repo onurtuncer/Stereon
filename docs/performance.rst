@@ -389,6 +389,80 @@ Not yet measured: the SIMD batch evaluation of B1.1, grid evaluation
 which Stereon does not have yet. All numbers come from one laptop; the
 release report for v0.1 needs the CI reference machine.
 
+Where OCCT gets it wrong
+------------------------
+
+Speed only counts with the right answer, so the comparison also hunts for
+inputs on which OCCT is wrong. ``tests/occt/RobustnessHunt.cpp`` generates
+adversarial geometry with a fixed seed, runs both kernels, and judges both
+against a reference that shares no code with either:
+
+- lengths of polylines (degree-1 B-splines) by exact arithmetic on their
+  points;
+- lengths of smooth curves by an inscribed polyline of :math:`2^k` chords,
+  doubled until two values agree to :math:`10^{-12}` and extrapolated
+  once, since its error falls as :math:`1/n^2`;
+- distances by dense sampling, which bounds the true distance from above:
+  a projection farther than the sampled bound is wrong.
+
+OCCT is given a tolerance of :math:`10^{-10}` throughout. The hunt runs
+on request (``stereon_occt_tests "[.hunt]"``) and reports what it finds;
+the findings worth keeping become ordinary tests in
+``tests/occt/OcctRobustnessTests.cpp``, which CI runs against the pinned
+OCCT 8.0.1.
+
+.. list-table:: Results of the hunt, OCCT 8.0.1
+   :header-rows: 1
+   :widths: 30 34 18 18
+
+   * - Job
+     - Adversarial input
+     - OCCT wrong
+     - Stereon wrong
+   * - Point at a given length (``GCPnts_AbscissaPoint``)
+     - Polylines with stalls (repeated points) and knot spans from
+       :math:`10^{-6}` to :math:`10^{2}`
+     - 10 of 400, worst 4.3 % of the length
+     - 0
+   * - Arc length (``GCPnts_AbscissaPoint::Length``)
+     - Rational cubics with weights from :math:`10^{-3}` to :math:`10^{3}`
+     - 5 of 60, worst 1.4 %
+     - 0
+   * - Point at a given length
+     - The same rational cubics
+     - 4 of 60, worst 4.5 %
+     - 0
+   * - Surface projection (``GeomAPI_ProjectPointOnSurf``)
+     - Bicubic sheets with one narrow bump, points beside it
+     - 10 of 120, worst 0.048 mm too far
+     - 0
+   * - Curve projection (``GeomAPI_ProjectPointOnCurve``)
+     - Narrow weighted spikes; hairpins with gaps down to :math:`10^{-4}`
+     - 0 of 800
+     - 0
+   * - Arc length
+     - The polylines above
+     - 0 of 400
+     - 0
+
+The tests record what OCCT returns, not why. The pattern fits the two
+designs. Stereon's arc length halves every piece until the halves agree,
+after splitting at every knot, so a speed that varies by six orders of
+magnitude only costs it more pieces; OCCT's error control evidently does not
+see such variation, since it returns a length off by 1.4 % at a requested
+tolerance of 1e-10. OCCT's surface extrema begin from a sampling of the
+surface and refine with Newton's method, so a bump between samples can hide
+the closest point, and the refinement settles at a farther local minimum;
+Stereon's Bernstein subdivision discards a region only once it has shown
+that the region holds no stationary point or no closer point.
+
+The hunt also found a weakness in Stereon: ``ParameterAtArcLength`` used to
+stop when its Newton step was small relative to the whole parameter range,
+which on a curve whose knot spans range from :math:`10^{-6}` to
+:math:`10^{2}` left 155 of 400 answers off by up to :math:`10^{-5}` of the
+length. It now stops on the length residual, and all 400 are within
+:math:`10^{-9}`. That is the point of hunting both ways.
+
 Reproducing the numbers
 -----------------------
 

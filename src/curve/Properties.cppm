@@ -362,6 +362,14 @@ template <typename C>
 
 export namespace Stereon::Detail {
 
+/// The relative residual at which ParameterAtArcLength stops: the length
+/// to its parameter matches the request to about 1.5e-11, some 16 times
+/// ArcLengthRelativeTarget, so the quadrature's own error cannot keep the
+/// iteration going. The test is on the length, not the parameter: a
+/// parameter step small for the whole range can still be large on a short
+/// knot span where the curve is fast.
+inline constexpr double ArcLengthResidualTarget = 0x1p-36;
+
 /// Newton steps for ParameterAtArcLength; the iteration converges
 /// quadratically from inside the bracket, so the bound only limits the work
 /// on degenerate input.
@@ -446,13 +454,12 @@ Result<double> ParameterAtArcLength(const C& curve, const double start, const do
     // short stretch between them, so no step integrates from start again.
     double low = std::min(start, end->Parameter);
     double high = std::max(start, end->Parameter);
-    const double settled = Detail::ArcLengthRelativeTarget * (high - low);
     // The linear guess, kept inside the bracket against rounding.
     double t = std::clamp(start + (end->Parameter - start) * (length / end->Length), low, high);
     double reached = Detail::SignedLength(curve, start, t);
     for (int step = 0; step < Detail::ArcLengthNewtonSteps; ++step) {
         const double residual = reached - length;
-        if (residual == 0.0) {
+        if (std::abs(residual) <= Detail::ArcLengthResidualTarget * std::abs(length)) {
             return t;
         }
         (residual > 0.0 ? high : low) = t;
@@ -461,8 +468,8 @@ Result<double> ParameterAtArcLength(const C& curve, const double start, const do
         if (!(next > low && next < high)) {
             next = 0.5 * (low + high);
         }
-        if (std::abs(next - t) <= settled) {
-            return next;
+        if (next == t) {
+            return t; // the bracket has shrunk to adjacent doubles
         }
         reached += Detail::SignedLength(curve, t, next);
         t = next;
