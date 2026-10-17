@@ -1,7 +1,8 @@
 # ADR-0015: AI contribution policy
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-28
+- **Accepted:** 2026-10-17 by Onur Tuncer, on review; enforced by the pull-request template and CODEOWNERS
 - **Owner:** Onur Tuncer
 - **Phase:** 0
 
