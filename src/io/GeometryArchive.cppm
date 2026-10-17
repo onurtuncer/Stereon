@@ -34,7 +34,7 @@ import Stereon.Surface;
 ///   required), the payload length (u64), the CRC-32 of the payload (u32)
 ///   and the payload.
 ///
-/// The chunks of format version 1, all required:
+/// The chunks, all required:
 ///
 /// - "POLI", the numerical policy: angular resolution, tolerance ceiling
 ///   and frame allowance (f64 each);
@@ -42,6 +42,13 @@ import Stereon.Surface;
 ///   plane and surfaces. Each payload is a record count (u64) and the
 ///   records: the type's name (u16 length and its bytes, e.g. "Circle"), the
 ///   value's length (u64) and the value as Serialized writes it.
+///
+/// Format version 2 adds trimmed curves to "CRVS" and "PCRV", named
+/// "TrimmedCurve" and "TrimmedCurve2d". The value of one is its basis as a
+/// record of the same chunk (name, length and value, so a basis may itself
+/// be trimmed, at most MaxTrimmedNesting deep), then the trim (Lower and
+/// Upper f64, Reversed one byte) as Serialized writes it. Version 1 is
+/// version 2 without trimmed curves, so a version-1 file reads unchanged.
 ///
 /// A reader refuses a newer format version, a damaged chunk, an unknown
 /// required chunk, an unknown type in a geometry chunk and any value its
@@ -97,11 +104,16 @@ struct LoadedGeometry {
 };
 
 /// The format version this kernel writes and the newest it reads.
-inline constexpr std::uint32_t GeometryFormatVersion = 1;
+inline constexpr std::uint32_t GeometryFormatVersion = 2;
+
+/// How deep trimmed curves may be nested in a file: a trimmed curve whose
+/// basis is a trimmed curve is depth 2. Deeper nesting is refused on read,
+/// so that a hostile file cannot exhaust the stack.
+inline constexpr int MaxTrimmedNesting = 8;
 
 /// The archive as bytes. NotSupported for geometry of a type the format has
-/// no record for (only the built-in types do) and without static
-/// reflection; InvalidInput for a policy value that is not finite and
+/// no record for (only the built-in types and trimmed curves of them do)
+/// and without static reflection; InvalidInput for a policy value that is not finite and
 /// positive.
 [[nodiscard]] Result<std::vector<std::byte>> WriteGeometry(const GeometryArchive& archive);
 

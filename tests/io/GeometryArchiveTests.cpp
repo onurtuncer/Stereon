@@ -8,17 +8,20 @@
 // The geometry archive (ADR-0012, ADR-0028): every built-in type saved and
 // read back bit for bit, the numerical policy preserved rather than
 // defaulted, damaged and hostile files refused with a ParseError that says
-// where, and a committed version-1 file that every later version must still
-// read and reproduce byte for byte.
+// where, trimmed curves (format version 2) stored with their bases, and the
+// committed files of every format version, which every later version must
+// still read and reproduce byte for byte.
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <numbers>
 #include <span>
 #include <string>
@@ -53,6 +56,8 @@ using Stereon::ReadGeometry;
 using Stereon::Sphere;
 using Stereon::Surface;
 using Stereon::Torus;
+using Stereon::TrimmedCurve;
+using Stereon::TrimmedCurve2d;
 using Stereon::Vec2;
 using Stereon::Vec3;
 using Stereon::WriteGeometry;
@@ -107,6 +112,26 @@ GeometryArchive EveryType()
                                           Point3{0.0, 2.0, 0.0}, Point3{1.0, 0.0, 0.0},
                                           Point3{1.0, 1.0, 1.0}, Point3{1.0, 2.0, 0.0}},
                                          {1.0, 0.5, 1.0, 1.0, 2.0, 1.0}})};
+    return a;
+}
+
+/// EveryType with trimmed curves added: an arc across a circle's seam, a
+/// reversed piece of a B-spline, a trimmed curve of a trimmed curve and a
+/// plane arc. The content of the committed version-2 file.
+GeometryArchive WithTrimmed()
+{
+    GeometryArchive a = EveryType();
+    const TrimmedCurve arc =
+        *Stereon::MakeTrimmedCurve(Curve(Circle{O, 2.5, X, Y}), Stereon::Interval{5.0, 7.0});
+    const TrimmedCurve piece =
+        Stereon::MakeTrimmedCurve(a.Curves[5], Stereon::Interval{0.25, 0.75})->Reversed();
+    const TrimmedCurve inner =
+        *Stereon::MakeTrimmedCurve(Curve(piece), Stereon::Interval{0.3, 0.6});
+    a.Curves.push_back(Curve(arc));
+    a.Curves.push_back(Curve(piece));
+    a.Curves.push_back(Curve(inner));
+    a.Curves2d.push_back(
+        Curve2d(*Stereon::MakeTrimmedCurve(a.Curves2d[1], Stereon::Interval{0.5, 2.0})));
     return a;
 }
 
@@ -182,9 +207,10 @@ Bytes WithChunk(Bytes b, const std::string& tag, const std::uint32_t flags)
     return b;
 }
 
-std::filesystem::path GoldenFile()
+std::filesystem::path GoldenFile(const int version)
 {
-    return std::filesystem::path(__FILE__).parent_path() / "data" / "geometry-v1.stn";
+    return std::filesystem::path(__FILE__).parent_path() / "data" /
+           ("geometry-v" + std::to_string(version) + ".stn");
 }
 
 Bytes FileBytes(const std::filesystem::path& path)
@@ -400,7 +426,7 @@ TEST_CASE("files round-trip, and the JSON view shows them", "[io][archive]")
 
     const auto json = Stereon::GeometryToJson(Written(EveryType()));
     REQUIRE(json.has_value());
-    REQUIRE(json->starts_with(R"({"format":1,)"));
+    REQUIRE(json->starts_with(R"({"format":2,)"));
     REQUIRE(json->find(R"("resolution":2e-05)") != std::string::npos);
     REQUIRE(
         json->find(R"({"type":"Circle","value":{"Center":{"X":1,"Y":-2,"Z":0.5},"Radius":2.5,)") !=
@@ -408,28 +434,193 @@ TEST_CASE("files round-trip, and the JSON view shows them", "[io][archive]")
     REQUIRE(json->find(R"("tag":"SRFS","required":true)") != std::string::npos);
 }
 
-TEST_CASE("the committed version-1 file still reads and rewrites byte for byte",
+TEST_CASE("the committed files of every format version still read and rewrite byte for byte",
           "[io][archive][compatibility]")
 {
     if constexpr (!Stereon::SerializationAvailable) {
         return;
     }
     // ADR-0012: files written by each release stay readable by every later
-    // one. Regenerate only when the format version changes, never to make
+    // one. Each version's file is frozen once committed; only the current
+    // version's is regenerated, when that version is new, never to make
     // this test pass, by running the hidden "[.regenerate]" case.
-    const Bytes golden = FileBytes(GoldenFile());
-    const LoadedGeometry loaded = Read(golden);
-    REQUIRE(loaded.FormatVersion == 1);
-    REQUIRE(loaded.Archive.Policy == EveryType().Policy);
-    // The kernel version in the header is the writer's, so compare the
-    // rest: everything after the header's version fields.
-    Bytes rewritten = Written(loaded.Archive);
-    REQUIRE(rewritten.size() == golden.size());
-    REQUIRE(std::equal(rewritten.begin() + 16, rewritten.end(), golden.begin() + 16));
-    REQUIRE(Written(EveryType()).size() == golden.size());
+    const struct {
+        int Version;
+        GeometryArchive Content;
+    } files[] = {{1, EveryType()}, {2, WithTrimmed()}};
+    for (const auto& [version, content] : files) {
+        const Bytes golden = FileBytes(GoldenFile(version));
+        const LoadedGeometry loaded = Read(golden);
+        REQUIRE(loaded.FormatVersion == static_cast<std::uint32_t>(version));
+        REQUIRE(loaded.Archive.Policy == content.Policy);
+        REQUIRE(loaded.Archive.Curves.size() == content.Curves.size());
+        REQUIRE(loaded.Archive.Curves2d.size() == content.Curves2d.size());
+        // The format and kernel versions in the header are the writer's, so
+        // compare the rest: everything after the header's version fields.
+        // Version 1 is version 2 without trimmed curves, so rewriting it as
+        // version 2 changes nothing else.
+        const Bytes rewritten = Written(loaded.Archive);
+        REQUIRE(rewritten.size() == golden.size());
+        REQUIRE(std::equal(rewritten.begin() + 16, rewritten.end(), golden.begin() + 16));
+        REQUIRE(Written(content).size() == golden.size());
+    }
 }
 
-TEST_CASE("regenerate the committed version-1 file", "[.regenerate]")
+TEST_CASE("regenerate the committed file of the current format version", "[.regenerate]")
 {
-    REQUIRE(Stereon::SaveGeometry(GoldenFile(), EveryType()).has_value());
+    static_assert(Stereon::GeometryFormatVersion == 2,
+                  "a new format version gets a new committed file; earlier ones stay frozen");
+    REQUIRE(Stereon::SaveGeometry(GoldenFile(2), WithTrimmed()).has_value());
+}
+
+TEST_CASE("trimmed curves are saved with their bases and read back bit for bit",
+          "[io][archive][trimmed]")
+{
+    if constexpr (!Stereon::SerializationAvailable) {
+        return;
+    }
+    const GeometryArchive original = WithTrimmed();
+    const Bytes bytes = Written(original);
+    const LoadedGeometry loaded = Read(bytes);
+    REQUIRE(Written(loaded.Archive) == bytes);
+    for (std::size_t i = 6; i < original.Curves.size(); ++i) {
+        const auto* before = original.Curves[i].Target<TrimmedCurve>();
+        const auto* after = loaded.Archive.Curves[i].Target<TrimmedCurve>();
+        REQUIRE(before != nullptr);
+        REQUIRE(after != nullptr);
+        REQUIRE(after->GetRange() == before->GetRange());
+        REQUIRE(after->IsReversed() == before->IsReversed());
+        const Stereon::Interval range = before->GetRange();
+        for (const double f : {0.0, 0.3, 1.0}) {
+            const double t = range.GetLower() + f * (range.GetUpper() - range.GetLower());
+            REQUIRE(Eval(*after, t) == Eval(*before, t));
+        }
+    }
+    // The nested one: a trimmed curve whose basis is a trimmed curve.
+    const auto* nested = loaded.Archive.Curves[8].Target<TrimmedCurve>();
+    REQUIRE(nested->GetBasis().Target<TrimmedCurve>() != nullptr);
+    REQUIRE(nested->GetBasis().Target<TrimmedCurve>()->IsReversed());
+    const auto* plane = loaded.Archive.Curves2d.back().Target<TrimmedCurve2d>();
+    REQUIRE(plane != nullptr);
+    REQUIRE(Eval(*plane, 1.0) == Eval(original.Curves2d[1], 1.0));
+
+    // The JSON view shows the basis and the trim.
+    const auto json = Stereon::GeometryToJson(bytes);
+    REQUIRE(json.has_value());
+    REQUIRE(json->starts_with(R"({"format":2,)"));
+    REQUIRE(json->find(R"({"type":"TrimmedCurve","value":{"basis":{"type":"Circle","value":)") !=
+            std::string::npos);
+    REQUIRE(json->find(R"("trim":{"Lower":5,"Upper":7,"Reversed":false})") != std::string::npos);
+    REQUIRE(json->find(R"({"type":"TrimmedCurve2d","value":{"basis":{"type":"Circle2d")") !=
+            std::string::npos);
+}
+
+namespace {
+
+/// A line trimmed `depth` times, each trim inside the one before.
+Curve NestedTrims(const int depth)
+{
+    Curve curve(Line{O, X});
+    for (int k = 0; k < depth; ++k) {
+        const double half = 10.0 - k;
+        curve = Curve(*Stereon::MakeTrimmedCurve(curve, Stereon::Interval{-half, half}));
+    }
+    return curve;
+}
+
+/// The archive with its one curve record wrapped in one more trimmed-curve
+/// record with the same trim, written by hand: the writer refuses to nest
+/// so deep, a hostile file need not.
+Bytes WrappedOnceMore(Bytes b)
+{
+    const std::size_t chunk = ChunkAt(b, "CRVS");
+    const std::size_t length = U32At(b, chunk + 8);
+    const Bytes record(b.begin() + static_cast<std::ptrdiff_t>(chunk + 20 + 8),
+                       b.begin() + static_cast<std::ptrdiff_t>(chunk + 20 + length));
+    // The record ends with its trim: two doubles and a bool.
+    Bytes value = record;
+    value.insert(value.end(), record.end() - 17, record.end());
+    const std::string name = "TrimmedCurve";
+    Bytes payload(8, std::byte{0});
+    payload[0] = std::byte{1};
+    payload.push_back(static_cast<std::byte>(name.size()));
+    payload.push_back(std::byte{0});
+    for (const char c : name) {
+        payload.push_back(static_cast<std::byte>(c));
+    }
+    for (std::size_t i = 0; i < 8; ++i) {
+        payload.push_back(static_cast<std::byte>((value.size() >> (8 * i)) & 0xFFU));
+    }
+    payload.insert(payload.end(), value.begin(), value.end());
+    Bytes out(b.begin(), b.begin() + static_cast<std::ptrdiff_t>(chunk + 20));
+    PutU32At(out, chunk + 8, static_cast<std::uint32_t>(payload.size()));
+    out.insert(out.end(), payload.begin(), payload.end());
+    out.insert(out.end(), b.begin() + static_cast<std::ptrdiff_t>(chunk + 20 + length), b.end());
+    Reseal(out, chunk);
+    return out;
+}
+
+} // namespace
+
+TEST_CASE("trimmed-curve records are validated and their nesting bounded", "[io][archive][trimmed]")
+{
+    if constexpr (!Stereon::SerializationAvailable) {
+        return;
+    }
+    // The deepest nesting the format allows is written and read back...
+    GeometryArchive deep;
+    deep.Curves = {NestedTrims(Stereon::MaxTrimmedNesting)};
+    const Bytes deepest = Written(deep);
+    REQUIRE(Written(Read(deepest).Archive) == deepest);
+    // ...one more is refused on write, and on read from a file made by hand.
+    GeometryArchive deeper;
+    deeper.Curves = {NestedTrims(Stereon::MaxTrimmedNesting + 1)};
+    REQUIRE(WriteGeometry(deeper).error().GetCode() == ErrorCode::NotSupported);
+    const auto tooDeep = ReadGeometry(WrappedOnceMore(deepest));
+    REQUIRE(tooDeep.error().GetCode() == ErrorCode::ParseError);
+    REQUIRE(std::string(tooDeep.error().GetMessage()).find("more than 8 deep") !=
+            std::string::npos);
+    // The hand-made wrapping is a valid record at a legal depth.
+    GeometryArchive shallow;
+    shallow.Curves = {NestedTrims(1)};
+    REQUIRE(Read(WrappedOnceMore(Written(shallow))).Archive.Curves.size() == 1);
+
+    // A trim edited in the file: the trimmed curve record is the circle arc
+    // [5, 7]; its trim is the record's last 17 bytes.
+    GeometryArchive arc;
+    arc.Curves = {Curve(
+        *Stereon::MakeTrimmedCurve(Curve(Circle{O, 2.5, X, Y}), Stereon::Interval{5.0, 7.0}))};
+    const Bytes good = Written(arc);
+    const std::size_t curves = ChunkAt(good, "CRVS");
+    const std::size_t end = curves + 20 + U32At(good, curves + 8);
+    const auto withUpper = [&](const double upper) {
+        Bytes b = good;
+        const auto bits = std::bit_cast<std::uint64_t>(upper);
+        for (std::size_t i = 0; i < 8; ++i) {
+            b[end - 9 + i] = static_cast<std::byte>((bits >> (8 * i)) & 0xFFU);
+        }
+        Reseal(b, curves);
+        return std::string(ReadGeometry(b).error().GetMessage());
+    };
+    REQUIRE(withUpper(std::numeric_limits<double>::quiet_NaN()).find("not finite and non-empty") !=
+            std::string::npos);
+    REQUIRE(withUpper(4.0).find("not finite and non-empty") != std::string::npos);
+    // A range longer than a period is caught by MakeTrimmedCurve.
+    REQUIRE(withUpper(12.0).find("(TrimmedCurve) is not valid geometry") != std::string::npos);
+    // A sense byte that is not 0 or 1.
+    Bytes badSense = good;
+    badSense[end - 1] = std::byte{2};
+    Reseal(badSense, curves);
+    REQUIRE(ReadGeometry(badSense).error().GetCode() == ErrorCode::ParseError);
+    // A trimmed record in the plane-curve chunk is of an unknown type there.
+    GeometryArchive plane;
+    plane.Curves2d = {Curve2d(*Stereon::MakeTrimmedCurve(
+        Curve2d(Line2d{Point2{0.0, 0.0}, Vec2{1.0, 0.0}}), Stereon::Interval{0.0, 1.0}))};
+    Bytes renamed = Written(plane);
+    const std::size_t planeCurves = ChunkAt(renamed, "PCRV");
+    // "TrimmedCurve2d" -> "TrimmedCurve2x": the name, after count and length.
+    renamed[planeCurves + 20 + 8 + 2 + 13] = std::byte{'x'};
+    Reseal(renamed, planeCurves);
+    REQUIRE(std::string(ReadGeometry(renamed).error().GetMessage()).find("unknown type") !=
+            std::string::npos);
 }
