@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: 2026 Onur Tuncer and Stereon contributors
+# SPDX-License-Identifier: MPL-2.0
+#
+# The ADR-0002 verification run, weekly and on request: a million nearly
+# degenerate cases per exact predicate (Orient2D, Orient3D, InCircle,
+# InSphere) against the exact integer oracle, with no disagreement allowed.
+# Too long for every pull request, where 20 000 cases per predicate run.
+
+name: Robustness
+
+on:
+  schedule:
+    - cron: "41 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CMAKE_BUILD_PARALLEL_LEVEL: "4"
+
+jobs:
+  exhaustive:
+    name: Predicates, a million cases each (gcc16-release)
+    runs-on: ubuntu-24.04
+    container: gcc:16.2
+    timeout-minutes: 90
+    steps:
+      - name: Install CMake and Ninja
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends cmake ninja-build
+      - uses: actions/checkout@v7
+      - name: Configure
+        run: cmake --preset gcc16-release
+      - name: Build the robust tests
+        run: cmake --build --preset gcc16-release --target stereon_robust_tests
+      - name: Run the exhaustive suite
+        run: ./build/gcc16-release/tests/stereon_robust_tests "[exhaustive]" --durations yes

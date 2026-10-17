@@ -181,4 +181,12 @@ if(Python3_Interpreter_FOUND)
                 --root "${PROJECT_SOURCE_DIR}")
     set_tests_properties("tools: complexity self-test" "tools: complexity"
         PROPERTIES SKIP_RETURN_CODE 77)
+    # ADR-0008: every dependency's declared licence is on the allow-list,
+    # and the licence file each build fetched reads as the declared one.
+    add_test(NAME "tools: dependency licences self-test"
+        COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/check_dependencies.py"
+                --self-test)
+    add_test(NAME "tools: dependency licences"
+        COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/check_dependencies.py"
+                --root "${PROJECT_SOURCE_DIR}" --deps-dir "${FETCHCONTENT_BASE_DIR}")
 endif()
