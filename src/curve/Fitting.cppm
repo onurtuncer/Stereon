@@ -152,6 +152,57 @@ Approximate(std::span<const Point3> points, int degree, ApproximationBudget budg
 Approximate(std::span<const Point2> points, int degree, ApproximationBudget budget,
             EndDerivatives2d ends, Parametrization parametrization = Parametrization::ChordLength);
 
+/// The closed curve of the given degree through all the points, in order,
+/// returning to the first point after the last with the smoothness of the
+/// spline, C^(p-1), at the seam. The points are given once: the closing
+/// chord from the last point back to the first takes part in the
+/// parametrisation like any other. The curve is a periodic B-spline of
+/// period 1 written out as its unclamped equivalent (see BSplineCurve): the
+/// domain is [0, 1], the knots repeat with period 1 and the last `degree`
+/// poles repeat the first. Knots are placed at the parameters for an odd
+/// degree and halfway between them for an even degree, the rule under which
+/// periodic spline interpolation is uniquely solvable; the parameters of
+/// the points increase from 0 (odd degree) or from half the closing chord's
+/// share (even degree) and stay below 1. The poles solve a cyclic banded
+/// system. InvalidInput unless 1 <= degree <= BSplineMaxDegree, there are
+/// at least degree + 1 finite points and, for chord-length and centripetal
+/// parameters, no two consecutive points coincide, the last and the first
+/// included.
+[[nodiscard]] Result<CurveFit>
+InterpolatePeriodic(std::span<const Point3> points, int degree,
+                    Parametrization parametrization = Parametrization::ChordLength);
+[[nodiscard]] Result<CurveFit2d>
+InterpolatePeriodic(std::span<const Point2> points, int degree,
+                    Parametrization parametrization = Parametrization::ChordLength);
+
+/// The closed curve of the given degree and number of distinct poles
+/// closest to the points in the least-squares sense: every pole is free,
+/// and they solve the periodic normal equations, a cyclic banded symmetric
+/// positive-definite system. Knots are spread over the period so that
+/// every span holds parameters, moved back by half a step for an even
+/// degree as in InterpolatePeriodic; with as many poles as points the fit
+/// interpolates. The curve has poleCount + degree poles, the last `degree`
+/// repeating the first. InvalidInput unless the points suit
+/// InterpolatePeriodic and degree + 1 <= poleCount <= points.size().
+[[nodiscard]] Result<CurveFit>
+FitLeastSquaresPeriodic(std::span<const Point3> points, int degree, std::size_t poleCount,
+                        Parametrization parametrization = Parametrization::ChordLength);
+[[nodiscard]] Result<CurveFit2d>
+FitLeastSquaresPeriodic(std::span<const Point2> points, int degree, std::size_t poleCount,
+                        Parametrization parametrization = Parametrization::ChordLength);
+
+/// Approximate for a closed curve: the periodic least-squares fit with the
+/// fewest distinct poles, among those tried by doubling and bisection as in
+/// Approximate, whose deviation at the points is within the budget. The
+/// same errors as Approximate, with InterpolatePeriodic's conditions on the
+/// points.
+[[nodiscard]] Result<CurveFit>
+ApproximatePeriodic(std::span<const Point3> points, int degree, ApproximationBudget budget,
+                    Parametrization parametrization = Parametrization::ChordLength);
+[[nodiscard]] Result<CurveFit2d>
+ApproximatePeriodic(std::span<const Point2> points, int degree, ApproximationBudget budget,
+                    Parametrization parametrization = Parametrization::ChordLength);
+
 } // namespace Stereon
 
 export namespace Stereon::Detail {
@@ -204,5 +255,18 @@ export namespace Stereon::Detail {
 FewestPolesWithin(std::size_t fewest, std::size_t most, double budget,
                   const std::function<Result<double>(std::size_t)>& deviationOf,
                   std::string_view where);
+
+/// The knot vector of the unclamped equivalent of a periodic B-spline of
+/// degree p whose distinct knots over one period are v_0 < ... < v_n, with
+/// v_n = v_0 + period: the n + 2p + 1 knots v_{n-p} - period, ...,
+/// v_{n-1} - period, v_0, ..., v_n, v_1 + period, ..., v_p + period, whose
+/// domain is [v_0, v_n]. `periodKnots` holds v_0, ..., v_n with n >= p + 1.
+[[nodiscard]] std::vector<double> PeriodicKnotVector(std::span<const double> periodKnots,
+                                                     int degree);
+
+/// The poles of that equivalent: the n distinct poles followed by the first
+/// p of them again, so that the curve on [v_0, v_n] closes with C^(p-1)
+/// continuity at the seam. `poles` holds n >= p + 1 poles.
+[[nodiscard]] std::vector<Point3> WrappedPoles(std::span<const Point3> poles, int degree);
 
 } // namespace Stereon::Detail

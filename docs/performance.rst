@@ -56,6 +56,21 @@ repetition, from the operating system or the CPU's frequency scaling, out
 of the result. On the laptop used here repeated runs move a ratio by up
 to about 10 %, so a ratio between 0.9 and 1.1 is reported as parity.
 
+Two kinds of run are told apart. A *development run* is made on whatever
+machine is to hand, as the table below was, and may be quoted in a pull
+request as long as its machine is named. The *reference run* is made by CI,
+``.github/workflows/occt-reference.yml``: the same ``gcc:16.2`` container
+and pinned OCCT build as the differential tests, on a GitHub-hosted
+``ubuntu-24.04`` runner, with 15 repetitions of the two libraries
+interleaved. Each run uploads the raw Google Benchmark JSON, a record of the
+machine (CPU model, cores, memory, kernel, compiler, OCCT tag and commit,
+Stereon commit) and the report that ``tools/bench_report.py`` renders from
+them, with the median per row and the largest deviation of any repetition
+from it. The report a release gate cites (``docs/benchmarks.md``,
+*Reporting*) is a reference run committed to ``bench/reports/``; a hosted
+runner's CPU differs from run to run and is shared with other jobs, so a
+row whose spread is large is run again rather than quoted.
+
 Each library gets its best usage where it has one. Projections reuse an
 initialised projector, ``GeomAPI_ProjectPointOnCurve::Perform`` against a
 reused ``CurveProjector``. Evaluation with derivatives is one ``D2`` call
@@ -386,8 +401,9 @@ Being farther from the right answer is not on offer at any speed.
 
 Not yet measured: the SIMD batch evaluation of B1.1, grid evaluation
 (B1.2), B1.3's convergence rate over a corpus, and degree elevation (B1.5),
-which Stereon does not have yet. All numbers come from one laptop; the
-release report for v0.1 needs the CI reference machine.
+which Stereon does not have yet. The numbers above are a development run
+on one laptop; the v0.1 release report is the CI reference run described
+under *Method*, committed to ``bench/reports/`` once it has been made.
 
 Where OCCT gets it wrong
 ------------------------

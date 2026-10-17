@@ -72,3 +72,5 @@ jobs:
         run: |
           python tools/check_corpus.py --self-test
           python tools/check_corpus.py
+      - name: Benchmark report renderer (self-test; occt-reference.yml uses it)
+        run: python tools/bench_report.py --self-test

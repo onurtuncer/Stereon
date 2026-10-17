@@ -23,6 +23,9 @@ This chapter derives the fitting functions of ``Stereon.Curve`` and
   an ``ApproximationBudget``;
 - each of the three also takes ``EndDerivatives``, the derivatives the curve
   must have at its two ends;
+- ``InterpolatePeriodic``, ``FitLeastSquaresPeriodic`` and
+  ``ApproximatePeriodic`` do the same for closed curves, which return to
+  their first point as periodic B-splines;
 - ``InterpolateSurface`` builds the surface through a grid of points,
   ``FitSurfaceLeastSquares`` the surface with given pole counts closest to
   the grid, and ``ApproximateSurface`` the one with the fewest poles within a
@@ -383,6 +386,95 @@ the caller must measure against that geometry (for instance with
 ``Project``) or sample densely enough; the fit does not pretend to know
 more than its input.
 
+Closed curves: periodic fits
+----------------------------
+
+A section through a blade, a cam profile, the outline of a hole: many
+measured curves close on themselves, and fitting them as open curves
+through a repeated first point leaves a corner at the seam
+(:numref:`fig-fitting-periodic`, left), because nothing ties the
+derivatives at the end to those at the start. ``InterpolatePeriodic``,
+``FitLeastSquaresPeriodic`` and ``ApproximatePeriodic`` fit a *periodic*
+B-spline instead: a curve of period 1 that returns to its first point with
+the full :math:`C^{p-1}` smoothness of the spline. The points are given
+once, and the closing chord from the last point back to the first takes
+part in the parametrisation like any other chord.
+
+**Representation.** Stereon has no periodic flag (:doc:`nurbs`); a periodic
+B-spline is written out as its unclamped equivalent. With :math:`n`
+distinct poles :math:`P_0, \dots, P_{n-1}` and distinct knots
+:math:`0 = v_0 < v_1 < \dots < v_n = 1` over one period, the curve has the
+:math:`n + 2p + 1` knots
+
+.. math::
+
+   v_{n-p} - 1, \dots, v_{n-1} - 1, \; v_0, \dots, v_n, \; v_1 + 1, \dots, v_p + 1
+
+and the :math:`n + p` poles :math:`P_0, \dots, P_{n-1}, P_0, \dots, P_{p-1}`
+(``Detail::PeriodicKnotVector``, ``Detail::WrappedPoles``). Its domain is
+:math:`[0, 1]`; on it the curve coincides with the periodic spline, so its
+derivatives up to order :math:`p - 1` at 1 equal those at 0, which
+``tests/curve/PeriodicFittingTests.cpp`` checks for every degree. The
+periodic basis function of pole :math:`i` is :math:`B_i = N_i + N_{i+n}`,
+the two pieces that multiply the pole and its repeat.
+
+**Parameters and knots.** The closing chord makes the parameters run round
+a circle, :math:`c_0 = 0, \dots, c_m, c_{m+1} = 1`, and the knots are
+where periodic interpolation differs from the open case. With as many
+poles as points, :math:`n = m + 1`, the natural choice is one knot per
+point, and for an odd degree it is the right one: a periodic cubic with
+knots at its data is the classical periodic spline, which exists and is
+unique for any spacing. For an even degree it fails. A periodic quadratic
+with knots at eight evenly spaced points is exactly singular: a control
+polygon that alternates up and down gives a curve that vanishes at every
+knot. In the uniform case the collocation matrix is a circulant whose
+symbol is an Euler–Frobenius polynomial, and it vanishes at :math:`-1`,
+making the system singular for an even number of points, exactly when the
+sites are offset by half a knot spacing from the centres of symmetry of the
+B-splines; the centred choice is always safe. Stereon therefore places the
+knots at the parameters for an odd degree and halfway between consecutive
+parameters for an even degree, and keeps the domain at :math:`[0, 1]` by
+starting the parameters at 0 (odd degree) or at half the closing chord's
+share (even degree), so that in both cases the parameters increase from
+the first point and stay below 1; ``Parameters`` reports them. With fewer
+poles than points the knots are spread :math:`d = (m + 1) / n` points
+apart, as eq. 9.69 does for open fits, with the same half-point shift for
+even degrees, so that every knot span holds a point and the periodic normal
+equations are positive definite.
+
+**The cyclic systems.** Every pole of a periodic fit is free, so the
+collocation system has :math:`n` equations in :math:`n` unknowns and the
+normal equations run over all poles. Both matrices are banded *cyclically*:
+the last poles neighbour the first, so the band wraps round the corners.
+Stereon solves them by bordering (Golub and Van Loan, *Matrix
+Computations*, section 4.8): the last :math:`p` unknowns are split off, the
+leading block, an ordinary band matrix, is factored once without pivoting
+and applied to :math:`p + 1` right-hand sides, and a dense
+:math:`p \times p` Schur complement, solved with partial pivoting, closes
+the loop. For the leading block to be an ordinary collocation matrix,
+totally positive and satisfying the Schoenberg–Whitney conditions, each
+point's equation is placed in the row of the central basis function of its
+span, the largest of the :math:`p + 1`; in point order the block would be
+nearly triangular with the smallest basis values as pivots, and its back
+substitution would grow exponentially. The cost stays :math:`O(m p^2)`.
+
+``ApproximatePeriodic`` runs the same doubling and bisection over the
+number of distinct poles as ``Approximate``, from :math:`p + 1` up to the
+number of points, where the fit is the periodic interpolant.
+
+.. _fig-fitting-periodic:
+
+.. figure:: figures/fitting-periodic.svg
+   :width: 100%
+   :alt: Left: a closed cam profile through twelve points, fitted once as a periodic cubic and once as an open cubic through the first point repeated, which has a corner at the seam. Right: fifty noisy samples of the profile, the periodic least-squares cubic with eight poles and its closed control polygon, and the periodic interpolant.
+
+   Left: twelve points on a cam profile. The periodic cubic interpolant
+   closes smoothly; the open interpolant through the same points with the
+   first repeated at the end has a corner where it starts and ends. Right:
+   fifty noisy samples of the profile, the periodic least-squares cubic
+   with eight distinct poles and its control polygon, and the periodic
+   interpolant through all fifty, which follows the noise.
+
 Surface interpolation
 ---------------------
 
@@ -504,14 +596,16 @@ The fitting functions validate their input as data from outside the kernel
 (or a full grid of them), a pole count between :math:`p + 1` and the number
 of points (four at least with end derivatives, and per direction for
 surfaces), a finite positive budget, finite end derivatives with degree 2
-or more, and no zero chords under chord-length or centripetal parameters.
-Invalid input returns ``InvalidInput`` with a message; it never reaches a
-contract.
+or more, and no zero chords under chord-length or centripetal parameters,
+the closing chord of a periodic fit included: a closed polygon whose last
+point repeats its first is rejected, since the periodic fits close the
+curve themselves. Invalid input returns ``InvalidInput`` with a message; it
+never reaches a contract.
 
 What is not yet there:
 
-- closed or periodic fits, and prescribed derivatives along a surface's
-  boundaries;
+- prescribed derivatives along a surface's boundaries, and periodic
+  surfaces;
 - weighted least squares and smoothing (fairing) terms;
 - surface fitting to scattered rather than gridded points;
 - parameter correction, which re-projects the points onto the fitted curve
