@@ -1,7 +1,8 @@
 # ADR-0008: Licence
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-28
+- **Accepted:** 2026-10-17 by Onur Tuncer: the REUSE job checks every file's licence, and `tools/check_dependencies.py` checks every dependency against the allow-list and its fetched licence text
 - **Owner:** Onur Tuncer
 - **Phase:** 0
 
