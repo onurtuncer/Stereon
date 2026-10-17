@@ -6,6 +6,7 @@
 [![Lint](https://github.com/onurtuncer/Stereon/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/onurtuncer/Stereon/actions/workflows/lint.yml)
 [![Python](https://github.com/onurtuncer/Stereon/actions/workflows/python.yml/badge.svg?branch=main)](https://github.com/onurtuncer/Stereon/actions/workflows/python.yml)
 [![Benchmarks](https://github.com/onurtuncer/Stereon/actions/workflows/bench.yml/badge.svg?branch=main)](https://github.com/onurtuncer/Stereon/actions/workflows/bench.yml)
+[![OCCT reference run](https://github.com/onurtuncer/Stereon/actions/workflows/occt-reference.yml/badge.svg?branch=main)](https://github.com/onurtuncer/Stereon/actions/workflows/occt-reference.yml)
 [![Docs](https://github.com/onurtuncer/Stereon/actions/workflows/deploy-docs.yml/badge.svg?branch=main)](https://onurtuncer.github.io/Stereon/)
 [![codecov](https://codecov.io/gh/onurtuncer/Stereon/branch/main/graph/badge.svg)](https://codecov.io/gh/onurtuncer/Stereon)
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg)](LICENSE)

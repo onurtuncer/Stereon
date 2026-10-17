@@ -1,0 +1,130 @@
+# SPDX-FileCopyrightText: 2026 Onur Tuncer and Stereon contributors
+# SPDX-License-Identifier: MPL-2.0
+#
+# The reference run of the OpenCASCADE comparison benchmarks (docs/benchmarks.md,
+# B1.1–B1.6): stereon_occt_bench on the reference image, the gcc:16.2 container
+# on a GitHub-hosted ubuntu-24.04 runner, against the pinned OCCT that occt.yml
+# builds and caches. Development runs happen on whatever machine is to hand;
+# the report a release gate cites comes from here (docs/performance.rst, Method).
+#
+# Each run uploads an artifact with the raw Google Benchmark JSON, the machine
+# and build record and the rendered report (tools/bench_report.py). A release
+# commits that report to bench/reports/. The run also appears in the job summary.
+#
+# Hosted runners differ from run to run (the CPU model is recorded) and share
+# their host, so every row is the median of interleaved repetitions and the
+# report shows the spread. A row whose spread is large is re-run, not quoted.
+# Not a required check: timings cannot gate a merge on a shared runner.
+
+name: OCCT reference run
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - bench/occt/**
+      - bench/CMakeLists.txt
+      - tools/bench_report.py
+      - tools/occt/build_occt.sh
+      - .github/workflows/occt-reference.yml
+  workflow_dispatch:
+    inputs:
+      repetitions:
+        description: Repetitions per benchmark (the median is reported)
+        type: number
+        default: 15
+      filter:
+        description: Google Benchmark regex of the benchmarks to run (empty for all)
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CMAKE_BUILD_PARALLEL_LEVEL: "4"
+  OCCT_PREFIX: /opt/occt
+
+jobs:
+  reference:
+    name: OCCT reference run (B1.1–B1.6)
+    runs-on: ubuntu-24.04
+    container: gcc:16.2
+    timeout-minutes: 150
+    steps:
+      - name: Install CMake, Ninja and Python
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends cmake ninja-build zstd python3
+          g++ --version | head -1; cmake --version | head -1; ninja --version
+      - uses: actions/checkout@v7
+      - name: Restore the OCCT build
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.OCCT_PREFIX }}
+          key: occt-gcc16.2-${{ hashFiles('tools/occt/build_occt.sh') }}
+      - name: Build OCCT (cache miss only)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash tools/occt/build_occt.sh "$OCCT_PREFIX" "$RUNNER_TEMP/occt"
+      - name: Save the OCCT build
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.OCCT_PREFIX }}
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+      - name: Show the OCCT build
+        run: cat "$OCCT_PREFIX/stereon-occt-build.txt"
+      - name: Configure the benchmarks against OCCT
+        run: >
+          cmake --preset bench -DSTEREON_WARNINGS_AS_ERRORS=ON
+          -DSTEREON_WITH_OCCT=ON -DCMAKE_PREFIX_PATH="$OCCT_PREFIX"
+      - name: Build
+        run: cmake --build --preset bench --target stereon_occt_bench
+      - name: Record the machine and the builds
+        run: |
+          {
+            echo "date=$(date -u +%Y-%m-%d)"
+            echo "commit=${{ github.sha }}"
+            echo "ref=${{ github.ref_name }}"
+            echo "workflow_run=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "runner=GitHub Actions ubuntu-24.04 (${{ runner.os }}, ${{ runner.arch }}), container gcc:16.2"
+            echo "cpu=$(sed -n 's/^model name[[:space:]]*: //p' /proc/cpuinfo | head -1)"
+            echo "cpus=$(nproc)"
+            echo "memory=$(awk '/MemTotal/ {printf "%.1f GB", $2 / 1048576}' /proc/meminfo)"
+            echo "kernel=$(uname -sr)"
+            echo "compiler=$(g++ --version | head -1)"
+            sed 's/^/occt_/' "$OCCT_PREFIX/stereon-occt-build.txt"
+          } | tee "$RUNNER_TEMP/machine.txt"
+      - name: Run the benchmarks
+        env:
+          REPETITIONS: ${{ inputs.repetitions || 15 }}
+          FILTER: ${{ inputs.filter }}
+        run: >
+          ./build/bench/bench/stereon_occt_bench
+          --benchmark_repetitions="$REPETITIONS"
+          --benchmark_enable_random_interleaving=true
+          --benchmark_display_aggregates_only=true
+          --benchmark_filter="${FILTER:-.}"
+          --benchmark_out="$RUNNER_TEMP/results.json" --benchmark_out_format=json
+      - name: Render the report
+        run: |
+          python3 tools/bench_report.py "$RUNNER_TEMP/results.json" \
+            --machine "$RUNNER_TEMP/machine.txt" --out "$RUNNER_TEMP/report.md"
+          cat "$RUNNER_TEMP/report.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload the run
+        uses: actions/upload-artifact@v4
+        with:
+          name: occt-reference-run-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/results.json
+            ${{ runner.temp }}/machine.txt
+            ${{ runner.temp }}/report.md
+          retention-days: 90
+          if-no-files-found: error
