@@ -573,7 +573,9 @@ The suite in ``tests/robust/PredicateTests.cpp`` then checks:
   the hidden test ``stereon_robust_tests "[exhaustive]"``. Both require zero
   disagreements with the oracle and record how often the plain formula is
   wrong, which must be more than never, so that the suite is known to have
-  teeth.
+  teeth. The verification run passed on 2026-10-17: four million cases, a
+  million per predicate, with no disagreement, in 41 s on the GCC 16.2
+  release build; the ``Robustness`` workflow repeats it weekly.
 
 ``bench/RobustBench.cpp`` is benchmark B0.1 of :doc:`testing`: each
 predicate against the plain determinant on random points in the unit square

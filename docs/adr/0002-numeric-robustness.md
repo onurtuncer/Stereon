@@ -2,6 +2,7 @@
 
 - **Status:** Proposed
 - **Date:** 2026-09-28
+- **Revised:** 2026-10-17 (enforcement of the sign-test ban: a source lint, since clang-tidy cannot parse the GCC 16 build)
 - **Owner:** Onur Tuncer
 - **Phase:** 0
 
@@ -21,7 +22,7 @@ Adopt option 3.
 
 - `stereon::robust` provides Shewchuk-style adaptive predicates: `Orient2D`, `Orient3D`, `InCircle`, `InSphere`, plus expansion arithmetic for custom predicates.
 - An `Interval` type (outward-rounded, using directed rounding or error-free transformations) serves as the fast filter for curve/surface predicates; ambiguous intervals fall back to higher precision or to subdivision.
-- Every topological decision in `topo/`, `boolean/` and `mesh/` goes through a predicate in `robust/`. Direct sign tests on computed doubles are banned in those libraries (clang-tidy rule).
+- Every topological decision in `topo/`, `boolean/` and `mesh/` goes through a predicate in `robust/`. Direct sign tests on computed doubles are banned in those libraries. `tools/check_epsilon.py` enforces the ban in CI on the token level (comparisons with floating-point literals and machine-epsilon constants); a clang-tidy check replaces or supplements it once clang-tidy can parse the GCC 16 module build (ADR-0016), and review covers what a token-level lint cannot see.
 - Constructions return a value plus an error bound where one is cheap to compute.
 
 ## Consequences
