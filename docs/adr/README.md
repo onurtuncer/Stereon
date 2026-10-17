@@ -50,3 +50,4 @@ Open questions that have to be researched before they can be decided live in [`d
 | [0032](0032-mutation-based-kernel-verification.md) | Mutation-based verification of kernel contracts | 0 | Accepted |
 | [0033](0033-modular-sdk-product-scope.md) | Modular CAD SDK with an independent kernel | 0 | Proposed |
 | [0034](0034-kernel-presentation-boundary.md) | Separate the modelling kernel from presentation and interaction | 0 | Proposed |
+| [0035](0035-debug-viewer.md) | Debug viewer over dump files with GLFW, OpenGL and Dear ImGui | 0 | Proposed |
