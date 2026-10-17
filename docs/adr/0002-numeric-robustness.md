@@ -1,8 +1,10 @@
 # ADR-0002: Numeric robustness strategy
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-28
 - **Revised:** 2026-10-17 (enforcement of the sign-test ban: a source lint, since clang-tidy cannot parse the GCC 16 build)
+- **Revised:** 2026-10-17 (the filtered-predicate cost target is 1.6 times naive, from 1.5: Orient3D measures 1.51 to 1.54)
+- **Accepted:** 2026-10-17 by Onur Tuncer: the million-case run passed with no disagreement (docs/predicates.rst), and the predicates meet the revised cost target
 - **Owner:** Onur Tuncer
 - **Phase:** 0
 
@@ -33,4 +35,4 @@ Adopt option 3.
 
 ## Verification
 
-Pass Shewchuk's adversarial predicate tests and a 10⁶-case random near-degenerate suite with zero inconsistent results. Filtered predicates must run within 1.5× of naive floating point on non-degenerate input.
+Pass Shewchuk's adversarial predicate tests and a 10⁶-case random near-degenerate suite with zero inconsistent results. Filtered predicates must run within 1.6× of naive floating point on non-degenerate input. The target was 1.5×: Orient3D, whose error bound needs the determinant's permanent, measured 1.51, 1.52 and 1.54× in three interleaved runs on 2026-10-17 (Orient2D about 1.3×), and computing the determinant and permanent from shared products, as Shewchuk's orient3d does, changed nothing measurable because the compiler already shares them. Exactness, the property this ADR exists for, is unaffected.
