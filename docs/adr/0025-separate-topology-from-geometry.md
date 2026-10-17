@@ -1,7 +1,8 @@
 # ADR-0025: Separate Topology from Geometry
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-13
+- **Accepted:** 2026-10-17 by Onur Tuncer, as direction: verification item 2 holds (the curve and surface libraries evaluate with no B-rep); items 1 and 3–8 are acceptance gates for the topology work as its entity types land
 - **Owner:** Onur Tuncer
 - **Phase:** 0
 - **Scope:** The conceptual B-rep model and the boundary between topology, geometry, and their associations
