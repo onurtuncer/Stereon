@@ -21,7 +21,12 @@ This chapter derives the fitting functions of ``Stereon.Curve`` and
   closest to the points in the least-squares sense;
 - ``Approximate`` searches for the fewest poles whose least-squares fit meets
   an ``ApproximationBudget``;
-- ``InterpolateSurface`` builds the surface through a grid of points.
+- each of the three also takes ``EndDerivatives``, the derivatives the curve
+  must have at its two ends;
+- ``InterpolateSurface`` builds the surface through a grid of points,
+  ``FitSurfaceLeastSquares`` the surface with given pole counts closest to
+  the grid, and ``ApproximateSurface`` the one with the fewest poles within a
+  budget.
 
 Every figure in this chapter is drawn from what Stereon computes:
 ``docs/figures/FigureData.cpp`` prints the data and
@@ -182,6 +187,77 @@ with :math:`(t, t^2 - t, 2t^3)`.
 Interpolation passes through every point, and that is its weakness for
 noisy data: every bump in the measurements becomes a bump in the curve
 (:numref:`fig-fitting-least-squares`, last panel).
+
+Prescribed end derivatives
+--------------------------
+
+A profile that continues a neighbouring curve, or a section that must
+leave a wall perpendicularly, needs more than the end points: its end
+derivatives are given. ``Interpolate(points, degree, EndDerivatives{D_0,
+D_m})`` adds the two conditions :math:`C'(0) = D_0` and :math:`C'(1) = D_m`
+to the interpolation problem (:cite:p:`piegl1997nurbs`, section 9.2.2,
+algorithm A9.2). Two conditions need two more unknowns, so the curve has
+:math:`n + 1 = m + 3` poles.
+
+**The fixed poles.** At a clamped end only two basis functions have a
+non-zero derivative, and (eq. 9.10)
+
+.. math::
+
+   C'(0) = \frac{p}{u_{p+1}} (P_1 - P_0), \qquad
+   C'(1) = \frac{p}{1 - u_n} (P_n - P_{n-1}),
+
+so the derivative conditions fix the second and the second to last pole
+outright,
+
+.. math::
+
+   P_1 = Q_0 + \frac{u_{p+1}}{p} D_0, \qquad
+   P_{n-1} = Q_m - \frac{1 - u_n}{p} D_m,
+
+while :math:`P_0 = Q_0` and :math:`P_n = Q_m` as before. What remains is a
+square system for :math:`P_2, \dots, P_{n-2}`: the collocation rows of the
+interior points :math:`Q_1, \dots, Q_{m-1}`, with the four fixed poles'
+contributions moved to the right-hand side.
+
+**The knots.** With two more poles the clamped knot vector has two more
+interior knots, :math:`m - p + 2` of them, and averaging has to be shifted
+so that the Schoenberg–Whitney conditions still hold (eq. 9.11, written
+here for any degree):
+
+.. math::
+
+   u_{j+p} = \frac{1}{p} \sum_{i=j-1}^{j+p-2} t_i, \qquad j = 1, \dots, m - p + 2.
+
+Interior point :math:`k` now sits against basis function :math:`k + 1`, the
+position it has once the fixed second pole is counted, and
+:math:`u_{k+1} < t_k < u_{k+p+2}` by the same argument as before: the knot
+on the left averages parameters up to :math:`t_{k-1}`, the one on the right
+parameters from :math:`t_{k+1}`. The reduced matrix is a collocation matrix
+again, totally positive and banded, and the same elimination without
+pivoting solves it. The shift also puts :math:`u_{p+1} > 0` and
+:math:`u_n < 1` whenever :math:`p \ge 2`; for degree 1 both would be end
+knots and the fixed poles would divide by zero, so end derivatives need
+degree 2 or more.
+
+**Scale.** The derivatives are taken with respect to the parameter on
+:math:`[0, 1]`, so their lengths matter as much as their directions. A
+chord-length parametrised curve of total chord :math:`L` moves at a speed
+of about :math:`L`; a unit tangent direction :math:`T` is therefore
+prescribed as :math:`L\, T`. A shorter vector slows the curve into its end
+and pulls :math:`P_1` towards :math:`P_0`; a longer one makes it overshoot.
+OCCT's ``GeomAPI_Interpolate`` scales its tangents to the chord length by
+default; Stereon leaves the length to the caller, who may know the true
+speed, and documents the convention instead.
+
+The same ``EndDerivatives`` go to ``FitLeastSquares`` and ``Approximate``.
+Least squares fixes the four end poles by the formulas above, with the
+knots of eq. 9.69, and solves the normal equations for the poles between
+them, which is why a constrained fit needs at least four poles. The
+approximation search runs over these constrained fits, from four poles up
+to as many as points, with the constrained interpolant, two more poles than
+points, as its last resort. ``tests/curve/FittingTests.cpp`` checks each
+against ``Deriv`` at both ends and the reduced normal equations.
 
 Least-squares approximation
 ---------------------------
@@ -355,23 +431,89 @@ matrix, at a total cost of :math:`O(nm(p^2 + q^2))`.
    when the parameters are averaged; the surface still passes through every
    grid point, to :math:`3 \cdot 10^{-16}` mm.
 
+Surface least squares
+---------------------
+
+``FitSurfaceLeastSquares(grid, countU, countV, p, q, nU, nV)`` fits the
+grid with :math:`n_U \times n_V` poles, fewer than it has points, in the
+least-squares sense (:cite:p:`piegl1997nurbs`, section 9.4.3). The
+parameters are the means of algorithm A9.3 as for interpolation, the knots
+of each direction are spread by eq. 9.69 for its pole count, and the poles
+come from the same two stages as interpolation, each a least-squares curve
+fit with its ends fixed: every grid line along :math:`u` is fitted with
+:math:`n_U` poles, giving :math:`n_U` intermediate lines along :math:`v`,
+and each of those is fitted with :math:`n_V` poles.
+
+Two curve fits in sequence do minimise the surface's squared deviation.
+The gradient of :math:`F = \sum_{k,l} \norm{Q_{kl} - S(\bar u_k, \bar v_l)}^2`
+over the interior grid points with respect to an interior pole
+:math:`P_{ab}` is
+
+.. math::
+
+   \sum_{l} M_{b,q}(\bar v_l) \Bigl[ \sum_k N_{a,p}(\bar u_k)
+   \bigl( \textstyle\sum_i N_{i,p}(\bar u_k) R_{il} - Q_{kl} \bigr) \Bigr]
+   + \sum_k N_{a,p}(\bar u_k) \sum_i N_{i,p}(\bar u_k)
+   \Bigl[ \sum_l M_{b,q}(\bar v_l) \bigl( \textstyle\sum_j M_{j,q}(\bar v_l) P_{ij} - R_{il} \bigr) \Bigr],
+
+where :math:`R_{il}` are the intermediate poles. The first bracket is the
+normal equation of the first stage for line :math:`l`, the second that of
+the second stage for line :math:`i`; both vanish. The result is therefore
+the exact minimiser over the interior poles once the boundary poles are
+fixed, because the grid shares one set of parameters along each direction
+(the design matrix is a Kronecker product, and the pseudo-inverse of a
+Kronecker product is the Kronecker product of the pseudo-inverses). The
+boundary poles themselves are the poles of the least-squares curve fits of
+the four boundary lines of the grid, so the corners are exact and the
+boundary curves are what fitting the boundaries alone would give. The test
+in ``tests/surface/FittingTests.cpp`` recomputes the gradient above from
+the returned surface and requires it to vanish for every interior pole.
+
+A direction with as many poles as grid lines is interpolated instead, with
+averaged knots, exactly as ``Approximate`` turns the fit with as many
+poles as points into the interpolant: ``FitSurfaceLeastSquares`` with both
+counts full returns ``InterpolateSurface``'s surface.
+
+Surface approximation to a budget
+---------------------------------
+
+``ApproximateSurface(grid, countU, countV, p, q, ApproximationBudget{d})``
+searches the pole counts for the fewest within the budget. Two counts make
+a two-dimensional search, and a surface that is simple along one direction
+but detailed along the other should not pay for poles in both; so the
+search runs one direction at a time:
+
+1. the count along :math:`u`, by the doubling and bisection of
+   ``Approximate``, with every line along :math:`v` interpolated so that
+   only :math:`u` limits the deviation;
+2. the count along :math:`v` with the :math:`u` count found, which passes
+   at the full count by construction.
+
+Each pass costs at most :math:`2 \log_2` of its grid count in surface
+fits, the answer is deterministic, and it is the smallest passing count of
+each direction *among those tried*, with the same non-monotonicity caveat
+as for curves. A grid that is straight along :math:`u` and a sine along
+:math:`v` gets :math:`p + 1` poles along :math:`u` whatever :math:`v`
+needs.
+
 Validation and limits
 ---------------------
 
 The fitting functions validate their input as data from outside the kernel
 (ADR-0006): a degree between 1 and 25, at least :math:`p + 1` finite points
 (or a full grid of them), a pole count between :math:`p + 1` and the number
-of points, a finite positive budget, and no zero chords under chord-length
-or centripetal parameters. Invalid input returns ``InvalidInput`` with a
-message; it never reaches a contract.
+of points (four at least with end derivatives, and per direction for
+surfaces), a finite positive budget, finite end derivatives with degree 2
+or more, and no zero chords under chord-length or centripetal parameters.
+Invalid input returns ``InvalidInput`` with a message; it never reaches a
+contract.
 
 What is not yet there:
 
-- end-derivative constraints (tangents prescribed at the ends, A9.2) and
-  closed or periodic fits;
+- closed or periodic fits, and prescribed derivatives along a surface's
+  boundaries;
 - weighted least squares and smoothing (fairing) terms;
-- least-squares approximation of surfaces, and surface fitting to scattered
-  rather than gridded points;
+- surface fitting to scattered rather than gridded points;
 - parameter correction, which re-projects the points onto the fitted curve
   and refits to reduce the deviation further.
 
@@ -379,7 +521,7 @@ Benchmark B1.4 compares these functions with OCCT's ``GeomAPI_Interpolate``
 and ``GeomAPI_PointsToBSpline``; ``bench/reports/phase1-2026-10-15.md``
 has the measurements: interpolation runs at parity, and approximation is
 faster but not like for like, since OCCT also optimises parameters and
-continuity.
+continuity. The surface fits are not in the harness yet.
 
 Related design decisions
 ------------------------
