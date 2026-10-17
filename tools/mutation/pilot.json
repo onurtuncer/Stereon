@@ -1,0 +1,185 @@
+{
+  "description": "ADR-0032 Phase 0 pilot: the critical seeded faults of core, robust and curve, conventional mutants, and one example of each non-scoring outcome.",
+  "preset": "gcc16-debug",
+  "mutants": [
+    {
+      "id": "PRED-FALLBACK",
+      "critical": true,
+      "operator": "domain: filtered-predicate fallback skipped",
+      "contract": "ADR-0002: Orient2D is exact; a filter failure must fall back to the adaptive stages",
+      "file": "src/robust/Predicates.cppm",
+      "find": "return Detail::Orient2DAdaptive(a, b, c, detSum);",
+      "replace": "return SignOf(det);",
+      "site": "statement",
+      "target": [
+        "stereon_robust_tests",
+        "stereon_contract_probe"
+      ],
+      "tests": "^robust: ",
+      "diagnostic": "robust: the orientation grid of Kettner et al. is decided exactly"
+    },
+    {
+      "id": "PRED-SIGN",
+      "critical": true,
+      "operator": "domain: orientation sign reversed",
+      "contract": "ADR-0002: Orient2D's sign is that of the determinant",
+      "file": "src/robust/Predicates.cppm",
+      "find": "    if (Detail::Magnitude(det) > errorBound) {\n        return SignOf(det);\n    }\n    return Detail::Orient2DAdaptive(a, b, c, detSum);",
+      "replace": "    if (Detail::Magnitude(det) > errorBound) {\n        return SignOf(-det);\n    }\n    return Detail::Orient2DAdaptive(a, b, c, detSum);",
+      "site": "statement",
+      "target": [
+        "stereon_robust_tests",
+        "stereon_contract_probe"
+      ],
+      "tests": "^robust: ",
+      "diagnostic": [
+        "PredicateTests.cpp",
+        "robust: predicates agree with exact integer arithmetic on random points"
+      ]
+    },
+    {
+      "id": "HANDLE-STALE",
+      "critical": true,
+      "operator": "domain: stale generation accepted",
+      "contract": "ADR-0004: a handle to a removed entity is stale and detected",
+      "file": "src/core/Handle.cppm",
+      "find": "        return index < m_Generations.size() && m_Alive[index] &&\n               m_Generations[index] == h.GetGeneration();",
+      "replace": "        return index < m_Generations.size() && m_Alive[index];",
+      "site": "statement",
+      "target": [
+        "stereon_core_tests",
+        "stereon_contract_probe"
+      ],
+      "tests": "^core: ",
+      "diagnostic": "core: generation tables detect stale handles"
+    },
+    {
+      "id": "BOUND-INTERVAL",
+      "critical": true,
+      "operator": "relational: closed lower bound made open",
+      "contract": "ADR-0001/ADR-0028: intervals are closed; a value on the boundary is contained",
+      "file": "src/core/Interval.cppm",
+      "find": "return i.GetLower() <= x && x <= i.GetUpper();",
+      "replace": "return i.GetLower() < x && x <= i.GetUpper();",
+      "site": "statement",
+      "target": [
+        "stereon_core_tests",
+        "stereon_contract_probe"
+      ],
+      "tests": "^core: ",
+      "diagnostic": [
+        "IntervalTests.cpp",
+        "BoxTests.cpp",
+        "core: intervals are closed and may be empty"
+      ]
+    },
+    {
+      "id": "CHECK-KNOTS",
+      "critical": true,
+      "operator": "domain: a checker finding suppressed",
+      "contract": "ADR-0016 (standing in for ADR-0018's checker): a knot inside the domain repeated more than the degree is rejected",
+      "file": "src/curve/BSplineBasis.cpp",
+      "find": "    if (m.Inside > p) {",
+      "replace": "    if (m.Inside > p + 1) {",
+      "site": "statement",
+      "target": [
+        "stereon_curve_tests",
+        "stereon_contract_probe"
+      ],
+      "tests": "^curve: ",
+      "diagnostic": "curve: MakeBSplineCurve validates data from outside the kernel"
+    },
+    {
+      "id": "BOUND-FRAME",
+      "critical": false,
+      "operator": "relational: <= to < at the frame allowance",
+      "contract": "ADR-0028: FrameAllowance admits a frame whose error equals it",
+      "file": "src/core/GeometryChecks.cpp",
+      "find": "return std::abs(x) <= FrameAllowance;",
+      "replace": "return std::abs(x) < FrameAllowance;",
+      "site": "statement",
+      "target": [
+        "stereon_curve_tests",
+        "stereon_contract_probe"
+      ],
+      "tests": "^curve: "
+    },
+    {
+      "id": "ARITH-BASIS",
+      "critical": false,
+      "operator": "arithmetic: + to - in the Cox-de Boor recurrence",
+      "contract": "B-spline basis functions (The NURBS Book, A2.2)",
+      "file": "src/curve/BSplineBasis.cpp",
+      "find": "            values[r] = saved + right[r + 1] * temp;",
+      "replace": "            values[r] = saved - right[r + 1] * temp;",
+      "site": "statement",
+      "target": [
+        "stereon_curve_tests",
+        "stereon_contract_probe"
+      ],
+      "tests": "^curve: "
+    },
+    {
+      "id": "REL-SPAN",
+      "critical": false,
+      "operator": "relational: >= to > in the span search",
+      "contract": "FindSpan keeps knots[low] <= t < knots[high] (A2.1)",
+      "file": "src/curve/BSplineBasis.cpp",
+      "find": "    while (t < knots[mid] || t >= knots[mid + 1]) {",
+      "replace": "    while (t < knots[mid] || t > knots[mid + 1]) {",
+      "site": "statement",
+      "target": [
+        "stereon_curve_tests",
+        "stereon_contract_probe"
+      ],
+      "tests": "^curve: "
+    },
+    {
+      "id": "EQUIV-PRUNE",
+      "critical": false,
+      "operator": "relational: > to >= in best-first pruning",
+      "contract": "Curve projection searches segments in order of their distance bound",
+      "file": "src/curve/BSplineCurve.cpp",
+      "find": "        if (bound > best.DistanceSquared) {",
+      "replace": "        if (bound >= best.DistanceSquared) {",
+      "site": "statement",
+      "target": [
+        "stereon_curve_tests",
+        "stereon_contract_probe"
+      ],
+      "tests": "^curve: ",
+      "equivalent": "A segment whose lower bound equals the best squared distance can at best tie it, and a tie keeps the earlier parameter (ADR-0007), which the search already holds unless the tied point has a smaller parameter in a later segment; segments are ordered by bound, not parameter, so the result can differ only in an exact tie of distances between two segments, which the supported semantics leave to either answer. Expert review: no observable difference within the declared semantics."
+    },
+    {
+      "id": "INVALID-DEMO",
+      "critical": false,
+      "operator": "demonstration: a mutant that does not build",
+      "contract": "Reporting: a build failure is Invalid, not a kill",
+      "file": "src/curve/BSplineBasis.cpp",
+      "find": "    if (m.Inside > p) {",
+      "replace": "    if (m.Inside > p) { undeclared_identifier;",
+      "site": "statement",
+      "target": [
+        "stereon_curve_tests",
+        "stereon_contract_probe"
+      ],
+      "tests": "^curve: "
+    },
+    {
+      "id": "HANG-DEMO",
+      "critical": false,
+      "operator": "demonstration: a mutant that never terminates",
+      "contract": "Reporting: a timeout is Inconclusive, not a kill",
+      "file": "src/curve/BSplineBasis.cpp",
+      "find": "        mid = (low + high) / 2;\n    }\n    return mid;",
+      "replace": "        mid = low;\n    }\n    return mid;",
+      "site": "statement",
+      "target": [
+        "stereon_curve_tests",
+        "stereon_contract_probe"
+      ],
+      "tests": "^curve: FindSpan",
+      "testTimeout": 60
+    }
+  ]
+}

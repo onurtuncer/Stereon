@@ -13,6 +13,7 @@ path = [
     "*.json", "**/*.json",
     "**/*.png",
     "**/*.svg",
+    "**/*.stn",
     "docs/license-header.txt",
     ".github/**",
     ".gitignore",

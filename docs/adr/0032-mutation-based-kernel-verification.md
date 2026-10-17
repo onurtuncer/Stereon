@@ -1,7 +1,9 @@
 # ADR-0032: Mutation-Based Verification of Kernel Contracts
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-16
+- **Revised:** 2026-10-17 (scheduled campaigns run weekly)
+- **Accepted:** 2026-10-17 by Onur Tuncer, on the Phase 0 pilot evidence in [docs/planning/mutation-pilot.md](../planning/mutation-pilot.md)
 - **Owner:** Onur Tuncer
 - **Phase:** 0 (verification policy); applied incrementally as kernel capabilities mature
 - **Related:** ADR-0002, ADR-0004, ADR-0006, ADR-0007, ADR-0016, ADR-0018, ADR-0026–ADR-0031
@@ -85,7 +87,7 @@ Mutations run in disposable worktrees/build directories. Tool-generated mutants,
 
 1. **Phase 0 pilot:** begin with bounded campaigns in `core/`, `robust/` and simple `curve/` algorithms; measure tool compatibility and the cost of rebuilding C++ modules. Include the stale-handle, orientation and numerical-boundary cases.
 2. **Incremental development:** run selective mutations for changed, compilable components where instrumentation is reliable. Initially produce non-blocking reports rather than imposing an arbitrary score threshold.
-3. **Scheduled/full campaigns:** run broader operator and domain-fault sets off the critical PR path, retaining the mutant inventory and reproducible survivor evidence.
+3. **Scheduled/full campaigns:** run broader operator and domain-fault sets off the critical PR path, retaining the mutant inventory and reproducible survivor evidence. They run **weekly**, and on request, on the reference GCC 16 build (the `Mutation` workflow); a week in which the campaign does not run, or its baseline fails, is itself a finding to triage.
 4. **Release gate:** once a domain-fault suite is validated for an implemented capability, every designated **critical seeded fault** for that capability must be detected by its specified independent oracle. Ordinary mutation scores are reviewed by subsystem and trend, not held to a universal 100% threshold.
 5. **Budget control:** use explicit per-campaign time limits, targeted tests and deterministic sampling. Report unexecuted mutants; do not silently classify a budget-exhausted run as success.
 

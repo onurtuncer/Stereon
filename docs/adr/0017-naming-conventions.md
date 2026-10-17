@@ -1,8 +1,9 @@
 # ADR-0017: Naming conventions
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-08
 - **Revised:** 2026-10-11 (C and Python names set by ADR-0020)
+- **Accepted:** 2026-10-17 by Onur Tuncer, on review; the clang-tidy naming job stays deferred while clang-tidy cannot parse the GCC 16 build, and review enforces the table meanwhile, as this ADR provides
 - **Owner:** Onur Tuncer
 - **Phase:** 0
 

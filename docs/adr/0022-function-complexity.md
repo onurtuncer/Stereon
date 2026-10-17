@@ -1,7 +1,9 @@
 # ADR-0022: Function complexity limits
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-11
+- **Revised:** 2026-10-17 (the measured baseline at acceptance)
+- **Accepted:** 2026-10-17 by Onur Tuncer, on review; `tools/check_complexity.py` passes with zero violations and zero exemptions
 - **Owner:** Onur Tuncer
 - **Phase:** 0
 
@@ -11,7 +13,7 @@ ADR-0015 rests on people reading code: Tier C changes (`intersect`, `boolean`, `
 
 Review judgement alone does not hold a limit, because each addition is small. A numeric limit, checked in CI, does. The limit also shapes the code towards how the project verifies it: one function per geometric case is what the differential tests, the corpus and the history records of ADR-0011 can point at.
 
-Tooling constrains the choice. clang-tidy cannot parse the GCC 16 module and reflection build (see `.clang-tidy`), so its `readability-function-cognitive-complexity` check does not run; the CI lint job uses Python checks that read the sources instead (`tools/check_layering.py`, `tools/check_epsilon.py`). `lizard` measures cyclomatic complexity and function length the same way, without compiling, and handles module declarations, contract specifiers and expansion statements in this codebase. At the time of writing the tree has 302 functions with an average cyclomatic complexity of 1.4 and a maximum of 5.
+Tooling constrains the choice. clang-tidy cannot parse the GCC 16 module and reflection build (see `.clang-tidy`), so its `readability-function-cognitive-complexity` check does not run; the CI lint job uses Python checks that read the sources instead (`tools/check_layering.py`, `tools/check_epsilon.py`). `lizard` measures cyclomatic complexity and function length the same way, without compiling, and handles module declarations, contract specifiers and expansion statements in this codebase. At the time of writing the tree had 302 functions with an average cyclomatic complexity of 1.4 and a maximum of 5; at acceptance (2026-10-17) it has 1 719 functions in 144 files, an average of 2.0 and a maximum of 15, exactly the limit (`IsoCurve` in `src/surface/BSplineSurface.cpp`).
 
 ## Options
 
@@ -49,7 +51,7 @@ Adopt option 2 together with a length limit (option 4) now, and add option 3 whe
 
 ## Verification
 
-- `tools/check_complexity.py` exits non-zero on any violation; the lint job and CTest run it. Pass at adoption: zero violations and zero exemptions over the current tree (302 functions, maximum complexity 5).
+- `tools/check_complexity.py` exits non-zero on any violation; the lint job and CTest run it. Pass at adoption: zero violations and zero exemptions over the current tree (302 functions, maximum complexity 5); met again at acceptance (1 719 functions, maximum 15, no violations, no exemptions).
 - The script has a `--self-test`, like `check_epsilon.py`: a synthetic function of complexity 11 under `src/boolean/` must be flagged, the same function under `src/core/` must pass, and a flagged function with the exemption marker must pass and be counted.
 - Each run prints the number of exemptions; the Phase 0 exit review records it.
 - When a clang-tidy job exists, `readability-function-cognitive-complexity` enforces the last column, and this ADR is revised with the first measurements.

@@ -246,6 +246,20 @@ TEST_CASE("MakeEllipse validates data from outside the kernel", "[curve][ellipse
     REQUIRE(Stereon::MakeEllipse(Point3{}, 2.0, 1.0, x, Vec3{1e-14, 1.0, 0.0}).has_value());
 }
 
+TEST_CASE("the frame allowance is a closed bound", "[curve][factory]")
+{
+    // ADR-0028: a frame whose error equals FrameAllowance is accepted, one
+    // just above it is not. With y = (a, 1, 0), x . y is exactly a, and
+    // y . y - 1 = a^2 = 2^-80 rounds away. The test above, at 1e-14, runs the
+    // same check without pinning its boundary: the mutation pilot of
+    // ADR-0032 found that "<=" could become "<" unnoticed.
+    const Vec3 x{1.0, 0.0, 0.0};
+    const double a = Stereon::FrameAllowance;
+    REQUIRE(Stereon::MakeCircle(Point3{}, 1.0, x, Vec3{a, 1.0, 0.0}).has_value());
+    const double above = std::nextafter(a, 1.0);
+    REQUIRE_FALSE(Stereon::MakeCircle(Point3{}, 1.0, x, Vec3{above, 1.0, 0.0}).has_value());
+}
+
 TEST_CASE("the other analytic curves validate their data too", "[curve][factory]")
 {
     const Vec3 x{1.0, 0.0, 0.0};
