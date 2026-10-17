@@ -63,6 +63,13 @@ See the [roadmap and versioning plan](docs/planning/roadmap-and-versioning.md) f
 - [x] `Context`: resolution, tolerance ceiling, scheduler, logger, journal sink (ADR-0001, ADR-0007). A value with `With...` modifiers; also the size box, the tolerance-growth policy (ADR-0006), the validity level (ADR-0018) and the compaction threshold (ADR-0004). The scheduler is a kind and a thread count, since stdexec types cannot appear in module code (docs/toolchain/gcc16-feature-probe.md)
 - [x] Logging and operation journal (inputs + parameters, replayable). Kernel-owned `LogSink` and `JournalSink` (ADR-0023), `MemoryJournal`, `JournalId` on `KernelError`; replay of a recorded entry lands with the first operation (the ADR-0001 prototype in section 10)
 - [x] Unit and property tests for all of the above. Every core item has Catch2 cases and RapidCheck properties in `tests/core/`
+- [ ] Sensitivity foundation types (ADR-0021 stage 1). Names stay provisional until ADR-0017 is applied at the first slice; no AD backend in any of them:
+  - [ ] Parameter identities: a typed `ParameterId` with its kind and unit (lengths in mm, angles in radians, per ADR-0001) and scaling convention, plus the ordering convention for parameter vectors and seeds (§3, §7)
+  - [ ] Derivative statuses `Valid`, `NearEvent`, `Nondifferentiable`, `NotSupported`, `Indeterminate`, and a `SensitivityResult` carrying the status, the branch/topology signature, affected entities, tolerance policy, residuals and conditioning diagnostics; returned as `std::expected<SensitivityResult, KernelError>`, with no usable payload for `NotSupported`, `Indeterminate` and `Nondifferentiable` (§5)
+  - [ ] Capability declarations: a per-operation descriptor of parameter dependencies, correspondence rules, differentiability assumptions and supported products (JVP, VJP, dense Jacobian), queryable before evaluation; `NotSupported` by default, never a silent zero (§5, Decision)
+  - [ ] Correspondence types: a tracked sample naming its source entity, orientation, local coordinates and tracking convention (fixed surface coordinates, fixed edge parameter, moving trim coordinates, unique projection), independent of entity indices so `Compact()` cannot redefine it (§4). Entity references use the §7 handles once they exist
+  - [ ] Sensitivity context: caller-owned, holds seeds, adjoints and solver workspaces for one evaluation, separate from `Context`, never stored in a `Shape`; two contexts share no mutable state (§3)
+  - [ ] Registration check in tests: adding a geometric operation without a capability declaration fails the build or the test suite (ADR-0021 verification)
 
 ## 5. `stereon::robust` (weeks 3–6)
 
@@ -135,7 +142,7 @@ Per [ADR-0035](docs/adr/0035-debug-viewer.md): objects reach the viewer as `.stn
 - [ ] **ADR-0018:** seeded-fault corpus for the checker; zero false positives on valid bodies
 - [ ] **ADR-0007:** determinism check across thread counts on the prototype operations
 - [ ] **ADR-0009:** early review of the edge representation, since ADR-0004's edge record depends on it (full acceptance is due before Phase 1 topology work)
-- [ ] Review ADRs 0001–0008, 0015–0018 and move each to **Accepted** or revise
+- [ ] Review ADRs 0001–0008, 0015–0018 and 0021 and move each to **Accepted** or revise
 
 ## 11. Documentation (ongoing)
 
@@ -159,5 +166,6 @@ All of the following must pass in CI before Phase 1 starts:
 - [ ] Pretty-printers pass their scripted GDB and LLDB tests
 - [ ] Handle design decided (index throughout, or hybrid) and recorded in ADR-0004
 - [ ] Output identical for 1, 2, 8 and 32 threads
+- [ ] ADR-0021 foundation types in place; no geometric operation can be added without a capability declaration
 - [ ] All blocking CI jobs green on Linux, Windows and macOS
 - [ ] ADRs 0001–0008, 0015–0017 accepted

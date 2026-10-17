@@ -3,7 +3,7 @@
 - **Status:** Proposed
 - **Date:** 2026-10-11
 - **Owner:** Onur Tuncer
-- **Phase:** 0 (contract); implementation staged below
+- **Phase:** 0 (contract and stage 1, the foundation); stages 2–4 staged below, shipped with shape sensitivities at v0.9
 - **Related:** ADR-0001, ADR-0002, ADR-0003, ADR-0004, ADR-0005, ADR-0006, ADR-0007, ADR-0008, ADR-0009, ADR-0010, ADR-0011, ADR-0013, ADR-0014, ADR-0019, ADR-0020
 
 ## Context
