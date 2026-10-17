@@ -215,9 +215,12 @@ FixedPoles(const std::span<const Point3> q, const std::span<const double> knots,
 {
     const auto p = static_cast<std::size_t>(degree);
     const std::size_t n = poleCount - 1;
-    std::vector<Point3> poles(poleCount);
-    poles.front() = q.front();
-    poles.back() = q.back();
+    // Filled with the first point rather than assigned through front() and
+    // back(): GCC 16 at -O2 cannot prove the vector non-empty and reports
+    // a potential null dereference (-Wnull-dereference). Every caller
+    // passes at least two poles.
+    std::vector<Point3> poles(poleCount, q.front());
+    poles[n] = q.back();
     if (!ends) {
         return {std::move(poles), 1};
     }
