@@ -14,6 +14,7 @@ module;
 #include <cmath>
 #include <cstddef>
 #include <expected>
+#include <limits>
 #include <optional>
 #include <span>
 #include <type_traits>
@@ -273,8 +274,9 @@ void AdaptiveLength(const C& curve, const double a, const double b, const double
 }
 
 /// Appends the knots of the curve in (breaks.back(), high): a B-spline's
-/// own, or those of a B-spline inside an erased wrapper, found through
-/// VisitBuiltin; nothing for other types.
+/// own, those of a B-spline inside an erased wrapper, found through
+/// VisitBuiltin, or a trimmed curve's basis's, in the trimmed parameter;
+/// nothing for other types.
 template <typename C>
 void AppendKnots(const C& curve, const double high, std::vector<double>& breaks)
 {
@@ -283,6 +285,23 @@ void AppendKnots(const C& curve, const double high, std::vector<double>& breaks)
                       curve.Degree;
                   }) {
         for (const double u : curve.Knots) {
+            if (u > breaks.back() && u < high) {
+                breaks.push_back(u);
+            }
+        }
+    } else if constexpr (requires {
+                             curve.GetBasis();
+                             curve.BasisParameter(0.0);
+                         }) {
+        // A trimmed curve: its basis's knots, in its own parameter.
+        std::vector<double> basisKnots{-std::numeric_limits<double>::infinity()};
+        AppendKnots(curve.GetBasis(), std::numeric_limits<double>::infinity(), basisKnots);
+        std::vector<double> knots;
+        for (std::size_t k = 1; k < basisKnots.size(); ++k) {
+            knots.push_back(curve.BasisParameter(basisKnots[k]));
+        }
+        std::ranges::sort(knots);
+        for (const double u : knots) {
             if (u > breaks.back() && u < high) {
                 breaks.push_back(u);
             }
