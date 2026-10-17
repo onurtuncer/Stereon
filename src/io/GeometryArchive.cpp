@@ -53,6 +53,10 @@ constexpr std::string_view CurvesTag = "CRVS";
 constexpr std::string_view PlaneCurvesTag = "PCRV";
 constexpr std::string_view SurfacesTag = "SRFS";
 
+/// The record names of trimmed curves (format version 2).
+template <std::size_t D>
+constexpr std::string_view TrimmedName = D == 3 ? "TrimmedCurve" : "TrimmedCurve2d";
+
 // ---------------------------------------------------------------------------
 // Writing
 
@@ -135,15 +139,65 @@ void PutHeader(std::vector<std::byte>& out, const ModelPolicy& policy)
 }
 
 /// One record: the type's name, the value's length and the value.
+void PutNamed(std::vector<std::byte>& out, const std::string_view name,
+              const std::vector<std::byte>& value)
+{
+    PutU16(out, static_cast<std::uint16_t>(name.size()));
+    PutTag(out, name);
+    PutU64(out, value.size());
+    out.insert(out.end(), value.begin(), value.end());
+}
+
 template <typename T>
 void PutRecord(std::vector<std::byte>& out, const T& value)
 {
-    const std::string_view name = GeometryTypeName<T>;
-    PutU16(out, static_cast<std::uint16_t>(name.size()));
-    PutTag(out, name);
-    const std::vector<std::byte> bytes = Detail::RecordBytes(value);
-    PutU64(out, bytes.size());
-    out.insert(out.end(), bytes.begin(), bytes.end());
+    PutNamed(out, GeometryTypeName<T>, Detail::RecordBytes(value));
+}
+
+template <typename Wrapper>
+[[nodiscard]] bool PutItem(std::vector<std::byte>& out, const Wrapper& item, int depth);
+
+/// A trimmed curve's record, if the item is one whose basis can be stored.
+[[nodiscard]] bool PutTrimmed(std::vector<std::byte>& /*out*/, const Surface& /*item*/,
+                              int /*depth*/)
+{
+    return false;
+}
+
+template <std::size_t D>
+[[nodiscard]] bool PutTrimmed(std::vector<std::byte>& out, const BasicErasedCurve<D>& item,
+                              const int depth)
+{
+    const auto* trimmed = item.template Target<BasicTrimmedCurve<D>>();
+    if (trimmed == nullptr || depth >= MaxTrimmedNesting) {
+        return false;
+    }
+    std::vector<std::byte> value;
+    if (!PutItem(value, trimmed->GetBasis(), depth + 1)) {
+        return false;
+    }
+    const Interval range = trimmed->GetRange();
+    const std::vector<std::byte> trim = Detail::RecordBytes(
+        Detail::TrimRecord{range.GetLower(), range.GetUpper(), trimmed->IsReversed()});
+    value.insert(value.end(), trim.begin(), trim.end());
+    PutNamed(out, TrimmedName<D>, value);
+    return true;
+}
+
+/// The item's record: a built-in type's, or a trimmed curve's. False for
+/// anything else, which the format has no record for.
+template <typename Wrapper>
+bool PutItem(std::vector<std::byte>& out, const Wrapper& item, const int depth)
+{
+    const bool builtin = VisitBuiltin(item, [&]<typename G>(const G& geometry) {
+        if constexpr (std::is_same_v<G, Wrapper>) {
+            return false;
+        } else {
+            PutRecord(out, geometry);
+            return true;
+        }
+    });
+    return builtin || PutTrimmed(out, item, depth);
 }
 
 /// The payload of a geometry chunk: the record count and the records.
@@ -159,19 +213,12 @@ template <typename Wrapper>
             return Fail(ErrorCode::InvalidInput,
                         std::format("WriteGeometry: {} {} is empty", what, i));
         }
-        const bool stored = VisitBuiltin(items[i], [&]<typename G>(const G& geometry) {
-            if constexpr (std::is_same_v<G, Wrapper>) {
-                return false;
-            } else {
-                PutRecord(payload, geometry);
-                return true;
-            }
-        });
-        if (!stored) {
+        if (!PutItem(payload, items[i], 0)) {
             return Fail(ErrorCode::NotSupported,
                         std::format("WriteGeometry: {} {} is of a type the archive has no "
-                                    "record for; only the built-in types are stored",
-                                    what, i));
+                                    "record for; only the built-in types, and trimmed curves "
+                                    "of them nested at most {} deep, are stored",
+                                    what, i, MaxTrimmedNesting));
         }
     }
     return payload;
@@ -312,6 +359,32 @@ struct RawRecord {
     std::span<const std::byte> Value;
 };
 
+/// One record at the cursor.
+[[nodiscard]] Result<RawRecord> ReadRecord(Cursor& cursor)
+{
+    STEREON_TRY(const std::uint64_t nameLength, cursor.Unsigned(2, "record"));
+    STEREON_TRY(const std::span<const std::byte> name,
+                cursor.Take(static_cast<std::size_t>(nameLength), "record"));
+    STEREON_TRY(const std::uint64_t valueLength, cursor.Unsigned(8, "record"));
+    STEREON_TRY(const std::span<const std::byte> value,
+                cursor.Take(static_cast<std::size_t>(valueLength), "record"));
+    return RawRecord{TagOf(name), value};
+}
+
+/// A trimmed curve's record split into its basis record and its trim bytes.
+struct RawTrimmed {
+    RawRecord Basis;
+    std::span<const std::byte> Trim;
+};
+
+[[nodiscard]] Result<RawTrimmed> SplitTrimmed(const RawRecord& record)
+{
+    Cursor cursor(record.Value);
+    STEREON_TRY(RawRecord basis, ReadRecord(cursor));
+    STEREON_TRY(const std::span<const std::byte> trim, cursor.Take(cursor.Left(), "trim"));
+    return RawTrimmed{std::move(basis), trim};
+}
+
 [[nodiscard]] Result<std::vector<RawRecord>> ReadRecords(const Chunk& chunk)
 {
     Cursor cursor(chunk.Payload);
@@ -324,12 +397,8 @@ struct RawRecord {
     }
     std::vector<RawRecord> records;
     for (std::uint64_t i = 0; i < count; ++i) {
-        STEREON_TRY(const std::uint64_t nameLength, cursor.Unsigned(2, "record"));
-        STEREON_TRY(const std::span<const std::byte> name, cursor.Take(nameLength, "record"));
-        STEREON_TRY(const std::uint64_t valueLength, cursor.Unsigned(8, "record"));
-        STEREON_TRY(const std::span<const std::byte> value,
-                    cursor.Take(static_cast<std::size_t>(valueLength), "record"));
-        records.push_back({TagOf(name), value});
+        STEREON_TRY(RawRecord record, ReadRecord(cursor));
+        records.push_back(std::move(record));
     }
     if (!cursor.AtEnd()) {
         return Fail(ErrorCode::ParseError,
@@ -416,11 +485,64 @@ template <typename T, typename Wrapper>
     return Wrapper(*valid);
 }
 
-/// The record decoded as the type of the list it names.
 template <typename Wrapper, typename... Ts>
-[[nodiscard]] Result<Wrapper> DecodeAny(TypeList<Ts...>, const RawRecord& record,
-                                        const std::string& where)
+[[nodiscard]] Result<Wrapper> DecodeAny(TypeList<Ts...> types, const RawRecord& record,
+                                        const std::string& where, int depth);
+
+/// A trimmed curve's record: its basis decoded as any record of the chunk,
+/// then its trim, validated by MakeTrimmedCurve.
+template <std::size_t D, typename Types>
+[[nodiscard]] Result<BasicErasedCurve<D>> DecodeTrimmed(Types types, const RawRecord& record,
+                                                        const std::string& where, const int depth)
 {
+    if (depth >= MaxTrimmedNesting) {
+        return Fail(ErrorCode::ParseError,
+                    std::format("ReadGeometry: {} nests trimmed curves more than {} deep", where,
+                                MaxTrimmedNesting));
+    }
+    const Result<RawTrimmed> split = SplitTrimmed(record);
+    if (!split) {
+        return Fail(ErrorCode::ParseError, std::format("ReadGeometry: {} ({}): {}", where,
+                                                       record.Name, split.error().GetMessage()));
+    }
+    STEREON_TRY(
+        const BasicErasedCurve<D> basis,
+        DecodeAny<BasicErasedCurve<D>>(types, split->Basis, where + ", its basis", depth + 1));
+    const Result<Detail::TrimRecord> trim = Detail::RecordValue<Detail::TrimRecord>(split->Trim);
+    if (!trim) {
+        return Fail(ErrorCode::ParseError, std::format("ReadGeometry: {} ({}): {}", where,
+                                                       record.Name, trim.error().GetMessage()));
+    }
+    // Checked before the Interval is made: its constructor requires
+    // lower <= upper, and NaN satisfies nothing.
+    if (!std::isfinite(trim->Lower) || !std::isfinite(trim->Upper) ||
+        !(trim->Lower < trim->Upper)) {
+        return Fail(ErrorCode::ParseError,
+                    std::format("ReadGeometry: {} ({}) has a range that is not finite and "
+                                "non-empty",
+                                where, record.Name));
+    }
+    const auto valid = MakeTrimmedCurve(basis, Interval{trim->Lower, trim->Upper});
+    if (!valid) {
+        return Fail(ErrorCode::ParseError,
+                    std::format("ReadGeometry: {} ({}) is not valid geometry: {}", where,
+                                record.Name, valid.error().GetMessage()));
+    }
+    return BasicErasedCurve<D>(trim->Reversed ? valid->Reversed() : *valid);
+}
+
+/// The record decoded as the type of the list it names, or as a trimmed
+/// curve in a curve chunk.
+template <typename Wrapper, typename... Ts>
+Result<Wrapper> DecodeAny(TypeList<Ts...> types, const RawRecord& record, const std::string& where,
+                          const int depth)
+{
+    if constexpr (std::is_same_v<Wrapper, Curve> || std::is_same_v<Wrapper, Curve2d>) {
+        constexpr std::size_t D = std::is_same_v<Wrapper, Curve> ? 3 : 2;
+        if (record.Name == TrimmedName<D>) {
+            return DecodeTrimmed<D>(types, record, where, depth);
+        }
+    }
     std::optional<Result<Wrapper>> decoded;
     static_cast<void>(((record.Name == GeometryTypeName<Ts>
                             ? (decoded.emplace(Decode<Ts, Wrapper>(record, where)), true)
@@ -442,7 +564,7 @@ template <typename Wrapper, typename Types>
     items.reserve(records.size());
     for (std::size_t i = 0; i < records.size(); ++i) {
         const std::string where = std::format("record {} of chunk \"{}\"", i, chunk.Tag);
-        STEREON_TRY(Wrapper item, DecodeAny<Wrapper>(types, records[i], where));
+        STEREON_TRY(Wrapper item, DecodeAny<Wrapper>(types, records[i], where, 0));
         items.push_back(std::move(item));
     }
     return items;
@@ -599,25 +721,46 @@ Result<LoadedGeometry> LoadGeometry(const std::filesystem::path& path)
 
 namespace {
 
+/// The JSON of one record, decoded but not validated: the view is for
+/// looking at a file. A trimmed curve's value is its basis and its trim;
+/// `trimmedName` is empty for a chunk that holds none.
+template <typename... Ts>
+[[nodiscard]] std::string RecordJsonOf(TypeList<Ts...> types, const RawRecord& record,
+                                       const std::string_view trimmedName, const int depth)
+{
+    std::string value = "null";
+    if (!trimmedName.empty() && record.Name == trimmedName && depth < MaxTrimmedNesting) {
+        const Result<RawTrimmed> split = SplitTrimmed(record);
+        if (split) {
+            const std::string trim =
+                Detail::RecordValue<Detail::TrimRecord>(split->Trim)
+                    .transform([](const Detail::TrimRecord& t) { return Detail::RecordJson(t); })
+                    .value_or(std::string{"null"});
+            value = std::format("{{\"basis\":{},\"trim\":{}}}",
+                                RecordJsonOf(types, split->Basis, trimmedName, depth + 1), trim);
+        }
+    }
+    static_cast<void>(
+        ((record.Name == GeometryTypeName<Ts>
+              ? (value = Detail::RecordValue<Ts>(record.Value)
+                             .transform([](const Ts& g) { return Detail::RecordJson(g); })
+                             .value_or(std::string{"null"}),
+                 true)
+              : false) ||
+         ...));
+    return std::format("{{\"type\":\"{}\",\"value\":{}}}", record.Name, value);
+}
+
 /// The JSON of one geometry chunk's records, decoded but not validated:
 /// the view is for looking at a file, including one that does not load.
-template <typename... Ts>
-[[nodiscard]] Result<std::string> RecordsJson(TypeList<Ts...>, const Chunk& chunk)
+template <typename Types>
+[[nodiscard]] Result<std::string> RecordsJson(Types types, const Chunk& chunk,
+                                              const std::string_view trimmedName)
 {
     STEREON_TRY(const std::vector<RawRecord> records, ReadRecords(chunk));
     std::string out = "[";
     for (std::size_t i = 0; i < records.size(); ++i) {
-        std::string value = "null";
-        static_cast<void>(
-            ((records[i].Name == GeometryTypeName<Ts>
-                  ? (value = Detail::RecordValue<Ts>(records[i].Value)
-                                 .transform([](const Ts& g) { return Detail::RecordJson(g); })
-                                 .value_or(std::string{"null"}),
-                     true)
-                  : false) ||
-             ...));
-        out += std::format("{}{{\"type\":\"{}\",\"value\":{}}}", i > 0 ? "," : "", records[i].Name,
-                           value);
+        out += (i > 0 ? "," : "") + RecordJsonOf(types, records[i], trimmedName, 0);
     }
     return out + "]";
 }
@@ -626,11 +769,11 @@ template <typename... Ts>
 {
     std::string body;
     if (chunk.Tag == CurvesTag) {
-        STEREON_TRY(body, RecordsJson(BuiltinCurveTypes{}, chunk));
+        STEREON_TRY(body, RecordsJson(BuiltinCurveTypes{}, chunk, TrimmedName<3>));
     } else if (chunk.Tag == PlaneCurvesTag) {
-        STEREON_TRY(body, RecordsJson(BuiltinCurve2dTypes{}, chunk));
+        STEREON_TRY(body, RecordsJson(BuiltinCurve2dTypes{}, chunk, TrimmedName<2>));
     } else if (chunk.Tag == SurfacesTag) {
-        STEREON_TRY(body, RecordsJson(BuiltinSurfaceTypes{}, chunk));
+        STEREON_TRY(body, RecordsJson(BuiltinSurfaceTypes{}, chunk, std::string_view{}));
     } else {
         body = std::format("{{\"bytes\":{}}}", chunk.Payload.size());
     }

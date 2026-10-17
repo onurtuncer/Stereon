@@ -28,6 +28,14 @@ import Stereon.Core;
 
 export namespace Stereon::Detail {
 
+/// The trim of a trimmed-curve record (format version 2), after its basis
+/// record: the range and the sense.
+struct TrimRecord {
+    double Lower = 0.0;
+    double Upper = 0.0;
+    bool Reversed = false;
+};
+
 template <typename T>
 [[nodiscard]] std::vector<std::byte> RecordBytes(const T& value);
 
