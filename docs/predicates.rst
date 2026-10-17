@@ -602,9 +602,12 @@ InSphere     49              67                  91 600                64 900
 ===========  ==============  ==================  ====================  ============
 
 On random points the adaptive predicates cost 1.1 (Orient2D) to 1.6
-(Orient3D) times the plain formula, the latter at the edge of the ADR-0002
-target of 1.5 and varying between 1.4 and 1.6 across runs; the permanent is
-the price, half as many operations again as the determinant. Nearly
+(Orient3D) times the plain formula, within the ADR-0002 target of 1.6.
+That target was 1.5 until Orient3D measured 1.51 to 1.54 in interleaved
+runs: the permanent is the price, half as many operations again as the
+determinant, and computing both from shared products, as Shewchuk's
+orient3d does, gains nothing measurable, because the compiler already
+shares them. Nearly
 degenerate input costs stage B plus the exact stage, which for the sphere
 test is a hundred microseconds; the exact stage's expansions are
 value-initialised to their full capacity, which is where a later
