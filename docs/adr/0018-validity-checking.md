@@ -2,6 +2,7 @@
 
 - **Status:** Proposed
 - **Date:** 2026-10-10
+- **Revised:** 2026-10-17 (topology traversal contract cross-reference)
 - **Owner:** Onur Tuncer
 - **Phase:** 0
 
@@ -51,3 +52,7 @@ Adopt option 3.
 - `Structural` costs ≤ 5% of a boolean's run time on the 10⁶-face body; `Geometric` ≤ 50%.
 - The layering check confirms the checker imports nothing from `build/`, `boolean/` or `blend/`.
 - The end-to-end example (ADR-0014): a duct with inlet, outlet and wall tags, cut by a cylinder, produces a `Solid`-level clean report before meshing.
+
+## Related traversal contracts
+
+[ADR-0038](0038-topology-traversal-lifetime-and-validation.md) specifies mandatory structural certification at Freeze and independent bounded diagnostic walks. Certification for ordinary traversal does not replace the Geometric and Solid checks required by this ADR's policy.

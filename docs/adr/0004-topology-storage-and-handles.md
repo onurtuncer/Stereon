@@ -2,6 +2,7 @@
 
 - **Status:** Proposed
 - **Date:** 2026-10-08
+- **Revised:** 2026-10-17 (topology traversal contract cross-reference)
 - **Revised:** 2026-10-10 (`Freeze()` keeps indices, `Compact()` is explicit; edge record follows revised ADR-0009; page size is a tuning constant)
 - **Owner:** Onur Tuncer
 - **Phase:** 0
@@ -85,3 +86,7 @@ Phase 0 prototype with a ~10⁶-face body. Pass:
 - Release-build handles are exactly 4 bytes (`static_assert` + CI check).
 - A seeded-fault test suite — stale handles, handles from another shape, off-by-one indices, wrong entity kinds, corrupted adjacency — is caught in debug builds 100% of the time, each at the first faulty access or at the end of the operation that caused it, with a `Describe()` message naming the entity.
 - Pretty-printers render every handle type in GDB and LLDB (tested in CI with scripted debugger sessions).
+
+## Related traversal contracts
+
+[ADR-0036](0036-typed-topology-ranges.md) defines typed adjacency ranges and explicit preparation costs; [ADR-0037](0037-topology-traversal-semantics.md) defines entity/use multiplicity, orientation and ordering.
