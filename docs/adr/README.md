@@ -48,3 +48,5 @@ Open questions that have to be researched before they can be decided live in [`d
 | [0030](0030-entity-lineage-in-operation-results.md) | Make entity lineage part of operation results | 3 | Proposed |
 | [0031](0031-attribute-propagation-and-conflicts.md) | Specify attribute propagation and conflict policies | 3 | Proposed |
 | [0032](0032-mutation-based-kernel-verification.md) | Mutation-based verification of kernel contracts | 0 | Accepted |
+| [0033](0033-modular-sdk-product-scope.md) | Modular CAD SDK with an independent kernel | 0 | Proposed |
+| [0034](0034-kernel-presentation-boundary.md) | Separate the modelling kernel from presentation and interaction | 0 | Proposed |
