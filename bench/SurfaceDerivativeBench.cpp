@@ -141,7 +141,7 @@ void Square(benchmark::State& state)
 {
     const BSplineSurface s = SomeSurface(Rational);
     const std::vector<Point2> uv = SurfaceParameters(s);
-    std::array<Vec3, (Du + 1) * (Dv + 1)> out;
+    std::array<Vec3, static_cast<std::size_t>((Du + 1) * (Dv + 1))> out;
     for (auto _ : state) {
         double sum = 0.0;
         for (const Point2& p : uv) {
