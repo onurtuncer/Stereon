@@ -40,7 +40,7 @@ Open questions that have to be researched before they can be decided live in [`d
 | [0022](0022-function-complexity.md) | Function complexity limits | 0 | Accepted |
 | [0023](0023-logging-and-journal-sinks.md) | Logging and journal sinks | 0 | Proposed |
 | [0024](0024-named-constants.md) | Named constants | 0 | Accepted |
-| [0025](0025-separate-topology-from-geometry.md) | Separate topology from geometry | 0 | Proposed |
+| [0025](0025-separate-topology-from-geometry.md) | Separate topology from geometry | 0 | Accepted |
 | [0026](0026-modelling-operations-by-contracts.md) | Specify modelling operations by contracts | 0 | Proposed |
 | [0027](0027-controlled-topology-mutation-and-euler-operators.md) | Controlled topology mutation and Euler operators | 0 | Proposed |
 | [0028](0028-purpose-specific-numerical-tolerances.md) | Separate numerical tolerances by purpose | 0 | Proposed |
