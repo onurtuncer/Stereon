@@ -51,3 +51,6 @@ Open questions that have to be researched before they can be decided live in [`d
 | [0033](0033-modular-sdk-product-scope.md) | Modular CAD SDK with an independent kernel | 0 | Proposed |
 | [0034](0034-kernel-presentation-boundary.md) | Separate the modelling kernel from presentation and interaction | 0 | Proposed |
 | [0035](0035-debug-viewer.md) | Debug viewer over dump files with GLFW, OpenGL and Dear ImGui | 0 | Proposed |
+| [0036](0036-typed-topology-ranges.md) | Typed read-only topology ranges | 0 | Proposed |
+| [0037](0037-topology-traversal-semantics.md) | Entity, use and orientation semantics for topology traversal | 0 | Proposed |
+| [0038](0038-topology-traversal-lifetime-and-validation.md) | Topology traversal lifetime, invalidation and validation | 0 | Proposed |

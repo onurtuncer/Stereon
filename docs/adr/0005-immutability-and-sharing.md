@@ -2,6 +2,7 @@
 
 - **Status:** Proposed
 - **Date:** 2026-09-28
+- **Revised:** 2026-10-17 (topology traversal contract cross-reference)
 - **Revised:** 2026-10-10 (sharing requires index-stable `Freeze()`; `OperationResult`; page size measured, not fixed)
 - **Owner:** Onur Tuncer
 - **Phase:** 0
@@ -36,3 +37,7 @@ Adopt option 3.
 ## Verification
 
 Benchmark: a sequence of 100 local edits on a 10⁶-face body, mixing surface replacement, face deletion, face splitting and edge splitting in equal parts, with no `Compact()` in the sequence. Pass: total memory < 1.2× the single body; each edit's copy cost < 1% of the body's storage. A `Compact()` at the end returns the body to within 1.05× of a freshly built one.
+
+## Related traversal contracts
+
+[ADR-0038](0038-topology-traversal-lifetime-and-validation.md) specifies the retained TopologySnapshot token and range lifetime. Retaining a query must not copy the snapshot's page-pointer tables.
