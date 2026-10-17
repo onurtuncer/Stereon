@@ -41,6 +41,8 @@ Stereon
    geometry
    analytic
    nurbs
+   trimmed
+   interchange
    fitting
    properties
    performance
