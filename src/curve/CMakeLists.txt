@@ -27,6 +27,7 @@ stereon_add_library(curve
         Conversion.cpp
         Factories.cpp
         Fitting.cpp
+        PeriodicFitting.cpp
         Properties.cpp
     DEPENDS
         robust)

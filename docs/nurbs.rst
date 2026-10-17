@@ -586,8 +586,8 @@ Current limits
 --------------
 
 - Periodic B-splines have no periodic flag; they are represented by their
-  unclamped equivalent and are not ``PeriodicCurve``\ s or
-  ``PeriodicSurface``\ s.
+  unclamped equivalent, which is what the periodic fits of :doc:`fitting`
+  produce, and are not ``PeriodicCurve``\ s or ``PeriodicSurface``\ s.
 - Surface projection is not certified inside its final sub-patches (see
   *Surface projection*).
 - Degree elevation, knot removal and curve fitting are not yet implemented;

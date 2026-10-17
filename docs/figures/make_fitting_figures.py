@@ -262,6 +262,42 @@ def surface(data):
     save(fig, "fitting-surface.svg")
 
 
+def periodic(data):
+    """A closed profile fitted periodic and open, and periodic least squares."""
+    d = data["periodic"]
+    fig, (left, right) = plt.subplots(1, 2, figsize=(7.4, 3.9))
+    x, y = xy(d["open"])
+    left.plot(x, y, "--", color=SERIES[1], linewidth=1.6, label="open cubic, first point repeated")
+    x, y = xy(d["closed"])
+    left.plot(x, y, color=SERIES[0], linewidth=2.0, label="periodic cubic")
+    data_points(left, d["points"])
+    seam = d["points"][0]
+    left.annotate("seam: first and last point", xy=(seam[0], seam[1]),
+                  xytext=(seam[0] + 0.55, seam[1] + 0.55), color=INK, fontsize=8,
+                  arrowprops={"arrowstyle": "-", "color": INK_SECONDARY, "linewidth": 0.8})
+    left.set_aspect("equal", adjustable="datalim")
+    left.set_title("Twelve points on a cam profile", loc="left", fontsize=10)
+    left.set_xlabel("x (mm)")
+    left.set_ylabel("y (mm)")
+    left.legend(loc="lower left", fontsize=8)
+    data_points(right, d["noisy"], size=10, color=INK_MUTED)
+    px, py = xy(d["poles"])
+    right.plot(px, py, ":", color=INK_SECONDARY, linewidth=1.0, label="control polygon")
+    right.scatter(px, py, s=18, marker="s", color=INK_SECONDARY, zorder=4)
+    x, y = xy(d["interpolant"])
+    right.plot(x, y, color=SERIES[1], linewidth=1.0, label="periodic interpolant")
+    x, y = xy(d["leastSquares"])
+    right.plot(x, y, color=SERIES[0], linewidth=2.0,
+               label=f"periodic least squares, {d['poleCount']} poles")
+    right.set_aspect("equal", adjustable="datalim")
+    right.set_title(f"Fifty noisy samples, max deviation {d['deviation']:.3f} mm",
+                    loc="left", fontsize=10)
+    right.set_xlabel("x (mm)")
+    right.legend(loc="lower left", fontsize=8)
+    fig.tight_layout()
+    save(fig, "fitting-periodic.svg")
+
+
 def curvature_comb(data):
     """The curvature comb: teeth along the principal normal, scaled by curvature."""
     d = data["properties"]
@@ -326,6 +362,7 @@ def main():
     approximation(data)
     collocation(data)
     surface(data)
+    periodic(data)
     curvature_comb(data)
     arc_length(data)
 

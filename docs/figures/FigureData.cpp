@@ -187,6 +187,60 @@ void Collocation()
     std::printf("]}");
 }
 
+/// A point of a closed cam profile, r = 1 + 0.3 cos 2a + 0.15 sin 3a, with
+/// a radial error added.
+Point3 CamPoint(const double a, const double noise)
+{
+    const double r = 1.0 + 0.3 * std::cos(2.0 * a) + 0.15 * std::sin(3.0 * a) + noise;
+    return {r * std::cos(a), r * std::sin(a), 0.0};
+}
+
+/// Twelve points of the cam at uneven angles, the first at the dent at the
+/// top where the profile turns sharply, interpolated as a periodic cubic
+/// and as an open cubic through the first point repeated; and fifty noisy
+/// samples fitted by periodic least squares and interpolation.
+void PeriodicFigure()
+{
+    std::vector<Point3> points;
+    constexpr int few = 12;
+    for (int k = 0; k < few; ++k) {
+        const double a =
+            std::numbers::pi / 2 + 2.0 * std::numbers::pi * (k + 0.35 * std::sin(1.7 * k)) / few;
+        points.push_back(CamPoint(a, 0.0));
+    }
+    const CurveFit closed = *InterpolatePeriodic(points, 3);
+    std::vector<Point3> repeated = points;
+    repeated.push_back(points.front());
+    const CurveFit open = *Interpolate(repeated, 3);
+    std::vector<Point3> noisy;
+    constexpr int many = 50;
+    for (int k = 0; k < many; ++k) {
+        const double a = 2.0 * std::numbers::pi * k / many;
+        noisy.push_back(CamPoint(a, 0.03 * std::sin(23.0 * a) + 0.02 * std::cos(41.0 * a)));
+    }
+    constexpr std::size_t poleCount = 8;
+    const CurveFit lsq = *FitLeastSquaresPeriodic(noisy, 3, poleCount);
+    const CurveFit through = *InterpolatePeriodic(noisy, 3);
+    std::printf("\"periodic\":{\"points\":");
+    Points(points);
+    std::printf(",\"closed\":");
+    Points(Sampled(closed.Curve, 400));
+    std::printf(",\"open\":");
+    Points(Sampled(open.Curve, 400));
+    std::printf(",\"noisy\":");
+    Points(noisy);
+    std::printf(",\"poleCount\":%zu,\"deviation\":", poleCount);
+    Number(lsq.MaxDeviation);
+    std::printf(",\"leastSquares\":");
+    Points(Sampled(lsq.Curve, 400));
+    // The distinct poles and the first again, so the polygon closes.
+    std::printf(",\"poles\":");
+    Points(std::span<const Point3>{lsq.Curve.Poles}.first(poleCount + 1));
+    std::printf(",\"interpolant\":");
+    Points(Sampled(through.Curve, 1200));
+    std::printf("}");
+}
+
 /// A grid on a sphere from pole to pole, and the interpolating surface.
 void SurfaceGrid()
 {
@@ -291,6 +345,8 @@ int main()
     ApproximationSearch();
     std::printf(",");
     Collocation();
+    std::printf(",");
+    PeriodicFigure();
     std::printf(",");
     SurfaceGrid();
     std::printf(",");
