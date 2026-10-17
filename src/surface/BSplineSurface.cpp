@@ -447,13 +447,20 @@ void Accumulate(Bernstein2& into, const Bernstein2& term, const double factor)
 }
 
 /// The two halves in one parameter at 1/2, by de Casteljau's algorithm on
-/// every row (alongU) or column, each rescaled to [0, 1].
-[[nodiscard]] std::pair<Bernstein2, Bernstein2> Halves(const Bernstein2& a, const bool alongU)
+/// every row (alongU) or column, each rescaled to [0, 1], written into
+/// `first` and `second`. They are resized, not reallocated, once they have
+/// held a polynomial of this size: the search reuses them (SearchScratch).
+void HalvesInto(const Bernstein2& a, const bool alongU, Bernstein2& first, Bernstein2& second,
+                std::vector<double>& work)
 {
-    std::pair<Bernstein2, Bernstein2> halves{a, a};
+    for (Bernstein2* half : {&first, &second}) {
+        half->M = a.M;
+        half->N = a.N;
+        half->C.resize(a.C.size());
+    }
     const std::size_t degree = alongU ? a.M : a.N;
     const std::size_t lines = alongU ? a.N + 1 : a.M + 1;
-    std::vector<double> work(degree + 1);
+    work.resize(degree + 1);
     for (std::size_t line = 0; line < lines; ++line) {
         const auto at = [&](Bernstein2& b, const std::size_t k) -> double& {
             return alongU ? b.At(k, line) : b.At(line, k);
@@ -461,17 +468,16 @@ void Accumulate(Bernstein2& into, const Bernstein2& term, const double factor)
         for (std::size_t k = 0; k <= degree; ++k) {
             work[k] = alongU ? a.At(k, line) : a.At(line, k);
         }
-        at(halves.first, 0) = work[0];
-        at(halves.second, degree) = work[degree];
+        at(first, 0) = work[0];
+        at(second, degree) = work[degree];
         for (std::size_t r = 1; r <= degree; ++r) {
             for (std::size_t k = 0; k + r <= degree; ++k) {
                 work[k] = 0.5 * (work[k] + work[k + 1]);
             }
-            at(halves.first, r) = work[0];
-            at(halves.second, degree - r) = work[degree - r];
+            at(first, r) = work[0];
+            at(second, degree - r) = work[degree - r];
         }
     }
-    return halves;
 }
 
 /// True when every coefficient has the same strict sign: the polynomial then
@@ -566,8 +572,18 @@ struct StationarityParts {
     return total;
 }
 
-/// The four quarters of a search patch, in a fixed order.
-[[nodiscard]] std::array<SearchPatch, 4> Quarters(const SearchPatch& patch)
+/// The polynomials a split reuses (HalvesInto): the two halves in u and
+/// de Casteljau's work row.
+struct SplitScratch {
+    Bernstein2 Left;
+    Bernstein2 Right;
+    std::vector<double> Work;
+};
+
+/// The four quarters of a search patch, in a fixed order, written into
+/// `quarters` without allocating once it has held quarters of this size.
+void QuartersInto(const SearchPatch& patch, std::array<SearchPatch, 4>& quarters,
+                  SplitScratch& scratch)
 {
     const double um = Midpoint(patch.Range.X);
     const double vm = Midpoint(patch.Range.Y);
@@ -575,17 +591,14 @@ struct StationarityParts {
     const Interval highU{um, patch.Range.X.GetUpper()};
     const Interval lowV{patch.Range.Y.GetLower(), vm};
     const Interval highV{vm, patch.Range.Y.GetUpper()};
-    std::array<SearchPatch, 4> quarters{
-        SearchPatch{{}, {}, {}, Box2{lowU, lowV}}, SearchPatch{{}, {}, {}, Box2{highU, lowV}},
-        SearchPatch{{}, {}, {}, Box2{lowU, highV}}, SearchPatch{{}, {}, {}, Box2{highU, highV}}};
-    const auto split = [&quarters](const Bernstein2& a, const auto member) {
-        const auto [left, right] = Halves(a, true);
-        const auto [ll, lh] = Halves(left, false);
-        const auto [rl, rh] = Halves(right, false);
-        member(quarters[0]) = ll;
-        member(quarters[1]) = rl;
-        member(quarters[2]) = lh;
-        member(quarters[3]) = rh;
+    quarters[0].Range = Box2{lowU, lowV};
+    quarters[1].Range = Box2{highU, lowV};
+    quarters[2].Range = Box2{lowU, highV};
+    quarters[3].Range = Box2{highU, highV};
+    const auto split = [&](const Bernstein2& a, const auto member) {
+        HalvesInto(a, true, scratch.Left, scratch.Right, scratch.Work);
+        HalvesInto(scratch.Left, false, member(quarters[0]), member(quarters[2]), scratch.Work);
+        HalvesInto(scratch.Right, false, member(quarters[1]), member(quarters[3]), scratch.Work);
     };
     for (std::size_t d = 0; d < 4; ++d) {
         split(patch.Coordinates[d],
@@ -593,7 +606,6 @@ struct StationarityParts {
     }
     split(patch.F, [](SearchPatch& s) -> Bernstein2& { return s.F; });
     split(patch.G, [](SearchPatch& s) -> Bernstein2& { return s.G; });
-    return quarters;
 }
 
 // ---------------------------------------------------------------------------
@@ -641,6 +653,15 @@ constexpr int ExtraLeafDepth = 2;
 struct Closest {
     Point2 Parameter;
     double DistanceSquared;
+};
+
+/// The storage of one query's subdivision search, reused throughout it. The
+/// search is depth first, so each depth needs one set of four quarters: a
+/// child's quarters go one level down and never overwrite its siblings.
+/// After the first visit to a depth, splitting allocates nothing.
+struct SearchScratch {
+    std::array<std::array<SearchPatch, 4>, LeafDepth + ExtraLeafDepth + 1> Levels;
+    SplitScratch Split;
 };
 
 void Consider(const BSplineSurface& s, const Point3& p, const Point2& uv, Closest& best)
@@ -812,7 +833,7 @@ struct NewtonState {
 /// at a leaf, Newton from its centre over the whole patch `range`, with a
 /// few more levels of subdivision if that stalls.
 void Search(const BSplineSurface& s, const Point3& p, const SearchPatch& patch, const int depth,
-            const Box2& range, Closest& best)
+            const Box2& range, Closest& best, SearchScratch& scratch)
 {
     if (LowerBoundSquared(patch.Coordinates, p) > best.DistanceSquared || OneSigned(patch.F) ||
         OneSigned(patch.G)) {
@@ -826,9 +847,10 @@ void Search(const BSplineSurface& s, const Point3& p, const SearchPatch& patch, 
             return;
         }
     }
-    const std::array<SearchPatch, 4> quarters = Quarters(patch);
+    std::array<SearchPatch, 4>& quarters = scratch.Levels[static_cast<std::size_t>(depth)];
+    QuartersInto(patch, quarters, scratch.Split);
     for (const std::size_t k : ClosestFirst(quarters, p)) {
-        Search(s, p, quarters[k], depth + 1, range, best);
+        Search(s, p, quarters[k], depth + 1, range, best, scratch);
     }
 }
 
@@ -965,11 +987,11 @@ PatchesByBound(const std::vector<Detail::PreparedPatch>& patches, const Point3& 
 
 /// The edges and the interior of one prepared patch, for the point p.
 void SearchPatchFor(const BSplineSurface& surface, const Detail::PreparedPatch& patch,
-                    const Point3& p, Closest& best)
+                    const Point3& p, Closest& best, SearchScratch& scratch)
 {
     ConsiderEdges(surface, p, patch, best);
     const SearchPatch search{patch.Coordinates, For(patch.F, p), For(patch.G, p), patch.Range};
-    Search(surface, p, search, 0, patch.Range, best);
+    Search(surface, p, search, 0, patch.Range, best, scratch);
 }
 
 /// The squared distance from p to the box of a slot's poles, read in
@@ -1016,11 +1038,12 @@ Point2 SurfaceProjector::Project(const Point3& p) const
     const Box2 domain = Domain(surface);
     const Point2 corner{domain.X.GetLower(), domain.Y.GetLower()};
     Closest best{corner, DistanceSquared(Eval(surface, corner), p)};
+    SearchScratch scratch; // reused by every patch of this query
     for (const auto& [bound, index] : PatchesByBound(m_Data->Patches, p)) {
         if (bound > best.DistanceSquared) {
             break; // every later patch is at least as far
         }
-        SearchPatchFor(surface, m_Data->Patches[index], p, best);
+        SearchPatchFor(surface, m_Data->Patches[index], p, best, scratch);
     }
     return best.Parameter;
 }
@@ -1042,12 +1065,13 @@ Point2 Project(const BSplineSurface& surface, const Point3& p)
     const Box2 domain = Domain(surface);
     const Point2 corner{domain.X.GetLower(), domain.Y.GetLower()};
     Closest best{corner, DistanceSquared(Eval(surface, corner), p)};
+    SearchScratch scratch; // reused by every patch of this query
     for (const auto& [bound, index] : order) {
         if (bound > best.DistanceSquared) {
             break;
         }
         SearchPatchFor(surface, Prepared(PatchAt(form.Surface, form.Slots[index]), surface), p,
-                       best);
+                       best, scratch);
     }
     return best.Parameter;
 }
