@@ -1,7 +1,8 @@
 # ADR-0024: Named constants, no magic numbers
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-12
+- **Accepted:** 2026-10-17 by Onur Tuncer, on review; `tools/check_literals.py` passes over the tree and runs in CI
 - **Owner:** Onur Tuncer
 - **Phase:** 0
 - **Related:** ADR-0001 (tolerances through the `Context`), ADR-0002 (predicate error bounds), ADR-0017 (naming), ADR-0021 (scalar-generic code), ADR-0022 (complexity limits and their lint)

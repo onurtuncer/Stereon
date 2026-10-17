@@ -30,16 +30,16 @@ Open questions that have to be researched before they can be decided live in [`d
 | [0012](0012-native-file-format.md) | Native file format and versioning | 3 | Proposed |
 | [0013](0013-boolean-classification.md) | Boolean classification | 4 | Proposed |
 | [0014](0014-mesh-generation-boundary.md) | Mesh generation boundary | 5 | Proposed |
-| [0015](0015-ai-contribution-policy.md) | AI contribution policy | 0 | Proposed |
+| [0015](0015-ai-contribution-policy.md) | AI contribution policy | 0 | Accepted |
 | [0016](0016-cpp26-adoption-and-contracts.md) | C++26 adoption and contracts policy | 0 | Proposed |
-| [0017](0017-naming-conventions.md) | Naming conventions (Hazel style) | 0 | Proposed |
+| [0017](0017-naming-conventions.md) | Naming conventions (Hazel style) | 0 | Accepted |
 | [0018](0018-validity-checking.md) | Validity checking | 0 | Proposed |
 | [0019](0019-library-linking-packaging-and-abi.md) | Library linking, packaging and ABI policy | 0 | Proposed |
 | [0020](0020-cpp-c-abi-and-python-bindings.md) | C++ API, C ABI and Python bindings | 0 | Proposed |
 | [0021](0021-shape-derivatives.md) | Shape derivatives as an operation contract | 0 | Proposed |
-| [0022](0022-function-complexity.md) | Function complexity limits | 0 | Proposed |
+| [0022](0022-function-complexity.md) | Function complexity limits | 0 | Accepted |
 | [0023](0023-logging-and-journal-sinks.md) | Logging and journal sinks | 0 | Proposed |
-| [0024](0024-named-constants.md) | Named constants | 0 | Proposed |
+| [0024](0024-named-constants.md) | Named constants | 0 | Accepted |
 | [0025](0025-separate-topology-from-geometry.md) | Separate topology from geometry | 0 | Proposed |
 | [0026](0026-modelling-operations-by-contracts.md) | Specify modelling operations by contracts | 0 | Proposed |
 | [0027](0027-controlled-topology-mutation-and-euler-operators.md) | Controlled topology mutation and Euler operators | 0 | Proposed |
