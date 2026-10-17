@@ -47,4 +47,4 @@ Open questions that have to be researched before they can be decided live in [`d
 | [0029](0029-intersection-and-classification-outcomes.md) | Define intersection and classification outcomes explicitly | 2 | Proposed |
 | [0030](0030-entity-lineage-in-operation-results.md) | Make entity lineage part of operation results | 3 | Proposed |
 | [0031](0031-attribute-propagation-and-conflicts.md) | Specify attribute propagation and conflict policies | 3 | Proposed |
-| [0032](0032-mutation-based-kernel-verification.md) | Mutation-based verification of kernel contracts | 0 | Proposed |
+| [0032](0032-mutation-based-kernel-verification.md) | Mutation-based verification of kernel contracts | 0 | Accepted |

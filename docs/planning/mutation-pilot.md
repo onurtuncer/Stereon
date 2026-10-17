@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-17
 **Revision measured:** `f06b521` (branch `verify/mutation-pilot`)
-**Status:** evidence for ADR-0032's Verification section. Accepting the ADR stays with its owner (ADR-0015).
+**Status:** evidence for ADR-0032's Verification section, on which the ADR was accepted on 2026-10-17 with weekly campaigns.
 
 This report records the pilot that ADR-0032 requires before it can move from Proposed to Accepted. Each section answers one item of the ADR's Verification list. The harness is `tools/mutate.py`, the catalogue is `tools/mutation/pilot.json`, and the method is documented in `docs/testing.rst` (*Mutation testing*).
 

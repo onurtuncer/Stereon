@@ -1,8 +1,9 @@
 # SPDX-FileCopyrightText: 2026 Onur Tuncer and Stereon contributors
 # SPDX-License-Identifier: MPL-2.0
 #
-# Mutation testing (ADR-0032): the pilot catalogue on the reference
-# compiler, weekly and on request. Off the pull-request path and not a
+# Mutation testing (ADR-0032, accepted 2026-10-17): the catalogue on the
+# reference compiler, weekly (Mondays 03:17 UTC) as the ADR requires, and on
+# request. Off the pull-request path and not a
 # required check: ADR-0032 starts with non-blocking reports. The job fails
 # when the baseline fails or a critical seeded fault is not detected with
 # its declared diagnostic, so a regression in fault detection is visible.

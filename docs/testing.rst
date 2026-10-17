@@ -99,8 +99,9 @@ with its declared diagnostic.
    python3 tools/mutate.py --catalogue tools/mutation/pilot.json
    python3 tools/mutate.py --catalogue tools/mutation/pilot.json --only PRED-SIGN
 
-The ``Mutation`` workflow runs the pilot catalogue weekly and on request,
-off the pull-request path, and publishes the report. As ADR-0032 asks, it
+The ``Mutation`` workflow runs the pilot catalogue weekly, as accepted
+ADR-0032 requires, and on request, off the pull-request path, and publishes
+the report. As ADR-0032 asks, it
 reports rather than gates on a score; it fails only when the baseline
 fails or a critical fault goes undetected. The pilot's results, and what
 they changed in the tests, are in ``docs/planning/mutation-pilot.md``.
