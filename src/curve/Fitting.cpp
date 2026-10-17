@@ -16,6 +16,8 @@ module;
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <functional>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -96,6 +98,18 @@ private:
 // ---------------------------------------------------------------------------
 // Validation and dimension handling
 
+/// End derivatives when the caller prescribed them.
+using Ends = std::optional<EndDerivatives>;
+
+/// The lowest degree that can take end derivatives: with degree 1 the
+/// shifted knots of the constrained interpolant would repeat the end knots,
+/// u_{p+1} = t_0 = 0, and the fixed second pole would divide by zero.
+constexpr int LowestConstrainedDegree = 2;
+
+/// With end derivatives two poles are fixed at each end, so the fewest
+/// poles any constrained fit can have.
+constexpr std::size_t FewestConstrainedPoles = 4;
+
 [[nodiscard]] Result<void> CheckPoints(const std::span<const Point3> points, const int degree,
                                        const std::string_view where)
 {
@@ -110,6 +124,21 @@ private:
     for (const Point3& p : points) {
         STEREON_TRY_VOID(Detail::CheckFinite(p, "every point", where));
     }
+    return {};
+}
+
+[[nodiscard]] Result<void> CheckEnds(const Ends& ends, const int degree,
+                                     const std::string_view where)
+{
+    if (!ends) {
+        return {};
+    }
+    if (degree < LowestConstrainedDegree) {
+        return Fail(ErrorCode::InvalidInput,
+                    std::string{where} + ": end derivatives need degree 2 or more");
+    }
+    STEREON_TRY_VOID(Detail::CheckFinite(ends->Start, "the start derivative", where));
+    STEREON_TRY_VOID(Detail::CheckFinite(ends->End, "the end derivative", where));
     return {};
 }
 
@@ -134,6 +163,11 @@ private:
         lifted.push_back({p.X, p.Y, 0.0});
     }
     return lifted;
+}
+
+[[nodiscard]] EndDerivatives Lifted(const EndDerivatives2d& ends)
+{
+    return {{ends.Start.X, ends.Start.Y, 0.0}, {ends.End.X, ends.End.Y, 0.0}};
 }
 
 [[nodiscard]] CurveFit2d Flattened(CurveFit fit)
@@ -167,146 +201,239 @@ template <typename F>
 }
 
 // ---------------------------------------------------------------------------
-// Least squares
+// Fixed poles
 
-/// Knots for a least-squares fit with poleCount poles (eq. 9.69): with
-/// d = (m + 1) / (n - p + 1), interior knot p + j blends the parameters
-/// around j d, so that every knot span holds at least one parameter and the
-/// normal equations are positive definite.
-[[nodiscard]] std::vector<double> SpreadKnots(const std::span<const double> t, const int degree,
-                                              const std::size_t poleCount)
-{
-    const auto p = static_cast<std::size_t>(degree);
-    const std::size_t n = poleCount - 1;
-    std::vector<double> knots(p + 1, 0.0);
-    const double d = static_cast<double>(t.size()) / static_cast<double>(n - p + 1);
-    for (std::size_t j = 1; j + p <= n; ++j) {
-        const double position = static_cast<double>(j) * d;
-        const auto i = static_cast<std::size_t>(position);
-        const double alpha = position - static_cast<double>(i);
-        knots.push_back((1.0 - alpha) * t[i - 1] + alpha * t[i]);
-    }
-    knots.insert(knots.end(), p + 1, 1.0);
-    return knots;
-}
-
-/// The interior poles of the least-squares fit: the rows of N are the
-/// basis functions at the interior parameters, restricted to the interior
-/// poles, and R_k is Q_k minus the contributions of the fixed end poles.
-[[nodiscard]] std::vector<Point3> LeastSquaresPoles(const std::span<const Point3> q,
-                                                    const std::span<const double> t,
-                                                    const std::span<const double> knots,
-                                                    const int degree, const std::size_t poleCount)
+/// The poles that the data and the end derivatives fix before any system is
+/// solved, in a vector of poleCount poles whose other entries are still to
+/// be computed: the first and last pole are the first and last point, and
+/// with end derivatives the second and the second to last follow from
+/// C'(0) = p (P_1 - P_0) / u_{p+1} and C'(1) = p (P_n - P_{n-1}) / (1 - u_n)
+/// (eq. 9.10). Returns the poles and how many are fixed at each end.
+[[nodiscard]] std::pair<std::vector<Point3>, std::size_t>
+FixedPoles(const std::span<const Point3> q, const std::span<const double> knots, const int degree,
+           const std::size_t poleCount, const Ends& ends)
 {
     const auto p = static_cast<std::size_t>(degree);
     const std::size_t n = poleCount - 1;
     std::vector<Point3> poles(poleCount);
     poles.front() = q.front();
     poles.back() = q.back();
-    if (n < 2) {
-        return poles; // no interior pole
+    if (!ends) {
+        return {std::move(poles), 1};
     }
-    BandMatrix normal(n - 1, p);
-    std::vector<Vec3> rhs(n - 1);
+    const double pd = static_cast<double>(degree);
+    poles[1] = q.front() + (knots[p + 1] / pd) * ends->Start;
+    poles[n - 1] = q.back() - ((1.0 - knots[n]) / pd) * ends->End;
+    return {std::move(poles), 2};
+}
+
+// ---------------------------------------------------------------------------
+// Interpolation with end derivatives
+
+/// Knots for the interpolant with end derivatives (eq. 9.11, for any
+/// degree): two more poles than points, so two more interior knots than
+/// AveragedKnots gives, each the mean of p parameters starting one earlier,
+/// interior knot j + p averaging parameters j - 1, ..., j + p - 2. The
+/// Schoenberg-Whitney conditions then hold for point k against basis
+/// function k + 1, the position it has once the fixed second pole is
+/// counted.
+[[nodiscard]] std::vector<double> ShiftedAveragedKnots(const std::span<const double> parameters,
+                                                       const int degree)
+{
+    const auto p = static_cast<std::size_t>(degree);
+    const std::size_t m = parameters.size() - 1;
+    std::vector<double> knots(p + 1, 0.0);
+    for (std::size_t j = 1; j + p <= m + 2; ++j) {
+        double sum = 0.0;
+        for (std::size_t i = j - 1; i + 2 <= j + p; ++i) {
+            sum += parameters[i];
+        }
+        knots.push_back(sum / static_cast<double>(p));
+    }
+    knots.insert(knots.end(), p + 1, 1.0);
+    return knots;
+}
+
+/// The poles of the interpolant with end derivatives: with the four end
+/// poles fixed, the interior points' collocation rows restricted to the
+/// free poles P_2, ..., P_{n-2} form a square banded system, still totally
+/// positive, whose right-hand side is each point less the fixed poles'
+/// contributions.
+[[nodiscard]] std::vector<Point3> ConstrainedInterpolatingPoles(const std::span<const Point3> q,
+                                                                const std::span<const double> t,
+                                                                const std::span<const double> knots,
+                                                                const int degree,
+                                                                const EndDerivatives& ends)
+{
+    const auto p = static_cast<std::size_t>(degree);
+    const std::size_t poleCount = q.size() + 2;
+    const std::size_t n = poleCount - 1;
+    auto [poles, fixed] = FixedPoles(q, knots, degree, poleCount, ends);
+    const std::size_t free = poleCount - 2 * fixed;
+    BandMatrix matrix(free, p);
+    std::vector<Vec3> rhs(free);
     std::array<double, BSplineMaxDegree + 1> basis; // filled by BasisFunctions
     for (std::size_t k = 1; k + 1 < q.size(); ++k) {
         const std::size_t span = FindSpan(knots, degree, poleCount, t[k]);
         BasisFunctions(knots, degree, span, t[k], std::span{basis}.first(p + 1));
+        // Point k is row k - 1 and pole i column i - 2; the shifted knots put
+        // basis function k + 1 on the diagonal, within p of every non-zero.
+        Detail::Require(span >= k + 1 && span <= k + 1 + p, "Interpolate",
+                        "a collocation row outside the band");
         Vec3 r = ToVec(q[k]);
         for (std::size_t a = 0; a <= p; ++a) {
             const std::size_t i = span - p + a;
-            r -= (i == 0 ? basis[a] * ToVec(q.front()) : Vec3{}) +
-                 (i == n ? basis[a] * ToVec(q.back()) : Vec3{});
-        }
-        for (std::size_t a = 0; a <= p; ++a) {
-            const std::size_t i = span - p + a;
-            if (i == 0 || i == n) {
-                continue;
-            }
-            rhs[i - 1] += basis[a] * r;
-            for (std::size_t b = 0; b <= p; ++b) {
-                const std::size_t j = span - p + b;
-                if (j != 0 && j != n) {
-                    normal.At(i - 1, j - 1) += basis[a] * basis[b];
-                }
+            if (i < fixed || i > n - fixed) {
+                r -= basis[a] * ToVec(poles[i]);
+            } else {
+                matrix.At(k - 1, i - fixed) = basis[a];
             }
         }
+        rhs[k - 1] = r;
     }
-    const std::vector<Vec3> interior = SolveBanded(normal, std::move(rhs));
-    for (std::size_t i = 1; i < n; ++i) {
-        poles[i] = ToPoint(interior[i - 1]);
+    const std::vector<Vec3> interior = SolveBanded(matrix, std::move(rhs));
+    for (std::size_t i = 0; i < free; ++i) {
+        poles[i + fixed] = ToPoint(interior[i]);
     }
     return poles;
 }
 
-[[nodiscard]] Result<CurveFit> FitCount(const std::span<const Point3> points, const int degree,
-                                        const std::size_t poleCount,
-                                        const Parametrization parametrization);
-
-/// The fit with `count` poles: interpolation when there are as many poles
-/// as points, least squares otherwise.
-[[nodiscard]] Result<CurveFit> FitWith(const std::span<const Point3> points, const int degree,
-                                       const std::size_t count,
-                                       const Parametrization parametrization)
+/// Interpolation with or without end derivatives.
+[[nodiscard]] Result<CurveFit> InterpolateWith(const std::span<const Point3> points,
+                                               const int degree, const Ends& ends,
+                                               const Parametrization parametrization)
 {
-    return count == points.size() ? Interpolate(points, degree, parametrization)
-                                  : FitCount(points, degree, count, parametrization);
-}
-
-Result<CurveFit> FitCount(const std::span<const Point3> points, const int degree,
-                          const std::size_t poleCount, const Parametrization parametrization)
-{
-    constexpr std::string_view where = "FitLeastSquares";
+    constexpr std::string_view where = "Interpolate";
     STEREON_TRY_VOID(CheckPoints(points, degree, where));
-    if (poleCount < static_cast<std::size_t>(degree) + 1 || poleCount > points.size()) {
-        return Fail(ErrorCode::InvalidInput,
-                    "FitLeastSquares: the pole count must be between degree + 1 and the number "
-                    "of points");
-    }
+    STEREON_TRY_VOID(CheckEnds(ends, degree, where));
     STEREON_TRY(std::vector<double> t, CheckedParameters(points, parametrization, where));
-    std::vector<double> knots = SpreadKnots(t, degree, poleCount);
-    std::vector<Point3> poles = LeastSquaresPoles(points, t, knots, degree, poleCount);
+    std::vector<double> knots =
+        ends ? ShiftedAveragedKnots(t, degree) : Detail::AveragedKnots(t, degree);
+    std::vector<Point3> poles = ends
+                                    ? ConstrainedInterpolatingPoles(points, t, knots, degree, *ends)
+                                    : Detail::InterpolatingPoles(points, t, knots, degree);
     BSplineCurve curve{degree, std::move(knots), std::move(poles), {}};
     const double deviation = MaxDeviationOf(curve, points, t);
     return CurveFit{std::move(curve), std::move(t), deviation};
 }
 
-/// The smallest pole count among those tried whose fit is within the
-/// budget: doubling from degree + 1 until one passes, then bisection
-/// between the last failure and the first success.
-[[nodiscard]] Result<CurveFit> ApproximateWithin(const std::span<const Point3> points,
-                                                 const int degree, const double budget,
-                                                 const Parametrization parametrization)
+// ---------------------------------------------------------------------------
+// Least squares
+
+/// Solves the normal equations for the free poles of a least-squares fit
+/// whose `fixed` first and last poles are already in `poles`: the rows of
+/// N are the basis functions at the interior parameters restricted to the
+/// free poles, and R_k is Q_k less the contributions of the fixed poles
+/// (algorithm A9.7, with two fixed poles per end when end derivatives are
+/// prescribed).
+void SolveFreePoles(const std::span<const Point3> q, const std::span<const double> t,
+                    const std::span<const double> knots, const int degree,
+                    std::vector<Point3>& poles, const std::size_t fixed)
 {
-    std::size_t failing = 0;
-    std::size_t count = static_cast<std::size_t>(degree) + 1;
-    double best = 0.0;
-    while (true) {
-        STEREON_TRY(CurveFit fit, FitWith(points, degree, count, parametrization));
-        if (fit.MaxDeviation <= budget) {
-            break;
-        }
-        best = fit.MaxDeviation;
-        failing = count;
-        if (count == points.size()) {
-            return std::unexpected(
-                KernelError(ErrorCode::ToleranceExceeded,
-                            "Approximate: even the interpolant exceeds the budget")
-                    .WithTolerance(budget)
-                    .WithTolerance(best));
-        }
-        count = std::min(2 * count, points.size());
+    const auto p = static_cast<std::size_t>(degree);
+    const std::size_t n = poles.size() - 1;
+    if (poles.size() <= 2 * fixed) {
+        return; // no free pole
     }
-    while (count - failing > 1 && failing != 0) {
-        const std::size_t mid = failing + (count - failing) / 2;
-        STEREON_TRY(CurveFit fit, FitWith(points, degree, mid, parametrization));
-        if (fit.MaxDeviation <= budget) {
-            count = mid;
-        } else {
-            failing = mid;
+    const std::size_t free = poles.size() - 2 * fixed;
+    const auto isFixed = [&](const std::size_t i) { return i < fixed || i > n - fixed; };
+    BandMatrix normal(free, p);
+    std::vector<Vec3> rhs(free);
+    std::array<double, BSplineMaxDegree + 1> basis; // filled by BasisFunctions
+    for (std::size_t k = 1; k + 1 < q.size(); ++k) {
+        const std::size_t span = FindSpan(knots, degree, poles.size(), t[k]);
+        BasisFunctions(knots, degree, span, t[k], std::span{basis}.first(p + 1));
+        Vec3 r = ToVec(q[k]);
+        for (std::size_t a = 0; a <= p; ++a) {
+            const std::size_t i = span - p + a;
+            if (isFixed(i)) {
+                r -= basis[a] * ToVec(poles[i]);
+            }
+        }
+        for (std::size_t a = 0; a <= p; ++a) {
+            const std::size_t i = span - p + a;
+            if (isFixed(i)) {
+                continue;
+            }
+            rhs[i - fixed] += basis[a] * r;
+            for (std::size_t b = 0; b <= p; ++b) {
+                const std::size_t j = span - p + b;
+                if (!isFixed(j)) {
+                    normal.At(i - fixed, j - fixed) += basis[a] * basis[b];
+                }
+            }
         }
     }
-    return FitWith(points, degree, count, parametrization);
+    const std::vector<Vec3> interior = SolveBanded(normal, std::move(rhs));
+    for (std::size_t i = 0; i < free; ++i) {
+        poles[i + fixed] = ToPoint(interior[i]);
+    }
+}
+
+/// The least-squares fit with `poleCount` poles, with or without end
+/// derivatives.
+[[nodiscard]] Result<CurveFit> FitCount(const std::span<const Point3> points, const int degree,
+                                        const std::size_t poleCount, const Ends& ends,
+                                        const Parametrization parametrization)
+{
+    constexpr std::string_view where = "FitLeastSquares";
+    STEREON_TRY_VOID(CheckPoints(points, degree, where));
+    STEREON_TRY_VOID(CheckEnds(ends, degree, where));
+    const std::size_t fewest =
+        std::max(static_cast<std::size_t>(degree) + 1, ends ? FewestConstrainedPoles : 0);
+    if (poleCount < fewest || poleCount > points.size()) {
+        return Fail(ErrorCode::InvalidInput,
+                    "FitLeastSquares: the pole count must be between degree + 1 (4 with end "
+                    "derivatives) and the number of points");
+    }
+    STEREON_TRY(std::vector<double> t, CheckedParameters(points, parametrization, where));
+    std::vector<double> knots = Detail::SpreadKnots(t, degree, poleCount);
+    auto [poles, fixed] = FixedPoles(points, knots, degree, poleCount, ends);
+    SolveFreePoles(points, t, knots, degree, poles, fixed);
+    BSplineCurve curve{degree, std::move(knots), std::move(poles), {}};
+    const double deviation = MaxDeviationOf(curve, points, t);
+    return CurveFit{std::move(curve), std::move(t), deviation};
+}
+
+// ---------------------------------------------------------------------------
+// Approximation to a budget
+
+/// The fits Approximate searches, by level: least squares with `level`
+/// poles up to as many as points, and above that the interpolant, which has
+/// as many poles as points, or two more with end derivatives.
+[[nodiscard]] Result<CurveFit> FitAtLevel(const std::span<const Point3> points, const int degree,
+                                          const std::size_t level, const Ends& ends,
+                                          const Parametrization parametrization)
+{
+    const std::size_t interpolant = points.size() + (ends ? 1 : 0);
+    return level >= interpolant ? InterpolateWith(points, degree, ends, parametrization)
+                                : FitCount(points, degree, level, ends, parametrization);
+}
+
+[[nodiscard]] Result<CurveFit> ApproximateWith(const std::span<const Point3> points,
+                                               const int degree, const ApproximationBudget budget,
+                                               const Ends& ends,
+                                               const Parametrization parametrization)
+{
+    constexpr std::string_view where = "Approximate";
+    if (!std::isfinite(budget.Deviation) || !(budget.Deviation > 0.0)) {
+        return Fail(ErrorCode::InvalidInput, "Approximate: the budget must be finite and positive");
+    }
+    STEREON_TRY_VOID(CheckPoints(points, degree, where));
+    STEREON_TRY_VOID(CheckEnds(ends, degree, where));
+    const std::size_t fewest =
+        std::max(static_cast<std::size_t>(degree) + 1, ends ? FewestConstrainedPoles : 0);
+    const std::size_t interpolant = points.size() + (ends ? 1 : 0);
+    STEREON_TRY(const std::size_t level,
+                Detail::FewestPolesWithin(
+                    fewest, interpolant, budget.Deviation,
+                    [&](const std::size_t count) -> Result<double> {
+                        STEREON_TRY(CurveFit fit,
+                                    FitAtLevel(points, degree, count, ends, parametrization));
+                        return fit.MaxDeviation;
+                    },
+                    where));
+    return FitAtLevel(points, degree, level, ends, parametrization);
 }
 
 } // namespace
@@ -314,14 +441,7 @@ Result<CurveFit> FitCount(const std::span<const Point3> points, const int degree
 Result<CurveFit> Interpolate(const std::span<const Point3> points, const int degree,
                              const Parametrization parametrization)
 {
-    constexpr std::string_view where = "Interpolate";
-    STEREON_TRY_VOID(CheckPoints(points, degree, where));
-    STEREON_TRY(std::vector<double> t, CheckedParameters(points, parametrization, where));
-    std::vector<double> knots = Detail::AveragedKnots(t, degree);
-    std::vector<Point3> poles = Detail::InterpolatingPoles(points, t, knots, degree);
-    BSplineCurve curve{degree, std::move(knots), std::move(poles), {}};
-    const double deviation = MaxDeviationOf(curve, points, t);
-    return CurveFit{std::move(curve), std::move(t), deviation};
+    return InterpolateWith(points, degree, std::nullopt, parametrization);
 }
 
 Result<CurveFit2d> Interpolate(const std::span<const Point2> points, const int degree,
@@ -332,10 +452,24 @@ Result<CurveFit2d> Interpolate(const std::span<const Point2> points, const int d
     });
 }
 
+Result<CurveFit> Interpolate(const std::span<const Point3> points, const int degree,
+                             const EndDerivatives ends, const Parametrization parametrization)
+{
+    return InterpolateWith(points, degree, ends, parametrization);
+}
+
+Result<CurveFit2d> Interpolate(const std::span<const Point2> points, const int degree,
+                               const EndDerivatives2d ends, const Parametrization parametrization)
+{
+    return InPlane(points, [&](const std::span<const Point3> lifted) {
+        return Interpolate(lifted, degree, Lifted(ends), parametrization);
+    });
+}
+
 Result<CurveFit> FitLeastSquares(const std::span<const Point3> points, const int degree,
                                  const std::size_t poleCount, const Parametrization parametrization)
 {
-    return FitCount(points, degree, poleCount, parametrization);
+    return FitCount(points, degree, poleCount, std::nullopt, parametrization);
 }
 
 Result<CurveFit2d> FitLeastSquares(const std::span<const Point2> points, const int degree,
@@ -343,7 +477,23 @@ Result<CurveFit2d> FitLeastSquares(const std::span<const Point2> points, const i
                                    const Parametrization parametrization)
 {
     return InPlane(points, [&](const std::span<const Point3> lifted) {
-        return FitCount(lifted, degree, poleCount, parametrization);
+        return FitLeastSquares(lifted, degree, poleCount, parametrization);
+    });
+}
+
+Result<CurveFit> FitLeastSquares(const std::span<const Point3> points, const int degree,
+                                 const std::size_t poleCount, const EndDerivatives ends,
+                                 const Parametrization parametrization)
+{
+    return FitCount(points, degree, poleCount, ends, parametrization);
+}
+
+Result<CurveFit2d> FitLeastSquares(const std::span<const Point2> points, const int degree,
+                                   const std::size_t poleCount, const EndDerivatives2d ends,
+                                   const Parametrization parametrization)
+{
+    return InPlane(points, [&](const std::span<const Point3> lifted) {
+        return FitLeastSquares(lifted, degree, poleCount, Lifted(ends), parametrization);
     });
 }
 
@@ -351,11 +501,7 @@ Result<CurveFit> Approximate(const std::span<const Point3> points, const int deg
                              const ApproximationBudget budget,
                              const Parametrization parametrization)
 {
-    if (!std::isfinite(budget.Deviation) || !(budget.Deviation > 0.0)) {
-        return Fail(ErrorCode::InvalidInput, "Approximate: the budget must be finite and positive");
-    }
-    STEREON_TRY_VOID(CheckPoints(points, degree, "Approximate"));
-    return ApproximateWithin(points, degree, budget.Deviation, parametrization);
+    return ApproximateWith(points, degree, budget, std::nullopt, parametrization);
 }
 
 Result<CurveFit2d> Approximate(const std::span<const Point2> points, const int degree,
@@ -364,6 +510,22 @@ Result<CurveFit2d> Approximate(const std::span<const Point2> points, const int d
 {
     return InPlane(points, [&](const std::span<const Point3> lifted) {
         return Approximate(lifted, degree, budget, parametrization);
+    });
+}
+
+Result<CurveFit> Approximate(const std::span<const Point3> points, const int degree,
+                             const ApproximationBudget budget, const EndDerivatives ends,
+                             const Parametrization parametrization)
+{
+    return ApproximateWith(points, degree, budget, ends, parametrization);
+}
+
+Result<CurveFit2d> Approximate(const std::span<const Point2> points, const int degree,
+                               const ApproximationBudget budget, const EndDerivatives2d ends,
+                               const Parametrization parametrization)
+{
+    return InPlane(points, [&](const std::span<const Point3> lifted) {
+        return Approximate(lifted, degree, budget, Lifted(ends), parametrization);
     });
 }
 
@@ -435,6 +597,72 @@ std::vector<Point3> InterpolatingPoles(const std::span<const Point3> points,
         poles.push_back(ToPoint(v));
     }
     return poles;
+}
+
+std::vector<double> SpreadKnots(const std::span<const double> parameters, const int degree,
+                                const std::size_t poleCount)
+{
+    const auto p = static_cast<std::size_t>(degree);
+    const std::size_t n = poleCount - 1;
+    std::vector<double> knots(p + 1, 0.0);
+    const double d = static_cast<double>(parameters.size()) / static_cast<double>(n - p + 1);
+    for (std::size_t j = 1; j + p <= n; ++j) {
+        const double position = static_cast<double>(j) * d;
+        const auto i = static_cast<std::size_t>(position);
+        const double alpha = position - static_cast<double>(i);
+        knots.push_back((1.0 - alpha) * parameters[i - 1] + alpha * parameters[i]);
+    }
+    knots.insert(knots.end(), p + 1, 1.0);
+    return knots;
+}
+
+std::vector<Point3> LeastSquaresPoles(const std::span<const Point3> points,
+                                      const std::span<const double> parameters,
+                                      const std::span<const double> knots, const int degree,
+                                      const std::size_t poleCount)
+{
+    auto [poles, fixed] = FixedPoles(points, knots, degree, poleCount, std::nullopt);
+    SolveFreePoles(points, parameters, knots, degree, poles, fixed);
+    return poles;
+}
+
+Result<std::size_t> FewestPolesWithin(const std::size_t fewest, const std::size_t most,
+                                      const double budget,
+                                      const std::function<Result<double>(std::size_t)>& deviationOf,
+                                      const std::string_view where)
+{
+    // Doubling from `fewest` until a count passes or `most` fails.
+    std::size_t failing = 0;
+    std::size_t count = fewest;
+    double best = 0.0;
+    while (true) {
+        STEREON_TRY(const double deviation, deviationOf(count));
+        if (deviation <= budget) {
+            break;
+        }
+        best = deviation;
+        failing = count;
+        if (count >= most) {
+            return std::unexpected(
+                KernelError(ErrorCode::ToleranceExceeded,
+                            std::string{where} + ": even the interpolant exceeds the budget")
+                    .WithTolerance(budget)
+                    .WithTolerance(best));
+        }
+        count = std::min(2 * count, most);
+    }
+    // Bisection between the last failure and the first success, keeping the
+    // passing half.
+    while (count - failing > 1 && failing != 0) {
+        const std::size_t mid = failing + (count - failing) / 2;
+        STEREON_TRY(const double deviation, deviationOf(mid));
+        if (deviation <= budget) {
+            count = mid;
+        } else {
+            failing = mid;
+        }
+    }
+    return count;
 }
 
 } // namespace Stereon::Detail

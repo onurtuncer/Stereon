@@ -16,8 +16,10 @@ export module Stereon.Surface:Fitting;
 import Stereon.Curve;
 import :BSplineSurface;
 
-/// Fitting B-spline surfaces to a grid of points (The NURBS Book, section
-/// 9.2.5).
+/// Fitting B-spline surfaces to a grid of points (The NURBS Book, sections
+/// 9.2.5 and 9.4.3): interpolation, least squares with given pole counts,
+/// and approximation to a budget. As for curves, every fit reports the
+/// parameters it used and the deviation it achieved (ADR-0028).
 
 export namespace Stereon {
 
@@ -45,6 +47,39 @@ struct SurfaceFit {
 [[nodiscard]] Result<SurfaceFit>
 InterpolateSurface(std::span<const Point3> grid, std::size_t countU, std::size_t countV,
                    int degreeU, int degreeV,
+                   Parametrization parametrization = Parametrization::ChordLength);
+
+/// The surface of degrees (degreeU, degreeV) with poleCountU x poleCountV
+/// poles closest to the grid in the least-squares sense (section 9.4.3):
+/// parameters as for InterpolateSurface, knots spread as for
+/// FitLeastSquares, and the poles from a least-squares curve fit of every
+/// grid line along u followed by one of every resulting line along v, each
+/// with its ends fixed. Because the grid shares its parameters along each
+/// direction, the two stages give the exact least-squares minimiser over the
+/// interior poles once the boundary poles are fixed, and the boundary poles
+/// are those of the least-squares fits of the four boundary lines, so the
+/// corners are exact. A direction with as many poles as grid lines is
+/// interpolated instead, as Approximate does for curves. InvalidInput unless
+/// the grid suits InterpolateSurface and each pole count is between its
+/// degree + 1 and its grid count.
+[[nodiscard]] Result<SurfaceFit>
+FitSurfaceLeastSquares(std::span<const Point3> grid, std::size_t countU, std::size_t countV,
+                       int degreeU, int degreeV, std::size_t poleCountU, std::size_t poleCountV,
+                       Parametrization parametrization = Parametrization::ChordLength);
+
+/// The least-squares surface with the fewest poles among those tried whose
+/// deviation at the grid is within the budget. The pole count along u is
+/// searched first, by doubling from degreeU + 1 and then bisection as
+/// Approximate does for curves, with every line along v interpolated so that
+/// only u limits the fit; then the count along v with that u count. The
+/// search stops at the first passing count of each direction among those
+/// tried, so a surface that is simple along one direction gets few poles
+/// there whatever the other needs. InvalidInput for an invalid grid or a
+/// budget that is not finite and positive; ToleranceExceeded, with the
+/// budget and the best deviation reached, if even the interpolant misses it.
+[[nodiscard]] Result<SurfaceFit>
+ApproximateSurface(std::span<const Point3> grid, std::size_t countU, std::size_t countV,
+                   int degreeU, int degreeV, ApproximationBudget budget,
                    Parametrization parametrization = Parametrization::ChordLength);
 
 } // namespace Stereon
