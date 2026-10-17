@@ -152,11 +152,11 @@ Per [ADR-0035](docs/adr/0035-debug-viewer.md): objects reach the viewer as `.stn
 
 All of the following must pass in CI before Phase 1 starts:
 
-- [ ] Predicates pass the adversarial suite with zero inconsistent results
-- [ ] Type-erased `Curve` with `VisitBuiltin` within 10% of direct calls; pure virtual fallback within 2×
+- [x] Predicates pass the adversarial suite with zero inconsistent results. 20 000 cases per predicate in every CI run; the 10⁶ run is `stereon_robust_tests "[exhaustive]"` (§5)
+- [ ] Type-erased `Curve` with `VisitBuiltin` within 10% of direct calls; pure virtual fallback within 2×. `VisitBuiltin` meets it; the fallback does not for a line (2.6×, 1.03× for a circle; `bench/GeometryBench.cpp`, §6)
 - [ ] ADR-0004 prototype: adjacency ≥ 5× faster than OCCT, memory per face < 50% of OCCT
 - [ ] Release-build handles are 4 bytes; seeded-fault suite caught 100% in debug builds
-- [ ] Pretty-printers pass their scripted GDB and LLDB tests
+- [x] Pretty-printers pass their scripted GDB and LLDB tests. Linux Debug CI (`tests/debugger/check_printers.py`); skipped on macOS and MSVC, whose debug information the debuggers cannot read. Rerun when handles resolve to entities (§8)
 - [ ] Handle design decided (index throughout, or hybrid) and recorded in ADR-0004
 - [ ] Output identical for 1, 2, 8 and 32 threads
 - [ ] All blocking CI jobs green on Linux, Windows and macOS
