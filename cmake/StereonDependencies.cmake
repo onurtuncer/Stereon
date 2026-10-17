@@ -7,7 +7,10 @@
 
 # Third-party dependencies, fetched at configure time and pinned to a release
 # tag (or a commit where the project has no releases). Every dependency must
-# have an MPL-2.0-compatible licence (ADR-0008); record it next to its entry.
+# have an MPL-2.0-compatible licence (ADR-0008), recorded above its entry as
+# "# Dependency licence: <SPDX expression>"; tools/check_dependencies.py
+# checks the expression against the allow-list and, in CTest, against the
+# licence file actually fetched.
 # Dependencies are SYSTEM, so their headers do not trip Stereon's warnings.
 
 include_guard(GLOBAL)
@@ -19,11 +22,12 @@ include(FetchContent)
 
 find_package(Threads REQUIRED)
 
-# stdexec: Apache-2.0 WITH LLVM-exception. Header-only. Its own CMake build
+# stdexec. Header-only. Its own CMake build
 # downloads rapids-cmake at configure time, so only the sources are fetched
 # (SOURCE_SUBDIR points at a directory without a CMakeLists.txt) and the
 # target is defined here. The parallel scheduler's default backend is
 # compiled inline, so nothing needs linking besides threads.
+# Dependency licence: Apache-2.0 WITH LLVM-exception
 FetchContent_Declare(stdexec
     GIT_REPOSITORY https://github.com/NVIDIA/stdexec.git
     GIT_TAG        nvhpc-26.05
@@ -36,7 +40,8 @@ target_include_directories(stereon_stdexec SYSTEM INTERFACE "${stdexec_SOURCE_DI
 target_compile_definitions(stereon_stdexec INTERFACE STDEXEC_PARALLEL_SCHEDULER_HEADER_ONLY)
 target_link_libraries(stereon_stdexec INTERFACE Threads::Threads)
 
-# xsimd: BSD-3-Clause. Header-only.
+# xsimd. Header-only.
+# Dependency licence: BSD-3-Clause
 FetchContent_Declare(xsimd
     GIT_REPOSITORY https://github.com/xtensor-stack/xsimd.git
     GIT_TAG        14.3.0
@@ -47,7 +52,8 @@ FetchContent_MakeAvailable(xsimd)
 # --- Tests -------------------------------------------------------------------
 
 if(STEREON_BUILD_TESTS)
-    # Catch2: BSL-1.0
+    # Catch2.
+    # Dependency licence: BSL-1.0
     FetchContent_Declare(Catch2
         GIT_REPOSITORY https://github.com/catchorg/Catch2.git
         GIT_TAG        v3.16.1
@@ -57,12 +63,13 @@ if(STEREON_BUILD_TESTS)
     FetchContent_MakeAvailable(Catch2)
     list(APPEND CMAKE_MODULE_PATH "${catch2_SOURCE_DIR}/extras")
 
-    # RapidCheck: BSD-2-Clause. No release tags upstream, so a commit is pinned.
+    # RapidCheck. No release tags upstream, so a commit is pinned.
     # Its RC_ENABLE_CATCH switch also builds a bundled Catch 2.x that clashes
     # with the Catch2 target above, so the header-only Catch adapter (rc::prop)
     # is defined here instead, and the bundled submodules are not cloned.
     set(RC_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
     set(RC_ENABLE_EXAMPLES OFF CACHE BOOL "" FORCE)
+    # Dependency licence: BSD-2-Clause
     FetchContent_Declare(rapidcheck
         GIT_REPOSITORY https://github.com/emil-e/rapidcheck.git
         GIT_TAG        2c3c4365aca21ef4e612768fdc95b1ce8b39a651
@@ -78,12 +85,13 @@ endif()
 # --- Benchmarks --------------------------------------------------------------
 
 if(STEREON_BUILD_BENCH)
-    # Google Benchmark: Apache-2.0
+    # Google Benchmark.
     set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
     set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "" FORCE)
     set(BENCHMARK_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
     set(BENCHMARK_INSTALL_DOCS OFF CACHE BOOL "" FORCE)
     set(BENCHMARK_ENABLE_WERROR OFF CACHE BOOL "" FORCE)
+    # Dependency licence: Apache-2.0
     FetchContent_Declare(benchmark
         GIT_REPOSITORY https://github.com/google/benchmark.git
         GIT_TAG        v1.9.5
@@ -96,7 +104,8 @@ endif()
 
 if(STEREON_BUILD_PYTHON)
     find_package(Python 3.11 REQUIRED COMPONENTS Interpreter Development.Module)
-    # nanobind: BSD-3-Clause
+    # nanobind.
+    # Dependency licence: BSD-3-Clause
     FetchContent_Declare(nanobind
         GIT_REPOSITORY https://github.com/wjakob/nanobind.git
         GIT_TAG        v3.1.0
