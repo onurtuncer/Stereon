@@ -95,8 +95,16 @@ public:
     [[nodiscard]] constexpr std::uint32_t GetIndex() const noexcept { return m_Index; }
     [[nodiscard]] constexpr bool IsValid() const noexcept { return m_Index != Invalid; }
 
-    constexpr bool operator==(const GeometryRef&) const = default;
-    constexpr std::strong_ordering operator<=>(const GeometryRef&) const = default;
+    // Written out, as Id's are: MSVC cannot default <=> with a declared
+    // return type in a module interface (C3774 on std::partial_ordering).
+    constexpr bool operator==(const GeometryRef& other) const noexcept
+    {
+        return m_Index == other.m_Index;
+    }
+    constexpr std::strong_ordering operator<=>(const GeometryRef& other) const noexcept
+    {
+        return m_Index <=> other.m_Index;
+    }
 
 private:
     std::uint32_t m_Index = Invalid;

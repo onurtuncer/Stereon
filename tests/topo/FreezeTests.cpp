@@ -32,6 +32,21 @@ TEST_CASE("Freeze certifies the snapshot it makes", "[topo][freeze]")
     const Shape shape = MakeBox().Freeze();
     REQUIRE_FALSE(shape.IsEmpty());
     const Stereon::ValidationCertificate& certificate = shape.GetSnapshot()->GetCertificate();
+    // CI probe: the Linux GCC jobs read a certificate the test TU lays out
+    // differently from the unit that wrote it. Shown only on failure.
+    using Stereon::ValidationCertificate;
+    const char* snapshotBytes = reinterpret_cast<const char*>(shape.GetSnapshot().get());
+    INFO("sizeof(ValidationCertificate) "
+         << sizeof(ValidationCertificate) << ", offsets "
+         << offsetof(ValidationCertificate, ValidatorVersion) << '/'
+         << offsetof(ValidationCertificate, Invariants) << '/'
+         << offsetof(ValidationCertificate, Snapshot) << "; sizeof(TopologyTables) "
+         << sizeof(Stereon::Detail::TopologyTables) << ", sizeof(TopologySnapshot) "
+         << sizeof(Stereon::TopologySnapshot) << ", certificate at snapshot+"
+         << (reinterpret_cast<const char*>(&certificate) - snapshotBytes) << "; raw: version "
+         << certificate.ValidatorVersion << ", invariants size " << certificate.Invariants.size()
+         << " data " << static_cast<const void*>(certificate.Invariants.data()) << ", snapshot "
+         << certificate.Snapshot << ", source builder " << shape.GetSnapshot()->GetSourceBuilder());
     REQUIRE(certificate.ValidatorVersion == Stereon::Detail::StructuralValidatorVersion);
     REQUIRE(certificate.Invariants == "Structural S01-S15");
     REQUIRE(certificate.Snapshot != 0);
