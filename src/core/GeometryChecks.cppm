@@ -53,6 +53,11 @@ export namespace Stereon::Detail {
 /// InvalidInput unless x is finite and greater than zero.
 [[nodiscard]] Result<void> CheckPositive(double x, std::string_view what, std::string_view where);
 
+/// InvalidInput unless x is finite and not negative: a tolerance, which may
+/// be zero.
+[[nodiscard]] Result<void> CheckNonNegative(double x, std::string_view what,
+                                            std::string_view where);
+
 /// InvalidInput unless x and y are finite unit vectors at right angles, each
 /// within FrameAllowance: |x.x - 1|, |y.y - 1| and |x.y| at most the
 /// allowance.

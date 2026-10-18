@@ -92,16 +92,16 @@ See the [roadmap and versioning plan](docs/planning/roadmap-and-versioning.md) f
 
 ## 7. Topology prototype (weeks 6–10)
 
-- [ ] SoA stores for vertex, edge, coedge (with radial ring), loop, face, shell, solid, following Golovanov's logical entity model (ADR-0004)
-- [ ] Edge record per ADR-0009: curve kind (`Intersection`, `Exact`, `Trim`, `Boundary`, `Spatial`, `Degenerate`), tolerance, stored primary coedge, own or cached 3D curve slot with certificate; pcurves on coedges on a shared parameter
+- [x] SoA stores for vertex, edge, coedge (with radial ring), loop, face, shell, solid, following Golovanov's logical entity model (ADR-0004). `Stereon.Topo:Records`: one `PagedArena` record table per kind with the slot state in the record; splitting records into per-field arrays is left to the ADR-0004 benchmark
+- [ ] Edge record per ADR-0009: curve kind (`Intersection`, `Exact`, `Trim`, `Boundary`, `Spatial`, `Degenerate`), tolerance, stored primary coedge, own or cached 3D curve slot with certificate; pcurves on coedges on a shared parameter. Done except the cached 3D curve and its certificate
 - [ ] Cache invalidation of the 3D edge curve when a pcurve changes (stub is enough for Phase 0)
-- [ ] `ShapeBuilder` → `Freeze()` → immutable `Shape` with stable indices and alive bitsets; separate `Compact()` returning the old→new remap table (ADR-0004)
-- [ ] Adjacency views: `FacesOf(edge)`, `EdgesOf(vertex)`, loop walks
-- [ ] `Structural`-level validity checker with rule IDs and a `ValidityReport`, naming offending entities with `Describe()` (ADR-0018); `Geometric` level once edge certificates exist
+- [ ] `ShapeBuilder` → `Freeze()` → immutable `Shape` with stable indices and alive bitsets; separate `Compact()` returning the old→new remap table (ADR-0004). `Freeze()` certifies a `TopologySnapshot` (ADR-0038) and keeps every index; `Compact()`, deletion and builders opened on an existing `Shape` are next
+- [ ] Adjacency views: `FacesOf(edge)`, `EdgesOf(vertex)`, loop walks. `AllEntities`, `LoopsOf`, `CoedgesOf`, `RadialCoedgesOf`, `FacesOf(shell)` and `ShellsOf` ranges (ADR-0036); the distinct-adjacency queries need the maintained vertex-incidence index
+- [x] `Structural`-level validity checker with rule IDs and a `ValidityReport`, naming offending entities with `Describe()` (ADR-0018); `Geometric` level once edge certificates exist. Rules S01–S15, bounded walks over the raw tables; the `Geometric` level is still to come
 - [ ] `OperationResult` (shape, history, tolerance changes, warnings) as the return type of shape-producing operations (ADR-0006)
-- [ ] `Describe(shape, handle)` for every entity kind, used in logs, contract messages and checker reports
+- [x] `Describe(shape, handle)` for every entity kind, used in logs, contract messages and checker reports
 - [ ] Debug builds run the validity checker after every public operation (ADR-0004 safeguards)
-- [ ] Build a box (`Exact` edges) and a cylinder (`Exact` + `Boundary`/seam edges) by hand as test bodies
+- [x] Build a box (`Exact` edges) and a cylinder (`Exact` + `Boundary`/seam edges) by hand as test bodies. `tests/topo/Bodies.hpp`, with prisms, sheets, a holed face, a non-manifold fan, a wire and a degenerate edge
 
 ## 8. Debug viewer v0 (weeks 5–9)
 
