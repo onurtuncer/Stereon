@@ -310,7 +310,9 @@ static_assert(sizeof(OrientedCoedgeId) == sizeof(CoedgeId));
 
 } // namespace Stereon
 
-namespace Stereon::Detail {
+// Exported for the topology store, whose frozen tables check handles the way
+// GenerationTable does and draw their store IDs from the same counter.
+export namespace Stereon::Detail {
 
 /// What a failed handle check knows; HandleCheckFailed() turns it into the
 /// report of ADR-0004.
