@@ -176,9 +176,6 @@ private:
 
 export namespace Stereon::Detail {
 
-/// The version recorded in every ValidationCertificate.
-inline constexpr std::uint32_t StructuralValidatorVersion = 1;
-
 /// The independent structural validator (ADR-0018, ADR-0038): its own
 /// bounded walks over the raw tables, checking every link before following
 /// it, so it terminates and reads nothing out of range on any input.

@@ -373,14 +373,9 @@ Result<Shape> Freeze(ShapeBuilder&& builder)
         return Fail(ErrorCode::InvalidInput,
                     "Freeze: the topology is not structurally valid:\n" + report.ToText());
     }
-    const ValidationCertificate certificate{
-        .ValidatorVersion = Detail::StructuralValidatorVersion,
-        .Invariants = "Structural S01-S15",
-        .Snapshot = Detail::NextStoreId(),
-    };
-    auto snapshot =
-        std::make_shared<const TopologySnapshot>(Detail::FreezeKey{}, std::move(consumed.m_Tables),
-                                                 certificate, consumed.m_Token.GetValue());
+    auto snapshot = std::make_shared<const TopologySnapshot>(
+        Detail::FreezeKey{}, std::move(consumed.m_Tables), Detail::NextStoreId(),
+        consumed.m_Token.GetValue());
     consumed.m_Token = BuilderToken{};
     return Shape(Detail::FreezeKey{}, std::move(snapshot));
 }

@@ -58,13 +58,20 @@ class FreezeKey {
 void ShapeHandleViolation(EntityKind kind, std::uint32_t index, std::uint32_t generation,
                           StoreId store, StoreId expectedStore, std::uint32_t size, bool alive);
 
+/// The version recorded in every ValidationCertificate: incremented
+/// whenever the structural rules change.
+inline constexpr std::uint32_t StructuralValidatorVersion = 1;
+/// The rule set the structural validator runs.
+inline constexpr std::string_view StructuralInvariants = "Structural S01-S15";
+
 } // namespace Stereon::Detail
 
 export namespace Stereon {
 
 /// What Freeze() proved about a snapshot (ADR-0038): which validator, which
-/// invariants, which snapshot. It is made with the snapshot and never
-/// serialised; a deserialised store is validated again.
+/// invariants, which snapshot. A value the snapshot makes on request from
+/// what it stores; never serialised, since a deserialised store is validated
+/// again.
 struct ValidationCertificate {
     /// Incremented whenever the structural rules change.
     std::uint32_t ValidatorVersion = 0;
@@ -74,24 +81,32 @@ struct ValidationCertificate {
     StoreId Snapshot = 0;
 };
 
-/// The immutable topology of one frozen Shape: its tables, its certificate
-/// and its store ID, which checked builds stamp on every handle it gives
-/// out. Shared, never copied, by the Shape and every range over it.
+/// The immutable topology of one frozen Shape: its tables and its store ID,
+/// which checked builds stamp on every handle it gives out. Shared, never
+/// copied, by the Shape and every range over it.
+///
+/// Beside the tables it keeps two integers and builds its certificate from
+/// them on request. On the Linux GCC 16.2 image, a certificate built with
+/// designated initializers in a module implementation unit and passed by
+/// value was read back with its fields scrambled by importing units
+/// (docs/toolchain/gcc16-feature-probe.md); plain scalars survive the trip.
 class TopologySnapshot {
 public:
-    TopologySnapshot(Detail::FreezeKey, Detail::TopologyTables tables,
-                     ValidationCertificate certificate, const StoreId sourceBuilder) noexcept
+    TopologySnapshot(Detail::FreezeKey, Detail::TopologyTables tables, const StoreId store,
+                     const StoreId sourceBuilder) noexcept
         : m_Tables(std::move(tables))
-        , m_Certificate(certificate)
+        , m_Store(store)
         , m_SourceBuilder(sourceBuilder)
     {}
 
     [[nodiscard]] const Detail::TopologyTables& GetTables() const noexcept { return m_Tables; }
-    [[nodiscard]] const ValidationCertificate& GetCertificate() const noexcept
+    [[nodiscard]] ValidationCertificate GetCertificate() const noexcept
     {
-        return m_Certificate;
+        return {.ValidatorVersion = Detail::StructuralValidatorVersion,
+                .Invariants = Detail::StructuralInvariants,
+                .Snapshot = m_Store};
     }
-    [[nodiscard]] StoreId GetStore() const noexcept { return m_Certificate.Snapshot; }
+    [[nodiscard]] StoreId GetStore() const noexcept { return m_Store; }
     /// The token of the builder Freeze() consumed: the store its handles
     /// carry in checked builds.
     [[nodiscard]] StoreId GetSourceBuilder() const noexcept { return m_SourceBuilder; }
@@ -126,7 +141,7 @@ public:
 
 private:
     Detail::TopologyTables m_Tables;
-    ValidationCertificate m_Certificate;
+    StoreId m_Store = 0;
     StoreId m_SourceBuilder = 0;
 };
 
