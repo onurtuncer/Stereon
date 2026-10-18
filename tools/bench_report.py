@@ -152,7 +152,10 @@ def per_item_ns(entry: dict, key: str) -> float:
 
 
 def read_rows(results: dict) -> list[Row]:
-    """Pair the repetitions of every Stereon benchmark with its OCCT twin, in run order."""
+    """Pair the repetitions of every Stereon benchmark with its OCCT twin.
+
+    Rows come back sorted by key, so the report reads by benchmark ID and two
+    runs diff line by line, whatever order the interleaving ran them in."""
     rows: dict[str, Row] = {}
     for entry in results.get("benchmarks", []):
         # With repetitions the file holds every repetition and the aggregates;
@@ -171,7 +174,7 @@ def read_rows(results: dict) -> list[Row]:
         for name, value in entry.items():
             if name.endswith("_mm") and isinstance(value, (int, float)):
                 side.counters[name] = float(value)
-    return list(rows.values())
+    return [rows[key] for key in sorted(rows)]
 
 
 def read_machine(text: str) -> dict[str, str]:
@@ -325,6 +328,7 @@ def self_test() -> int:
         _entry("Unpaired/thing", 0, 10, None),
     ]
     rows = read_rows({"benchmarks": benchmarks})
+    assert [row.key for row in rows] == sorted(row.key for row in rows), "rows are sorted by key"
     by_key = {row.key: row for row in rows}
 
     cubic = by_key["B1.1/CurveD0/cubic"]
