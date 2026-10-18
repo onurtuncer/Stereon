@@ -24,4 +24,11 @@ if(STEREON_WITH_OCCT)
         PRIVATE stereon::surface stereon_options benchmark::benchmark_main
                 TKernel TKMath TKG3d TKGeomBase TKGeomAlgo)
     stereon_anchor_contracts(stereon_occt_bench)
+    # GCC's -Wnull-dereference fires inside OCCT's NCollection_Array1 accessors
+    # once they are inlined at -O3, where -isystem does not reach, as it does
+    # in stdexec's queue (stereon_exec_sources()); with -Werror that stops the
+    # reference run's build.
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        set_property(SOURCE occt/OcctBench.cpp APPEND PROPERTY COMPILE_OPTIONS -Wno-null-dereference)
+    endif()
 endif()

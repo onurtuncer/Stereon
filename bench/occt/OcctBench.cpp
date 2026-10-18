@@ -472,7 +472,10 @@ void OcctInterpolation(benchmark::State& state)
     for (auto _ : state) {
         GeomAPI_Interpolate interpolate(occtPoints, false, 1e-7);
         interpolate.Perform();
-        benchmark::DoNotOptimize(interpolate.Curve());
+        // A named handle: DoNotOptimize's const& overload is deprecated for
+        // types that are not trivially copyable, and -Werror stops the build.
+        auto curve = interpolate.Curve();
+        benchmark::DoNotOptimize(curve);
     }
     Items(state, points.size());
 }
@@ -496,7 +499,8 @@ void OcctApproximation(benchmark::State& state)
     }
     for (auto _ : state) {
         GeomAPI_PointsToBSpline approximate(occtPoints, 3, 3, GeomAbs_C2, 1e-3);
-        benchmark::DoNotOptimize(approximate.Curve());
+        auto curve = approximate.Curve();
+        benchmark::DoNotOptimize(curve);
     }
     Items(state, points.size());
 }
