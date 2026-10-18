@@ -32,9 +32,12 @@
 #include <Geom_Parabola.hxx>
 #include <Geom_Plane.hxx>
 #include <Geom_SphericalSurface.hxx>
+#include <Geom_SurfaceOfLinearExtrusion.hxx>
+#include <Geom_SurfaceOfRevolution.hxx>
 #include <Geom_ToroidalSurface.hxx>
 #include <NCollection_Array1.hxx>
 #include <NCollection_Array2.hxx>
+#include <gp_Ax1.hxx>
 #include <gp_Ax2.hxx>
 #include <gp_Ax3.hxx>
 #include <gp_Dir.hxx>
@@ -532,5 +535,40 @@ TEST_CASE("the erased wrappers agree with OCCT too", "[occt][erased]")
         const double t = Sample(i);
         REQUIRE(Agree(Eval(circle, t), occt->Value(t)));
         REQUIRE(Agree(Eval(cylinder, Point2{t, t}), occtCylinder->Value(t, t)));
+    }
+}
+
+TEST_CASE("swept surfaces agree with OCCT construction evaluators", "[occt][surface][swept]")
+{
+    const BSplineCurve profile{
+        2, {0, 0, 0, 1, 1, 1}, {{2, 0, -1}, {3, 1, 1}, {2, 0, 3}}, {1, 2, 1}};
+    const Vec3 direction = Normalized(Vec3{1, -2, 3});
+    const auto extruded =
+        Stereon::MakeExtrusionSurface(profile, direction, Stereon::Interval{-2, 3});
+    REQUIRE(extruded.has_value());
+    const Geom_SurfaceOfLinearExtrusion occtExtrusion(
+        ToOcct(profile), gp_Dir(direction.X, direction.Y, direction.Z));
+    for (const double u : {0.0, 0.17, 0.6, 1.0}) {
+        for (const double v : {-2.0, 0.3, 3.0}) {
+            REQUIRE(Agree(Eval(*extruded, Point2{u, v}), occtExtrusion.Value(u, v)));
+        }
+    }
+    const Point3 origin{1, -2, 0.5};
+    const Vec3 axis{2, -1, 3};
+    const double start = 0.2;
+    const double span = 1.0;
+    const auto revolved = Stereon::MakeRevolutionSurface(profile, origin, axis,
+                                                         Stereon::Interval{start, start + span});
+    REQUIRE(revolved.has_value());
+    const Geom_SurfaceOfRevolution occtRevolution(
+        ToOcct(profile),
+        gp_Ax1(gp_Pnt(origin.X, origin.Y, origin.Z), gp_Dir(axis.X, axis.Y, axis.Z)));
+    for (const double t : {0.0, 0.13, 0.5, 0.79, 1.0}) {
+        const double angle =
+            start + 2.0 * std::atan2(t * std::sin(span / 2.0), 1.0 - t + t * std::cos(span / 2.0));
+        for (const double v : {0.0, 0.17, 0.6, 1.0}) {
+            REQUIRE(Agree(Eval(*revolved, Point2{start + t * span, v}),
+                          occtRevolution.Value(angle, v)));
+        }
     }
 }

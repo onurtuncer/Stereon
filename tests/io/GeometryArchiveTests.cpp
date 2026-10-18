@@ -433,3 +433,23 @@ TEST_CASE("regenerate the committed version-1 file", "[.regenerate]")
 {
     REQUIRE(Stereon::SaveGeometry(GoldenFile(), EveryType()).has_value());
 }
+
+TEST_CASE("swept NURBS surfaces survive the geometry archive", "[io][swept]")
+{
+    const BSplineCurve profile{2, {0, 0, 0, 1, 1, 1}, {{2, 0, 0}, {3, 1, 1}, {2, 0, 2}}, {1, 2, 1}};
+    const auto extruded =
+        Stereon::MakeExtrusionSurface(profile, Vec3{0, 1, 2}, Stereon::Interval{-1, 2});
+    const auto revolved = Stereon::MakeRevolutionSurface(
+        profile, Point3{}, Vec3{0, 0, 1}, Stereon::Interval{0, Stereon::CirclePeriod});
+    REQUIRE(extruded.has_value());
+    REQUIRE(revolved.has_value());
+    GeometryArchive archive;
+    archive.Surfaces = {Surface{*extruded}, Surface{*revolved}};
+    const auto bytes = WriteGeometry(archive);
+    REQUIRE(bytes.has_value());
+    const auto loaded = ReadGeometry(*bytes);
+    REQUIRE(loaded.has_value());
+    const auto writtenAgain = WriteGeometry(loaded->Archive);
+    REQUIRE(writtenAgain.has_value());
+    REQUIRE(*writtenAgain == *bytes);
+}

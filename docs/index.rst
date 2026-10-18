@@ -42,6 +42,7 @@ Stereon
    analytic
    nurbs
    trimmed
+   swept
    interchange
    fitting
    properties
