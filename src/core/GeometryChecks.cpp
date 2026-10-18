@@ -103,6 +103,15 @@ Result<void> CheckPositive(const double x, const std::string_view what,
     return {};
 }
 
+Result<void> CheckNonNegative(const double x, const std::string_view what,
+                              const std::string_view where)
+{
+    if (!std::isfinite(x) || x < 0.0) {
+        return Invalid(where, what, "must be finite and not negative");
+    }
+    return {};
+}
+
 Result<void> CheckOrthonormal(const Vec2& x, const Vec2& y, const std::string_view where)
 {
     if (!AllFinite({x.X, x.Y, y.X, y.Y})) {

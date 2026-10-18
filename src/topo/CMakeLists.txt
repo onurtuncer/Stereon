@@ -7,6 +7,15 @@
 
 stereon_add_library(topo
     MODULES
+        Builder.cppm
+        Records.cppm
+        Report.cppm
+        Shape.cppm
         Topo.cppm
+    SOURCES
+        Builder.cpp
+        Describe.cpp
+        Shape.cpp
+        Validate.cpp
     DEPENDS
         intersect)
