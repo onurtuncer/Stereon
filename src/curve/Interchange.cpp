@@ -170,6 +170,31 @@ Result<Curve2d> ParabolaFrom(const double l1, const Vec2& e1, const Vec2& e2, co
     return Curve2d(parabola);
 }
 
+Result<Curve2d> EllipseFrom(const Point2& center, const Vec2& e2, const double l1, const double l2,
+                            const double shifted)
+{
+    if ((shifted > 0.0) == (l1 > 0.0)) {
+        return NotACurve("no point");
+    }
+    // |l1| >= |l2|, so the radius along e2 is the larger.
+    const double major = std::sqrt(-shifted / l2);
+    const double minor = std::sqrt(-shifted / l1);
+    STEREON_TRY(auto result, MakeEllipse(center, major, minor, e2, Perpendicular(e2)));
+    return Curve2d(result);
+}
+
+Result<void> CheckImplicitConic(const ImplicitConic& conic, const std::optional<Point2> branch)
+{
+    constexpr std::string_view where = "ConicFromImplicit";
+    for (const double c : {conic.A, conic.B, conic.C, conic.D, conic.E, conic.F}) {
+        STEREON_TRY_VOID(Detail::CheckFinite(c, "a coefficient", where));
+    }
+    if (branch) {
+        STEREON_TRY_VOID(Detail::CheckFinite(*branch, "the branch point", where));
+    }
+    return {};
+}
+
 } // namespace
 
 Result<PiecewiseConversion>
@@ -199,13 +224,7 @@ double ImplicitResidual(const ImplicitConic& k, const Point2& p)
 
 Result<Curve2d> ConicFromImplicit(const ImplicitConic& conic, const std::optional<Point2> branch)
 {
-    constexpr std::string_view where = "ConicFromImplicit";
-    for (const double c : {conic.A, conic.B, conic.C, conic.D, conic.E, conic.F}) {
-        STEREON_TRY_VOID(Detail::CheckFinite(c, "a coefficient", where));
-    }
-    if (branch) {
-        STEREON_TRY_VOID(Detail::CheckFinite(*branch, "the branch point", where));
-    }
+    STEREON_TRY_VOID(CheckImplicitConic(conic, branch));
     const double scale = Largest(conic);
     if (scale == 0.0) {
         return NotACurve("all of the plane");
@@ -254,14 +273,7 @@ Result<Curve2d> ConicFromImplicit(const ImplicitConic& conic, const std::optiona
         return NotACurve(ellipse ? "a single point" : "two crossing lines");
     }
     if (ellipse) {
-        if ((shifted > 0.0) == (l1 > 0.0)) {
-            return NotACurve("no point");
-        }
-        // |l1| >= |l2|, so the radius along e2 is the larger.
-        const double major = std::sqrt(-shifted / l2);
-        const double minor = std::sqrt(-shifted / l1);
-        STEREON_TRY(auto result, MakeEllipse(center, major, minor, e2, Perpendicular(e2)));
-        return Curve2d(result);
+        return EllipseFrom(center, e2, l1, l2, shifted);
     }
     // The transverse axis is the one along which -f' / l is positive.
     const bool alongFirst = -shifted / l1 > 0.0;
