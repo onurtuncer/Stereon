@@ -83,7 +83,7 @@ same geometry gives the same bytes on every platform (ADR-0007).
      - Each: a tag of four ASCII letters, flags (u32, bit 0 = required), the
        payload length (u64), the CRC-32 of the payload (u32), the payload
 
-Format version 1 has four chunks, all required:
+The format has four chunks, all required:
 
 - ``POLI``, the rest of the numerical policy: the angular resolution, the
   tolerance ceiling and the frame allowance under which the geometry was
@@ -99,6 +99,19 @@ Format version 1 has four chunks, all required:
 Records are named, not numbered, so adding a built-in type never changes
 what an existing name means.
 
+Format version 2 adds trimmed curves (:doc:`trimmed`) to ``CRVS`` and
+``PCRV``, named ``TrimmedCurve`` and ``TrimmedCurve2d``. The value of a
+trimmed-curve record is its basis, written as a record of the same chunk
+(name, length and value), followed by the trim: the range's ends and the
+sense, ``Lower`` and ``Upper`` (f64) and ``Reversed`` (one byte), as the
+reflection serialiser writes them. A basis may itself be a trimmed curve,
+nested at most ``MaxTrimmedNesting`` (8) deep. The writer refuses deeper
+nesting with ``NotSupported``, and the reader refuses it with
+``ParseError``, so a hostile file cannot exhaust the stack by recursion.
+The piece's NURBS form and projector are not stored: they are rebuilt from
+the basis on load. Version 1 is version 2 without trimmed curves, so a
+version-1 file needs no migration.
+
 Reading
 ~~~~~~~
 
@@ -113,6 +126,8 @@ ADR-0016). Everything it reads is checked, and every failure is a
 - every record's value through its type's checked factory (``MakeCircle``,
   ``MakeBSplineSurface`` and so on), so a negative radius or a bad knot
   vector in a file is caught exactly as it would be from any other source;
+  a trimmed curve goes through ``MakeTrimmedCurve`` after its basis, once
+  its range has been checked finite and non-empty;
 - every element count against the bytes left, before anything is allocated,
   so a hostile count cannot exhaust memory.
 
@@ -132,17 +147,22 @@ Compatibility
 ~~~~~~~~~~~~~
 
 ``tests/io/data/geometry-v1.stn`` holds one of every built-in type written
-in format version 1. A test reads it and requires the kernel to write the
-same bytes back, so every later version keeps reading version-1 files
-exactly. When the format changes, the version goes up, a migration reads
-the old one, and the old file stays in the repository: it is regenerated
-only for a new format version, never to make a test pass.
+in format version 1, and ``geometry-v2.stn`` the same with trimmed curves
+added, among them an arc across a circle's seam, a reversed piece of a
+B-spline and a trimmed curve of a trimmed curve. A test reads each and
+requires the kernel to write the same bytes back, apart from the versions
+in the header, so every later version keeps reading the files of every
+earlier one exactly. When the format changes, the version goes up, a
+migration reads the old one if it needs one, and the old files stay in the
+repository unchanged: only the current version's file is generated, once,
+when that version is new, never to make a test pass.
 
 Limits
 ~~~~~~
 
-- Only the built-in types have records. Saving a user's curve or surface
-  type fails with ``NotSupported``; a registration mechanism for user types
+- Only the built-in types and trimmed curves of them have records. Saving
+  a user's curve or surface type, or a trimmed curve of one, fails with
+  ``NotSupported``; a registration mechanism for user types
   belongs with the plug-in work of ADR-0003.
 - Files are read whole into memory. The chunked layout allows streaming
   and optional zstd compression (ADR-0012); neither is implemented yet.

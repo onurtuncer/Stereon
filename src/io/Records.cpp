@@ -41,7 +41,8 @@ std::string RecordJson(const T& value)
     return ToJson(value);
 }
 
-// Every built-in type, in space and in the plane, and every surface.
+// Every built-in type, in space and in the plane, every surface, and the
+// trim of a trimmed curve.
 #define STEREON_ARCHIVE_RECORD(T)                                                                  \
     template std::vector<std::byte> RecordBytes<T>(const T&);                                      \
     template Result<T> RecordValue<T>(std::span<const std::byte>);                                 \
@@ -65,6 +66,7 @@ STEREON_ARCHIVE_RECORD(Cone)
 STEREON_ARCHIVE_RECORD(Sphere)
 STEREON_ARCHIVE_RECORD(Torus)
 STEREON_ARCHIVE_RECORD(BSplineSurface)
+STEREON_ARCHIVE_RECORD(TrimRecord)
 
 #undef STEREON_ARCHIVE_RECORD
 
