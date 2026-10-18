@@ -21,8 +21,14 @@ rendered here through Breathe.
       (Core, Robust, Curve, Surface, Intersect, Topo, Build, Boolean,
       Blend, Mesh, Io) once the public API settles.
 
-   .. doxygenindex::
+   .. Breathe cannot render the ``module`` compounds Doxygen emits for the
+      C++20 module units, so the page lists the namespace rather than the
+      whole index.
+
+   .. doxygennamespace:: Stereon
       :project: Stereon
+      :members:
+      :undoc-members:
 
 .. stereon-api-end
 
