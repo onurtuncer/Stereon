@@ -17,6 +17,7 @@ stereon_add_library(surface
         Plane.cppm
         Properties.cppm
         Sphere.cppm
+        Swept.cppm
         Surface.cppm
         Torus.cppm
         Visit.cppm
@@ -26,5 +27,6 @@ stereon_add_library(surface
         Factories.cpp
         Fitting.cpp
         Surface.cpp
+        Swept.cpp
     DEPENDS
         curve)
