@@ -87,8 +87,13 @@ jobs:
           -DSTEREON_WITH_OCCT=ON -DCMAKE_PREFIX_PATH="$OCCT_PREFIX"
       - name: Build
         run: cmake --build --preset bench --target stereon_occt_bench
+      # The run's files go under the workspace: the upload step executes in
+      # the container, and GitHub maps the host path of ${{ runner.temp }}
+      # into it for the first line of a multi-line input only, so an upload
+      # from $RUNNER_TEMP found one file of three.
       - name: Record the machine and the builds
         run: |
+          mkdir -p build/reference
           {
             echo "date=$(date -u +%Y-%m-%d)"
             echo "commit=${{ github.sha }}"
@@ -101,7 +106,7 @@ jobs:
             echo "kernel=$(uname -sr)"
             echo "compiler=$(g++ --version | head -1)"
             sed 's/^/occt_/' "$OCCT_PREFIX/stereon-occt-build.txt"
-          } | tee "$RUNNER_TEMP/machine.txt"
+          } | tee build/reference/machine.txt
       - name: Run the benchmarks
         env:
           REPETITIONS: ${{ inputs.repetitions || 15 }}
@@ -112,19 +117,16 @@ jobs:
           --benchmark_enable_random_interleaving=true
           --benchmark_display_aggregates_only=true
           --benchmark_filter="${FILTER:-.}"
-          --benchmark_out="$RUNNER_TEMP/results.json" --benchmark_out_format=json
+          --benchmark_out=build/reference/results.json --benchmark_out_format=json
       - name: Render the report
         run: |
-          python3 tools/bench_report.py "$RUNNER_TEMP/results.json" \
-            --machine "$RUNNER_TEMP/machine.txt" --out "$RUNNER_TEMP/report.md"
-          cat "$RUNNER_TEMP/report.md" >> "$GITHUB_STEP_SUMMARY"
+          python3 tools/bench_report.py build/reference/results.json \
+            --machine build/reference/machine.txt --out build/reference/report.md
+          cat build/reference/report.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload the run
         uses: actions/upload-artifact@v4
         with:
           name: occt-reference-run-${{ github.sha }}
-          path: |
-            ${{ runner.temp }}/results.json
-            ${{ runner.temp }}/machine.txt
-            ${{ runner.temp }}/report.md
+          path: build/reference/
           retention-days: 90
           if-no-files-found: error
