@@ -105,6 +105,7 @@ jobs:
         env:
           STEREON_RUN_DOXYGEN: "1"
         run: |
+          mkdir -p build
           sphinx-build -T --keep-going -b html docs build/html 2>&1 | tee build/sphinx.log
           test -f docs/_build/doxygen/xml/index.xml
           # Breathe reports an XML it cannot read as a warning and leaves the
