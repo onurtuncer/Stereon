@@ -63,10 +63,22 @@ jobs:
             echo "No TikZ figures in docs/tikz; skipping LaTeX."
           fi
 
+      # Ubuntu 24.04 packages Doxygen 1.9.8, whose XML for C++20 module units
+      # is malformed ("mismatched tag" in index.xml), so Breathe rendered no
+      # API at all. A pinned release binary from doxygen/doxygen instead.
       - name: Install Doxygen and Graphviz
+        env:
+          DOXYGEN_VERSION: 1.17.0
+          DOXYGEN_SHA256: 75419ef4f446fc1c24ef12514b574e66e898ee6f527c6ae2ad84f91a905823c2
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends doxygen graphviz
+          sudo apt-get install -y -qq --no-install-recommends graphviz
+          tag="Release_${DOXYGEN_VERSION//./_}"
+          curl -sSL -o doxygen.tar.gz             "https://github.com/doxygen/doxygen/releases/download/${tag}/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz"
+          echo "${DOXYGEN_SHA256}  doxygen.tar.gz" | sha256sum -c -
+          tar -xzf doxygen.tar.gz "doxygen-${DOXYGEN_VERSION}/bin/doxygen"
+          sudo install -m 755 "doxygen-${DOXYGEN_VERSION}/bin/doxygen" /usr/local/bin/doxygen
+          rm -rf doxygen.tar.gz "doxygen-${DOXYGEN_VERSION}"
           doxygen --version
 
       - name: Install LaTeX
@@ -93,8 +105,14 @@ jobs:
         env:
           STEREON_RUN_DOXYGEN: "1"
         run: |
-          sphinx-build -T --keep-going -b html docs build/html
+          sphinx-build -T --keep-going -b html docs build/html 2>&1 | tee build/sphinx.log
           test -f docs/_build/doxygen/xml/index.xml
+          # Breathe reports an XML it cannot read as a warning and leaves the
+          # API page empty; the manual is not built until the page has content.
+          if grep -q "Unable to parse xml" build/sphinx.log; then
+            echo "::error::Breathe could not read the Doxygen XML"; exit 1
+          fi
+          grep -q "PagedArena" build/html/api.html
           echo "Pages built: $(find build/html -name '*.html' | wc -l)"
 
       - name: Upload Pages artifact
