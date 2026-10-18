@@ -22,5 +22,6 @@ export import :Fitting;
 export import :Plane;
 export import :Properties;
 export import :Sphere;
+export import :Swept;
 export import :Torus;
 export import :Visit;

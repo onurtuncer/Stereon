@@ -2,6 +2,7 @@
 
 - **Status:** Proposed
 - **Date:** 2026-10-13
+- **Revised:** 2026-10-17 (topology traversal contract cross-reference)
 - **Owner:** Onur Tuncer
 - **Phase:** 0 (contract); implementation staged with topology work
 - **Related:** ADR-0004, ADR-0005, ADR-0006, ADR-0009, ADR-0011, ADR-0016, ADR-0018, ADR-0025, ADR-0026
@@ -156,3 +157,7 @@ Tests are implemented with the corresponding operators. These are acceptance req
 - [ADR-0026: Specify Modelling Operations by Contracts](0026-modelling-operations-by-contracts.md)
 
 This proposal supplements the existing decisions and supersedes none. It specifies a controlled mutation boundary without selecting a complete operator catalogue, changing the storage representation, or accepting the related proposals.
+
+## Related traversal contracts
+
+[ADR-0038](0038-topology-traversal-lifetime-and-validation.md) specifies BuilderToken and topology-epoch invalidation before traversal-visible mutation, including rollback and failed edits. Entity generations alone do not validate a saved cursor.

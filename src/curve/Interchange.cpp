@@ -170,44 +170,29 @@ Result<Curve2d> ParabolaFrom(const double l1, const Vec2& e1, const Vec2& e2, co
     return Curve2d(parabola);
 }
 
-/// The ellipse or hyperbola of l1 x'^2 + l2 y'^2 + g1 x' + g2 y' + f = 0 in
-/// the eigenframe (e1, e2), with |l1| >= |l2| > 0.
-Result<Curve2d> CentralConic(const double l1, const double l2, const Vec2& e1, const Vec2& e2,
-                             const double g1, const double g2, const double f,
-                             const std::optional<Point2>& branch)
+Result<Curve2d> EllipseFrom(const Point2& center, const Vec2& e2, const double l1, const double l2,
+                            const double shifted)
 {
-    // l1 x''^2 + l2 y''^2 + f' = 0 about the centre.
-    const double cx = -g1 / (2.0 * l1);
-    const double cy = -g2 / (2.0 * l2);
-    const Point2 center = Point2{} + cx * e1 + cy * e2;
-    const double shifted = f + 0.5 * (g1 * cx + g2 * cy);
-    const double cancelled =
-        std::max({std::abs(f), std::abs(0.5 * g1 * cx), std::abs(0.5 * g2 * cy)});
-    const bool ellipse = (l1 > 0.0) == (l2 > 0.0);
-    if (std::abs(shifted) <= ConicAllowance * cancelled) {
-        return NotACurve(ellipse ? "a single point" : "two crossing lines");
+    if ((shifted > 0.0) == (l1 > 0.0)) {
+        return NotACurve("no point");
     }
-    if (ellipse) {
-        if ((shifted > 0.0) == (l1 > 0.0)) {
-            return NotACurve("no point");
-        }
-        // |l1| >= |l2|, so the radius along e2 is the larger.
-        const double major = std::sqrt(-shifted / l2);
-        const double minor = std::sqrt(-shifted / l1);
-        STEREON_TRY(auto result, MakeEllipse(center, major, minor, e2, Perpendicular(e2)));
-        return Curve2d(result);
-    }
-    // The transverse axis is the one along which -f' / l is positive.
-    const bool alongFirst = -shifted / l1 > 0.0;
-    const double transverse = alongFirst ? l1 : l2;
-    const double conjugate = alongFirst ? l2 : l1;
-    Vec2 x = alongFirst ? e1 : e2;
-    if (branch && Dot(*branch - center, x) < 0.0) {
-        x = -x;
-    }
-    STEREON_TRY(auto result, MakeHyperbola(center, std::sqrt(-shifted / transverse),
-                                           std::sqrt(shifted / conjugate), x, Perpendicular(x)));
+    // |l1| >= |l2|, so the radius along e2 is the larger.
+    const double major = std::sqrt(-shifted / l2);
+    const double minor = std::sqrt(-shifted / l1);
+    STEREON_TRY(auto result, MakeEllipse(center, major, minor, e2, Perpendicular(e2)));
     return Curve2d(result);
+}
+
+Result<void> CheckImplicitConic(const ImplicitConic& conic, const std::optional<Point2> branch)
+{
+    constexpr std::string_view where = "ConicFromImplicit";
+    for (const double c : {conic.A, conic.B, conic.C, conic.D, conic.E, conic.F}) {
+        STEREON_TRY_VOID(Detail::CheckFinite(c, "a coefficient", where));
+    }
+    if (branch) {
+        STEREON_TRY_VOID(Detail::CheckFinite(*branch, "the branch point", where));
+    }
+    return {};
 }
 
 } // namespace
@@ -239,13 +224,7 @@ double ImplicitResidual(const ImplicitConic& k, const Point2& p)
 
 Result<Curve2d> ConicFromImplicit(const ImplicitConic& conic, const std::optional<Point2> branch)
 {
-    constexpr std::string_view where = "ConicFromImplicit";
-    for (const double c : {conic.A, conic.B, conic.C, conic.D, conic.E, conic.F}) {
-        STEREON_TRY_VOID(Detail::CheckFinite(c, "a coefficient", where));
-    }
-    if (branch) {
-        STEREON_TRY_VOID(Detail::CheckFinite(*branch, "the branch point", where));
-    }
+    STEREON_TRY_VOID(CheckImplicitConic(conic, branch));
     const double scale = Largest(conic);
     if (scale == 0.0) {
         return NotACurve("all of the plane");
@@ -281,7 +260,32 @@ Result<Curve2d> ConicFromImplicit(const ImplicitConic& conic, const std::optiona
     if (std::abs(l2) <= ConicAllowance * largest) {
         return ParabolaFrom(l1, e1, e2, g1, g2, f);
     }
-    return CentralConic(l1, l2, e1, e2, g1, g2, f, branch);
+
+    // A central conic: l1 x'^2 + l2 y'^2 + f' = 0 about the centre.
+    const double cx = -g1 / (2.0 * l1);
+    const double cy = -g2 / (2.0 * l2);
+    const Point2 center = Point2{} + cx * e1 + cy * e2;
+    const double shifted = f + 0.5 * (g1 * cx + g2 * cy);
+    const double cancelled =
+        std::max({std::abs(f), std::abs(0.5 * g1 * cx), std::abs(0.5 * g2 * cy)});
+    const bool ellipse = (l1 > 0.0) == (l2 > 0.0);
+    if (std::abs(shifted) <= ConicAllowance * cancelled) {
+        return NotACurve(ellipse ? "a single point" : "two crossing lines");
+    }
+    if (ellipse) {
+        return EllipseFrom(center, e2, l1, l2, shifted);
+    }
+    // The transverse axis is the one along which -f' / l is positive.
+    const bool alongFirst = -shifted / l1 > 0.0;
+    const double transverse = alongFirst ? l1 : l2;
+    const double conjugate = alongFirst ? l2 : l1;
+    Vec2 x = alongFirst ? e1 : e2;
+    if (branch && Dot(*branch - center, x) < 0.0) {
+        x = -x;
+    }
+    STEREON_TRY(auto result, MakeHyperbola(center, std::sqrt(-shifted / transverse),
+                                           std::sqrt(shifted / conjugate), x, Perpendicular(x)));
+    return Curve2d(result);
 }
 
 } // namespace Stereon
