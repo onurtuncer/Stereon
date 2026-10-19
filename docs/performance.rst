@@ -310,11 +310,11 @@ more than twice as much and was slower than OCCT; accumulated, it is
 Results
 -------
 
-Median CPU time per item, GCC 16.2 ``-O3``, OCCT 8.0.1, Intel Core
-i5-10210U (Windows 11 laptop), single thread, 2026-10-16. The surface
-projection, interpolation and Bezier decomposition rows, whose ratios moved
-by more than 10 % between runs, are the medians of 15 repetitions with
-the two libraries' runs interleaved (``--benchmark_enable_random_interleaving``).
+The reference run of 2026-10-19 (``bench/reports/phase1-reference-2026-10-19.md``, run
+39236132501): median CPU time per item over 15 repetitions with the
+two libraries' runs interleaved, GCC 16.2 ``-O3``, OCCT 8.0.1, the
+``gcc:16.2`` container on a GitHub-hosted ``ubuntu-24.04`` runner, single
+thread. The report lists each row's spread across the repetitions.
 
 .. list-table::
    :header-rows: 1
@@ -327,106 +327,109 @@ the two libraries' runs interleaved (``--benchmark_enable_random_interleaving``)
      - :math:`\rho`
    * - B1.1
      - Curve D0, cubic, 24 poles
-     - 94 ns
-     - 314 ns
-     - 3.4
+     - 51.4 ns
+     - 84.9 ns
+     - 1.65
    * - B1.1
      - Curve D0, rational cubic
-     - 129 ns
-     - 307 ns
-     - 2.4
+     - 57.3 ns
+     - 88.3 ns
+     - 1.54
    * - B1.1
      - Curve D0, degree 7
-     - 244 ns
-     - 587 ns
-     - 2.4
+     - 94.6 ns
+     - 153 ns
+     - 1.61
    * - B1.1
      - Curve D0–D2, cubic
-     - 279 ns
-     - 322 ns
-     - 1.2
+     - 94.7 ns
+     - 98.7 ns
+     - 1.04
    * - B1.1
      - Curve D0–D2, rational cubic
-     - 214 ns
-     - 293 ns
-     - 1.4
+     - 104 ns
+     - 139 ns
+     - 1.33
    * - B1.1
      - Surface D0, bicubic 12 × 12
-     - 179 ns
-     - 384 ns
-     - 2.1
+     - 109 ns
+     - 172 ns
+     - 1.58
    * - B1.1
      - Surface D0, rational bicubic
-     - 187 ns
-     - 441 ns
-     - 2.4
+     - 115 ns
+     - 198 ns
+     - 1.73
    * - B1.1
      - Surface D0–D1, bicubic
-     - 619 ns
-     - 663 ns
-     - parity
+     - 191 ns
+     - 255 ns
+     - 1.33
    * - B1.3
      - Curve projection, rational cubic
-     - 12.9 µs
-     - 45.8 µs
-     - 3.6
+     - 5.5 µs
+     - 20.5 µs
+     - 3.7
    * - B1.3
      - Surface projection, bicubic
-     - 353 µs
-     - 312 µs
-     - 0.88
-   * - B1.4
-     - Interpolation, 1000 points, cubic
-     - 0.34 ms
-     - 0.31 ms
-     - parity
+     - 104 µs
+     - 128 µs
+     - 1.24
    * - B1.4
      - Approximation, 1000 points, 1e-3 mm
-     - 3.8 ms
-     - 141 ms
-     - 37 (not like for like)
-   * - B1.5
-     - 100 knot insertions
-     - 3.5 µs
-     - 7.5 µs
-     - 2.2
+     - 1.95 ms
+     - 36.7 ms
+     - 19
+   * - B1.4
+     - Interpolation, 1000 points, cubic
+     - 84.1 µs
+     - 113 µs
+     - 1.34
    * - B1.5
      - Bezier decomposition, 21 segments
-     - 22.9 µs
-     - 25.7 µs
-     - 1.1
-   * - B1.6
-     - Frenet frame and curvature, rational cubic
-     - 276 ns
-     - 383 ns
-     - 1.4
-   * - B1.6
-     - Principal curvatures and directions, bicubic
-     - 861 ns
-     - 938 ns
-     - 1.1
+     - 4.97 µs
+     - 7.3 µs
+     - 1.47
+   * - B1.5
+     - 100 knot insertions
+     - 88 µs
+     - 227 µs
+     - 2.6
    * - B1.6
      - Arc length of the whole curve, rational cubic
-     - 197 µs
-     - 225 µs
-     - 1.1
+     - 106 µs
+     - 112 µs
+     - 1.06
+   * - B1.6
+     - Frenet frame and curvature, rational cubic
+     - 135 ns
+     - 189 ns
+     - 1.41
    * - B1.6
      - Parameter at a given length
-     - 350 µs
-     - 583 µs
-     - 1.7
+     - 182 µs
+     - 293 µs
+     - 1.61
+   * - B1.6
+     - Principal curvatures and directions, bicubic
+     - 442 ns
+     - 409 ns
+     - 0.93
 
-Surface projection is the one row where OCCT is ahead. A correctness fix
-costs about 10 % there: the safeguards of the leaf Newton iteration
-(:doc:`nurbs`, *Surface projection*), which made a surface point project
-3.2e-3 mm away from itself in one property-test case before they existed.
-Being farther from the right answer is not on offer at any speed.
+No row is below parity. Surface projection, the one row where OCCT had been
+ahead (0.89 on the first reference run), reads 1.24 since the search
+skips the divisions and edge projections that prove nothing (*Projection*
+above); the safeguards of the leaf Newton iteration (:doc:`nurbs`, *Surface
+projection*), which cost about 10 % when they were added, stay, since being
+farther from the right answer is not on offer at any speed. Surface first
+derivatives (1.33) and interpolation (1.34) were below parity on that run
+too and have the kernels described under *Evaluation* and *Fitting*.
 
 Not yet measured: the SIMD batch evaluation of B1.1, grid evaluation
 (B1.2), B1.3's convergence rate over a corpus, and degree elevation (B1.5),
-which Stereon does not have yet. The numbers above are a development run
-on one laptop; the v0.1 release report is the CI reference run described
-under *Method*, committed to ``bench/reports/`` once it has been made.
+which Stereon does not have yet. The reference host varies between runs by
+up to about 1.5× in absolute time on both sides, so a ratio is read within
+one run, and one within a few percent of 1 is parity.
 
 Where OCCT gets it wrong
 ------------------------
