@@ -28,6 +28,8 @@ import :Conversion;
 import :Cylinder;
 import :Erased;
 import :Plane;
+import :Swept;
+import :Trimmed;
 import :Sphere;
 import :Torus;
 import :Visit;
@@ -183,6 +185,17 @@ Result<BSplineSurface> ToBSpline(const Surface& surface, const Box2 range)
 {
     return VisitBuiltin(surface, [&]<typename G>(const G& geometry) -> Result<BSplineSurface> {
         if constexpr (std::is_same_v<G, Surface>) {
+            // Not built in, but with an exact form of its own: a trimmed or a
+            // swept surface.
+            if (const auto* trimmed = geometry.template Target<TrimmedSurface>()) {
+                return ToBSpline(*trimmed, range);
+            }
+            if (const auto* extrusion = geometry.template Target<ExtrusionSurface>()) {
+                return ToBSpline(*extrusion, range);
+            }
+            if (const auto* revolution = geometry.template Target<RevolutionSurface>()) {
+                return ToBSpline(*revolution, range);
+            }
             return Fail(ErrorCode::NotSupported,
                         "ToBSpline: the surface's type has no exact NURBS form the kernel knows");
         } else {

@@ -9,9 +9,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <numbers>
+#include <string_view>
 
 import Stereon.Surface;
 
@@ -140,4 +142,310 @@ TEST_CASE("swept factories reject malformed and overflowing inputs", "[surface][
     REQUIRE_FALSE(MakeRevolutionSurface(invalid, Point3{}, Vec3{0, 0, 1}, Interval{0, 1}));
     const double huge = std::numeric_limits<double>::max();
     REQUIRE_FALSE(MakeExtrusionSurface(profile, Vec3{huge, 0, 0}, Interval{0, 2}));
+}
+
+// ---------------------------------------------------------------------------
+// The wrapper types: unbounded sweeps evaluated from the profile itself
+
+namespace {
+
+/// A curve type that is not built in: a line under another name, with no
+/// NURBS form the kernel knows.
+struct UserLine {
+    Line Base;
+};
+Point3 Eval(const UserLine& c, const double t)
+{
+    return Eval(c.Base, t);
+}
+Vec3 Deriv(const UserLine& c, const double t, const int n)
+{
+    return Deriv(c.Base, t, n);
+}
+Interval Domain(const UserLine& c)
+{
+    return Domain(c.Base);
+}
+Box3 BoundingBox(const UserLine& c)
+{
+    return BoundingBox(c.Base);
+}
+double Project(const UserLine& c, const Point3& p)
+{
+    return Project(c.Base, p);
+}
+UserLine Reversed(const UserLine& c)
+{
+    return {Reversed(c.Base)};
+}
+UserLine Transformed(const UserLine& c, const Transform& x)
+{
+    return {Transformed(c.Base, x)};
+}
+
+Curve CircleProfile()
+{
+    // In the xz-plane, centred off the z axis: revolved about z it is a torus.
+    return Curve(Circle{Point3{3.0, 0.0, 0.5}, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 0.0, 1.0}});
+}
+
+/// The least distance from p to the surface over a grid of the box.
+double SampledDistance(const Surface& s, const Box2& box, const Point3& p, const int n = 80)
+{
+    double best = std::numeric_limits<double>::infinity();
+    for (int i = 0; i <= n; ++i) {
+        for (int j = 0; j <= n; ++j) {
+            const Point2 uv{box.X.GetLower() + (box.X.GetUpper() - box.X.GetLower()) * i / n,
+                            box.Y.GetLower() + (box.Y.GetUpper() - box.Y.GetLower()) * j / n};
+            best = std::min(best, Distance(Eval(s, uv), p));
+        }
+    }
+    return best;
+}
+
+/// Central differences of Eval, the referee for Deriv.
+Vec3 NumericalPartial(const Surface& s, const Point2& uv, const bool alongU)
+{
+    const double h = 1e-5;
+    const Point2 a = alongU ? Point2{uv.X - h, uv.Y} : Point2{uv.X, uv.Y - h};
+    const Point2 b = alongU ? Point2{uv.X + h, uv.Y} : Point2{uv.X, uv.Y + h};
+    return (Eval(s, b) - Eval(s, a)) / (2.0 * h);
+}
+
+constexpr double Infinite = std::numeric_limits<double>::infinity();
+
+} // namespace
+
+TEST_CASE("an extrusion evaluates its profile moved along the direction", "[surface][swept]")
+{
+    const Curve profile(Profile());
+    const Vec3 direction{1.0, -2.0, 3.0};
+    const ExtrusionSurface s = *MakeExtrusion(profile, direction);
+    REQUIRE(Domain(s).X == Domain(profile));
+    REQUIRE(Domain(s).Y.GetLower() == -Infinite);
+    REQUIRE(Domain(s).Y.GetUpper() == Infinite);
+    REQUIRE(Periods(s) == Vec2{});
+    for (const double u : {0.0, 0.17, 0.5, 0.83, 1.0}) {
+        for (const double v : {-1000.0, -0.3, 1.0, 4.0, 2500.0}) {
+            const Point2 uv{u, v};
+            REQUIRE(Distance(Eval(s, uv), Eval(profile, u) + v * direction) < Tolerance);
+            REQUIRE(Deriv(s, uv, 1, 0) == Deriv(profile, u, 1));
+            REQUIRE(Deriv(s, uv, 2, 0) == Deriv(profile, u, 2));
+            REQUIRE(Deriv(s, uv, 0, 1) == direction);
+            REQUIRE(Deriv(s, uv, 1, 1) == Vec3{});
+            REQUIRE(Deriv(s, uv, 0, 2) == Vec3{});
+        }
+    }
+    const Box3 box = BoundingBox(s);
+    REQUIRE(box.X.GetLower() == -Infinite);
+    REQUIRE(box.Z.GetUpper() == Infinite);
+    const ExtrusionSurface circular = *MakeExtrusion(CircleProfile(), Vec3{0.0, 1.0, 0.0});
+    REQUIRE(Periods(circular) == Vec2{CirclePeriod, 0.0});
+    REQUIRE(BoundingBox(circular).X == BoundingBox(CircleProfile()).X);
+    const Surface erased(s);
+    REQUIRE(Eval(erased, Point2{0.4, -7.0}) == Eval(s, Point2{0.4, -7.0}));
+    REQUIRE(Periods(erased) == Vec2{});
+    STATIC_REQUIRE(GeometryTypeName<ExtrusionSurface> == std::string_view{"ExtrusionSurface"});
+}
+
+TEST_CASE("an extrusion projects onto the surface", "[surface][swept][property]")
+{
+    rc::prop("exactly for a profile with a NURBS form, as a plane for a line", [] {
+        const int kind = *rc::gen::inRange(0, 3);
+        const Curve profile = kind == 0 ? Curve(Profile())
+                              : kind == 1
+                                  ? CircleProfile()
+                                  : Curve(Line{Point3{1.0, 2.0, 0.0}, Vec3{0.5, -1.0, 0.2}});
+        const Vec3 direction{*rc::gen::inRange(-30, 30) / 10.0, *rc::gen::inRange(-30, 30) / 10.0,
+                             1.0 + *rc::gen::inRange(0, 30) / 10.0};
+        const ExtrusionSurface s = *MakeExtrusion(profile, direction);
+        const Point3 p{*rc::gen::inRange(-60, 60) / 10.0, *rc::gen::inRange(-60, 60) / 10.0,
+                       *rc::gen::inRange(-60, 60) / 10.0};
+        const Point2 found = Project(s, p);
+        RC_ASSERT(Contains(Domain(s), found));
+        const double distance = Distance(Eval(s, found), p);
+        const Interval uRange = kind == 2 ? Interval{-8.0, 8.0} : Domain(profile);
+        const Box2 box{uRange, Interval{-8.0, 8.0}};
+        RC_ASSERT(distance <= SampledDistance(Surface(s), box, p) + 2e-3);
+        // The displacement to the closest point is normal to the direction.
+        const Vec3 r = p - Eval(s, found);
+        RC_ASSERT(std::abs(Dot(r, direction)) <= 1e-7 * (1.0 + Length(r)) * Length(direction));
+    });
+}
+
+TEST_CASE("a line profile extrudes to a plane", "[surface][swept]")
+{
+    const Line line{Point3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+    const Vec3 direction{0.0, 0.0, 2.0};
+    const ExtrusionSurface s = *MakeExtrusion(Curve(line), direction);
+    REQUIRE(s.GetProjection() == nullptr); // no finite domain, no NURBS form
+    const Plane plane{Point3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}, Vec3{0.0, 0.0, 1.0}};
+    for (const Point3& p : {Point3{4.0, 3.0, -7.0}, Point3{-2.0, 100.0, 0.3}}) {
+        const Point2 found = Project(s, p);
+        REQUIRE(Distance(Eval(s, found), p) <= Distance(Eval(plane, Project(plane, p)), p) + 1e-12);
+        REQUIRE(found == Point2{p.Y, p.Z / 2.0});
+    }
+    // A line along the direction extrudes to itself.
+    const ExtrusionSurface degenerate = *MakeExtrusion(Curve(line), Vec3{0.0, 3.0, 0.0});
+    const Point2 onLine = Project(degenerate, Point3{5.0, 2.0, 0.0});
+    REQUIRE(Distance(Eval(degenerate, onLine), Point3{1.0, 2.0, 0.0}) <= 1e-12);
+}
+
+TEST_CASE("a profile without a NURBS form projects onto the surface, approximately",
+          "[surface][swept]")
+{
+    const Curve profile(UserLine{Line{Point3{}, Vec3{1.0, 1.0, 0.0}}});
+    const Vec3 up{0.0, 0.0, 1.0};
+    const ExtrusionSurface s = *MakeExtrusion(profile, up);
+    REQUIRE(s.GetProjection() == nullptr);
+    const Point3 p{3.0, 1.0, 4.0};
+    const Point2 found = Project(s, p);
+    // On the surface, at p's height: the profile's own closest point moved
+    // there, which is what the approximation is.
+    REQUIRE(found.Y == 4.0);
+    REQUIRE(Distance(Eval(s, found), Eval(profile, Project(profile, p)) + 4.0 * up) <= 1e-12);
+}
+
+TEST_CASE("a revolution turns its profile about the axis", "[surface][swept]")
+{
+    const Curve profile = CircleProfile();
+    const RevolutionSurface s =
+        *MakeRevolution(profile, Point3{0.0, 0.0, 0.5}, Vec3{0.0, 0.0, 2.0});
+    REQUIRE(s.GetAxis() == Vec3{0.0, 0.0, 1.0});
+    REQUIRE(Domain(s) == Box2{Interval{0.0, CirclePeriod}, Domain(profile)});
+    REQUIRE(Periods(s) == Vec2{CirclePeriod, CirclePeriod});
+    // The torus it is.
+    const Torus torus{Point3{0.0, 0.0, 0.5}, 3.0, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+    const Surface erased(s);
+    for (const double u : {0.0, 0.7, 2.0, 4.5, CirclePeriod}) {
+        for (const double v : {0.0, 1.1, 3.0, 5.9}) {
+            const Point2 uv{u, v};
+            const Point3 p = Eval(s, uv);
+            REQUIRE(Distance(Eval(torus, Project(torus, p)), p) <= 1e-9);
+            REQUIRE(Length(Deriv(s, uv, 1, 0) - NumericalPartial(erased, uv, true)) <= 1e-7);
+            REQUIRE(Length(Deriv(s, uv, 0, 1) - NumericalPartial(erased, uv, false)) <= 1e-7);
+            // S_uu points back to the axis: minus the radial part.
+            REQUIRE(Length(Deriv(s, uv, 2, 0) + (p - Point3{0.0, 0.0, p.Z})) <= 1e-9);
+            REQUIRE(Distance(Eval(s, Point2{u + CirclePeriod, v}), p) <= 1e-12);
+        }
+    }
+    // Right-handed about the axis: a quarter turn takes +x towards +y.
+    REQUIRE(Eval(s, Point2{std::numbers::pi / 2.0, 0.0}).Y > 3.9);
+    STATIC_REQUIRE(GeometryTypeName<RevolutionSurface> == std::string_view{"RevolutionSurface"});
+}
+
+TEST_CASE("a revolution projects onto its full turn", "[surface][swept][property]")
+{
+    rc::prop("exactly for a profile with a NURBS form", [] {
+        const Curve profile = *rc::gen::arbitrary<bool>() ? CircleProfile() : Curve(Profile());
+        const Point3 origin{*rc::gen::inRange(-10, 10) / 10.0, 0.0,
+                            *rc::gen::inRange(-10, 10) / 10.0};
+        const Vec3 axis{*rc::gen::inRange(-5, 5) / 10.0, *rc::gen::inRange(-5, 5) / 10.0, 1.0};
+        const RevolutionSurface s = *MakeRevolution(profile, origin, axis);
+        RC_ASSERT(s.GetPiece() != nullptr);
+        const Point3 p{*rc::gen::inRange(-60, 60) / 10.0, *rc::gen::inRange(-60, 60) / 10.0,
+                       *rc::gen::inRange(-60, 60) / 10.0};
+        const Point2 found = Project(s, p);
+        RC_ASSERT(Contains(Domain(s), found));
+        const double distance = Distance(Eval(s, found), p);
+        RC_ASSERT(distance <= SampledDistance(Surface(s), Domain(s), p) + 5e-3);
+    });
+}
+
+TEST_CASE("a profile without a NURBS form revolves and projects approximately", "[surface][swept]")
+{
+    const Curve profile(UserLine{Line{Point3{2.0, 0.0, 0.0}, Vec3{0.0, 0.0, 1.0}}});
+    const RevolutionSurface s = *MakeRevolution(profile, Point3{}, Vec3{0.0, 0.0, 1.0});
+    REQUIRE(s.GetPiece() == nullptr);
+    // A cylinder of radius 2 about z: the projection of (4, 0, 3) is (2, 0, 3).
+    const Point2 found = Project(s, Point3{4.0, 0.0, 3.0});
+    REQUIRE(Distance(Eval(s, found), Point3{2.0, 0.0, 3.0}) <= 1e-9);
+    const Point3 inside{-1.0, -1.0, -2.0};
+    const Point2 behind = Project(s, inside);
+    REQUIRE(std::abs(Distance(Eval(s, behind), inside) - (2.0 - std::sqrt(2.0))) <= 1e-9);
+    REQUIRE(BoundingBox(s).Z.GetLower() == -Infinite); // the line is unbounded
+}
+
+TEST_CASE("sweeps reverse, move and reflect consistently", "[surface][swept]")
+{
+    const Curve profile(Profile());
+    const ExtrusionSurface e = *MakeExtrusion(profile, Vec3{1.0, -2.0, 3.0});
+    const RevolutionSurface r =
+        *MakeRevolution(profile, Point3{0.5, 0.0, 0.0}, Vec3{0.0, 0.0, 1.0});
+    const Transform rotation = MakeRotation(Vec3{1.0, 2.0, 0.5}, 0.7);
+    const Transform mirror = MakePointMirror(Point3{1.0, -1.0, 2.0});
+    for (const double t : {0.1, 0.6, 0.95}) {
+        for (const double w : {0.3, 2.4, 5.0}) {
+            // Extrusion: the profile runs backwards, so its parameter t maps
+            // to 1 - t for this profile; the normal flips.
+            const Point2 uv{t, w};
+            const Point2 reflected{1.0 - t, w};
+            REQUIRE(Distance(Eval(Reversed(e), reflected), Eval(e, uv)) <= 1e-9);
+            REQUIRE(Dot(*UnitNormal(Reversed(e), reflected), *UnitNormal(e, uv)) <= -1.0 + 1e-9);
+            for (const Transform& x : {rotation, mirror}) {
+                REQUIRE(Distance(Eval(Transformed(e, x), uv), Transformed(Eval(e, uv), x)) <= 1e-9);
+            }
+            // Revolution: the angle w, the profile parameter t; reversed, the
+            // turn runs the other way.
+            const Point2 st{w, t};
+            const Point2 turnedBack{CirclePeriod - w, t};
+            REQUIRE(Distance(Eval(Reversed(r), turnedBack), Eval(r, st)) <= 1e-9);
+            REQUIRE(Dot(*UnitNormal(Reversed(r), turnedBack), *UnitNormal(r, st)) <= -1.0 + 1e-9);
+            for (const Transform& x : {rotation, mirror}) {
+                REQUIRE(Distance(Eval(Transformed(r, x), st), Transformed(Eval(r, st), x)) <= 1e-9);
+            }
+        }
+    }
+}
+
+TEST_CASE("ToBSpline of a sweep is the exact patch", "[surface][swept]")
+{
+    const Curve profile(Profile());
+    const ExtrusionSurface e = *MakeExtrusion(profile, Vec3{1.0, -2.0, 3.0});
+    const Box2 box{Interval{0.2, 0.8}, Interval{-2.0, 4.0}};
+    const BSplineSurface patch = *ToBSpline(e, box);
+    REQUIRE(Domain(patch) == box);
+    for (const double u : {0.2, 0.5, 0.8}) {
+        for (const double v : {-2.0, 1.0, 4.0}) {
+            REQUIRE(Distance(Eval(patch, Point2{u, v}), Eval(e, Point2{u, v})) <= 1e-9);
+        }
+    }
+    REQUIRE(ToBSpline(e, Box2{Interval{0.0, 1.5}, Interval{0.0, 1.0}}).error().GetCode() ==
+            ErrorCode::InvalidInput);
+    REQUIRE(ToBSpline(e, Box2{Interval{0.0, 1.0}, Interval{0.0, Infinite}}).error().GetCode() ==
+            ErrorCode::InvalidInput);
+    const RevolutionSurface r = *MakeRevolution(profile, Point3{}, Vec3{0.0, 0.0, 1.0});
+    const Box2 part{Interval{0.0, 2.0}, Interval{0.0, 1.0}};
+    const BSplineSurface turn = *ToBSpline(r, part);
+    for (const double a : {0.0, 0.9, 2.0}) {
+        for (const double t : {0.0, 0.4, 1.0}) {
+            const Point3 p = Eval(turn, Point2{a, t});
+            REQUIRE(Distance(Eval(r, Project(r, p)), p) <= 1e-8);
+        }
+    }
+    REQUIRE(ToBSpline(r, Box2{Interval{0.0, CirclePeriod + 0.1}, Interval{0.0, 1.0}})
+                .error()
+                .GetCode() == ErrorCode::InvalidInput);
+    // The erased conversion reaches the wrappers.
+    REQUIRE(ToBSpline(Surface(e), box).has_value());
+    REQUIRE(ToBSpline(Surface(r), part).has_value());
+}
+
+TEST_CASE("MakeExtrusion and MakeRevolution validate their data", "[surface][swept][validation]")
+{
+    const auto invalid = [](const auto& result) {
+        return !result.has_value() && result.error().GetCode() == ErrorCode::InvalidInput;
+    };
+    constexpr double nan = std::numeric_limits<double>::quiet_NaN();
+    const Curve profile(Profile());
+    REQUIRE(invalid(MakeExtrusion(Curve{}, Vec3{0.0, 0.0, 1.0})));
+    REQUIRE(invalid(MakeExtrusion(profile, Vec3{})));
+    REQUIRE(invalid(MakeExtrusion(profile, Vec3{nan, 0.0, 1.0})));
+    // Tiny but usable: 1e-300 would square to zero and is refused as zero.
+    REQUIRE(MakeExtrusion(profile, Vec3{0.0, 0.0, 1e-150}).has_value());
+    REQUIRE(invalid(MakeRevolution(Curve{}, Point3{}, Vec3{0.0, 0.0, 1.0})));
+    REQUIRE(invalid(MakeRevolution(profile, Point3{nan, 0.0, 0.0}, Vec3{0.0, 0.0, 1.0})));
+    REQUIRE(invalid(MakeRevolution(profile, Point3{}, Vec3{})));
+    REQUIRE(invalid(MakeRevolution(profile, Point3{}, Vec3{0.0, nan, 1.0})));
+    REQUIRE(MakeRevolution(profile, Point3{}, Vec3{0.0, 0.0, -5.0}).has_value());
 }

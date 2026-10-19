@@ -140,19 +140,6 @@ Point2 InDimension(const Point3& p, const Point2& /*tag*/)
     return {p.X, p.Y};
 }
 
-/// u brought into [lower, upper]: by whole periods first for a periodic
-/// basis, then clamped.
-double IntoRange(double u, const Interval range, const double period)
-{
-    if (period > 0.0 && u < range.GetLower()) {
-        u += std::ceil((range.GetLower() - u) / period) * period;
-    }
-    if (period > 0.0 && u > range.GetUpper()) {
-        u -= std::ceil((u - range.GetUpper()) / period) * period;
-    }
-    return std::clamp(u, range.GetLower(), range.GetUpper());
-}
-
 /// The basis parameter of the piece's closest point to p, or of the
 /// basis's global closest point brought into the range for a user type.
 template <std::size_t D>
@@ -162,7 +149,7 @@ double InteriorCandidate(const BasicTrimmedCurve<D>& curve, const BasicPointN<do
     const Interval range = curve.GetRange();
     const Detail::TrimmedPiece* piece = curve.GetPiece();
     if (piece == nullptr) {
-        return IntoRange(Project(basis, p), range, Period(basis));
+        return NearestInRange(Project(basis, p), range, Period(basis));
     }
     Point3 lifted;
     if constexpr (D == 2) {
@@ -177,7 +164,7 @@ double InteriorCandidate(const BasicTrimmedCurve<D>& curve, const BasicPointN<do
     // The piece's point lies on the basis, which (a line or a conic) does
     // not cross itself, so projecting it back finds its own parameter.
     const BasicPointN<double, D> onPiece = InDimension(Eval(piece->Curve, s), p);
-    return IntoRange(Project(basis, onPiece), range, Period(basis));
+    return NearestInRange(Project(basis, onPiece), range, Period(basis));
 }
 
 template <std::size_t D>

@@ -31,6 +31,7 @@
 #include <Geom_Line.hxx>
 #include <Geom_Parabola.hxx>
 #include <Geom_Plane.hxx>
+#include <Geom_RectangularTrimmedSurface.hxx>
 #include <Geom_SphericalSurface.hxx>
 #include <Geom_SurfaceOfLinearExtrusion.hxx>
 #include <Geom_SurfaceOfRevolution.hxx>
@@ -569,6 +570,118 @@ TEST_CASE("swept surfaces agree with OCCT construction evaluators", "[occt][surf
         for (const double v : {0.0, 0.17, 0.6, 1.0}) {
             REQUIRE(Agree(Eval(*revolved, Point2{start + t * span, v}),
                           occtRevolution.Value(angle, v)));
+        }
+    }
+}
+
+namespace {
+
+/// Our projection onto `surface` must find a point at least as close as
+/// OCCT's closest one on `occt`, a surface holding no point ours does not:
+/// OCCT's extrema are interior stationary points and can miss a closest
+/// point on a trimmed surface's boundary.
+template <typename S>
+void CheckProjectionsAtLeastAsClose(const S& surface, const occ::handle<Geom_Surface>& occt,
+                                    const Frame& f)
+{
+    for (int i = 0; i < ProbeCount; ++i) {
+        for (int j = 0; j < ProbeCount; ++j) {
+            for (int k = 0; k < ProbeCount; ++k) {
+                const Point3 p = Probe(f, i, j, k);
+                const double ours = Distance(Eval(surface, Project(surface, p)), p);
+                GeomAPI_ProjectPointOnSurf extrema(ToOcct(p), occt);
+                if (extrema.NbPoints() > 0) {
+                    REQUIRE(ours <= extrema.LowerDistance() + 1e-9 * (1.0 + ours));
+                }
+            }
+        }
+    }
+}
+
+} // namespace
+
+TEST_CASE("the sweep wrappers agree with OCCT's unbounded sweeps", "[occt][surface][swept]")
+{
+    const BSplineCurve profile{
+        2, {0, 0, 0, 1, 1, 1}, {{2, 0, -1}, {3, 1, 1}, {2, 0, 3}}, {1, 2, 1}};
+    const occ::handle<Geom_BSplineCurve> occtProfile = ToOcct(profile);
+    const Stereon::Curve erasedProfile(profile);
+
+    const Vec3 direction = Normalized(Vec3{1, -2, 3});
+    const Stereon::ExtrusionSurface extrusion = *Stereon::MakeExtrusion(erasedProfile, direction);
+    const occ::handle<Geom_SurfaceOfLinearExtrusion> occtExtrusion =
+        new Geom_SurfaceOfLinearExtrusion(occtProfile, ToOcctDir(direction));
+    // Unbounded along the direction: v well beyond any finite patch.
+    for (const double u : {0.0, 0.17, 0.6, 1.0}) {
+        for (const double v : {-40.0, -2.0, 0.3, 3.0, 55.0}) {
+            CheckSecondOrder(extrusion, *occtExtrusion, Point2{u, v});
+        }
+    }
+    // OCCT's extrema need finite bounds: a patch of the same surface.
+    const occ::handle<Geom_RectangularTrimmedSurface> finiteExtrusion =
+        new Geom_RectangularTrimmedSurface(occtExtrusion, 0.0, 1.0, -30.0, 30.0);
+    CheckProjectionsAtLeastAsClose(extrusion, finiteExtrusion, TiltedFrame());
+
+    const Point3 origin{1, -2, 0.5};
+    const Vec3 axis = Normalized(Vec3{2, -1, 3});
+    const Stereon::RevolutionSurface revolution =
+        *Stereon::MakeRevolution(erasedProfile, origin, axis);
+    const occ::handle<Geom_SurfaceOfRevolution> occtRevolution =
+        new Geom_SurfaceOfRevolution(occtProfile, gp_Ax1(ToOcct(origin), ToOcctDir(axis)));
+    // The wrapper's u is the angle, as OCCT's is, right-handed about the
+    // axis and periodic: two turns of samples either way.
+    for (int i = 0; i < SampleCount; ++i) {
+        for (const double v : {0.0, 0.17, 0.6, 1.0}) {
+            CheckSecondOrder(revolution, *occtRevolution, Point2{Sample(i), v});
+        }
+    }
+    CheckProjectionsAtLeastAsClose(revolution, occtRevolution, TiltedFrame());
+}
+
+TEST_CASE("trimmed surfaces agree with Geom_RectangularTrimmedSurface", "[occt][surface][trimmed]")
+{
+    SECTION("a cylinder across its seam")
+    {
+        const Frame f = TiltedFrame();
+        const Stereon::Surface cylinder(Cylinder{f.Origin, 2.0, f.X, f.Y});
+        const occ::handle<Geom_CylindricalSurface> occtCylinder =
+            new Geom_CylindricalSurface(ToOcctFrame(f), 2.0);
+        const Stereon::Box2 box{Stereon::Interval{5.0, 7.5}, Stereon::Interval{-1.0, 2.0}};
+        const Stereon::TrimmedSurface trimmed = *Stereon::MakeTrimmedSurface(cylinder, box);
+        const occ::handle<Geom_RectangularTrimmedSurface> occt =
+            new Geom_RectangularTrimmedSurface(occtCylinder, 5.0, 7.5, -1.0, 2.0);
+        for (const double u : {5.0, 5.9, 2.0 * std::numbers::pi, 6.7, 7.5}) {
+            for (const double v : {-1.0, 0.4, 2.0}) {
+                CheckSecondOrder(trimmed, *occt, Point2{u, v});
+            }
+        }
+        CheckProjectionsAtLeastAsClose(trimmed, occt, f);
+    }
+    SECTION("a corner of each B-spline surface")
+    {
+        const Frame f{Point3{3.0, 2.0, 0.0}, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0},
+                      Vec3{0.0, 0.0, 1.0}};
+        for (const BSplineSurface& surface : SomeBSplineSurfaces()) {
+            const Stereon::Box2 domain = Domain(surface);
+            const auto part = [](const Stereon::Interval& d) {
+                return Stereon::Interval{std::lerp(d.GetLower(), d.GetUpper(), 0.2),
+                                         std::lerp(d.GetLower(), d.GetUpper(), 0.7)};
+            };
+            const Stereon::Box2 box{part(domain.X), part(domain.Y)};
+            const Stereon::TrimmedSurface trimmed =
+                *Stereon::MakeTrimmedSurface(Stereon::Surface(surface), box);
+            const occ::handle<Geom_RectangularTrimmedSurface> occt =
+                new Geom_RectangularTrimmedSurface(ToOcct(surface), box.X.GetLower(),
+                                                   box.X.GetUpper(), box.Y.GetLower(),
+                                                   box.Y.GetUpper());
+            for (const double s : {0.0, 0.35, 1.0}) {
+                for (const double t : {0.0, 0.6, 1.0}) {
+                    CheckSecondOrder(trimmed, *occt,
+                                     Point2{std::lerp(box.X.GetLower(), box.X.GetUpper(), s),
+                                            std::lerp(box.Y.GetLower(), box.Y.GetUpper(), t)});
+                }
+            }
+            CheckProjectionsAtLeastAsClose(trimmed, occt, f);
         }
     }
 }

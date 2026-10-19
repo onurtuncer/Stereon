@@ -20,6 +20,7 @@ stereon_add_library(surface
         Swept.cppm
         Surface.cppm
         Torus.cppm
+        Trimmed.cppm
         Visit.cppm
     SOURCES
         BSplineSurface.cpp
@@ -28,5 +29,6 @@ stereon_add_library(surface
         Fitting.cpp
         Surface.cpp
         Swept.cpp
+        Trimmed.cpp
     DEPENDS
         curve)

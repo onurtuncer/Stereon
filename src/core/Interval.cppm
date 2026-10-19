@@ -171,6 +171,28 @@ private:
     return outer.GetLower() <= inner.GetLower() && inner.GetUpper() <= outer.GetUpper();
 }
 
+/// x brought into `range` by whole periods and clamped: of x's images a
+/// period apart, the one nearest the range, so that a value a rounding error
+/// past one end stays at that end instead of wrapping round to the other. A
+/// period of zero means not periodic, and x is clamped as it is.
+[[nodiscard]] inline double NearestInRange(const double x, const Interval& range,
+                                           const double period) noexcept
+{
+    double nearest = x;
+    if (period > 0.0) {
+        const auto gap = [&](const double image) {
+            return std::max({range.GetLower() - image, image - range.GetUpper(), 0.0});
+        };
+        // The image in [lower, lower + period) and the one before it; when
+        // x is one of them it is used as it is, without a rounding round trip.
+        const double k = std::floor((x - range.GetLower()) / period);
+        const double above = x - k * period;
+        const double below = x - (k + 1.0) * period;
+        nearest = gap(below) < gap(above) ? below : above;
+    }
+    return std::clamp(nearest, range.GetLower(), range.GetUpper());
+}
+
 /// Closed intervals that share only an endpoint intersect; the empty interval
 /// intersects nothing. (The emptiness checks are needed: the empty interval's
 /// bounds, +inf and -inf, pass the comparisons against unbounded intervals.)
