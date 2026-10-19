@@ -338,11 +338,13 @@ void SurfaceD1(benchmark::State& state)
 {
     const BSplineSurface s = SomeSurface(Rational);
     const std::vector<Point2> uv = SurfaceParameters(s);
-    std::array<Stereon::Vec3, 4> d{}; // (0,0), (0,1), (1,0), (1,1)
+    // The point and the two first partials, as OCCT's D1 below: not the
+    // mixed partial that Derivatives(s, p, 1, 1, d) would also give.
+    std::array<Stereon::Vec3, 4> d{}; // (0,0), (0,1), (1,0); d[3] is not written
     for (auto _ : state) {
         double sum = 0.0;
         for (const Point2& p : uv) {
-            Derivatives(s, p, 1, 1, std::span<Stereon::Vec3>{d});
+            TotalDerivatives(s, p, 1, std::span<Stereon::Vec3>{d});
             sum += d[0].Z + d[2].Z + d[1].Z;
         }
         benchmark::DoNotOptimize(sum);

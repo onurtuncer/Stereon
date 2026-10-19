@@ -64,11 +64,28 @@ struct PrincipalCurvaturesResult {
 };
 
 /// The unit normal Su x Sv / |Su x Sv|. DegenerateResult where the
-/// parametrisation is singular.
+/// parametrisation is singular. A type with TotalDerivatives (a B-spline
+/// surface) gives both partials from one pass over its poles.
 template <typename S>
 [[nodiscard]] Result<Vec3> UnitNormal(const S& surface, const Point2& uv)
 {
-    const Vec3 normal = Cross(Deriv(surface, uv, 1, 0), Deriv(surface, uv, 0, 1));
+    // V is Vec3 for every surface; naming it through S keeps the array
+    // dependent, as PartialsAt does: a concrete std::array<Vec3, 4> in this
+    // interface made GCC 16.2 fail with "recursive lazy load" on the
+    // module's implementation units (docs/toolchain/gcc16-feature-probe.md).
+    using V = decltype(Deriv(surface, uv, 1, 0));
+    V su;
+    V sv;
+    if constexpr (requires(std::span<V> out) { TotalDerivatives(surface, uv, 1, out); }) {
+        std::array<V, 4> first; // out[k * 2 + l] = S^(k,l); out[3] is not written
+        TotalDerivatives(surface, uv, 1, std::span<V>{first});
+        su = first[2];
+        sv = first[1];
+    } else {
+        su = Deriv(surface, uv, 1, 0);
+        sv = Deriv(surface, uv, 0, 1);
+    }
+    const Vec3 normal = Cross(su, sv);
     const double length = Length(normal);
     if (!(length > 0.0)) {
         return Fail(ErrorCode::DegenerateResult,
