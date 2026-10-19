@@ -5,8 +5,8 @@
 .. License, v. 2.0. If a copy of the MPL was not distributed with this
 .. file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-Trimmed curves
-==============
+Trimmed curves and surfaces
+===========================
 
 Most curves in a model are only parts of curves: a line segment, a circular
 arc, a stretch of a conic or of a B-spline between two parameters. The
@@ -231,6 +231,57 @@ returns the form reversed with its knots reflected,
 and it runs as the trimmed curve runs. For a user type there is no form,
 and the result is ``NotSupported``.
 
+Trimmed surfaces
+----------------
+
+A ``TrimmedSurface`` is a surface restricted to a box of its parameter
+plane, STEP's ``rectangular_trimmed_surface`` and OCCT's
+``Geom_RectangularTrimmedSurface``: a quarter of a cylinder, a patch of a
+plane, a corner of a B-spline surface. It follows the trimmed curve in
+every respect that has a counterpart.
+
+``MakeTrimmedSurface(basis, box)`` validates the box as ``MakeTrimmedCurve``
+validates a range, direction by direction: each interval finite and
+non-empty, and inside the basis's domain in that direction or, where the
+basis is periodic in it, at most one period wide, so a patch may cross a
+seam (a cylinder trimmed to :math:`u \in [5, 7]`). The trimmed surface
+keeps the basis's parametrisation: ``Eval(trimmed, uv)`` is
+``Eval(basis, uv)`` on the box, and its domain is the box. It is periodic
+in neither direction, whatever the basis repeats: a cylinder trimmed to a
+full turn in :math:`u` still refuses :math:`u = 2\pi + 0.1`.
+
+Reversing reflects :math:`u` in the box, :math:`u \to u_1 + u_2 - u`, which
+flips the normal; the basis is left alone, and derivatives of odd order in
+:math:`u` change sign.
+
+**The exact patch.** For a built-in basis the trimmed surface keeps the
+exact NURBS form of its patch, ``ToBSpline(basis, box)``, with a
+``SurfaceProjector`` on it. ``Project`` finds the closest point of that
+patch, then maps it back to the basis's parameters: directly where the
+form keeps them (a plane, a B-spline surface), by projecting the patch's
+point onto the basis where it does not (the rational arcs of a cylinder,
+cone, sphere or torus agree with the angle only at their knots), brought
+into the box by whole periods first. The box's four corners are compared
+too, and ties go to the smaller parameters, :math:`u` first (ADR-0007).
+Clamping the basis's own projection into the box would not do: on a wavy
+B-spline surface the closest point of a corner patch to a point above the
+middle is an interior point of the patch that the basis's projection never
+gives. ``BoundingBox`` is the patch's pole box, ``ToBSpline(trimmed)`` the
+patch with the trimmed surface's normal, and ``ToBSpline(trimmed, range)``
+the part over a smaller box, parametrised as the basis's piece and
+reversed in :math:`u` when the trimmed surface is.
+
+For a user's surface type, which has no NURBS form the kernel knows,
+``Project`` compares the basis's global projection, brought into the box,
+with the corners: correct when the closest point on the basis lies in the
+box or at a corner, approximate otherwise; ``BoundingBox`` is the basis's,
+and ``ToBSpline`` reports ``NotSupported``.
+
+A trimmed surface is not one of the built-in types that ``VisitBuiltin``
+dispatches on, as a trimmed curve is not: it is wrapped in a ``Surface``
+like any user type, and ``Surface::Target<TrimmedSurface>()`` finds it.
+The erased ``ToBSpline(surface, range)`` reaches it all the same.
+
 Correspondence with the exchange formats
 ----------------------------------------
 
@@ -262,3 +313,10 @@ Correspondence with the exchange formats
        reversed trim, OCCT reverses the basis and maps the range through
        the basis's ``ReversedParameter``, while Stereon keeps the basis
        and reflects the range.
+   * - STEP ``rectangular_trimmed_surface``
+     - ``MakeTrimmedSurface(basis, {{u1, u2}, {v1, v2}})``, reversed when
+       ``usense`` is false. A false ``vsense`` has no counterpart: a
+       trimmed surface reverses in :math:`u` only, as a face needs.
+   * - OCCT ``Geom_RectangularTrimmedSurface``
+     - ``TrimmedSurface``, with the same parameters on the box. OCCT keeps
+       the basis's periodicity; a ``TrimmedSurface`` is not periodic.

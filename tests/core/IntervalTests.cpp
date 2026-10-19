@@ -7,11 +7,13 @@
 
 #include "RapidCheck.hpp"
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
 #include <format>
 #include <limits>
+#include <numbers>
 
 import Stereon.Core;
 
@@ -93,6 +95,35 @@ TEST_CASE("hull, intersection and overlap", "[core][interval]")
     STATIC_REQUIRE(Intersects(Interval{0, 1}, Interval{1, 2}));
     STATIC_REQUIRE_FALSE(Intersects(Interval{0, 1}, Interval{2, 3}));
     STATIC_REQUIRE_FALSE(Intersects(Interval{}, Interval::Everything()));
+}
+
+TEST_CASE("the nearest image of a value in a periodic range", "[core][interval]")
+{
+    using Stereon::NearestInRange;
+    const Interval range{0.2, 0.6};
+    constexpr double tau = 2.0 * std::numbers::pi;
+    // Not periodic: clamped.
+    REQUIRE(NearestInRange(0.7, range, 0.0) == 0.6);
+    REQUIRE(NearestInRange(-1.0, range, 0.0) == 0.2);
+    REQUIRE(NearestInRange(0.3, range, 0.0) == 0.3);
+    // Inside, periods away: brought in.
+    REQUIRE(NearestInRange(0.3, range, tau) == 0.3);
+    REQUIRE(NearestInRange(0.3 + tau, range, tau) == Catch::Approx(0.3).margin(1e-12));
+    REQUIRE(NearestInRange(0.3 - 3.0 * tau, range, tau) == Catch::Approx(0.3).margin(1e-12));
+    // A rounding error past an end stays at that end, whichever end and
+    // however many periods away.
+    REQUIRE(NearestInRange(0.6 + 1e-15, range, tau) == 0.6);
+    REQUIRE(NearestInRange(0.2 - 1e-15, range, tau) == 0.2);
+    REQUIRE(NearestInRange(0.6 + 1e-15 + tau, range, tau) == 0.6);
+    REQUIRE(NearestInRange(0.2 - 1e-15 - tau, range, tau) == 0.2);
+    // Well past an end: still the nearer end round the period.
+    REQUIRE(NearestInRange(1.6, range, tau) == 0.6);
+    REQUIRE(NearestInRange(-0.8, range, tau) == 0.2);
+    REQUIRE(NearestInRange(-0.8 + 2.0 * tau, range, tau) == 0.2);
+    // A range of a whole period: everything has an image inside.
+    const Interval turn{0.0, tau};
+    REQUIRE(NearestInRange(tau + 0.1, turn, tau) == Catch::Approx(0.1).margin(1e-12));
+    REQUIRE(NearestInRange(-0.1, turn, tau) == Catch::Approx(tau - 0.1).margin(1e-12));
 }
 
 TEST_CASE("width, midpoint and inflation", "[core][interval]")

@@ -24,4 +24,5 @@ export import :Properties;
 export import :Sphere;
 export import :Swept;
 export import :Torus;
+export import :Trimmed;
 export import :Visit;
