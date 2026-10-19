@@ -128,6 +128,17 @@ curve then applies the quotient rule (A4.2), :math:`O(k^2 d)` more. The
 lead over OCCT is smaller here, :math:`\rho \approx 1.2`–:math:`1.6`, as
 the arithmetic both libraries must do is a larger share of the work.
 
+A surface's first partials have a kernel of their own
+(``TotalDerivatives(s, uv, 1, out)``, and ``Deriv`` of first order): the
+basis functions and their first derivatives of both directions (A2.3), then
+one pass over the :math:`(p + 1)(q + 1)` active poles with three
+multiply–adds each, for :math:`\mathbf S`, :math:`\mathbf S_u` and
+:math:`\mathbf S_v` together, relative to the pole with the largest basis
+product for the rounding reason of the general path. That is what OCCT's
+``D1`` returns, and what the *Surface D0–D1* row compares; the mixed
+partial that ``Derivatives(s, uv, 1, 1, out)`` also gives is not part of
+either.
+
 Projection (B1.3)
 ~~~~~~~~~~~~~~~~~
 
@@ -152,9 +163,15 @@ far is never expanded. OCCT's ``Extrema`` package instead samples the
 curve and refines candidates with Newton's method, evaluating the curve
 many times per query; the measured ratio is :math:`\rho \approx 3.5`–:math:`4`.
 
-On surfaces both libraries are dominated by the search, and OCCT is
-slightly ahead, :math:`\rho \approx 0.9`, since the leaf Newton iteration
-became safeguarded (see the results below).
+On surfaces both libraries are dominated by the search. Two of its costs
+are avoided where they prove nothing: the pole-box bound of a sub-patch is
+taken without a division per coefficient when the surface is polynomial,
+since :math:`w` is then exactly 1 in every coefficient and stays so under
+subdivision; and a patch's edges, whose four certified curve projections
+were the dearest step of its search, are projected only when the edge's own
+bounding box is nearer than the best point so far. Neither changes an
+answer: only candidates provably farther than the best go unconsidered. The
+leaf Newton iteration stays safeguarded (see the results below).
 
 Fitting (B1.4)
 ~~~~~~~~~~~~~~
@@ -162,7 +179,13 @@ Fitting (B1.4)
 Interpolation solves the collocation system :math:`N \mathbf P = \mathbf
 Q`, whose matrix :math:`N_{ki} = N_{i,p}(t_k)` is banded with bandwidth
 :math:`p` and totally positive, so Gaussian elimination without pivoting
-is stable and costs :math:`O(n\, p^2)`. Both libraries do this, at parity.
+is stable and costs :math:`O(n\, p^2)`. Both libraries do this. Stereon
+builds the collocation rows once: the span of each parameter is found by
+scanning forward from the previous row's, since the parameters increase,
+the basis functions at it fill the band matrix, and after the solve the same
+rows give the fit's deviation at its points, which ``MaxDeviationOf`` would
+otherwise re-evaluate the curve for, point by point, with a span search and
+a basis triangle each.
 Least squares forms the normal equations :math:`(N^\mathsf{T} N)\mathbf P =
 N^\mathsf{T}\mathbf Q`, banded too. ``Approximate`` searches for the
 fewest poles that meet an ``ApproximationBudget``; its ratio of about 40 is

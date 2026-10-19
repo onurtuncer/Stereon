@@ -16,6 +16,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <numbers>
@@ -438,9 +439,15 @@ TEST_CASE("Derivatives returns every partial at once", "[surface][bspline][prope
         RC_ASSERT(Near(Stereon::ToPoint(all[0]), Eval(s, uv), 1e-13));
         for (int k = 0; k <= du; ++k) {
             for (int l = 0; l <= dv; ++l) {
-                if (k + l > 0) {
-                    RC_ASSERT(all[static_cast<std::size_t>(k * (dv + 1) + l)] ==
-                              Deriv(s, uv, k, l));
+                const Vec3& partial = all[static_cast<std::size_t>(k * (dv + 1) + l)];
+                if (k + l == 1) {
+                    // Deriv of first order runs the first-derivative kernel
+                    // (Detail::FirstDerivatives), the general path here
+                    // differences the poles: the same values up to rounding.
+                    const double scale = 1.0 + Length(partial) + Length(all[0]);
+                    RC_ASSERT(Length(partial - Deriv(s, uv, k, l)) <= 1e-12 * scale);
+                } else if (k + l > 1) {
+                    RC_ASSERT(partial == Deriv(s, uv, k, l));
                 }
             }
         }
@@ -450,7 +457,11 @@ TEST_CASE("Derivatives returns every partial at once", "[surface][bspline][prope
 TEST_CASE("TotalDerivatives returns the partials of bounded total order",
           "[surface][bspline][property]")
 {
-    rc::prop("bit for bit those of Derivatives with k + l <= n", [] {
+    // First order has a kernel of its own (Detail::FirstDerivatives), which
+    // sums basis derivatives where the general path differences poles: the
+    // same values up to rounding. Every other order runs the general path
+    // and agrees to the bit.
+    rc::prop("those of Derivatives with k + l <= n", [] {
         const BSplineSurface s = RandomSurface(*rc::gen::arbitrary<bool>());
         const Point2 uv = RandomParameter(s);
         const int n = *rc::gen::inRange(0, 5);
@@ -462,9 +473,35 @@ TEST_CASE("TotalDerivatives returns the partials of bounded total order",
         for (int k = 0; k <= n; ++k) {
             for (int l = 0; k + l <= n; ++l) {
                 const auto i = static_cast<std::size_t>(k * (n + 1) + l);
-                RC_ASSERT(total[i] == square[i]);
+                if (n == 1) {
+                    const double scale = 1.0 + Length(square[i]) + Length(square[0]);
+                    RC_ASSERT(Length(total[i] - square[i]) <= 1e-12 * scale);
+                } else {
+                    RC_ASSERT(total[i] == square[i]);
+                }
             }
         }
+    });
+}
+
+TEST_CASE("the first-derivative kernel agrees with the general path and with Deriv",
+          "[surface][bspline][property]")
+{
+    rc::prop("S, S_u and S_v from one pass over the poles", [] {
+        const BSplineSurface s = RandomSurface(*rc::gen::arbitrary<bool>());
+        const Point2 uv = RandomParameter(s);
+        std::array<Vec3, 4> first{};
+        std::array<Vec3, 4> general{};
+        Stereon::TotalDerivatives(s, uv, 1, std::span<Vec3>{first});
+        Stereon::Derivatives(s, uv, 1, 1, std::span<Vec3>{general});
+        const double scale = 1.0 + Length(general[0]) + Length(general[1]) + Length(general[2]);
+        RC_ASSERT(Length(first[0] - general[0]) <= 1e-12 * scale);
+        RC_ASSERT(Length(first[1] - general[1]) <= 1e-12 * scale);
+        RC_ASSERT(Length(first[2] - general[2]) <= 1e-12 * scale);
+        // Deriv of first order takes the same kernel.
+        RC_ASSERT(Deriv(s, uv, 1, 0) == first[2]);
+        RC_ASSERT(Deriv(s, uv, 0, 1) == first[1]);
+        RC_ASSERT(Length(ToVec(Eval(s, uv)) - first[0]) <= 1e-12 * scale);
     });
 }
 

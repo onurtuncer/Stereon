@@ -496,6 +496,9 @@ struct SearchPatch {
     Bernstein2 F;
     Bernstein2 G;
     Box2 Range;
+    /// The surface is polynomial: w is exactly 1 in every coefficient, and
+    /// stays so under subdivision, so the bounds below need no division.
+    bool Polynomial = false;
 };
 
 /// The point-independent parts of the stationarity polynomials. With the
@@ -556,15 +559,25 @@ struct StationarityParts {
 
 /// The squared distance from p to the box of the (sub-)patch's poles, a
 /// lower bound on its squared distance to the (sub-)patch.
-[[nodiscard]] double LowerBoundSquared(const std::array<Bernstein2, 4>& a, const Point3& p)
+[[nodiscard]] double LowerBoundSquared(const std::array<Bernstein2, 4>& a, const Point3& p,
+                                       const bool polynomial)
 {
     double total = 0.0;
     for (std::size_t d = 0; d < 3; ++d) {
         double low = std::numeric_limits<double>::infinity();
         double high = -low;
-        for (std::size_t k = 0; k < a[d].C.size(); ++k) {
-            low = std::min(low, a[d].C[k] / a[3].C[k]);
-            high = std::max(high, a[d].C[k] / a[3].C[k]);
+        if (polynomial) {
+            // w is 1: the same bound as below, since x / 1 is x, without the
+            // division per coefficient that dominated this function.
+            for (const double c : a[d].C) {
+                low = std::min(low, c);
+                high = std::max(high, c);
+            }
+        } else {
+            for (std::size_t k = 0; k < a[d].C.size(); ++k) {
+                low = std::min(low, a[d].C[k] / a[3].C[k]);
+                high = std::max(high, a[d].C[k] / a[3].C[k]);
+            }
         }
         const double gap = std::max({low - p[d], p[d] - high, 0.0});
         total += gap * gap;
@@ -595,6 +608,9 @@ void QuartersInto(const SearchPatch& patch, std::array<SearchPatch, 4>& quarters
     quarters[1].Range = Box2{highU, lowV};
     quarters[2].Range = Box2{lowU, highV};
     quarters[3].Range = Box2{highU, highV};
+    for (SearchPatch& quarter : quarters) {
+        quarter.Polynomial = patch.Polynomial;
+    }
     const auto split = [&](const Bernstein2& a, const auto member) {
         HalvesInto(a, true, scratch.Left, scratch.Right, scratch.Work);
         HalvesInto(scratch.Left, false, member(quarters[0]), member(quarters[2]), scratch.Work);
@@ -822,7 +838,7 @@ struct NewtonState {
 {
     std::array<std::pair<double, std::size_t>, 4> order;
     for (std::size_t k = 0; k < 4; ++k) {
-        order[k] = {LowerBoundSquared(quarters[k].Coordinates, p), k};
+        order[k] = {LowerBoundSquared(quarters[k].Coordinates, p, quarters[k].Polynomial), k};
     }
     std::ranges::sort(order);
     return {order[0].second, order[1].second, order[2].second, order[3].second};
@@ -835,8 +851,8 @@ struct NewtonState {
 void Search(const BSplineSurface& s, const Point3& p, const SearchPatch& patch, const int depth,
             const Box2& range, Closest& best, SearchScratch& scratch)
 {
-    if (LowerBoundSquared(patch.Coordinates, p) > best.DistanceSquared || OneSigned(patch.F) ||
-        OneSigned(patch.G)) {
+    if (LowerBoundSquared(patch.Coordinates, p, patch.Polynomial) > best.DistanceSquared ||
+        OneSigned(patch.F) || OneSigned(patch.G)) {
         return;
     }
     if (depth >= LeafDepth) {
@@ -934,6 +950,12 @@ struct PreparedPatch {
     StationarityParts F;
     StationarityParts G;
     std::vector<CurveProjector> Edges;
+    /// See SearchPatch::Polynomial.
+    bool Polynomial = false;
+    /// The bounding box of each edge curve (BoundingBox of the curve, which
+    /// contains it and its evaluated points): an edge farther than the
+    /// best point so far holds no closer point and is not projected.
+    std::array<Box3, 4> EdgeBoxes;
 };
 
 struct SurfaceProjectorData {
@@ -953,24 +975,53 @@ namespace {
     const auto q = static_cast<std::size_t>(surface.DegreeV);
     const bool rational = IsRational(surface);
     std::array<Bernstein2, 4> a = CoordinatesOf(patch, p, q);
-    Detail::PreparedPatch prepared{patch.Range, a, PartsOf(a, true), PartsOf(a, false), {}};
-    prepared.Edges.emplace_back(EdgeCurve(patch, p, q, true, 0, rational));
-    prepared.Edges.emplace_back(EdgeCurve(patch, p, q, true, q, rational));
-    prepared.Edges.emplace_back(EdgeCurve(patch, p, q, false, 0, rational));
-    prepared.Edges.emplace_back(EdgeCurve(patch, p, q, false, p, rational));
+    Detail::PreparedPatch prepared{patch.Range, a, PartsOf(a, true), PartsOf(a, false), {},
+                                   !rational,   {}};
+    const std::array<BSplineCurve, 4> edges{
+        EdgeCurve(patch, p, q, true, 0, rational), EdgeCurve(patch, p, q, true, q, rational),
+        EdgeCurve(patch, p, q, false, 0, rational), EdgeCurve(patch, p, q, false, p, rational)};
+    for (std::size_t e = 0; e < edges.size(); ++e) {
+        prepared.EdgeBoxes[e] = BoundingBox(edges[e]);
+        prepared.Edges.emplace_back(edges[e]);
+    }
     return prepared;
 }
 
+/// The squared distance from p to the box, 0 inside it.
+[[nodiscard]] double GapSquared(const Box3& box, const Point3& p)
+{
+    double total = 0.0;
+    for (std::size_t d = 0; d < 3; ++d) {
+        const double gap = std::max({box[d].GetLower() - p[d], p[d] - box[d].GetUpper(), 0.0});
+        total += gap * gap;
+    }
+    return total;
+}
+
 /// The closest points of the patch's four boundary curves, which the
-/// search for interior stationary points does not cover.
+/// search for interior stationary points does not cover. An edge whose box
+/// is farther than the best point so far holds no closer point, so its
+/// projection, the dearest step of a patch, is skipped; the answer is the
+/// same, since only strictly farther candidates go unconsidered.
 void ConsiderEdges(const BSplineSurface& s, const Point3& point, const Detail::PreparedPatch& patch,
                    Closest& best)
 {
     const Box2& r = patch.Range;
-    Consider(s, point, Point2{patch.Edges[0].Project(point), r.Y.GetLower()}, best);
-    Consider(s, point, Point2{patch.Edges[1].Project(point), r.Y.GetUpper()}, best);
-    Consider(s, point, Point2{r.X.GetLower(), patch.Edges[2].Project(point)}, best);
-    Consider(s, point, Point2{r.X.GetUpper(), patch.Edges[3].Project(point)}, best);
+    const auto near = [&](const std::size_t e) {
+        return GapSquared(patch.EdgeBoxes[e], point) <= best.DistanceSquared;
+    };
+    if (near(0)) {
+        Consider(s, point, Point2{patch.Edges[0].Project(point), r.Y.GetLower()}, best);
+    }
+    if (near(1)) {
+        Consider(s, point, Point2{patch.Edges[1].Project(point), r.Y.GetUpper()}, best);
+    }
+    if (near(2)) {
+        Consider(s, point, Point2{r.X.GetLower(), patch.Edges[2].Project(point)}, best);
+    }
+    if (near(3)) {
+        Consider(s, point, Point2{r.X.GetUpper(), patch.Edges[3].Project(point)}, best);
+    }
 }
 
 [[nodiscard]] std::vector<std::pair<double, std::size_t>>
@@ -979,7 +1030,7 @@ PatchesByBound(const std::vector<Detail::PreparedPatch>& patches, const Point3& 
     std::vector<std::pair<double, std::size_t>> order;
     order.reserve(patches.size());
     for (std::size_t i = 0; i < patches.size(); ++i) {
-        order.emplace_back(LowerBoundSquared(patches[i].Coordinates, p), i);
+        order.emplace_back(LowerBoundSquared(patches[i].Coordinates, p, patches[i].Polynomial), i);
     }
     std::ranges::sort(order);
     return order;
@@ -990,7 +1041,8 @@ void SearchPatchFor(const BSplineSurface& surface, const Detail::PreparedPatch& 
                     const Point3& p, Closest& best, SearchScratch& scratch)
 {
     ConsiderEdges(surface, p, patch, best);
-    const SearchPatch search{patch.Coordinates, For(patch.F, p), For(patch.G, p), patch.Range};
+    const SearchPatch search{patch.Coordinates, For(patch.F, p), For(patch.G, p), patch.Range,
+                             patch.Polynomial};
     Search(surface, p, search, 0, patch.Range, best, scratch);
 }
 

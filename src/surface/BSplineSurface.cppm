@@ -505,6 +505,77 @@ void SurfaceDerivativesUpTo(const BasicBSplineSurface<T>& surface, const Point2&
     out[0] += origin; // the point back in absolute coordinates
 }
 
+/// The point and the two first partials at uv, into out[0], out[1] =
+/// S^(0,1) and out[2] = S^(1,0), the layout of TotalDerivatives for n = 1:
+/// what normals, first fundamental forms and a tessellator ask for most. One
+/// pass over the (p + 1)(q + 1) active poles with the basis functions and
+/// their first derivatives (A2.3) costs three multiply-adds per pole, where
+/// the general path above differences the poles once per order. The poles
+/// are taken relative to the one with the largest basis product, as
+/// WindowOrigin does and for the same rounding reason, and a rational
+/// surface applies the quotient rule once (A4.4 at first order).
+template <Scalar T>
+void FirstDerivatives(const BasicBSplineSurface<T>& surface, const Point2& uv,
+                      std::span<BasicVec3<T>> out)
+{
+    const auto p = static_cast<std::size_t>(surface.DegreeU);
+    const auto q = static_cast<std::size_t>(surface.DegreeV);
+    const std::size_t countV = PoleCountV(surface);
+    const std::size_t spanU = FindSpan(surface.KnotsU, surface.DegreeU, PoleCountU(surface), uv.X);
+    const std::size_t spanV = FindSpan(surface.KnotsV, surface.DegreeV, countV, uv.Y);
+    std::array<double, 2 * SurfaceBasisCount> nu; // N then N', filled by BasisDerivatives
+    std::array<double, 2 * SurfaceBasisCount> nv;
+    BasisDerivatives(surface.KnotsU, surface.DegreeU, spanU, uv.X, 1,
+                     std::span{nu}.first(2 * (p + 1)));
+    BasisDerivatives(surface.KnotsV, surface.DegreeV, spanV, uv.Y, 1,
+                     std::span{nv}.first(2 * (q + 1)));
+    std::size_t r0 = 0;
+    std::size_t c0 = 0;
+    for (std::size_t r = 1; r <= p; ++r) {
+        r0 = nu[r] > nu[r0] ? r : r0;
+    }
+    for (std::size_t c = 1; c <= q; ++c) {
+        c0 = nv[c] > nv[c0] ? c : c0;
+    }
+    const BasicVec3<T> origin = ToVec(surface.Poles[(spanU - p + r0) * countV + (spanV - q + c0)]);
+    const bool rational = IsRational(surface);
+    BasicVec3<T> a{};
+    BasicVec3<T> au{};
+    BasicVec3<T> av{};
+    T w{};
+    T wu{};
+    T wv{};
+    for (std::size_t r = 0; r <= p; ++r) {
+        const std::size_t first = (spanU - p + r) * countV + (spanV - q);
+        for (std::size_t c = 0; c <= q; ++c) {
+            const double n = nu[r] * nv[c];
+            const double nU = nu[p + 1 + r] * nv[c];
+            const double nV = nu[r] * nv[q + 1 + c];
+            BasicVec3<T> d = ToVec(surface.Poles[first + c]) - origin;
+            if (rational) {
+                const T weight = surface.Weights[first + c];
+                d = weight * d;
+                w = w + T{n} * weight;
+                wu = wu + T{nU} * weight;
+                wv = wv + T{nV} * weight;
+            }
+            a += T{n} * d;
+            au += T{nU} * d;
+            av += T{nV} * d;
+        }
+    }
+    if (rational) {
+        const BasicVec3<T> relative = a / w; // S - origin
+        out[0] = relative + origin;
+        out[2] = (au - wu * relative) / w;
+        out[1] = (av - wv * relative) / w;
+    } else {
+        out[0] = a + origin;
+        out[2] = au;
+        out[1] = av;
+    }
+}
+
 } // namespace Stereon::Detail
 
 export namespace Stereon {
@@ -539,6 +610,10 @@ void TotalDerivatives(const BasicBSplineSurface<T>& surface, const Point2& uv, c
     Detail::CheckSurfaceEvaluation(surface, uv, "TotalDerivatives(BSplineSurface)");
     Detail::Require(n >= 0 && out.size() >= static_cast<std::size_t>((n + 1) * (n + 1)),
                     "TotalDerivatives(BSplineSurface)", "a negative order or too small an output");
+    if (n == 1) {
+        Detail::FirstDerivatives(surface, uv, out);
+        return;
+    }
     const auto order = static_cast<std::size_t>(n);
     Detail::SurfaceDerivativesUpTo(surface, uv, order, order, order, out);
 }
@@ -555,6 +630,11 @@ template <Scalar T>
                     "a derivative order that does not exist");
     if (!IsRational(surface) && (du > surface.DegreeU || dv > surface.DegreeV)) {
         return {};
+    }
+    if (du + dv == 1) {
+        std::array<BasicVec3<T>, 3> first;
+        Detail::FirstDerivatives(surface, uv, std::span<BasicVec3<T>>{first});
+        return first[du == 1 ? 2 : 1];
     }
     const auto size = static_cast<std::size_t>((du + 1) * (dv + 1));
     if (size <= Detail::SurfaceTableCapacity) {

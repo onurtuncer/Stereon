@@ -96,6 +96,109 @@ private:
 }
 
 // ---------------------------------------------------------------------------
+// Collocation rows
+
+/// The knot span of t for parameters that come in increasing order: scanned
+/// forward from the previous row's span rather than searched afresh, so a
+/// sweep over n sorted parameters costs O(n) rather than O(n log n). The
+/// ends keep FindSpan's rules for the empty spans there, and checked builds
+/// verify the agreement with FindSpan on every row.
+[[nodiscard]] std::size_t SpanAfter(const std::span<const double> knots, const int degree,
+                                    const std::size_t poleCount, const double t,
+                                    const std::size_t previous)
+{
+    const auto p = static_cast<std::size_t>(degree);
+    const std::size_t n = poleCount - 1;
+    if (t <= knots[p] || t >= knots[n + 1]) {
+        return FindSpan(knots, degree, poleCount, t);
+    }
+    std::size_t span = std::max(previous, p);
+    while (knots[span + 1] <= t) {
+        ++span;
+    }
+    Detail::Require(span == FindSpan(knots, degree, poleCount, t), "Interpolate",
+                    "a scanned span that differs from the searched one");
+    return span;
+}
+
+/// The collocation rows of increasing parameters: for row k the span of
+/// t_k and the p + 1 basis functions there, Basis[k * (p + 1) + a] =
+/// N_{span-p+a,p}(t_k). Built once per fit; the system is assembled from
+/// them and the deviation measured with them.
+struct CollocationRows {
+    std::vector<std::size_t> Spans;
+    std::vector<double> Basis;
+};
+
+[[nodiscard]] CollocationRows CollocationRowsOf(const std::span<const double> parameters,
+                                                const std::span<const double> knots,
+                                                const int degree, const std::size_t poleCount)
+{
+    const auto p = static_cast<std::size_t>(degree);
+    CollocationRows rows;
+    rows.Spans.reserve(parameters.size());
+    rows.Basis.resize(parameters.size() * (p + 1));
+    std::size_t span = p;
+    for (std::size_t k = 0; k < parameters.size(); ++k) {
+        span = SpanAfter(knots, degree, poleCount, parameters[k], span);
+        rows.Spans.push_back(span);
+        BasisFunctions(knots, degree, span, parameters[k],
+                       std::span{rows.Basis}.subspan(k * (p + 1), p + 1));
+    }
+    return rows;
+}
+
+/// The largest distance between the points and the curve with these poles
+/// at the rows' parameters: what MaxDeviationOf measures, to the bit, since
+/// Eval of a polynomial curve sums the same basis functions and poles in
+/// the same order; found here without a second span search and basis
+/// evaluation per point.
+[[nodiscard]] double RowDeviation(const CollocationRows& rows, const std::span<const Point3> poles,
+                                  const std::span<const Point3> points, const int degree)
+{
+    const auto p = static_cast<std::size_t>(degree);
+    double worst = 0.0;
+    for (std::size_t k = 0; k < points.size(); ++k) {
+        Vec3 sum{};
+        for (std::size_t a = 0; a <= p; ++a) {
+            sum += rows.Basis[k * (p + 1) + a] * ToVec(poles[rows.Spans[k] - p + a]);
+        }
+        worst = std::max(worst, Distance(ToPoint(sum), points[k]));
+    }
+    return worst;
+}
+
+/// The poles of the unconstrained interpolant from its rows: the banded
+/// collocation system, solved (see Detail::InterpolatingPoles).
+[[nodiscard]] std::vector<Point3> InterpolatingPolesFrom(const std::span<const Point3> points,
+                                                         const CollocationRows& rows,
+                                                         const int degree)
+{
+    const auto p = static_cast<std::size_t>(degree);
+    const std::size_t count = points.size();
+    BandMatrix matrix(count, p);
+    std::vector<Vec3> rhs;
+    rhs.reserve(count);
+    for (std::size_t k = 0; k < count; ++k) {
+        const std::size_t span = rows.Spans[k];
+        // Averaged knots satisfy the Schoenberg-Whitney conditions, which
+        // puts every non-zero within p of the diagonal.
+        Detail::Require(span >= k && span <= k + p, "Interpolate",
+                        "a collocation row outside the band");
+        for (std::size_t a = 0; a <= p; ++a) {
+            matrix.At(k, span - p + a) = rows.Basis[k * (p + 1) + a];
+        }
+        rhs.push_back(ToVec(points[k]));
+    }
+    std::vector<Point3> poles;
+    poles.reserve(count);
+    for (const Vec3& v : SolveBanded(matrix, std::move(rhs))) {
+        poles.push_back(ToPoint(v));
+    }
+    return poles;
+}
+
+// ---------------------------------------------------------------------------
 // Validation and dimension handling
 
 /// End derivatives when the caller prescribed them.
@@ -263,7 +366,7 @@ FixedPoles(const std::span<const Point3> q, const std::span<const double> knots,
 /// positive, whose right-hand side is each point less the fixed poles'
 /// contributions.
 [[nodiscard]] std::vector<Point3> ConstrainedInterpolatingPoles(const std::span<const Point3> q,
-                                                                const std::span<const double> t,
+                                                                const CollocationRows& rows,
                                                                 const std::span<const double> knots,
                                                                 const int degree,
                                                                 const EndDerivatives& ends)
@@ -275,10 +378,9 @@ FixedPoles(const std::span<const Point3> q, const std::span<const double> knots,
     const std::size_t free = poleCount - 2 * fixed;
     BandMatrix matrix(free, p);
     std::vector<Vec3> rhs(free);
-    std::array<double, BSplineMaxDegree + 1> basis; // filled by BasisFunctions
     for (std::size_t k = 1; k + 1 < q.size(); ++k) {
-        const std::size_t span = FindSpan(knots, degree, poleCount, t[k]);
-        BasisFunctions(knots, degree, span, t[k], std::span{basis}.first(p + 1));
+        const std::size_t span = rows.Spans[k];
+        const std::span<const double> basis = std::span{rows.Basis}.subspan(k * (p + 1), p + 1);
         // Point k is row k - 1 and pole i column i - 2; the shifted knots put
         // basis function k + 1 on the diagonal, within p of every non-zero.
         Detail::Require(span >= k + 1 && span <= k + 1 + p, "Interpolate",
@@ -312,11 +414,13 @@ FixedPoles(const std::span<const Point3> q, const std::span<const double> knots,
     STEREON_TRY(std::vector<double> t, CheckedParameters(points, parametrization, where));
     std::vector<double> knots =
         ends ? ShiftedAveragedKnots(t, degree) : Detail::AveragedKnots(t, degree);
-    std::vector<Point3> poles = ends
-                                    ? ConstrainedInterpolatingPoles(points, t, knots, degree, *ends)
-                                    : Detail::InterpolatingPoles(points, t, knots, degree);
+    const std::size_t poleCount = ends ? points.size() + 2 : points.size();
+    const CollocationRows rows = CollocationRowsOf(t, knots, degree, poleCount);
+    std::vector<Point3> poles =
+        ends ? ConstrainedInterpolatingPoles(points, rows, knots, degree, *ends)
+             : InterpolatingPolesFrom(points, rows, degree);
+    const double deviation = RowDeviation(rows, poles, points, degree);
     BSplineCurve curve{degree, std::move(knots), std::move(poles), {}};
-    const double deviation = MaxDeviationOf(curve, points, t);
     return CurveFit{std::move(curve), std::move(t), deviation};
 }
 
@@ -578,28 +682,8 @@ std::vector<Point3> InterpolatingPoles(const std::span<const Point3> points,
                                        const std::span<const double> parameters,
                                        const std::span<const double> knots, const int degree)
 {
-    const auto p = static_cast<std::size_t>(degree);
-    const std::size_t count = points.size();
-    BandMatrix matrix(count, p);
-    std::vector<Vec3> rhs;
-    rhs.reserve(count);
-    std::array<double, BSplineMaxDegree + 1> basis; // filled by BasisFunctions
-    for (std::size_t k = 0; k < count; ++k) {
-        const std::size_t span = FindSpan(knots, degree, count, parameters[k]);
-        BasisFunctions(knots, degree, span, parameters[k], std::span{basis}.first(p + 1));
-        // Averaged knots satisfy the Schoenberg-Whitney conditions, which
-        // puts every non-zero within p of the diagonal.
-        Require(span >= k && span <= k + p, "Interpolate", "a collocation row outside the band");
-        for (std::size_t a = 0; a <= p; ++a) {
-            matrix.At(k, span - p + a) = basis[a];
-        }
-        rhs.push_back(ToVec(points[k]));
-    }
-    std::vector<Point3> poles;
-    for (const Vec3& v : SolveBanded(matrix, std::move(rhs))) {
-        poles.push_back(ToPoint(v));
-    }
-    return poles;
+    return InterpolatingPolesFrom(
+        points, CollocationRowsOf(parameters, knots, degree, points.size()), degree);
 }
 
 std::vector<double> SpreadKnots(const std::span<const double> parameters, const int degree,
