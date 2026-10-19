@@ -123,6 +123,31 @@ TEST_CASE("interpolation passes through every point", "[curve][fitting][property
     });
 }
 
+TEST_CASE("interpolation reports the deviation that evaluating the curve measures",
+          "[curve][fitting][property]")
+{
+    // The deviation comes from the collocation rows the fit was assembled
+    // from, not from evaluating the curve again at every parameter; the
+    // two are the same number to the bit, since Eval sums the same basis
+    // functions and poles in the same order.
+    rc::prop("with and without end derivatives", [] {
+        const int degree = *rc::gen::inRange(2, 6);
+        const std::vector<Point3> points = RandomPoints(static_cast<std::size_t>(degree) + 1 +
+                                                        *rc::gen::inRange<std::size_t>(0, 40));
+        const bool constrained = *rc::gen::arbitrary<bool>();
+        const auto fit =
+            constrained
+                ? Stereon::Interpolate(points, degree, RandomEnds(), RandomParametrization())
+                : Stereon::Interpolate(points, degree, RandomParametrization());
+        RC_ASSERT(fit.has_value());
+        double worst = 0.0;
+        for (std::size_t k = 0; k < points.size(); ++k) {
+            worst = std::max(worst, Distance(Eval(fit->Curve, fit->Parameters[k]), points[k]));
+        }
+        RC_ASSERT(fit->MaxDeviation == worst);
+    });
+}
+
 TEST_CASE("interpolation reproduces a curve of its own space", "[curve][fitting]")
 {
     // A cubic polynomial in t lies in every cubic spline space on [0, 1],
