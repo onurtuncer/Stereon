@@ -8,7 +8,8 @@
 B-rep topology
 ==============
 
-The topology store, typed handles, ShapeBuilder and immutable Shape, Euler operators, and the validity checker.
+The topology store, typed handles, ShapeBuilder and immutable Shape,
+editing and compaction, and the validity checker.
 
 Handles
 -------
@@ -97,13 +98,19 @@ Records reach one another by index, and each record carries its own slot
 state (alive, generation), so that a deletion copies one page rather than a
 whole-table bitset (ADR-0005).
 
+- A **vertex** records its position and tolerance, and the head of its
+  incidence list: the edges that start or end at it, in ascending index
+  order, each continuing the list through its own ``NextAtStart`` or
+  ``NextAtEnd``, whichever end the vertex is. This is the maintained
+  vertex-incidence index of ADR-0004 and ADR-0036; the builder keeps it
+  as edges come and go, and ``EdgesOf`` reads it without scanning.
 - An **edge** records its curve kind, its tolerance, its start and end
   vertices, the shared parameter range of its curve and pcurves, the anchor
-  of its radial ring and, for the kinds that evaluate through a surface,
-  its primary coedge (ADR-0009). ``Exact`` and ``Spatial`` edges carry
-  their own 3D curve; ``Intersection``, ``Trim``, ``Boundary`` and
-  ``Degenerate`` edges have none and are evaluated on the primary coedge's
-  pcurve and surface.
+  of its radial ring, its two incidence links and, for the kinds that
+  evaluate through a surface, its primary coedge (ADR-0009). ``Exact`` and
+  ``Spatial`` edges carry their own 3D curve; ``Intersection``, ``Trim``,
+  ``Boundary`` and ``Degenerate`` edges have none and are evaluated on the
+  primary coedge's pcurve and surface.
 - A **coedge** is one use of an edge in a loop: ``Next`` and ``Prev`` around
   the loop, ``Radial`` around the ring of uses of the same edge, its stored
   edge-use sense (``EdgeUseSense::Same`` along the edge's parameter or
@@ -149,6 +156,47 @@ have, a face added to a second shell. Every change advances the builder's
 topology epoch; its ``BuilderToken`` is stable across moves, and a
 moved-from builder refuses every operation (ADR-0038).
 
+Editing a shape
+---------------
+
+``ShapeBuilder::Open(shape)`` gives a builder on a frozen shape's tables.
+It shares every page with the shape until it writes to one (ADR-0005), so
+an edit costs the pages it touches, not the size of the body; the shape
+itself never changes. ``builder.Handle(id)`` is the builder's handle to
+one of the shape's entities, the same slot; new entities take slots after
+the shape's last one, and a removed slot is never reused by the builder,
+so an index live in both the shape and its edit names the same entity,
+edited or not (ADR-0004). ``SetSurface(face, surface)`` replaces a face's
+surface by another of the pool.
+
+Deletion is the family of ``Remove`` operations, each keeping every
+reciprocal link consistent and leaving a tombstone: the slot is dead, its
+generation bumped, so every handle to it is stale and every operation
+refuses it.
+
+- ``RemoveCoedge`` takes one use out of its loop's cycle and its edge's
+  radial ring, moving the anchors on. It is refused when the coedge is its
+  edge's primary and the edge has other uses: reassign the primary first
+  with ``SetPrimaryCoedge`` (ADR-0027, section 4).
+- ``RemoveLoop`` removes the loop's coedges and the loop from its face;
+  ``RemoveFace`` removes the face's loops that way and the face from its
+  shell. Every use of the loop goes at once, so a primary among them
+  passes to the next use in the ring; an edge left with no use loses its
+  primary. The edges and vertices stay. An edge whose kind needs a use
+  (``Boundary``, ``Trim``, ``Intersection``) then fails the validator
+  until it is removed or re-kinded, which keeps ADR-0009's rules in force.
+- ``RemoveShell`` and ``RemoveSolid`` detach their children, which stay
+  in no shell or of no solid.
+- ``RemoveEdge`` is refused while a coedge uses the edge, and
+  ``RemoveVertex`` while an edge starts or ends at the vertex: nothing is
+  ever left pointing at a dead slot.
+
+.. code-block:: cpp
+
+   ShapeBuilder b = *ShapeBuilder::Open(shape);
+   *b.RemoveFace(b.Handle(face));
+   Result<Shape> edited = Freeze(std::move(b));   // shares every untouched page
+
 Freeze and certification
 ------------------------
 
@@ -177,9 +225,18 @@ Query                                  Result
 ``LoopsOf(shape, face)``               the face's loops, in the order they were added
 ``CoedgesOf(shape, loop)``             one walk around the loop from its anchor
 ``RadialCoedgesOf(shape, edge)``       every use of the edge, a seam's two included
+``EdgesOf(shape, vertex)``             the edges at the vertex, once each, ascending
+``FacesOf(shape, edge)``               the distinct faces of the edge's uses, ascending
 ``FacesOf(shape, shell)``              the shell's faces, in the order they were added
 ``ShellsOf(shape, solid)``             the solid's shells, in the order they were added
 =====================================  ====================================================
+
+``EdgesOf`` walks the maintained vertex-incidence index: a vertex of degree
+d costs O(d), one record per step, no allocation, and a closed edge comes
+once. ``FacesOf(shape, edge)`` is the eager result ADR-0036 allows for
+distinct adjacency: it walks the radial ring, sorts the faces and drops
+repeats, so k uses cost O(k log k) and one allocation, visible in its
+``std::vector<FaceId>`` return type; a seam's face comes once.
 
 The ranges are forward ranges of handles by value; they are not writable,
 not bidirectional and not borrowed. A range holds one snapshot ownership
@@ -198,7 +255,24 @@ Their handle must name a live entity of the shape; checked builds report
 one that does not, and handles from a range carry their snapshot's store
 there, so a handle of another shape is caught. ``Describe(shape, h)`` gives
 the text logs and reports use, e.g. ``Edge#0 [Exact Line, tol 1e-07, faces
-0|2]``.
+0|2]`` or ``Vertex#3 [(0, 3, 0), tol 1e-07, 3 edges]``.
+
+Compacting
+----------
+
+``Freeze`` keeps every index, so a long edit sequence leaves tombstones
+behind; ``Compact(shape)`` is the explicit renumbering of ADR-0004. It
+gives the live entities of each kind consecutive indices in their old
+order, rewrites every link, drops the dead slots and the geometry nothing
+references, and freezes the result, so the compacted shape is certified
+like any other. The ``Compacted`` result carries the new ``Shape`` and the
+``RemapTable``, the old-to-new index of every slot of every kind and of
+the three pools (``Invalid`` for a dropped one), which the history of
+ADR-0011 composes; ``compacted.Translate(id)`` is the compacted shape's
+handle to an entity of the source, invalid for one that was dead. The
+source shape is left as it is, and its handles do not reach the compacted
+shape: checked builds tell the two stores apart. Traversal order is
+preserved by the renumbering but not promised across it (ADR-0037).
 
 The structural validator
 ------------------------
@@ -230,17 +304,25 @@ S12   ``MissingGeometry``     a face without a surface, an edge without the curv
 S13   ``EdgeEndpoints``       a degenerate edge with two different vertices
 S14   ``EmptyLoop``           a loop without coedges
 S15   ``ShellDisconnected``   the faces of a shell are not connected through shared edges
+S16   ``VertexIncidence``     a vertex's list names an edge not at it, twice or out of order,
+                              or an edge is missing from one of its ends' lists
 ====  ======================  ===================================================================
 
 ``Testing::TopologyFaults`` writes link fields directly, for the
 validator's seeded-fault tests (ADR-0027, section 8); production code has
 no other way to reach the tables.
 
+The seeded-fault suite of ADR-0004 (``tests/topo/FaultTests.cpp``) feeds
+stale handles, handles from another builder or shape, off-by-one indices
+and tombstones to every operation and query, mixes entity kinds at compile
+time, and corrupts loop links, rings, slots and the incidence index: each
+is refused through a ``Result`` naming the entity with ``Describe``, or by
+``Freeze`` with the rule. The O(1) accessors report the same faults as a
+contract violation in checked builds.
+
 .. todo::
 
-   Document the maintained vertex-incidence index (``EdgesOf``,
-   ``FacesOf(edge)``), editing an existing shape, ``Compact()`` and the
-   Euler operators as they land.
+   Document the Euler operators as they land (ADR-0027).
 
 Related design decisions
 ------------------------

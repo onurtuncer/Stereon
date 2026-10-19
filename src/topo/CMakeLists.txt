@@ -14,6 +14,7 @@ stereon_add_library(topo
         Topo.cppm
     SOURCES
         Builder.cpp
+        Compact.cpp
         Describe.cpp
         Shape.cpp
         Validate.cpp

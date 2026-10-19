@@ -64,6 +64,9 @@ enum class TopologyRule : std::uint8_t {
     EmptyLoop,
     /// The faces of a shell are not connected through shared edges.
     ShellDisconnected,
+    /// The vertex-incidence index does not match the edges: a vertex's list
+    /// names an edge not at it, twice or out of order, or misses one.
+    VertexIncidence,
 };
 
 /// "S01", "S02", ...

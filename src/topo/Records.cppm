@@ -137,6 +137,12 @@ struct VertexRecord {
     SlotState Slot;
     Point3 Position;
     double Tolerance = 0.0;
+    /// The maintained vertex-incidence index (ADR-0004, ADR-0036): the first
+    /// of the edges that start or end here, in ascending index order; each
+    /// edge continues the list through NextAtStart or NextAtEnd, whichever
+    /// of its ends this vertex is. A closed edge is listed once, through
+    /// NextAtStart.
+    EdgeId FirstEdge;
 };
 
 /// ADR-0004's edge record, following ADR-0009: kind, tolerance, the primary
@@ -149,6 +155,9 @@ struct EdgeRecord {
     VertexId End;
     CoedgeId RadialAnchor;
     CoedgeId Primary;
+    /// The next edge in Start's incidence list, and in End's (ADR-0004).
+    EdgeId NextAtStart;
+    EdgeId NextAtEnd;
     CurveRef Curve;
     Interval Range;
     double Tolerance = 0.0;

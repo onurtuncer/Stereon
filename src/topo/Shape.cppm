@@ -17,6 +17,7 @@ module;
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 export module Stereon.Topo:Shape;
 
@@ -40,17 +41,23 @@ export namespace Stereon {
 
 class Shape;
 class ShapeBuilder;
+class Compacted;
 
 [[nodiscard]] Result<Shape> Freeze(ShapeBuilder&& builder);
+[[nodiscard]] Result<Compacted> Compact(const Shape& shape);
 
 } // namespace Stereon
 
 export namespace Stereon::Detail {
 
-/// Only Freeze() makes snapshots, so a certificate cannot be forged.
+/// Only Freeze() makes snapshots, so a certificate cannot be forged; the
+/// builder and Compact() hold the key to open a builder on a snapshot's
+/// tables, which only Freeze() can turn into a snapshot again.
 class FreezeKey {
     FreezeKey() = default;
     friend Result<Shape> Stereon::Freeze(ShapeBuilder&& builder);
+    friend Result<Compacted> Stereon::Compact(const Shape& shape);
+    friend class Stereon::ShapeBuilder;
 };
 
 /// Reports a handle that is not a live entity of the shape it is used with,
@@ -60,9 +67,9 @@ void ShapeHandleViolation(EntityKind kind, std::uint32_t index, std::uint32_t ge
 
 /// The version recorded in every ValidationCertificate: incremented
 /// whenever the structural rules change.
-inline constexpr std::uint32_t StructuralValidatorVersion = 1;
+inline constexpr std::uint32_t StructuralValidatorVersion = 2;
 /// The rule set the structural validator runs.
-inline constexpr std::string_view StructuralInvariants = "Structural S01-S15";
+inline constexpr std::string_view StructuralInvariants = "Structural S01-S16";
 
 } // namespace Stereon::Detail
 
@@ -423,6 +430,76 @@ using CoedgeRange = Detail::LinkRange<EntityKind::Coedge, Detail::NextInLoop, tr
 /// one, and the anchor need not be the primary coedge.
 using RadialCoedgeRange = Detail::LinkRange<EntityKind::Coedge, Detail::NextInRing, true>;
 
+/// The edges at a vertex, each once (ADR-0036: distinct, a closed edge
+/// once), in ascending index order, read from the maintained
+/// vertex-incidence index: each step reads one edge record, O(1), no
+/// allocation, so a vertex of degree d costs O(d).
+class VertexEdgeRange {
+public:
+    class Iterator {
+    public:
+        using iterator_concept = std::forward_iterator_tag;
+        using iterator_category = std::input_iterator_tag;
+        using value_type = EdgeId;
+        using difference_type = std::ptrdiff_t;
+
+        Iterator() = default;
+
+        [[nodiscard]] EdgeId operator*() const
+        {
+            return m_Snapshot->template MakeId<EntityKind::Edge>(m_Current);
+        }
+        Iterator& operator++()
+        {
+            const Detail::EdgeRecord& e = m_Snapshot->GetTables().Edges[m_Current];
+            m_Current = (e.Start.GetIndex() == m_Vertex ? e.NextAtStart : e.NextAtEnd).GetIndex();
+            return *this;
+        }
+        Iterator operator++(int)
+        {
+            Iterator copy = *this;
+            ++*this;
+            return copy;
+        }
+        bool operator==(const Iterator& other) const noexcept
+        {
+            return m_Current == other.m_Current;
+        }
+
+    private:
+        friend class VertexEdgeRange;
+        Iterator(const TopologySnapshot* snapshot, const std::uint32_t vertex,
+                 const std::uint32_t current) noexcept
+            : m_Snapshot(snapshot)
+            , m_Vertex(vertex)
+            , m_Current(current)
+        {}
+
+        const TopologySnapshot* m_Snapshot = nullptr;
+        std::uint32_t m_Vertex = VertexId::Invalid;
+        std::uint32_t m_Current = EdgeId::Invalid;
+    };
+
+    VertexEdgeRange(std::shared_ptr<const TopologySnapshot> snapshot, const std::uint32_t vertex,
+                    const std::uint32_t first)
+        : m_Snapshot(std::move(snapshot))
+        , m_Vertex(vertex)
+        , m_First(first)
+    {}
+
+    [[nodiscard]] Iterator begin() const noexcept { return {m_Snapshot.get(), m_Vertex, m_First}; }
+    [[nodiscard]] Iterator end() const noexcept
+    {
+        return {m_Snapshot.get(), m_Vertex, EdgeId::Invalid};
+    }
+    [[nodiscard]] bool empty() const noexcept { return m_First == EdgeId::Invalid; }
+
+private:
+    std::shared_ptr<const TopologySnapshot> m_Snapshot;
+    std::uint32_t m_Vertex = VertexId::Invalid;
+    std::uint32_t m_First = EdgeId::Invalid;
+};
+
 /// Every live entity of kind K in the shape: not the descendants of a root,
 /// all of them (ADR-0036).
 template <EntityKind K>
@@ -439,6 +516,13 @@ template <EntityKind K>
 [[nodiscard]] Result<SolidShellRange> ShellsOf(const Shape& shape, SolidId solid);
 [[nodiscard]] Result<CoedgeRange> CoedgesOf(const Shape& shape, LoopId loop);
 [[nodiscard]] Result<RadialCoedgeRange> RadialCoedgesOf(const Shape& shape, EdgeId edge);
+/// The edges at a vertex, from the maintained index (ADR-0036).
+[[nodiscard]] Result<VertexEdgeRange> EdgesOf(const Shape& shape, VertexId vertex);
+/// The distinct faces of an edge's uses, once each, in ascending index order
+/// (ADR-0036, ADR-0037): an eager result over the radial ring, k uses
+/// costing O(k log k) and one allocation. A seam's face comes once; an edge
+/// with no uses gives an empty vector.
+[[nodiscard]] Result<std::vector<FaceId>> FacesOf(const Shape& shape, EdgeId edge);
 
 // --- Accessors: O(1) reads of one record --------------------------------
 //

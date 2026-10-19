@@ -95,8 +95,8 @@ See the [roadmap and versioning plan](docs/planning/roadmap-and-versioning.md) f
 - [x] SoA stores for vertex, edge, coedge (with radial ring), loop, face, shell, solid, following Golovanov's logical entity model (ADR-0004). `Stereon.Topo:Records`: one `PagedArena` record table per kind with the slot state in the record; splitting records into per-field arrays is left to the ADR-0004 benchmark
 - [ ] Edge record per ADR-0009: curve kind (`Intersection`, `Exact`, `Trim`, `Boundary`, `Spatial`, `Degenerate`), tolerance, stored primary coedge, own or cached 3D curve slot with certificate; pcurves on coedges on a shared parameter. Done except the cached 3D curve and its certificate
 - [ ] Cache invalidation of the 3D edge curve when a pcurve changes (stub is enough for Phase 0)
-- [ ] `ShapeBuilder` → `Freeze()` → immutable `Shape` with stable indices and alive bitsets; separate `Compact()` returning the old→new remap table (ADR-0004). `Freeze()` certifies a `TopologySnapshot` (ADR-0038) and keeps every index; `Compact()`, deletion and builders opened on an existing `Shape` are next
-- [ ] Adjacency views: `FacesOf(edge)`, `EdgesOf(vertex)`, loop walks. `AllEntities`, `LoopsOf`, `CoedgesOf`, `RadialCoedgesOf`, `FacesOf(shell)` and `ShellsOf` ranges (ADR-0036); the distinct-adjacency queries need the maintained vertex-incidence index
+- [x] `ShapeBuilder` → `Freeze()` → immutable `Shape` with stable indices and alive bitsets; separate `Compact()` returning the old→new remap table (ADR-0004). `Freeze()` certifies a `TopologySnapshot` (ADR-0038) and keeps every index; the `Remove` operations leave tombstones and keep every link consistent; `ShapeBuilder::Open(shape)` edits an existing `Shape` sharing its pages; `Compact()` renumbers and returns the `RemapTable`
+- [x] Adjacency views: `FacesOf(edge)`, `EdgesOf(vertex)`, loop walks. `AllEntities`, `LoopsOf`, `CoedgesOf`, `RadialCoedgesOf`, `FacesOf(shell)` and `ShellsOf` ranges (ADR-0036); `EdgesOf(vertex)` from the maintained vertex-incidence index (rule S16 checks it), `FacesOf(edge)` as the eager distinct result
 - [x] `Structural`-level validity checker with rule IDs and a `ValidityReport`, naming offending entities with `Describe()` (ADR-0018); `Geometric` level once edge certificates exist. Rules S01–S15, bounded walks over the raw tables; the `Geometric` level is still to come
 - [ ] `OperationResult` (shape, history, tolerance changes, warnings) as the return type of shape-producing operations (ADR-0006)
 - [x] `Describe(shape, handle)` for every entity kind, used in logs, contract messages and checker reports
@@ -127,17 +127,17 @@ Per [ADR-0035](docs/adr/0035-debug-viewer.md): objects reach the viewer as `.stn
 - [x] `corpus/` layout, metadata format and `corpus/LICENSES.md` ([`corpus/README.md`](corpus/README.md)); cases validated by `tools/check_corpus.py` in CI
 - [ ] Regression-case workflow: failing case → minimal file + journal → never deleted
 - [ ] Benchmark harness against OCCT per `docs/benchmarks.md`: pinned OCCT build in CI, Phase 0 benchmarks B0.1–B0.5 running and reported. The pinned build exists; the OCCT side of B0.2–B0.5 is next
-- [ ] Seeded-fault test suite for handles and topology: stale handles, handles from another shape, off-by-one indices, wrong entity kinds, corrupted adjacency (ADR-0004 verification)
+- [x] Seeded-fault test suite for handles and topology: stale handles, handles from another shape, off-by-one indices, wrong entity kinds, corrupted adjacency (ADR-0004 verification). `tests/topo/FaultTests.cpp`: every fault is refused through a `Result` naming the entity or by `Freeze` with its rule; the accessors' contract violations are not testable in-process
 
 ## 10. ADR prototypes (weeks 6–12)
 
 - [ ] **ADR-0001:** union/cut/common on boxes and cylinders, including loosened-tolerance variants (1e-4 to 1e-2 mm); confirm tolerance growth is logged
 - [ ] **RS-0001:** build the ADR-0001 prototype's intersections to the contract in [RS-0001](docs/research/RS-0001-tolerant-analytic-intersection.md) and run it on `corpus/analytic-ssi/`. Before that, as a side track that needs no kernel code: the literature survey, the sweep generator, the exact reference oracle and the go/no-go decision (due week 12)
 - [ ] **ADR-0003:** dispatch benchmark, 10⁸ evaluations on line, circle, cubic B-spline
-- [ ] **ADR-0004:** ~10⁶-face body: adjacency speed and memory vs OCCT
-- [ ] **ADR-0004:** debuggability check: seeded-fault suite caught 100% in debug builds; pretty-printers working in GDB and LLDB
+- [ ] **ADR-0004:** ~10⁶-face body: adjacency speed and memory vs OCCT. `bench/TopoBench.cpp` and `bench/occt/OcctTopoBench.cpp` (B0.3–B0.5) run the sheet at 10⁴ and 10⁶ faces; the reference run and its report are next
+- [ ] **ADR-0004:** debuggability check: seeded-fault suite caught 100% in debug builds; pretty-printers working in GDB and LLDB. The suite is in place (§9); the pretty-printers still resolve no handle to its entity
 - [ ] **ADR-0004 decision point:** keep index handles throughout, or switch to the hybrid (pointers in `ShapeBuilder`, indices in `Shape`). Decide before Phase 1 algorithms start
-- [ ] **ADR-0005:** 100 local edits on a 10⁶-face body (surface replacement, face deletion, face and edge splitting; no `Compact()`): memory and copy cost; page-size sweep 128/256/1 024
+- [ ] **ADR-0005:** 100 local edits on a 10⁶-face body (surface replacement, face deletion, face and edge splitting; no `Compact()`): memory and copy cost; page-size sweep 128/256/1 024. `bench/TopoBench.cpp` runs the sequence with replacement and deletion; splitting waits for the Euler operators, and the page-size sweep is in `bench/ArenaBench.cpp`
 - [ ] **ADR-0001:** merge-policy test with vertex chains at 0.8× tolerance; result deterministic and radius-bounded
 - [ ] **ADR-0018:** seeded-fault corpus for the checker; zero false positives on valid bodies
 - [ ] **ADR-0007:** determinism check across thread counts on the prototype operations

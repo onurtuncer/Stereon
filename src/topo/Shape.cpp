@@ -11,12 +11,14 @@ module;
 #include <Stereon/Core/Contracts.hpp>
 #include <Stereon/Core/Try.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <format>
 #include <string>
 #include <string_view>
+#include <vector>
 
 module Stereon.Topo;
 
@@ -74,6 +76,34 @@ Result<RadialCoedgeRange> RadialCoedgesOf(const Shape& shape, const EdgeId edge)
                              Detail::RecordOf(shape, edge).RadialAnchor.GetIndex());
 }
 
+Result<VertexEdgeRange> EdgesOf(const Shape& shape, const VertexId vertex)
+{
+    STEREON_TRY_VOID(Detail::CheckQuery(shape, vertex, "EdgesOf"));
+    return VertexEdgeRange(shape.GetSnapshot(), vertex.GetIndex(),
+                           Detail::RecordOf(shape, vertex).FirstEdge.GetIndex());
+}
+
+Result<std::vector<FaceId>> FacesOf(const Shape& shape, const EdgeId edge)
+{
+    STEREON_TRY_VOID(Detail::CheckQuery(shape, edge, "FacesOf"));
+    const TopologySnapshot& snapshot = *shape.GetSnapshot();
+    const Detail::TopologyTables& t = snapshot.GetTables();
+    std::vector<FaceId> faces;
+    const std::uint32_t anchor = t.Edges[edge.GetIndex()].RadialAnchor.GetIndex();
+    if (anchor != CoedgeId::Invalid) {
+        std::uint32_t c = anchor;
+        do {
+            faces.push_back(snapshot.MakeId<EntityKind::Face>(
+                t.Loops[t.Coedges[c].Loop.GetIndex()].Face.GetIndex()));
+            c = t.Coedges[c].Radial.GetIndex();
+        } while (c != anchor);
+    }
+    std::ranges::sort(faces);
+    const auto [first, last] = std::ranges::unique(faces);
+    faces.erase(first, last);
+    return faces;
+}
+
 std::string RuleId(const TopologyRule rule)
 {
     return std::format("S{:02}", static_cast<int>(rule));
@@ -82,11 +112,11 @@ std::string RuleId(const TopologyRule rule)
 std::string_view RuleName(const TopologyRule rule) noexcept
 {
     // In rule order: S01 first.
-    static constexpr std::array<std::string_view, 15> Names{
+    static constexpr std::array<std::string_view, 16> Names{
         "DanglingLink",    "LoopLinksBroken",   "LoopOpen",          "CoedgeOutsideLoop",
         "RadialRingOpen",  "CoedgeOutsideRing", "EdgeUseCount",      "PrimaryCoedge",
         "LoopOutsideFace", "FaceOutsideShell",  "ShellOutsideSolid", "MissingGeometry",
-        "EdgeEndpoints",   "EmptyLoop",         "ShellDisconnected",
+        "EdgeEndpoints",   "EmptyLoop",         "ShellDisconnected", "VertexIncidence",
     };
     const auto index = static_cast<std::size_t>(rule) - 1;
     return index < Names.size() ? Names[index] : std::string_view{"UnknownRule"};
