@@ -109,8 +109,23 @@ nested at most ``MaxTrimmedNesting`` (8) deep. The writer refuses deeper
 nesting with ``NotSupported``, and the reader refuses it with
 ``ParseError``, so a hostile file cannot exhaust the stack by recursion.
 The piece's NURBS form and projector are not stored: they are rebuilt from
-the basis on load. Version 1 is version 2 without trimmed curves, so a
-version-1 file needs no migration.
+the basis on load.
+
+Format version 3 adds trimmed surfaces and the sweep wrappers
+(:doc:`trimmed`, :doc:`swept`) to ``SRFS``. The value of a
+``TrimmedSurface`` record is its basis as a record of the same chunk, then
+the trim: ``LowerU``, ``UpperU``, ``LowerV`` and ``UpperV`` (f64) and
+``Reversed`` (one byte). The value of an ``ExtrusionSurface`` record is
+its profile as a record of the ``CRVS`` kind, so a trimmed profile is
+stored as one, then ``Direction`` (three f64); a ``RevolutionSurface``
+record is its profile likewise, then ``Origin`` and ``Axis`` (three f64
+each, the axis as the surface keeps it, of unit length: the reader keeps it
+as stored, since normalising it again could move it by an ulp, and refuses
+one that is not of unit length). Bases and
+profiles nest under the one bound of ``MaxTrimmedNesting``, trims and
+sweeps counted together, and the exact patches and projectors are rebuilt
+on load as for trimmed curves. Each version is the next without its new
+records, so a version-1 or version-2 file needs no migration.
 
 Reading
 ~~~~~~~
@@ -147,9 +162,12 @@ Compatibility
 ~~~~~~~~~~~~~
 
 ``tests/io/data/geometry-v1.stn`` holds one of every built-in type written
-in format version 1, and ``geometry-v2.stn`` the same with trimmed curves
+in format version 1, ``geometry-v2.stn`` the same with trimmed curves
 added, among them an arc across a circle's seam, a reversed piece of a
-B-spline and a trimmed curve of a trimmed curve. A test reads each and
+B-spline and a trimmed curve of a trimmed curve, and ``geometry-v3.stn``
+that with trimmed surfaces and sweeps added: a cylinder patch across its
+seam, a reversed corner of a B-spline surface, an extrusion of a trimmed
+profile, a revolution and a band of it. A test reads each and
 requires the kernel to write the same bytes back, apart from the versions
 in the header, so every later version keeps reading the files of every
 earlier one exactly. When the format changes, the version goes up, a

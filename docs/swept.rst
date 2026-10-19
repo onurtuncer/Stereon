@@ -22,13 +22,13 @@ ones data exchange produces. *The wrapper types* below describe them.
 ``MakeExtrusionSurface`` and ``MakeRevolutionSurface`` construct finite
 swept patches as exact tensor-product ``BSplineSurface`` values from a
 ``BSplineCurve`` profile, the form the wrappers convert to with
-``ToBSpline`` over a range and the one the geometry archive stores. They
-do not construct faces or solids. Convert an analytic or trimmed profile
-with ``ToBSpline`` first; that conversion may change its parameter. Both
-factories validate the profile before accessing its poles or weights, then
-validate the generated surface. They return ``InvalidInput`` for malformed
-data or non-finite generated values. There is no fitting budget: these are
-exact rational constructions up to floating-point rounding.
+``ToBSpline`` over a range. They do not construct faces or solids. Convert
+an analytic or trimmed profile with ``ToBSpline`` first; that conversion
+may change its parameter. Both factories validate the profile before
+accessing its poles or weights, then validate the generated surface. They
+return ``InvalidInput`` for malformed data or non-finite generated values.
+There is no fitting budget: these are exact rational constructions up to
+floating-point rounding.
 
 Extrusion
 ---------
@@ -138,8 +138,9 @@ solid, or absence of self-intersections. Singular local-property queries
 retain the existing structured-error behaviour. Projection has the same
 limitations as other B-spline surfaces, including uncertified final
 Newton leaves, and is approximate for the profiles named above. The
-geometry archive stores the NURBS patches; records for the wrapper types
-and for trimmed surfaces follow with the next format version.
+geometry archive stores a wrapper as its profile with the direction, or
+the origin and axis, and rebuilds the projection data on load
+(:doc:`data_exchange`, format version 3).
 
 Tests compare extrusion with direct translation and revolution with
 Rodrigues rotation at interior parameters, the wrappers with their

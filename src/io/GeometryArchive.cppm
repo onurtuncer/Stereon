@@ -47,8 +47,19 @@ import Stereon.Surface;
 /// "TrimmedCurve" and "TrimmedCurve2d". The value of one is its basis as a
 /// record of the same chunk (name, length and value, so a basis may itself
 /// be trimmed, at most MaxTrimmedNesting deep), then the trim (Lower and
-/// Upper f64, Reversed one byte) as Serialized writes it. Version 1 is
-/// version 2 without trimmed curves, so a version-1 file reads unchanged.
+/// Upper f64, Reversed one byte) as Serialized writes it.
+///
+/// Format version 3 adds trimmed surfaces and sweeps to "SRFS". The value
+/// of a "TrimmedSurface" is its basis as a record of the same chunk, then
+/// the trim (LowerU, UpperU, LowerV, UpperV f64, Reversed one byte); the
+/// value of an "ExtrusionSurface" is its profile as a record of the "CRVS"
+/// kind, then the direction (three f64), and of a "RevolutionSurface" its
+/// profile likewise, then the origin and the unit axis (three f64 each),
+/// which the reader keeps as stored and refuses when not of unit length. A
+/// basis or profile may itself be such a composite record, all nested at
+/// most MaxTrimmedNesting deep together. Each earlier version is the next
+/// without its new records, so a version-1 or version-2 file reads
+/// unchanged.
 ///
 /// A reader refuses a newer format version, a damaged chunk, an unknown
 /// required chunk, an unknown type in a geometry chunk and any value its
@@ -104,17 +115,20 @@ struct LoadedGeometry {
 };
 
 /// The format version this kernel writes and the newest it reads.
-inline constexpr std::uint32_t GeometryFormatVersion = 2;
+inline constexpr std::uint32_t GeometryFormatVersion = 3;
 
-/// How deep trimmed curves may be nested in a file: a trimmed curve whose
-/// basis is a trimmed curve is depth 2. Deeper nesting is refused on read,
-/// so that a hostile file cannot exhaust the stack.
+/// How deep the composite records (trimmed curves, trimmed surfaces and
+/// sweeps) may be nested in a file: a trimmed curve whose basis is a
+/// trimmed curve is depth 2, as is an extrusion of a trimmed curve. Deeper
+/// nesting is refused on read, so that a hostile file cannot exhaust the
+/// stack.
 inline constexpr int MaxTrimmedNesting = 8;
 
 /// The archive as bytes. NotSupported for geometry of a type the format has
-/// no record for (only the built-in types and trimmed curves of them do)
-/// and without static reflection; InvalidInput for a policy value that is not finite and
-/// positive.
+/// no record for (the built-in types, trimmed curves and surfaces of them,
+/// and extrusions and revolutions of any stored profile have one) and
+/// without static reflection; InvalidInput for a policy value that is not
+/// finite and positive.
 [[nodiscard]] Result<std::vector<std::byte>> WriteGeometry(const GeometryArchive& archive);
 
 /// The archive in bytes; ParseError for anything malformed (see above).

@@ -42,7 +42,7 @@ std::string RecordJson(const T& value)
 }
 
 // Every built-in type, in space and in the plane, every surface, and the
-// trim of a trimmed curve.
+// tails of the composite records: the trims and the sweeps.
 #define STEREON_ARCHIVE_RECORD(T)                                                                  \
     template std::vector<std::byte> RecordBytes<T>(const T&);                                      \
     template Result<T> RecordValue<T>(std::span<const std::byte>);                                 \
@@ -67,6 +67,9 @@ STEREON_ARCHIVE_RECORD(Sphere)
 STEREON_ARCHIVE_RECORD(Torus)
 STEREON_ARCHIVE_RECORD(BSplineSurface)
 STEREON_ARCHIVE_RECORD(TrimRecord)
+STEREON_ARCHIVE_RECORD(SurfaceTrimRecord)
+STEREON_ARCHIVE_RECORD(ExtrusionRecord)
+STEREON_ARCHIVE_RECORD(RevolutionRecord)
 
 #undef STEREON_ARCHIVE_RECORD
 
