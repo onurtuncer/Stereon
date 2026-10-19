@@ -20,7 +20,8 @@ stereon_anchor_contracts(stereon_bench)
 # LGPL-2.1 and linked into this executable only (ADR-0008).
 if(STEREON_WITH_OCCT)
     find_package(OpenCASCADE CONFIG REQUIRED)
-    add_executable(stereon_occt_bench occt/OcctBench.cpp occt/OcctTopoBench.cpp)
+    add_executable(stereon_occt_bench occt/OcctBench.cpp occt/OcctTopoBench.cpp
+                                      occt/ResidentMemory.cpp)
     target_link_libraries(stereon_occt_bench
         PRIVATE stereon::surface stereon::topo stereon_options benchmark::benchmark_main
                 TKernel TKMath TKG3d TKGeomBase TKGeomAlgo TKBRep TKTopAlgo

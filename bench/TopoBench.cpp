@@ -81,7 +81,9 @@ Shape MakeSheet(const std::size_t n)
         }
     }
     // Horizontal edges (i, j) -> (i + 1, j), then vertical (i, j) -> (i, j + 1).
-    const auto at = [&](const std::size_t i, const std::size_t j) { return vertices[j * side + i]; };
+    const auto at = [&](const std::size_t i, const std::size_t j) {
+        return vertices[j * side + i];
+    };
     std::vector<BuilderEdgeId> horizontal;
     std::vector<BuilderEdgeId> vertical;
     horizontal.reserve(n * side);
@@ -128,8 +130,7 @@ Shape MakeSheet(const std::size_t n)
             // Counter-clockwise: bottom along, right along, top against, left against.
             static_cast<void>(*b.AppendCoedge(loop, horizontal[j * n + i], EdgeUseSense::Same,
                                               pcurve(Point2{x, y}, Vec2{1, 0})));
-            static_cast<void>(*b.AppendCoedge(loop, vertical[j * side + i + 1],
-                                              EdgeUseSense::Same,
+            static_cast<void>(*b.AppendCoedge(loop, vertical[j * side + i + 1], EdgeUseSense::Same,
                                               pcurve(Point2{x + 1, y}, Vec2{0, 1})));
             static_cast<void>(*b.AppendCoedge(loop, horizontal[(j + 1) * n + i],
                                               EdgeUseSense::Opposite,
@@ -250,8 +251,8 @@ void BytesPerFace(benchmark::State& state)
     state.counters["faces"] = static_cast<double>(n * n);
     state.counters["bytes_per_face"] =
         static_cast<double>(TableBytes(shape)) / static_cast<double>(n * n);
-    state.counters["bytes_per_edge"] =
-        static_cast<double>(TableBytes(shape)) / static_cast<double>(shape.Count<EntityKind::Edge>());
+    state.counters["bytes_per_edge"] = static_cast<double>(TableBytes(shape)) /
+                                       static_cast<double>(shape.Count<EntityKind::Edge>());
 }
 
 /// One edit of the frozen body: opened, edited, frozen again. The pages
@@ -316,11 +317,11 @@ void EditSequence(benchmark::State& state)
             // Faces spread along a diagonal, never one twice.
             const std::size_t i = 1 + (k * 7) % (n - 2);
             const std::size_t j = 1 + (k * 11) % (n - 2);
-            const FaceId face =
-                current.GetSnapshot()->MakeId<EntityKind::Face>(static_cast<std::uint32_t>(j * n + i));
+            const FaceId face = current.GetSnapshot()->MakeId<EntityKind::Face>(
+                static_cast<std::uint32_t>(j * n + i));
             if (k % 2 == 0) {
-                const Stereon::SurfaceRef moved = b.AddSurface(Stereon::Surface(
-                    Stereon::Plane{Point3{0, 0, static_cast<double>(k)}, Vec3{1, 0, 0}, Vec3{0, 1, 0}}));
+                const Stereon::SurfaceRef moved = b.AddSurface(Stereon::Surface(Stereon::Plane{
+                    Point3{0, 0, static_cast<double>(k)}, Vec3{1, 0, 0}, Vec3{0, 1, 0}}));
                 static_cast<void>(*b.SetSurface(b.Handle(face), moved));
             } else {
                 static_cast<void>(*b.RemoveFace(b.Handle(face)));
@@ -346,8 +347,8 @@ void CompactAfterEdits(benchmark::State& state)
         ShapeBuilder b = *ShapeBuilder::Open(current);
         const std::size_t i = 1 + (k * 7) % (n - 2);
         const std::size_t j = 1 + (k * 11) % (n - 2);
-        static_cast<void>(*b.RemoveFace(b.Handle(
-            current.GetSnapshot()->MakeId<EntityKind::Face>(static_cast<std::uint32_t>(j * n + i)))));
+        static_cast<void>(*b.RemoveFace(b.Handle(current.GetSnapshot()->MakeId<EntityKind::Face>(
+            static_cast<std::uint32_t>(j * n + i)))));
         current = *Stereon::Freeze(std::move(b));
     }
     for (auto _ : state) {
@@ -362,11 +363,39 @@ constexpr std::int64_t Body = 1'000'000;
 
 } // namespace
 
-BENCHMARK(SheetBuild)->Name("B0.3/SheetBuild/Stereon")->Arg(Quick)->Arg(Body)->Unit(benchmark::kMillisecond);
-BENCHMARK(FacesOfEdges)->Name("B0.3/FacesOfEdges/Stereon")->Arg(Quick)->Arg(Body)->Unit(benchmark::kMillisecond);
-BENCHMARK(EdgesOfVertices)->Name("B0.3/EdgesOfVertices/Stereon")->Arg(Quick)->Arg(Body)->Unit(benchmark::kMillisecond);
+BENCHMARK(SheetBuild)
+    ->Name("B0.3/SheetBuild/Stereon")
+    ->Arg(Quick)
+    ->Arg(Body)
+    ->Unit(benchmark::kMillisecond);
+BENCHMARK(FacesOfEdges)
+    ->Name("B0.3/FacesOfEdges/Stereon")
+    ->Arg(Quick)
+    ->Arg(Body)
+    ->Unit(benchmark::kMillisecond);
+BENCHMARK(EdgesOfVertices)
+    ->Name("B0.3/EdgesOfVertices/Stereon")
+    ->Arg(Quick)
+    ->Arg(Body)
+    ->Unit(benchmark::kMillisecond);
 BENCHMARK(BytesPerFace)->Name("B0.4/BytesPerFace/Stereon")->Arg(Quick)->Arg(Body);
-BENCHMARK(EditReplaceSurface)->Name("B0.5/ReplaceSurface/Stereon")->Arg(Quick)->Arg(Body)->Unit(benchmark::kMillisecond);
-BENCHMARK(EditDeleteFace)->Name("B0.5/DeleteFace/Stereon")->Arg(Quick)->Arg(Body)->Unit(benchmark::kMillisecond);
-BENCHMARK(EditSequence)->Name("ADR-0005/EditSequence/Stereon")->Arg(Quick)->Arg(Body)->Unit(benchmark::kMillisecond);
-BENCHMARK(CompactAfterEdits)->Name("ADR-0004/Compact/Stereon")->Arg(Quick)->Arg(Body)->Unit(benchmark::kMillisecond);
+BENCHMARK(EditReplaceSurface)
+    ->Name("B0.5/ReplaceSurface/Stereon")
+    ->Arg(Quick)
+    ->Arg(Body)
+    ->Unit(benchmark::kMillisecond);
+BENCHMARK(EditDeleteFace)
+    ->Name("B0.5/DeleteFace/Stereon")
+    ->Arg(Quick)
+    ->Arg(Body)
+    ->Unit(benchmark::kMillisecond);
+BENCHMARK(EditSequence)
+    ->Name("ADR-0005/EditSequence/Stereon")
+    ->Arg(Quick)
+    ->Arg(Body)
+    ->Unit(benchmark::kMillisecond);
+BENCHMARK(CompactAfterEdits)
+    ->Name("ADR-0004/Compact/Stereon")
+    ->Arg(Quick)
+    ->Arg(Body)
+    ->Unit(benchmark::kMillisecond);

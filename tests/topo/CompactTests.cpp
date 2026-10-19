@@ -37,14 +37,14 @@ namespace {
 /// A box with its face 1 removed, frozen, and the box's handles.
 struct Edited {
     Body Box = MakeBox();
-    Shape Shape;
+    Shape Frozen;
 };
 
 Edited BoxMinusFace()
 {
     Edited e;
     Must(e.Box.Builder.RemoveFace(e.Box.Faces[1]));
-    e.Shape = Must(Stereon::Freeze(std::move(e.Box.Builder)));
+    e.Frozen = Must(Stereon::Freeze(std::move(e.Box.Builder)));
     return e;
 }
 
@@ -54,13 +54,13 @@ TEST_CASE("Compact renumbers the live entities in their old order and drops the 
           "[topo][compact]")
 {
     const Edited e = BoxMinusFace();
-    const Compacted c = Must(Stereon::Compact(e.Shape));
+    const Compacted c = Must(Stereon::Compact(e.Frozen));
     REQUIRE(c.Shape.Count<EntityKind::Face>() == 5);
     REQUIRE(c.Shape.Count<EntityKind::Loop>() == 5);
     REQUIRE(c.Shape.Count<EntityKind::Coedge>() == 20);
     REQUIRE(c.Shape.Count<EntityKind::Edge>() == 12);
     REQUIRE(c.Shape.Count<EntityKind::Vertex>() == 8);
-    REQUIRE(c.SourceStore == e.Shape.GetSnapshot()->GetStore());
+    REQUIRE(c.SourceStore == e.Frozen.GetSnapshot()->GetStore());
     REQUIRE(c.Shape.GetSnapshot()->GetStore() != c.SourceStore);
     // Dense, in the old order.
     std::uint32_t expected = 0;
@@ -97,12 +97,12 @@ TEST_CASE("Compact renumbers the live entities in their old order and drops the 
 TEST_CASE("Translate takes the source's handles to the compacted shape's", "[topo][compact]")
 {
     const Edited e = BoxMinusFace();
-    const Compacted c = Must(Stereon::Compact(e.Shape));
-    const FaceId dead = e.Shape.GetSnapshot()->MakeId<EntityKind::Face>(1);
-    REQUIRE_FALSE(e.Shape.GetSnapshot()->Contains(dead));
+    const Compacted c = Must(Stereon::Compact(e.Frozen));
+    const FaceId dead = e.Frozen.GetSnapshot()->MakeId<EntityKind::Face>(1);
+    REQUIRE_FALSE(e.Frozen.GetSnapshot()->Contains(dead));
     REQUIRE_FALSE(c.Translate(dead).IsValid());
     REQUIRE_FALSE(c.Translate(FaceId{}).IsValid());
-    for (const FaceId f : Must(Stereon::AllEntities<EntityKind::Face>(e.Shape))) {
+    for (const FaceId f : Must(Stereon::AllEntities<EntityKind::Face>(e.Frozen))) {
         const FaceId g = c.Translate(f);
         REQUIRE(g.IsValid());
         REQUIRE(g.GetIndex() == c.Remap.NewIndex<EntityKind::Face>(f.GetIndex()));
@@ -117,7 +117,7 @@ TEST_CASE("Translate takes the source's handles to the compacted shape's", "[top
 TEST_CASE("the compacted shape is the same shape under new indices", "[topo][compact]")
 {
     const Edited e = BoxMinusFace();
-    const Shape& a = e.Shape;
+    const Shape& a = e.Frozen;
     const Compacted c = Must(Stereon::Compact(a));
     const Shape& b = c.Shape;
     for (const VertexId v : Must(Stereon::AllEntities<EntityKind::Vertex>(a))) {
@@ -185,15 +185,15 @@ TEST_CASE("Compact of a shape without tombstones renumbers by identity", "[topo]
 TEST_CASE("the source's handles do not reach the compacted shape", "[topo][compact][fault]")
 {
     const Edited e = BoxMinusFace();
-    const Compacted c = Must(Stereon::Compact(e.Shape));
+    const Compacted c = Must(Stereon::Compact(e.Frozen));
     // The source's last face has no slot in the compacted shape, which has
     // five; a handle made for that slot is refused in every build.
-    const FaceId last = e.Shape.GetSnapshot()->MakeId<EntityKind::Face>(5);
-    REQUIRE(Stereon::LoopsOf(e.Shape, last).has_value());
+    const FaceId last = e.Frozen.GetSnapshot()->MakeId<EntityKind::Face>(5);
+    REQUIRE(Stereon::LoopsOf(e.Frozen, last).has_value());
     REQUIRE_FALSE(Stereon::LoopsOf(c.Shape, last).has_value());
     REQUIRE_FALSE(Stereon::LoopsOf(c.Shape, FaceId::FromIndex(5)).has_value());
     if constexpr (STEREON_CHECKED_HANDLES) {
-        const FaceId ofSource = e.Shape.Resolve(e.Box.Faces[0]);
+        const FaceId ofSource = e.Frozen.Resolve(e.Box.Faces[0]);
         REQUIRE_FALSE(Stereon::LoopsOf(c.Shape, ofSource).has_value());
         REQUIRE(Stereon::Describe(c.Shape, ofSource) == "Face#0 [not in this shape]");
         REQUIRE_FALSE(c.Shape.Resolve(e.Box.Faces[0]).IsValid());

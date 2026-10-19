@@ -23,10 +23,11 @@
 #include <BRepBuilderAPI_MakeWire.hxx>
 #include <BRepTools_ReShape.hxx>
 #include <BRep_Builder.hxx>
+#include <NCollection_IndexedDataMap.hxx>
+#include <NCollection_List.hxx>
 #include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
-#include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
-#include <TopTools_ListOfShape.hxx>
+#include <TopTools_ShapeMapHasher.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
@@ -34,52 +35,26 @@
 #include <TopoDS_Shell.hxx>
 #include <TopoDS_Vertex.hxx>
 #include <TopoDS_Wire.hxx>
+#include <benchmark/benchmark.h>
 #include <gp_Pln.hxx>
 #include <gp_Pnt.hxx>
-
-#include <benchmark/benchmark.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <utility>
 #include <vector>
 
-#if defined(_WIN32)
-#include <windows.h>
-// After windows.h.
-#include <psapi.h>
-#elif defined(__linux__)
-#include <fstream>
-#include <unistd.h>
-#endif
-
 import Stereon.Topo;
+
+#include "ResidentMemory.hpp"
 
 namespace {
 
-/// The process's resident set, in bytes; 0 where this file does not know
-/// how to ask.
-std::size_t ResidentBytes()
-{
-#if defined(_WIN32)
-    PROCESS_MEMORY_COUNTERS counters{};
-    counters.cb = sizeof counters;
-    if (GetProcessMemoryInfo(GetCurrentProcess(), &counters, counters.cb) != 0) {
-        return counters.WorkingSetSize;
-    }
-    return 0;
-#elif defined(__linux__)
-    std::ifstream statm("/proc/self/statm");
-    std::size_t pages = 0;
-    std::size_t resident = 0;
-    if (statm >> pages >> resident) {
-        return resident * static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
-    }
-    return 0;
-#else
-    return 0;
-#endif
-}
+/// The ancestor map of TopExp, under OCCT 8's name for it.
+using AncestorMap = NCollection_IndexedDataMap<TopoDS_Shape, NCollection_List<TopoDS_Shape>,
+                                               TopTools_ShapeMapHasher>;
+
+using StereonBench::ResidentBytes;
 
 std::size_t SideFor(const std::size_t faces)
 {
@@ -128,7 +103,7 @@ TopoDS_Shell MakeOcctSheet(const std::size_t n)
             BRepBuilderAPI_MakeWire wire(horizontal[j * n + i], vertical[j * side + i + 1],
                                          TopoDS::Edge(horizontal[(j + 1) * n + i].Reversed()),
                                          TopoDS::Edge(vertical[j * side + i].Reversed()));
-            builder.Add(shell, BRepBuilderAPI_MakeFace(plane, wire.Wire(), Standard_True).Face());
+            builder.Add(shell, BRepBuilderAPI_MakeFace(plane, wire.Wire(), true).Face());
         }
     }
     return shell;
@@ -137,10 +112,10 @@ TopoDS_Shell MakeOcctSheet(const std::size_t n)
 /// The faces of every edge, summed, through the ancestor map.
 std::size_t FacesOfEveryEdge(const TopoDS_Shape& shape)
 {
-    TopTools_IndexedDataMapOfShapeListOfShape map;
+    AncestorMap map;
     TopExp::MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, map);
     std::size_t total = 0;
-    for (Standard_Integer k = 1; k <= map.Extent(); ++k) {
+    for (int k = 1; k <= map.Extent(); ++k) {
         total += static_cast<std::size_t>(map.FindFromIndex(k).Extent());
     }
     return total;
@@ -148,10 +123,10 @@ std::size_t FacesOfEveryEdge(const TopoDS_Shape& shape)
 
 std::size_t EdgesOfEveryVertex(const TopoDS_Shape& shape)
 {
-    TopTools_IndexedDataMapOfShapeListOfShape map;
+    AncestorMap map;
     TopExp::MapShapesAndAncestors(shape, TopAbs_VERTEX, TopAbs_EDGE, map);
     std::size_t total = 0;
-    for (Standard_Integer k = 1; k <= map.Extent(); ++k) {
+    for (int k = 1; k <= map.Extent(); ++k) {
         total += static_cast<std::size_t>(map.FindFromIndex(k).Extent());
     }
     return total;
@@ -199,7 +174,7 @@ void OcctAncestorMap(benchmark::State& state)
     const std::size_t n = SideFor(static_cast<std::size_t>(state.range(0)));
     const TopoDS_Shell shell = MakeOcctSheet(n);
     for (auto _ : state) {
-        TopTools_IndexedDataMapOfShapeListOfShape map;
+        AncestorMap map;
         TopExp::MapShapesAndAncestors(shell, TopAbs_EDGE, TopAbs_FACE, map);
         benchmark::DoNotOptimize(map.Extent());
     }
@@ -246,7 +221,9 @@ Stereon::Shape MakeStereonSheet(const std::size_t n)
                 *b.AddVertex(Point3{static_cast<double>(i), static_cast<double>(j), 0.0}, 1e-7));
         }
     }
-    const auto at = [&](const std::size_t i, const std::size_t j) { return vertices[j * side + i]; };
+    const auto at = [&](const std::size_t i, const std::size_t j) {
+        return vertices[j * side + i];
+    };
     std::vector<Stereon::BuilderEdgeId> horizontal;
     std::vector<Stereon::BuilderEdgeId> vertical;
     const auto edge = [&](const Stereon::BuilderVertexId from, const Stereon::BuilderVertexId to,
@@ -260,16 +237,16 @@ Stereon::Shape MakeStereonSheet(const std::size_t n)
     };
     for (std::size_t j = 0; j < side; ++j) {
         for (std::size_t i = 0; i < n; ++i) {
-            horizontal.push_back(
-                edge(at(i, j), at(i + 1, j),
-                     Point3{static_cast<double>(i), static_cast<double>(j), 0.0}, Vec3{1, 0, 0}));
+            horizontal.push_back(edge(at(i, j), at(i + 1, j),
+                                      Point3{static_cast<double>(i), static_cast<double>(j), 0.0},
+                                      Vec3{1, 0, 0}));
         }
     }
     for (std::size_t j = 0; j < n; ++j) {
         for (std::size_t i = 0; i < side; ++i) {
-            vertical.push_back(
-                edge(at(i, j), at(i, j + 1),
-                     Point3{static_cast<double>(i), static_cast<double>(j), 0.0}, Vec3{0, 1, 0}));
+            vertical.push_back(edge(at(i, j), at(i, j + 1),
+                                    Point3{static_cast<double>(i), static_cast<double>(j), 0.0},
+                                    Vec3{0, 1, 0}));
         }
     }
     const Stereon::BuilderShellId shell = *b.AddShell();
@@ -284,8 +261,7 @@ Stereon::Shape MakeStereonSheet(const std::size_t n)
             const auto y = static_cast<double>(j);
             static_cast<void>(*b.AppendCoedge(loop, horizontal[j * n + i], EdgeUseSense::Same,
                                               pcurve(Point2{x, y}, Vec2{1, 0})));
-            static_cast<void>(*b.AppendCoedge(loop, vertical[j * side + i + 1],
-                                              EdgeUseSense::Same,
+            static_cast<void>(*b.AppendCoedge(loop, vertical[j * side + i + 1], EdgeUseSense::Same,
                                               pcurve(Point2{x + 1, y}, Vec2{0, 1})));
             static_cast<void>(*b.AppendCoedge(loop, horizontal[(j + 1) * n + i],
                                               EdgeUseSense::Opposite,
@@ -338,7 +314,7 @@ void OcctReplaceFace(benchmark::State& state)
         for (TopExp_Explorer wires(middle, TopAbs_WIRE); wires.More(); wires.Next()) {
             wire = TopoDS::Wire(wires.Current());
         }
-        const TopoDS_Face replacement = BRepBuilderAPI_MakeFace(lifted, wire, Standard_True).Face();
+        const TopoDS_Face replacement = BRepBuilderAPI_MakeFace(lifted, wire, true).Face();
         BRepTools_ReShape reshape;
         reshape.Replace(middle, replacement);
         const TopoDS_Shape edited = reshape.Apply(shell);
@@ -354,10 +330,38 @@ constexpr std::int64_t Body = 1'000'000;
 
 } // namespace
 
-BENCHMARK(OcctSheetBuild)->Name("B0.3/SheetBuild/OCCT")->Arg(Quick)->Arg(Body)->Unit(benchmark::kMillisecond);
-BENCHMARK(OcctFacesOfEdges)->Name("B0.3/FacesOfEdges/OCCT")->Arg(Quick)->Arg(Body)->Unit(benchmark::kMillisecond);
-BENCHMARK(OcctEdgesOfVertices)->Name("B0.3/EdgesOfVertices/OCCT")->Arg(Quick)->Arg(Body)->Unit(benchmark::kMillisecond);
-BENCHMARK(OcctAncestorMap)->Name("B0.3/AncestorMap/OCCT")->Arg(Quick)->Arg(Body)->Unit(benchmark::kMillisecond);
-BENCHMARK(OcctResidentPerFace)->Name("B0.4/ResidentPerFace/OCCT")->Arg(Quick)->Arg(Body)->Unit(benchmark::kMillisecond);
-BENCHMARK(StereonResidentPerFace)->Name("B0.4/ResidentPerFace/Stereon")->Arg(Quick)->Arg(Body)->Unit(benchmark::kMillisecond);
-BENCHMARK(OcctReplaceFace)->Name("B0.5/ReplaceSurface/OCCT")->Arg(Quick)->Arg(Body)->Unit(benchmark::kMillisecond);
+BENCHMARK(OcctSheetBuild)
+    ->Name("B0.3/SheetBuild/OCCT")
+    ->Arg(Quick)
+    ->Arg(Body)
+    ->Unit(benchmark::kMillisecond);
+BENCHMARK(OcctFacesOfEdges)
+    ->Name("B0.3/FacesOfEdges/OCCT")
+    ->Arg(Quick)
+    ->Arg(Body)
+    ->Unit(benchmark::kMillisecond);
+BENCHMARK(OcctEdgesOfVertices)
+    ->Name("B0.3/EdgesOfVertices/OCCT")
+    ->Arg(Quick)
+    ->Arg(Body)
+    ->Unit(benchmark::kMillisecond);
+BENCHMARK(OcctAncestorMap)
+    ->Name("B0.3/AncestorMap/OCCT")
+    ->Arg(Quick)
+    ->Arg(Body)
+    ->Unit(benchmark::kMillisecond);
+BENCHMARK(OcctResidentPerFace)
+    ->Name("B0.4/ResidentPerFace/OCCT")
+    ->Arg(Quick)
+    ->Arg(Body)
+    ->Unit(benchmark::kMillisecond);
+BENCHMARK(StereonResidentPerFace)
+    ->Name("B0.4/ResidentPerFace/Stereon")
+    ->Arg(Quick)
+    ->Arg(Body)
+    ->Unit(benchmark::kMillisecond);
+BENCHMARK(OcctReplaceFace)
+    ->Name("B0.5/ReplaceSurface/OCCT")
+    ->Arg(Quick)
+    ->Arg(Body)
+    ->Unit(benchmark::kMillisecond);
