@@ -43,7 +43,9 @@ constexpr std::uint32_t None = CoedgeId::Invalid;
     return kind == EdgeCurveKind::Exact || kind == EdgeCurveKind::Spatial;
 }
 
-[[nodiscard]] Result<void> Refuse(const char* operation, const std::string& why)
+/// The refusal of an operator: InvalidInput, naming it. Converts to any
+/// operator's Result.
+[[nodiscard]] auto Refuse(const char* operation, const std::string& why)
 {
     return Fail(ErrorCode::InvalidInput, std::string(operation) + ": " + why);
 }
@@ -407,8 +409,8 @@ Result<void> ShapeBuilder::KillEdgeVertex(const BuilderEdgeId edge, const Builde
     if (e.Start == e.End || (e.Start.GetIndex() != v && e.End.GetIndex() != v)) {
         return Refuse(op, "the vertex must be one end of an edge that is not closed");
     }
-    const EdgeId far = e.Start.GetIndex() == v ? e.NextAtStart : e.NextAtEnd;
-    if (m_Tables.Vertices[v].FirstEdge.GetIndex() != edge.GetIndex() || far.IsValid()) {
+    const EdgeId another = e.Start.GetIndex() == v ? e.NextAtStart : e.NextAtEnd;
+    if (m_Tables.Vertices[v].FirstEdge.GetIndex() != edge.GetIndex() || another.IsValid()) {
         return Refuse(op, "other edges start or end at the vertex");
     }
     const std::uint32_t first = e.RadialAnchor.GetIndex();
