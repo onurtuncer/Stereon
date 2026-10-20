@@ -34,6 +34,7 @@ module;
 
 module Stereon.Io;
 
+import :Debug;
 import :GeometryArchive;
 import :Records;
 
@@ -54,6 +55,8 @@ constexpr std::string_view PolicyTag = "POLI";
 constexpr std::string_view CurvesTag = "CRVS";
 constexpr std::string_view PlaneCurvesTag = "PCRV";
 constexpr std::string_view SurfacesTag = "SRFS";
+/// The optional debug chunk of a dump (ADR-0035).
+constexpr std::string_view DebugTag = "DBUG";
 
 /// The record names of trimmed curves (format version 2).
 template <std::size_t D>
@@ -776,6 +779,7 @@ struct ChunkState {
     bool Curves = false;
     bool PlaneCurves = false;
     bool Surfaces = false;
+    bool Debug = false;
 };
 
 /// Marks the chunk's kind seen; ParseError if it was already.
@@ -812,6 +816,11 @@ struct ChunkState {
     if (chunk.Tag == SurfacesTag) {
         STEREON_TRY_VOID(FirstOfKind(chunk, state.Surfaces));
         STEREON_TRY(archive.Surfaces, DecodeChunk<Surface>(chunk, BuiltinSurfaceTypes{}, version));
+        return {};
+    }
+    if (chunk.Tag == DebugTag) {
+        STEREON_TRY_VOID(FirstOfKind(chunk, state.Debug));
+        STEREON_TRY(archive.Debug, Detail::ReadDebugPayload(chunk.Payload));
         return {};
     }
     if (chunk.Required) {
@@ -884,6 +893,10 @@ Result<std::vector<std::byte>> WriteGeometry(const GeometryArchive& archive)
     PutChunk(out, CurvesTag, true, curves);
     PutChunk(out, PlaneCurvesTag, true, planeCurves);
     PutChunk(out, SurfacesTag, true, surfaces);
+    if (archive.Debug) {
+        STEREON_TRY(const std::vector<std::byte> debug, Detail::DebugPayload(*archive.Debug));
+        PutChunk(out, DebugTag, false, debug);
+    }
     return out;
 }
 
@@ -1073,6 +1086,9 @@ template <typename Types>
         STEREON_TRY(body, RecordsJson(BuiltinCurve2dTypes{}, chunk));
     } else if (chunk.Tag == SurfacesTag) {
         STEREON_TRY(body, RecordsJson(BuiltinSurfaceTypes{}, chunk));
+    } else if (chunk.Tag == DebugTag) {
+        STEREON_TRY(const DebugChunk debug, Detail::ReadDebugPayload(chunk.Payload));
+        body = Detail::DebugJson(debug);
     } else {
         body = std::format("{{\"bytes\":{}}}", chunk.Payload.size());
     }

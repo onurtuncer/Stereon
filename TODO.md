@@ -107,9 +107,9 @@ See the [roadmap and versioning plan](docs/planning/roadmap-and-versioning.md) f
 
 Per [ADR-0035](docs/adr/0035-debug-viewer.md): objects reach the viewer as `.stn` dump files; the viewer is GLFW + OpenGL 3.3 core + Dear ImGui.
 
-- [ ] `Stereon.Mesh:Sampling`: curves to polylines and surfaces to iso-lines within a display tolerance (chord and angle) kept apart from modelling tolerances; NURBS sampled through every knot; unbounded geometry over a given range
-- [ ] `Stereon.Io:Dump`: one `.stn` file per call in `$STEREON_DUMP_DIR` (nothing written when unset), the geometry chunks plus an optional `DBUG` chunk (name, source location, points, polylines, boxes, triangle soups, labels); written to a temporary file and renamed
-- [ ] `STEREON_DUMP(name, obj)` in `<Stereon/Io/Dump.hpp>`, and exported non-template `Dump(name, obj)` overloads callable from a GDB or LLDB breakpoint
+- [x] `Stereon.Mesh:Sampling`: curves to polylines and surfaces to iso-lines within a display tolerance (chord and angle) kept apart from modelling tolerances; NURBS sampled through every knot; unbounded geometry over a given range. `SampleCurve`, `SampleSurface` and `Breakpoints` in `src/mesh/Sampling.cppm`; the chord is checked at seven interior points per segment, so the bound is for display, not certified
+- [x] `Stereon.Io:Dump`: one `.stn` file per call in `$STEREON_DUMP_DIR` (nothing written when unset), the geometry chunks plus an optional `DBUG` chunk (name, source location, points, polylines, boxes, triangle soups, labels); written to a temporary file and renamed. `Stereon.Io:Debug` holds the chunk's layout; a `Shape` is dumped through `ShapeArchive` (geometry plus overlay primitives) until the format has topology chunks
+- [x] `STEREON_DUMP(name, obj)` in `<Stereon/Io/Dump.hpp>`, and exported non-template `Dump(name, obj)` overloads callable from a GDB or LLDB breakpoint. `Dump(const char*, ...)` for `Curve`, `Curve2d`, `Surface` and `Shape`
 - [ ] `viewer/scene`: headless library turning dump files into display primitives, with Catch2 tests that open no window
 - [ ] `viewer/app` (`stn-view`) behind `STEREON_BUILD_VIEWER` (off by default): orbit/pan/zoom, fit all, object list with visibility and source location, live reload of the dump directory
 - [ ] Geometry overlays: parameter ticks, direction arrows, control polygons and nets, knots; a 2D panel for `Curve2d` and pcurves in parameter space
@@ -117,7 +117,7 @@ Per [ADR-0035](docs/adr/0035-debug-viewer.md): objects reach the viewer as `.stn
 - [ ] GLFW, Dear ImGui and the GL loader declared with licences and admitted by `tools/check_dependencies.py` only under `viewer/`; a check that nothing under `src/` references them (ADR-0034); CI builds the viewer and runs the `viewer/scene` tests
 - [ ] Debugger pretty-printers for GDB (Python) and LLDB: handles resolved to the entity (e.g. `Edge#4711 [Line, tol 1e-5, faces 12|37]`), `Interval`, `Box3`, `Curve`, `Surface`. Done except resolving a handle to its entity, which needs the topology stores: `tools/debugger/stereon_gdb.py` and `stereon_lldb.py` print vectors, intervals, boxes, handles, the erased wrappers (built-in and user types), arenas, journal ids, signs and expansions as `std::format` does
 - [x] CI test for the pretty-printers using scripted GDB and LLDB sessions. `tests/debugger/check_printers.py` against one expected table for both debuggers; the Linux CI jobs install gdb and lldb
-- [ ] `stn-dump` prototype: JSON view of any `.stn` file, dumps included (geometry now, `Shape` once it exists), for diffing two versions (ADR-0012 groundwork)
+- [x] `stn-dump` prototype: JSON view of any `.stn` file, dumps included (geometry now, `Shape` once it exists), for diffing two versions (ADR-0012 groundwork). `tools/stn-dump`, with `--pretty` for diffs; `Shape` dumps show their overlays, not yet their topology records
 
 ## 9. Testing infrastructure (weeks 2–10)
 

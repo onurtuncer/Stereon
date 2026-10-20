@@ -12,6 +12,7 @@ include_guard(GLOBAL)
 
 option(STEREON_BUILD_TESTS "Build the unit and property tests" ON)
 option(STEREON_BUILD_BENCH "Build the benchmark suite" OFF)
+option(STEREON_BUILD_TOOLS "Build the command-line tools (stn-dump)" ON)
 option(STEREON_BUILD_PYTHON "Build the Python bindings (nanobind)" OFF)
 option(STEREON_BUILD_DOCS "Build the Sphinx manual and Doxygen API reference" OFF)
 option(STEREON_WITH_OCCT

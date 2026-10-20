@@ -7,10 +7,14 @@
 
 stereon_add_library(io
     MODULES
+        Debug.cppm
+        Dump.cppm
         GeometryArchive.cppm
         Io.cppm
         Records.cppm
     SOURCES
+        Debug.cpp
+        Dump.cpp
         GeometryArchive.cpp
         Records.cpp
     DEPENDS

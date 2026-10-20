@@ -34,6 +34,7 @@ stereon_add_tests(curve)
 stereon_add_tests(surface)
 stereon_add_tests(intersect)
 stereon_add_tests(topo)
+stereon_add_tests(mesh)
 stereon_add_tests(io)
 
 # The reflection serialiser is instantiated in the test unit, which pulls the
@@ -60,6 +61,27 @@ add_test(NAME "determinism: serial and 1, 2, 8 and 32 threads give the same byte
     COMMAND stereon_determinism --check 2000)
 set_tests_properties("determinism: serial and 1, 2, 8 and 32 threads give the same bytes"
     PROPERTIES PASS_REGULAR_EXPRESSION "every configuration identical")
+
+# stn-dump (ADR-0012, ADR-0035) on a committed archive: the JSON view, its
+# pretty form for diffs, and the exit statuses for a missing file and for
+# bad arguments.
+if(TARGET stn-dump)
+    set(stn_dump_fixture "${CMAKE_CURRENT_SOURCE_DIR}/io/data/geometry-v3.stn")
+    add_test(NAME "tools: stn-dump prints the JSON view"
+        COMMAND stn-dump "${stn_dump_fixture}")
+    set_tests_properties("tools: stn-dump prints the JSON view"
+        PROPERTIES PASS_REGULAR_EXPRESSION "^\\{\"format\":3,.*\"tag\":\"SRFS\"")
+    add_test(NAME "tools: stn-dump --pretty puts one member on a line"
+        COMMAND stn-dump --pretty "${stn_dump_fixture}")
+    set_tests_properties("tools: stn-dump --pretty puts one member on a line"
+        PROPERTIES PASS_REGULAR_EXPRESSION "\n  \"format\": 3,")
+    add_test(NAME "tools: stn-dump fails on a missing file"
+        COMMAND stn-dump "${CMAKE_CURRENT_SOURCE_DIR}/io/data/no-such-file.stn")
+    set_tests_properties("tools: stn-dump fails on a missing file" PROPERTIES WILL_FAIL TRUE)
+    add_test(NAME "tools: stn-dump refuses unknown options"
+        COMMAND stn-dump --frobnicate "${stn_dump_fixture}")
+    set_tests_properties("tools: stn-dump refuses unknown options" PROPERTIES WILL_FAIL TRUE)
+endif()
 
 # The data behind the manual's fitting figures (docs/figures/): built and
 # run with the tests so that it keeps compiling and the figures can always be
