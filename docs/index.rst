@@ -46,6 +46,7 @@ Stereon
    interchange
    fitting
    properties
+   sensitivity
    performance
    topology
    intersection

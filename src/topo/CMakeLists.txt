@@ -8,6 +8,7 @@
 stereon_add_library(topo
     MODULES
         Builder.cppm
+        Capabilities.cppm
         Operation.cppm
         Records.cppm
         Report.cppm

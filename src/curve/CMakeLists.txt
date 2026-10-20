@@ -9,6 +9,7 @@ stereon_add_library(curve
     MODULES
         BSplineBasis.cppm
         BSplineCurve.cppm
+        Capabilities.cppm
         Circle.cppm
         Concepts.cppm
         Conversion.cppm

@@ -26,6 +26,7 @@ export import :Journal;
 export import :Log;
 export import :Matrix;
 export import :Scalar;
+export import :Sensitivity;
 export import :Serialize;
 export import :Simd;
 export import :SmallBuffer;
