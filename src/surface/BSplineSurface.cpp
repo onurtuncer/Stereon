@@ -12,6 +12,7 @@ module;
 // of its own, which GCC 16.2 cannot link without it
 // (docs/toolchain/gcc16-feature-probe.md).
 #include <Stereon/Core/Contracts.hpp>
+#include <Stereon/Core/Parallel.hpp>
 #include <Stereon/Core/Try.hpp>
 
 #include <algorithm>
@@ -1098,6 +1099,26 @@ Point2 SurfaceProjector::Project(const Point3& p) const
         SearchPatchFor(surface, m_Data->Patches[index], p, best, scratch);
     }
     return best.Parameter;
+}
+
+std::vector<Point2> ProjectAll(const SurfaceProjector& projector,
+                               const std::span<const Point3> points, const Context& context)
+{
+    std::vector<Point2> parameters(points.size());
+    struct Work {
+        const SurfaceProjector* Projector;
+        const Point3* Points;
+        Point2* Parameters;
+    } work{&projector, points.data(), parameters.data()};
+    Detail::ParallelFor(points.size(), context.GetThreadCount(),
+                        context.GetScheduler() == Scheduler::Serial, &work,
+                        [](void* state, const std::size_t begin, const std::size_t end) {
+                            const Work& w = *static_cast<const Work*>(state);
+                            for (std::size_t i = begin; i < end; ++i) {
+                                w.Parameters[i] = w.Projector->Project(w.Points[i]);
+                            }
+                        });
+    return parameters;
 }
 
 Point2 Project(const BSplineSurface& surface, const Point3& p)

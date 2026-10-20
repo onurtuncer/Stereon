@@ -1,0 +1,104 @@
+# SPDX-FileCopyrightText: 2026 Onur Tuncer and Stereon contributors
+# SPDX-License-Identifier: MPL-2.0
+#
+# The nightly run (TODO.md, section 3; ADR-0007): the full test suite on the
+# debug and release presets, and the determinism check across processes.
+#
+# Determinism (ADR-0007, G1): for the same executable, hardware and Context
+# settings, results are bit-identical for any thread count and scheduler.
+# The operations that run in parallel today, batch projection onto B-spline
+# curves and surfaces, are run on the serial scheduler and at 1, 2, 8 and 32
+# threads, each in its own process and twice, and the files they write are
+# compared byte for byte. Every pull request runs the same comparison within
+# one process on fewer points (CTest, "determinism:" and "[determinism]").
+
+name: Nightly
+
+on:
+  schedule:
+    - cron: "23 2 * * *"
+  workflow_dispatch:
+    inputs:
+      points:
+        description: Points projected per configuration
+        type: number
+        default: 200000
+
+permissions:
+  contents: read
+
+env:
+  CMAKE_BUILD_PARALLEL_LEVEL: "4"
+  CTEST_OUTPUT_ON_FAILURE: "1"
+
+jobs:
+  suite:
+    name: Full test suite (${{ matrix.preset }})
+    runs-on: ubuntu-24.04
+    container: gcc:16.2
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [gcc16-debug, gcc16-release]
+    steps:
+      - name: Install CMake and Ninja
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends cmake ninja-build gdb lldb python3
+      - uses: actions/checkout@v7
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }} -DSTEREON_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }}
+
+  determinism:
+    name: Determinism, serial and 1, 2, 8, 32 threads (gcc16-release)
+    runs-on: ubuntu-24.04
+    container: gcc:16.2
+    timeout-minutes: 90
+    steps:
+      - name: Install CMake and Ninja
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends cmake ninja-build
+      - uses: actions/checkout@v7
+      - name: Configure
+        run: cmake --preset gcc16-release -DSTEREON_WARNINGS_AS_ERRORS=ON
+      - name: Build the determinism check
+        run: cmake --build --preset gcc16-release --target stereon_determinism
+      - name: Run every configuration twice, each in its own process
+        env:
+          POINTS: ${{ inputs.points || 200000 }}
+        run: |
+          mkdir -p build/determinism
+          for run in 1 2; do
+            for config in serial 1 2 8 32; do
+              ./build/gcc16-release/tests/stereon_determinism "$config" \
+                "build/determinism/$config-$run.bin" "$POINTS"
+            done
+          done
+      - name: Compare the bytes
+        run: |
+          cd build/determinism
+          {
+            echo "## Determinism (ADR-0007, G1)"
+            echo
+            echo "Batch projection of $(( $(stat -c %s serial-1.bin) / 24 )) points onto a rational cubic curve and a rational bicubic surface; each configuration in its own process, twice."
+            echo
+            echo "| Configuration | Run | SHA-256 |"
+            echo "| --- | --- | --- |"
+            for file in *.bin; do
+              name="${file%.bin}"
+              echo "| ${name%-*} | ${name##*-} | \`$(sha256sum "$file" | cut -c1-64)\` |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+          sha256sum *.bin
+          distinct=$(sha256sum *.bin | cut -c1-64 | sort -u | wc -l)
+          if [ "$distinct" -ne 1 ]; then
+            echo "Results differ between configurations or runs ($distinct distinct)" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "Every configuration and run wrote the same bytes." | tee -a "$GITHUB_STEP_SUMMARY"
