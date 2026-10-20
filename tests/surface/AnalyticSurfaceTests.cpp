@@ -195,9 +195,9 @@ TEST_CASE("analytic surfaces satisfy the surface concept", "[surface][concepts]"
     STATIC_REQUIRE(Stereon::PeriodicSurface<Cone>);
     STATIC_REQUIRE(Stereon::PeriodicSurface<Torus>);
     // Every built-in surface is stored in the wrapper's own buffer.
-    STATIC_REQUIRE(Stereon::Detail::FitsInline<Sphere, Stereon::GeometryBufferSize>);
-    STATIC_REQUIRE(Stereon::Detail::FitsInline<Cone, Stereon::GeometryBufferSize>);
-    STATIC_REQUIRE(Stereon::Detail::FitsInline<Torus, Stereon::GeometryBufferSize>);
+    STATIC_REQUIRE(Stereon::Detail::FitsInline<Sphere, Stereon::SurfaceBufferSize>);
+    STATIC_REQUIRE(Stereon::Detail::FitsInline<Cone, Stereon::SurfaceBufferSize>);
+    STATIC_REQUIRE(Stereon::Detail::FitsInline<Torus, Stereon::SurfaceBufferSize>);
 }
 
 TEST_CASE("a sphere is evaluated at its poles and equator", "[surface][sphere]")

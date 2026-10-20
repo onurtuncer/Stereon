@@ -268,8 +268,8 @@ TEST_CASE("Curve wraps any curve and answers as the curve does", "[curve][erased
 
 TEST_CASE("Curve stores small curves in place and shares large ones", "[curve][erased]")
 {
-    STATIC_REQUIRE(Stereon::Detail::FitsInline<Circle, Stereon::GeometryBufferSize>);
-    STATIC_REQUIRE_FALSE(Stereon::Detail::FitsInline<BigLine, Stereon::GeometryBufferSize>);
+    STATIC_REQUIRE(Stereon::Detail::FitsInline<Circle, Stereon::CurveBufferSize>);
+    STATIC_REQUIRE_FALSE(Stereon::Detail::FitsInline<BigLine, Stereon::CurveBufferSize>);
 
     const Curve small(Line{Point3{}, Vec3{1.0, 0.0, 0.0}});
     Curve smallCopy = small;

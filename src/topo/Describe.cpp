@@ -149,7 +149,7 @@ template <typename Table, typename Step>
 [[nodiscard]] std::size_t CountList(const Table& table, std::uint32_t first, Step step)
 {
     std::size_t count = 0;
-    while (first < table.GetSize() && table[first].Slot.Alive && count <= table.GetSize()) {
+    while (first < table.GetSize() && table[first].Slot.IsAlive() && count <= table.GetSize()) {
         ++count;
         first = step(table[first]);
     }

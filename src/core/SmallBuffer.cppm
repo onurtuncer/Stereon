@@ -30,12 +30,30 @@ export module Stereon.Core:SmallBuffer;
 
 export namespace Stereon {
 
-/// Bytes of in-place storage in Curve, Curve2d and Surface (ADR-0003). A
-/// tuning constant fixed by the copy benchmark in bench/GeometryBench.cpp;
-/// not part of the API or ABI. 128 holds Cone and Torus (96 bytes plus the
-/// model's table pointer), whose copies cost about 15 ns inline against 43 ns
-/// shared, for about 2.5 ns more on a Line or Circle copy than at 96.
-inline constexpr std::size_t GeometryBufferSize = 128;
+/// Bytes of in-place storage in Curve, Curve2d and Surface (ADR-0003): each
+/// the largest built-in type of its kind plus the model's table pointer, so
+/// that every built-in analytic type is stored inline (a shared payload
+/// costs about three times an inline copy, bench/GeometryBench.cpp) and no
+/// wrapper is larger than that needs. A topology's curve and pcurve pools
+/// are most of its memory (B0.4), so every byte here is paid per edge and
+/// per coedge. Static assertions beside each type keep them fitting. Tuning
+/// constants, not part of the API or ABI.
+///
+/// Curve: Ellipse and Hyperbola, 88 bytes.
+inline constexpr std::size_t CurveBufferSize = 96;
+/// Curve2d: Ellipse2d and Hyperbola2d, 64 bytes.
+inline constexpr std::size_t Curve2dBufferSize = 72;
+/// Surface: Cone and Torus, 96 bytes.
+inline constexpr std::size_t SurfaceBufferSize = 104;
+
+/// The buffer of a curve wrapper in D dimensions.
+template <std::size_t D>
+inline constexpr std::size_t CurveBufferSizeN = D == 2 ? Curve2dBufferSize : CurveBufferSize;
+
+/// The alignment of the buffers: a model holds doubles and a table pointer.
+/// A type that needs more is shared rather than stored inline.
+inline constexpr std::size_t GeometryAlignment = alignof(void*);
+static_assert(alignof(double) <= GeometryAlignment);
 
 /// A list of types, for the closed sets of built-in geometry that
 /// VisitBuiltin and the intersection tables are generated over.
@@ -112,7 +130,7 @@ private:
 /// so copies stay cheap").
 template <typename T, std::size_t Size>
 inline constexpr bool FitsInline =
-    sizeof(T) + sizeof(void*) <= Size && alignof(T) <= alignof(std::max_align_t) &&
+    sizeof(T) + sizeof(void*) <= Size && alignof(T) <= GeometryAlignment &&
     std::is_trivially_copyable_v<T>;
 
 /// InlineValue<T> when it fits, SharedValue<T> otherwise.
@@ -196,7 +214,7 @@ public:
     void Emplace(Args&&... args)
     {
         static_assert(sizeof(M) <= Size, "the model does not fit the buffer");
-        static_assert(alignof(M) <= alignof(std::max_align_t));
+        static_assert(alignof(M) <= GeometryAlignment);
         Reset();
         m_Model = ::new (&m_Storage) M(std::forward<Args>(args)...);
     }
@@ -213,7 +231,7 @@ private:
         }
     }
 
-    alignas(std::max_align_t) std::byte m_Storage[Size];
+    alignas(GeometryAlignment) std::byte m_Storage[Size];
     Concept* m_Model = nullptr;
 };
 

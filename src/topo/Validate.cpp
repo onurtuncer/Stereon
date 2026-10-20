@@ -134,17 +134,17 @@ private:
     {
         for (std::uint32_t i = 0; i < m_T.Vertices.GetSize(); ++i) {
             m_VertexOk[i] =
-                m_T.Vertices[i].Slot.Alive &&
+                m_T.Vertices[i].Slot.IsAlive() &&
                 Link(EntityKind::Vertex, i, m_T.Vertices[i].FirstEdge, false, "FirstEdge");
         }
         for (std::uint32_t i = 0; i < m_T.Edges.GetSize(); ++i) {
-            m_EdgeOk[i] = m_T.Edges[i].Slot.Alive && CheckEdgeLinks(i);
+            m_EdgeOk[i] = m_T.Edges[i].Slot.IsAlive() && CheckEdgeLinks(i);
         }
         for (std::uint32_t i = 0; i < m_T.Coedges.GetSize(); ++i) {
-            m_CoedgeOk[i] = m_T.Coedges[i].Slot.Alive && CheckCoedgeLinks(i);
+            m_CoedgeOk[i] = m_T.Coedges[i].Slot.IsAlive() && CheckCoedgeLinks(i);
         }
         for (std::uint32_t i = 0; i < m_T.Loops.GetSize(); ++i) {
-            m_LoopOk[i] = m_T.Loops[i].Slot.Alive && CheckLoopLinks(i);
+            m_LoopOk[i] = m_T.Loops[i].Slot.IsAlive() && CheckLoopLinks(i);
         }
         CheckParentLinks();
     }
@@ -185,7 +185,7 @@ private:
     {
         for (std::uint32_t i = 0; i < m_T.Faces.GetSize(); ++i) {
             const FaceRecord& f = m_T.Faces[i];
-            if (f.Slot.Alive) {
+            if (f.Slot.IsAlive()) {
                 Link(EntityKind::Face, i, f.Shell, false, "Shell");
                 Link(EntityKind::Face, i, f.FirstLoop, false, "FirstLoop");
                 Link(EntityKind::Face, i, f.NextInShell, false, "NextInShell");
@@ -193,14 +193,14 @@ private:
         }
         for (std::uint32_t i = 0; i < m_T.Shells.GetSize(); ++i) {
             const ShellRecord& s = m_T.Shells[i];
-            if (s.Slot.Alive) {
+            if (s.Slot.IsAlive()) {
                 Link(EntityKind::Shell, i, s.Solid, false, "Solid");
                 Link(EntityKind::Shell, i, s.FirstFace, false, "FirstFace");
                 Link(EntityKind::Shell, i, s.NextInSolid, false, "NextInSolid");
             }
         }
         for (std::uint32_t i = 0; i < m_T.Solids.GetSize(); ++i) {
-            if (m_T.Solids[i].Slot.Alive) {
+            if (m_T.Solids[i].Slot.IsAlive()) {
                 Link(EntityKind::Solid, i, m_T.Solids[i].FirstShell, false, "FirstShell");
             }
         }
@@ -410,14 +410,14 @@ private:
         const auto& children = m_T.Table<C>();
         std::vector<std::uint8_t> seen(children.GetSize(), 0);
         for (std::uint32_t p = 0; p < parents.GetSize(); ++p) {
-            if (parents[p].Slot.Alive) {
+            if (parents[p].Slot.IsAlive()) {
                 const auto [first, last] = members(parents[p]);
                 WalkList<P, C>(rule, p, first, last, seen, next, parentOf);
             }
         }
         for (std::uint32_t c = 0; c < children.GetSize(); ++c) {
             const std::uint32_t parent = parentOf(children[c]);
-            if (children[c].Slot.Alive && seen[c] == 0 && m_T.IsLive<P>(parent)) {
+            if (children[c].Slot.IsAlive() && seen[c] == 0 && m_T.IsLive<P>(parent)) {
                 Report(rule, {Name(C, c), Name(P, parent)}, "missing from its parent's list");
             }
         }
@@ -487,7 +487,7 @@ private:
     {
         for (std::uint32_t f = 0; f < m_T.Faces.GetSize(); ++f) {
             const SurfaceRef s = m_T.Faces[f].Surface;
-            if (!m_T.Faces[f].Slot.Alive) {
+            if (!m_T.Faces[f].Slot.IsAlive()) {
                 continue;
             }
             if (!(s.IsValid() && s.GetIndex() < m_T.Surfaces.GetSize())) {
@@ -604,7 +604,7 @@ private:
             }
         }
         for (std::uint32_t s = 0; s < m_T.Shells.GetSize(); ++s) {
-            if (m_T.Shells[s].Slot.Alive) {
+            if (m_T.Shells[s].Slot.IsAlive()) {
                 CheckShellComponent(s, parent);
             }
         }

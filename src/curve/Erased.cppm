@@ -87,7 +87,7 @@ public:
                 Detail::WrappableCurve<std::remove_cvref_t<G>, D>
     explicit BasicErasedCurve(G&& geometry)
     {
-        using Model = Detail::CurveModel<D, std::remove_cvref_t<G>, GeometryBufferSize>;
+        using Model = Detail::CurveModel<D, std::remove_cvref_t<G>, CurveBufferSizeN<D>>;
         m_Storage.template Emplace<Model>(std::forward<G>(geometry));
     }
 
@@ -113,7 +113,7 @@ public:
     }
 
 private:
-    Detail::SmallBuffer<Detail::CurveConcept<D>, GeometryBufferSize> m_Storage;
+    Detail::SmallBuffer<Detail::CurveConcept<D>, CurveBufferSizeN<D>> m_Storage;
 };
 
 } // namespace Stereon
@@ -250,6 +250,8 @@ static_assert(CurveGeometry<Curve>);
 static_assert(Curve2dGeometry<Curve2d>);
 static_assert(std::semiregular<Curve>);
 // The buffer plus the model pointer, padded to the buffer's alignment.
-static_assert(sizeof(Curve) <= GeometryBufferSize + alignof(std::max_align_t));
+// The buffer and the model pointer, nothing more (B0.4).
+static_assert(sizeof(Curve) == CurveBufferSize + sizeof(void*));
+static_assert(sizeof(Curve2d) == Curve2dBufferSize + sizeof(void*));
 
 } // namespace Stereon

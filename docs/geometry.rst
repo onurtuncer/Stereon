@@ -313,9 +313,39 @@ Torus     42.1     15.0
 
 A shared payload costs an atomic reference count per copy, almost three
 times an inline copy of the same type, against about 2.5 ns more for the
-types that already fit. ``GeometryBufferSize`` is therefore 128, and every
-built-in analytic type is stored inline; ``static_assert``\ s next to each
-type keep it so.
+types that already fit. The buffer was therefore 128 bytes, and every
+built-in analytic type was stored inline.
+
+Topology later made the size matter far more than a copy does: a shape keeps
+one erased curve per edge and one erased pcurve per coedge, and at 144 bytes
+each (128 plus the model pointer, aligned to 16) they were about two thirds
+of its memory (B0.4, :doc:`performance`). Each kind of wrapper now has its
+own buffer, sized to its largest built-in type plus the table pointer, at the
+alignment of a double:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Wrapper
+     - Largest built-in type
+     - Buffer
+     - Wrapper size
+   * - ``Curve``
+     - ``Ellipse``, ``Hyperbola`` (88 bytes)
+     - 96
+     - 104
+   * - ``Curve2d``
+     - ``Ellipse2d``, ``Hyperbola2d`` (64 bytes)
+     - 72
+     - 80
+   * - ``Surface``
+     - ``Cone``, ``Torus`` (96 bytes)
+     - 104
+     - 112
+
+Every built-in analytic type is still stored inline, so no copy got slower;
+``static_assert``\ s next to each type and in
+``tests/topo/RecordLayoutTests.cpp`` keep it so.
 
 Related design decisions
 ------------------------

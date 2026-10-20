@@ -238,6 +238,7 @@ template <Scalar T>
 
 static_assert(CurveGeometry<Ellipse>);
 static_assert(Curve2dGeometry<Ellipse2d>);
-static_assert(Detail::FitsInline<Ellipse, GeometryBufferSize>);
+static_assert(Detail::FitsInline<Ellipse, CurveBufferSize>);
+static_assert(Detail::FitsInline<Ellipse2d, Curve2dBufferSize>);
 
 } // namespace Stereon

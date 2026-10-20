@@ -176,7 +176,7 @@ TEST_CASE("B-spline surfaces satisfy the surface concept and are shared when wra
           "[surface][bspline]")
 {
     STATIC_REQUIRE(Stereon::SurfaceGeometry<BSplineSurface>);
-    STATIC_REQUIRE_FALSE(Stereon::Detail::FitsInline<BSplineSurface, Stereon::GeometryBufferSize>);
+    STATIC_REQUIRE_FALSE(Stereon::Detail::FitsInline<BSplineSurface, Stereon::SurfaceBufferSize>);
     const Surface surface(MonomialSurface());
     const Surface copy = surface; // NOLINT(performance-unnecessary-copy-initialization)
     REQUIRE(copy.Target<BSplineSurface>() == surface.Target<BSplineSurface>());

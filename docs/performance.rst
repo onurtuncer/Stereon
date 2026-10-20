@@ -620,21 +620,45 @@ Stereon's live heap per face is almost exactly its table pages per face
 (1253 B), so the cost is in the tables and geometry pools, not in anything
 else.
 
-A breakdown by table is not measured yet. An estimate from the record and
-wrapper sizes suggests that the pools dominate. Each of the 4 coedges of a
-face has its own pcurve and each of its 2 edges its own curve, and every
-one is an erased ``Curve`` or ``Curve2d`` with a 128-byte inline buffer.
-That is roughly two thirds of the total, against roughly a third for the
-topology records themselves. Ways to close the gap include smaller erased
-wrappers for small geometry, sharing pcurves between uses, and per-field
-storage (ADR-0004). Choosing between them needs that breakdown first.
+The first run estimated that the geometry pools dominated: each of a face's
+four coedges has its own pcurve and each of its two edges its own curve, and
+every one was an erased ``Curve`` or ``Curve2d`` of 144 bytes (a 128-byte
+buffer and a pointer, aligned to 16). Two changes followed: smaller records
+(liveness folded into the generation word, fields ordered against padding)
+and one buffer size per wrapper kind, so that every built-in type still fits
+inline (:doc:`geometry`, *The buffer size, revisited*). B0.4 now reports its
+bytes per face by table. A run of only these rows on the reference image
+(run 39433824401, three repetitions) measured, at 10⁶ faces:
 
+.. list-table::
+   :header-rows: 1
+
+   * - Table
+     - Bytes per face
+   * - Vertices
+     - 40
+   * - Edges
+     - 144
+   * - Coedges
+     - 128
+   * - Loops and faces
+     - 44
+   * - Curve pool (2 lines)
+     - 208
+   * - Pcurve pool (4 plane lines)
+     - 320
+   * - Live heap, all of it
+     - 887, against OCCT's 1601: **55%, not met**
+
+The geometry pools are still 60% of the total, and their wrappers are most
+of it: a ``Line2d`` is 32 bytes, its ``Curve2d`` 80. Storing the built-in
+types in typed pools, with the erased wrapper kept for user types, is the
+next step towards the target.
 Splitting a face or an edge is part of ADR-0005's edit sequence and is not
 measured. It needs the Euler operators of ADR-0027, which do not exist yet.
 
-The run predates the cached-curve fields of the edge record (a cache
-reference, a status byte and a bound). Those make every edge record
-larger, so B0.4 should be measured again once they are in.
+The run of 2026-10-20 predates the cached-curve fields of the edge record;
+the measurement above includes them.
 
 Reproducing the numbers
 -----------------------

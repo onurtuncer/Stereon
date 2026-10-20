@@ -144,5 +144,7 @@ template <Scalar T>
 
 static_assert(CurveGeometry<Circle>);
 static_assert(Curve2dGeometry<Circle2d>);
+static_assert(Detail::FitsInline<Circle, CurveBufferSize>);
+static_assert(Detail::FitsInline<Circle2d, Curve2dBufferSize>);
 
 } // namespace Stereon

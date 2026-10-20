@@ -40,7 +40,7 @@ template <typename T>
     std::vector<std::uint32_t> map(table.GetSize(), None);
     std::uint32_t next = 0;
     for (std::uint32_t i = 0; i < table.GetSize(); ++i) {
-        if (table[i].Slot.Alive) {
+        if (table[i].Slot.IsAlive()) {
             map[i] = next++;
         }
     }
@@ -82,7 +82,7 @@ void MarkUsed(const PagedArena<Record>& records, Ref Record::* member, std::vect
 {
     for (const Record& record : records) {
         const Ref ref = record.*member;
-        if (record.Slot.Alive && ref.IsValid() && ref.GetIndex() < used.size()) {
+        if (record.Slot.IsAlive() && ref.IsValid() && ref.GetIndex() < used.size()) {
             used[ref.GetIndex()] = true;
         }
     }
@@ -112,10 +112,10 @@ template <typename T, typename Rewrite>
 void CopyLive(const PagedArena<T>& from, PagedArena<T>& to, Rewrite rewrite)
 {
     for (const T& record : from) {
-        if (record.Slot.Alive) {
+        if (record.Slot.IsAlive()) {
             T copy = record;
             rewrite(copy);
-            copy.Slot = {.Generation = 0, .Alive = true};
+            copy.Slot = Detail::SlotState::Live();
             static_cast<void>(to.PushBack(std::move(copy)));
         }
     }

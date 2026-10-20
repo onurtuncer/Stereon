@@ -87,7 +87,7 @@ template <typename Table, typename Step>
 [[nodiscard]] std::vector<std::uint32_t> Members(const Table& table, std::uint32_t first, Step step)
 {
     std::vector<std::uint32_t> members;
-    while (first < table.GetSize() && table[first].Slot.Alive &&
+    while (first < table.GetSize() && table[first].Slot.IsAlive() &&
            members.size() <= table.GetSize()) {
         members.push_back(first);
         first = step(table[first]);

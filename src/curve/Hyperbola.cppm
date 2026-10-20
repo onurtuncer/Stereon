@@ -214,7 +214,9 @@ static_assert(CurveGeometry<Hyperbola>);
 static_assert(Curve2dGeometry<Hyperbola2d>);
 static_assert(CurveGeometry<Parabola>);
 static_assert(Curve2dGeometry<Parabola2d>);
-static_assert(Detail::FitsInline<Hyperbola, GeometryBufferSize>);
-static_assert(Detail::FitsInline<Parabola, GeometryBufferSize>);
+static_assert(Detail::FitsInline<Hyperbola, CurveBufferSize>);
+static_assert(Detail::FitsInline<Parabola, CurveBufferSize>);
+static_assert(Detail::FitsInline<Hyperbola2d, Curve2dBufferSize>);
+static_assert(Detail::FitsInline<Parabola2d, Curve2dBufferSize>);
 
 } // namespace Stereon
