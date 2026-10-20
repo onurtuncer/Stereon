@@ -16,7 +16,7 @@ Open questions that have to be researched before they can be decided live in [`d
 
 | ADR | Title | Phase | Status |
 | --- | --- | --- | --- |
-| [0001](0001-tolerance-model.md) | Tolerance model | 0 | Proposed |
+| [0001](0001-tolerance-model.md) | Tolerance model | 0 | Accepted |
 | [0002](0002-numeric-robustness.md) | Numeric robustness strategy | 0 | Accepted |
 | [0003](0003-geometry-polymorphism.md) | Geometry polymorphism via external polymorphism | 0 | Accepted |
 | [0004](0004-topology-storage-and-handles.md) | Topology storage and handles | 0 | Accepted |
