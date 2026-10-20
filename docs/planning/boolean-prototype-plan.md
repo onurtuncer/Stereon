@@ -45,13 +45,13 @@ Each milestone merges on its own, with tests. Estimates are working days.
 | M4 | Certificates | An interval bound of each branch's deviation from both surfaces, from the closed forms and core's outward-rounded `Interval`, stored as a `Certified` edge bound. | 3 |
 | M5 | Controlled operators | The classical Euler set under ADR-0027's contracts: MVFS/KVFS, MEV/KEV, MEF/KEF, KEMR/MEKR, KFMRH/MFKRH, SEMV/JEKV, with radial rings, pcurve restriction and certificates; `MergeVertices` (ADR-0001); transactions as discarded candidate copies; local checks in checked builds; inverse-pair property tests; history events. ADR-0005's splitting edits join its benchmark. | 10 |
 | M6 | Face clipping and imprinting | Branch against loop in parameter space (line and conic against line and circle pcurves, exactly decided); imprinting with M5. | 6 |
-| M7 | Classification | Fragment connectivity; ray-cast point-in-solid for plane and cylinder faces with exact predicates and seeded re-shoots; propagation; the cross-check table. | 6 |
+| M7 | Classification | Fragment connectivity; seeding by up to 16 deterministic rays per region, decided exactly for plane and cylinder faces; then the bounded generalised winding number (exact solid angles for planar faces, tessellated cylinders with a deviation bound), accepted only beyond its bound; then `Unresolved`; propagation; the cross-check table (ADR-0013's acceptance). | 10 |
 | M8 | Assembly, merging, History | Keep rules; the ADR-0001 merge policy for vertices and edges; regularisation; a History with input ordinals, split and merge groups and Generated provenance (extending `HistoryEntry`). | 6 |
 | M9 | Tolerance variants | Loosened inputs from 1e-4 to 1e-2 mm; growth logged; the merge-chain test. | 3 |
 | M10 | Parallelism and determinism | Pair finding and surface intersection run in parallel through `ParallelFor`; the thread-count identity check; the 5× speed-up on a many-face fixture (a box with a grid of cylindrical holes); the G2 comparison job. | 4 |
 | M11 | OCCT differential tests | Volumes, areas and face counts against `BRepAlgoAPI` on the same fixtures. | 2 |
 
-About 61 working days in sequence. M0 comes first, and M1 needs none of it. M1, M2 and M5 have no dependencies on each other and can go in parallel; M3 needs M2, M3b needs M3 and M4, M6 needs M3 and M5, M7 needs M6, M8 needs M7, and M9 to M11 follow M8.
+About 65 working days in sequence. M0 comes first, and M1 needs none of it. M1, M2 and M5 have no dependencies on each other and can go in parallel; M3 needs M2, M3b needs M3 and M4, M6 needs M3 and M5, M7 needs M6, M8 needs M7, and M9 to M11 follow M8.
 
 ## 4. Decisions (2026-10-20, Onur Tuncer)
 
