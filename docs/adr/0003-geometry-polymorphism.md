@@ -1,8 +1,10 @@
 # ADR-0003: Geometry polymorphism via external polymorphism
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-28
 - **Revised:** 2026-10-10 (capability tiers for user geometry; SBO size is a tuning constant)
+- **Revised:** 2026-10-20 (the virtual fallback's target is an absolute overhead per call, not a ratio; one buffer size per wrapper kind; tiers 2 and 3 arrive with the intersection and boolean work)
+- **Accepted:** 2026-10-20 by Onur Tuncer: `VisitBuiltin` is within 10% of direct calls, and the virtual fallback adds about 3.4 ns per call, within the revised target (see *Results*)
 - **Owner:** Onur Tuncer
 - **Phase:** 0
 
@@ -35,8 +37,10 @@ Adopt option 4.
 
   All built-in types are tier 3. Tier 2 is what makes a user surface usable in any search; tier 3 is what makes it usable in booleans.
 
+  Phase 0 builds tier 1. The `BoundedGeometry` and `IntersectableGeometry` concepts are defined with the subdivision search and the booleans that use them (ADR-0010, ADR-0013). Until then an operation that would need them returns `NotSupported` for a user type, as the intersection dispatch table already does.
+
   Design-parameter derivatives are a separate optional capability, orthogonal to the tiers (ADR-0021).
-- `Curve`, `Curve2d` and `Surface` are copyable value types with small-buffer storage; larger types (NURBS with many poles) store an immutable shared payload so copies stay cheap. The initial buffer size is 96 bytes; it is a tuning constant fixed by the Phase 0 benchmark, not part of the public API or ABI promise.
+- `Curve`, `Curve2d` and `Surface` are copyable value types with small-buffer storage; larger types (NURBS with many poles) store an immutable shared payload so copies stay cheap. Each wrapper kind has its own buffer, sized to its largest built-in type plus the model's table pointer, so that every built-in analytic type is stored inline: 96 bytes for `Curve` (`Ellipse`, `Hyperbola`), 72 for `Curve2d` (`Ellipse2d`, `Hyperbola2d`) and 104 for `Surface` (`Cone`, `Torus`). The sizes are tuning constants, not part of the public API or ABI promise. The copy benchmark first set one 96-byte buffer, then 128 when `Cone` and `Torus` arrived (a shared copy costs about three times an inline one); topology then made the wrapper's size a memory cost per edge and per coedge (ADR-0004, B0.4), which fixed the per-kind sizes (`docs/geometry.rst`, *The buffer size, revisited*).
 - Hot loops call `VisitBuiltin(g, f)`, which dispatches once over a closed `std::variant`-like table of built-in types (generated with expansion statements and pack indexing, ADR-0016) and falls back to virtual dispatch for user types.
 - Binary operations (curve–curve, surface–surface intersection) dispatch through a table keyed on type-ID pairs, with analytic special cases registered for known pairs and a generic NURBS fallback.
 
@@ -50,6 +54,22 @@ Adopt option 4.
 
 ## Verification
 
-Benchmark a tight evaluation loop (10⁸ calls) on line, circle and cubic B-spline. Pass: the erased `Curve` path is within 10% of direct calls when using `VisitBuiltin`, and within 2× for the pure virtual fallback. The same benchmark measures copy cost for buffer sizes 64, 96 and 128 bytes against the actual sizes of the built-in types and fixes the constant.
+Benchmark a tight evaluation loop (10⁸ calls) on line, circle and cubic B-spline. Pass: the erased `Curve` path is within 10% of direct calls when using `VisitBuiltin`, and the pure virtual fallback adds at most 5 ns per call over a direct call on the concrete type.
 
-A tier-1-only test surface wrapped and passed to a boolean must return `NotSupported`; the same surface with `BoundedGeometry` and `ToBSpline` added must take part in the ADR-0001 prototype booleans.
+The bound is absolute because a ratio measures the evaluator rather than the dispatch. A line evaluates in about 2 ns, and in the direct loop the compiler vectorises it, so one indirect call per evaluation costs several times as much whatever the design. For a circle the trigonometry dominates and the ratio is about 1. The benchmark therefore also reports a direct call made one evaluation at a time, for comparison with the fallback.
+
+The same benchmark measures copy cost for buffer sizes 64, 96 and 128 bytes against the actual sizes of the built-in types and fixes the constants.
+
+A tier-1-only test surface wrapped and passed to a boolean must return `NotSupported`; the same surface with `BoundedGeometry` and `ToBSpline` added must take part in the ADR-0001 prototype booleans. This check waits for the booleans.
+
+### Results
+
+`bench/GeometryBench.cpp`, GCC 16.2, -O3 (`docs/geometry.rst`, *Dispatch*), nanoseconds per evaluation:
+
+| Path | Line | Circle |
+| --- | --- | --- |
+| Direct call on the concrete type | 2.2 | 49 |
+| `VisitBuiltin`, loop inside | 2.0 | 46 |
+| `Curve`, one virtual call each | 5.6 | 50 |
+
+`VisitBuiltin` is within 10% of direct calls. The fallback adds 3.4 ns for a line and about 1 ns for a circle, both within 5 ns. The same benchmark reports the cubic B-spline row, the scalar direct baseline and the 10⁸-call run.

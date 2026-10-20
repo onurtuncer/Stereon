@@ -107,6 +107,7 @@ COUNTER_ONLY_PREFIXES = ("B0.4/",)
 REPORTED_COUNTERS = {
     "heap_bytes_per_face", "heap_bytes_per_edge", "bytes_per_face", "bytes_per_edge",
     "copied_fraction", "pages_copied", "pages", "memory_ratio", "heap_delta_bytes",
+    "compacted_over_body",
     "vertex_bytes_per_face", "edge_bytes_per_face", "coedge_bytes_per_face",
     "loop_face_bytes_per_face", "curve_bytes_per_face", "pcurve_bytes_per_face",
     "surface_bytes_per_face",
@@ -149,6 +150,9 @@ for _size, _faces in TOPOLOGY_SIZES.items():
         (f"ADR-0005/EditSequence/{_size}", "memory_ratio",
          f"Body and its edited copy over the body, 100 edits, {_faces}",
          "< 1.2×" if _gate else "report", ("below", 1.2) if _gate else None),
+        (f"ADR-0004/Compact/{_size}", "compacted_over_body",
+         f"Compact() result over a fresh body, after 50 deletions, {_faces}",
+         "< 1.05×" if _gate else "report", ("below", 1.05) if _gate else None),
     ]
 
 # Rows whose two libraries do not compute the same thing, so the ratio is
@@ -335,7 +339,7 @@ def format_counter(name: str, value: float) -> str:
     """A counter as the report quotes it: a fraction in percent, bytes whole, a ratio with its sign."""
     if name == "copied_fraction":
         return f"{value:.3%}"
-    if name == "memory_ratio":
+    if name in ("memory_ratio", "compacted_over_body"):
         return f"{value:.3f}×"
     return f"{value:,.0f} B" if "bytes" in name else f"{value:.6g}"
 

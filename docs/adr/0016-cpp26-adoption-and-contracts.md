@@ -1,14 +1,16 @@
 # ADR-0016: C++26 adoption and contracts policy
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-28
 - **Revised:** 2026-10-10 (what contracts may guard)
+- **Revised:** 2026-10-20 (the GCC 16.2 limitations the build works around, and when the workarounds go; reflection status)
+- **Accepted:** 2026-10-20 by Onur Tuncer: option 3 is built, the enforced GCC 16 build passes every test on Linux, Windows and macOS, and the hot-contract switch is tested; the observe-mode corpus run and the fuzzing run are release gates (see *Status of the verification*)
 - **Owner:** Onur Tuncer
 - **Phase:** 0
 
 ## Context
 
-Stereon targets C++26 for static reflection, contracts, `std::execution`, `std::simd`, `std::inplace_vector`, `std::function_ref`, `submdspan`, pack indexing and expansion statements. As of September 2026, GCC 16 is the only compiler with reflection (partial) and contracts; Clang and MSVC lag, and no standard library ships `std::execution` or `std::linalg`. We must decide which features are mandatory and how contracts behave in each build.
+Stereon targets C++26 for static reflection, contracts, `std::execution`, `std::simd`, `std::inplace_vector`, `std::function_ref`, `submdspan`, pack indexing and expansion statements. As of September 2026, GCC 16 is the only compiler with reflection and contracts (GCC 16.2 reports `__cpp_impl_reflection` 202603); Clang and MSVC lag, and no standard library ships `std::execution` or `std::linalg`. We must decide which features are mandatory and how contracts behave in each build.
 
 ## Options
 
@@ -30,6 +32,16 @@ Adopt option 3.
 - **Mechanism for the release split.** The evaluation semantic is chosen per translation unit, not per contract, so one flag cannot ignore some contracts and enforce others. Contracts are therefore written with macros from `<Stereon/Core/Contracts.hpp>`. `STEREON_PRE`, `STEREON_POST` and `STEREON_ASSERT` mark boundary checks and are always compiled. `STEREON_HOT_PRE`, `STEREON_HOT_POST` and `STEREON_HOT_ASSERT` mark hot-path checks and are compiled only when the CMake option `STEREON_HOT_CONTRACTS` is on. Release presets turn it off and keep the `enforce` semantic, so boundary violations still reach the violation handler and are logged. The macros expand to nothing on compilers without P2900 contracts, which keeps Clang and MSVC building.
 - Contract violations are programming errors and never become `KernelError`s (ADR-0006).
 
+### GCC 16.2 limitations
+
+The reference compiler has bugs that shape how the policy above is built. Each is recorded with a reproduction and its workaround in `docs/toolchain/gcc16-feature-probe.md`:
+
+- **Contracts in imported templates are dropped.** Contracts in templates imported from a module are silently compiled out. Evaluator checks (`Eval`, `Deriv`, `Project` on the erased wrappers) are therefore plain branches that report through one function and raise a violation, compiled only with `STEREON_HOT_CONTRACTS` (`docs/geometry.rst`, *Evaluator preconditions*).
+- **Contracts on inline module functions need a helper.** They need a per-unit helper that optimised importers do not emit. Those contracts are therefore in the hot tier, compiled out of release builds. Non-module targets preinclude a contract anchor (`stereon_anchor_contracts()`), and `gcc16-observe` builds without optimisation.
+- **stdexec does not compile in module units.** Sender code lives in plain source files behind ordinary declarations: `<Stereon/Core/Exec.hpp>` is a header, not a module, and `ParallelFor` is in `src/core/Parallel.cpp` (ADR-0007).
+
+The workarounds go when the known-failing test `stereon_contract_probe` starts to pass, which a fixed compiler release shows.
+
 ## Consequences
 
 - Reflection removes serialisation and binding boilerplate (ADR-0012); contracts make interfaces self-documenting and catch misuse early.
@@ -39,3 +51,13 @@ Adopt option 3.
 ## Verification
 
 CI confirms the GCC build with contracts enforced passes all tests; a test confirms `Stereon::HotContracts` matches the build configuration; feature-test macros correctly select standard vs polyfill implementations; the contract-observe corpus run reports zero violations before each release. The fuzzing run of ADR-0006 (corrupt files and invalid shapes into every public operation) must trigger no contract violation, which proves that no public entry point has a precondition user data can reach.
+
+### Status of the verification
+
+| Criterion | Status |
+| --- | --- |
+| The enforced GCC build passes all tests | Met: blocking CI on Linux, Windows and macOS |
+| `HotContracts` matches the build | Met: `tests/core/ContractTests.cpp` |
+| Feature-test macros select standard or polyfill | Met: the `Exec` and `Simd` wrappers |
+| Observe-mode corpus run reports no violation | A release gate: `gcc16-observe` exists as a preset and is not yet in a workflow; it runs before the first release |
+| Fuzzing triggers no contract violation | A release gate: needs the fuzzing harness (TODO.md, section 9) |

@@ -18,10 +18,10 @@ Open questions that have to be researched before they can be decided live in [`d
 | --- | --- | --- | --- |
 | [0001](0001-tolerance-model.md) | Tolerance model | 0 | Proposed |
 | [0002](0002-numeric-robustness.md) | Numeric robustness strategy | 0 | Accepted |
-| [0003](0003-geometry-polymorphism.md) | Geometry polymorphism via external polymorphism | 0 | Proposed |
-| [0004](0004-topology-storage-and-handles.md) | Topology storage and handles | 0 | Proposed |
-| [0005](0005-immutability-and-sharing.md) | Immutability and structural sharing | 0 | Proposed |
-| [0006](0006-error-handling.md) | Error handling | 0 | Proposed |
+| [0003](0003-geometry-polymorphism.md) | Geometry polymorphism via external polymorphism | 0 | Accepted |
+| [0004](0004-topology-storage-and-handles.md) | Topology storage and handles | 0 | Accepted |
+| [0005](0005-immutability-and-sharing.md) | Immutability and structural sharing | 0 | Accepted |
+| [0006](0006-error-handling.md) | Error handling | 0 | Accepted |
 | [0007](0007-threading-and-determinism.md) | Threading and determinism | 0 | Proposed |
 | [0008](0008-licence.md) | Licence | 0 | Accepted |
 | [0009](0009-parameter-space-representation.md) | Parameter-space curves (pcurves) | 1 | Proposed |
@@ -31,7 +31,7 @@ Open questions that have to be researched before they can be decided live in [`d
 | [0013](0013-boolean-classification.md) | Boolean classification | 4 | Proposed |
 | [0014](0014-mesh-generation-boundary.md) | Mesh generation boundary | 5 | Proposed |
 | [0015](0015-ai-contribution-policy.md) | AI contribution policy | 0 | Accepted |
-| [0016](0016-cpp26-adoption-and-contracts.md) | C++26 adoption and contracts policy | 0 | Proposed |
+| [0016](0016-cpp26-adoption-and-contracts.md) | C++26 adoption and contracts policy | 0 | Accepted |
 | [0017](0017-naming-conventions.md) | Naming conventions (Hazel style) | 0 | Accepted |
 | [0018](0018-validity-checking.md) | Validity checking | 0 | Proposed |
 | [0019](0019-library-linking-packaging-and-abi.md) | Library linking, packaging and ABI policy | 0 | Proposed |

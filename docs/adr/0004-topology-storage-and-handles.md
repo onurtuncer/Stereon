@@ -1,9 +1,11 @@
 # ADR-0004: Topology storage and handles
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-08
 - **Revised:** 2026-10-17 (topology traversal contract cross-reference)
 - **Revised:** 2026-10-10 (`Freeze()` keeps indices, `Compact()` is explicit; edge record follows revised ADR-0009; page size is a tuning constant)
+- **Revised:** 2026-10-20 (the handle design is decided: index handles throughout; liveness is kept in each record, not a bitset; the seeded-fault criterion is stated for what a handle check can detect; the memory target's status)
+- **Accepted:** 2026-10-20 by Onur Tuncer: adjacency is 20× and 60× faster than OCCT, an edit copies 0.003–0.014% of pages, release handles are 4 bytes, and the seeded faults a handle check can detect are caught. Memory per face is not yet met (see *Results*) and stays an open Phase 0 exit-gate item; the storage decision does not depend on it
 - **Owner:** Onur Tuncer
 - **Phase:** 0
 
@@ -45,13 +47,13 @@ It differs from Stereon in ways that matter for this decision:
 
 Adopt option 2, with a small ECS-style side table for sparse attributes.
 
-1. **Builder and frozen shape.** `ShapeBuilder` is mutable and single-threaded; its handles are 32-bit index + 32-bit generation, so stale handles are detected. `Freeze()` seals the builder's arrays into an immutable `Shape` with plain 32-bit indices **without renumbering**: entities removed in the builder leave tombstone slots recorded in a per-table alive bitset, so every page the edit did not touch stays shared with the input `Shape` (ADR-0005). A builder opened on an existing `Shape` appends new entities and does not reuse slots freed in the same session; an index that is live in both input and output therefore denotes the same or a modified entity, and the `Freeze()` remap is the identity. `Compact(shape)` is a separate, explicit operation that renumbers, drops tombstones and returns the old→new remap table that feeds the history maps (ADR-0011); callers run it when the alive ratio falls below a `Context` threshold or before archiving. Renumbering inside `Freeze()` would copy every page that holds an index, which defeats structural sharing for any deletion.
+1. **Builder and frozen shape.** `ShapeBuilder` is mutable and single-threaded; its handles are 32-bit index + 32-bit generation, so stale handles are detected. `Freeze()` seals the builder's arrays into an immutable `Shape` with plain 32-bit indices **without renumbering**: entities removed in the builder leave tombstone slots, marked dead in the record itself (one word holds the slot's liveness and generation, so a deletion writes only the page that holds the record), and every page the edit did not touch stays shared with the input `Shape` (ADR-0005). A builder opened on an existing `Shape` appends new entities and does not reuse slots freed in the same session; an index that is live in both input and output therefore denotes the same or a modified entity, and the `Freeze()` remap is the identity. `Compact(shape)` is a separate, explicit operation that renumbers, drops tombstones and returns the old→new remap table that feeds the history maps (ADR-0011); callers run it when the alive ratio falls below a `Context` threshold or before archiving. Renumbering inside `Freeze()` would copy every page that holds an index, which defeats structural sharing for any deletion.
 2. **Coedge core with radial rings.** Each coedge stores `Next`, `Prev`, `Radial` (next use of the same edge, forming a ring), `Edge`, `Loop`, `PCurve` and `Reversed`. The radial ring handles manifold solids, sheets and non-manifold edges with one structure.
 3. **Geometry in separate pools.** Topology references curves, pcurves and surfaces by index into pools of type-erased values (ADR-0003); several faces may share one surface.
    **Edge records follow ADR-0009.** Each edge stores its curve kind (`Intersection`, `Exact`, `Trim`, `Boundary`, `Spatial`, `Degenerate`), its tolerance, the ID of its primary coedge (for kinds that evaluate through a surface), and either its own 3D curve (`Exact`, `Spatial`) or a cached 3D approximation with its certificate (`Intersection`, `Trim`). The pcurves stay on the coedges, all on the edge's shared parameter; the surfaces are reached through each coedge's face, so an edge never stores its own surface references. Cached 3D curves are invalidated whenever a pcurve of the edge changes. The primary coedge is stored, not derived from ring order, so re-linking a radial ring never changes an edge's evaluation.
 4. **No per-sub-shape transforms.** Bodies are stored in their own coordinates. Instancing belongs to an assembly layer above the kernel.
 5. **Copy-on-write pages.** Arrays are stored in fixed-size pages behind `shared_ptr<const Page>`; an operation copies only the pages it touches (ADR-0005). The page size is a per-table tuning constant (initially 256 entries) fixed by the Phase 0 measurement in ADR-0005; vertex and face records differ in size, so the same entry count does not imply the same bytes per page. It is not part of the public API or the file format.
-6. **Sparse attributes** (names, colours, user tags, persistent IDs) live in a side table keyed by handle, keeping hot arrays small.
+6. **Sparse attributes** (names, colours, user tags, persistent IDs) live in a side table keyed by handle, keeping hot arrays small. Phase 0 has no attributes; the side table arrives with them (ADR-0031).
 
 Handles are local to one `Shape`. Identity across operations comes from history maps, never from handles.
 
@@ -67,7 +69,13 @@ Index handles fail differently from pointers: a stale or off-by-one index usuall
 6. **Replayable journals.** Each operation can record its inputs and parameters to a journal file; any failure can be replayed deterministically in isolation (ADR-0007).
 7. **Visual and textual inspection.** Any shape or sub-shape can be sent to the debug viewer (`STEREON_DUMP(obj)`) and written as JSON with `stn-dump` (ADR-0012), so two versions of a shape can be diffed.
 
-**Fallback.** If the Phase 0 prototype shows debugging remains too costly despite these safeguards, switch to a hybrid: pointer-linked entities in the mutable `ShapeBuilder`, indices only in the frozen `Shape`. This must be decided before Phase 1 algorithms start, when the change costs weeks rather than a rewrite.
+**Handles: indices throughout (decided 2026-10-20).** The fallback this ADR kept open, a hybrid with pointer-linked entities in the mutable `ShapeBuilder` and indices only in the frozen `Shape`, is not taken. The prototype showed:
+
+- **The hybrid would lose the measured sharing.** `ShapeBuilder::Open(shape)` shares the shape's pages until it writes one, which is why one local edit adds about 1 MB of heap against OCCT's 48 MB (ADR-0005). A pointer builder would convert the whole shape on every `Open`.
+- **The hybrid's benefit does not arise.** Callers cannot write the builder's links: every link changes through a controlled operation (ADR-0027), and `Freeze` validates every result (ADR-0018).
+- **A stale index fails safely.** A stale generational handle is refused (`tests/topo/FaultTests.cpp`); a stale pointer is a use-after-free.
+- **The audit found no handle faults.** The audit of 2026-10-20 found none.
+- **Everything downstream already assumes indices.** That includes the History, `Compact`'s remap, the `.stn` format, ADR-0021's `TrackedSample` and the traversal contracts of ADRs 0036–0038.
 
 ## Consequences
 
@@ -84,8 +92,23 @@ Phase 0 prototype with a ~10⁶-face body. Pass:
 
 - Adjacency queries ≥ 5× faster than OCCT `TopExp::MapShapesAndAncestors`; memory per face < 50% of OCCT; each of replacing one face's surface, deleting one face and splitting one face copies < 1% of pages without a `Compact()`.
 - Release-build handles are exactly 4 bytes (`static_assert` + CI check).
-- A seeded-fault test suite — stale handles, handles from another shape, off-by-one indices, wrong entity kinds, corrupted adjacency — is caught in debug builds 100% of the time, each at the first faulty access or at the end of the operation that caused it, with a `Describe()` message naming the entity.
+- A seeded-fault test suite — stale handles, handles from another shape, out-of-range indices and indices of dead slots, wrong entity kinds, corrupted adjacency — is caught in debug builds 100% of the time, each at the first faulty access or at the end of the operation that caused it, with a `Describe()` message naming the entity. An index that is off by one into another live slot of the same kind is a valid handle to the wrong entity; no handle check can see it, and the validity checker (ADR-0018) and the property tests are what catch the corruption it causes.
 - Pretty-printers render every handle type in GDB and LLDB (tested in CI with scripted debugger sessions).
+
+### Results
+
+The 10⁶-face sheet of `bench/TopoBench.cpp` against `bench/occt/OcctTopoBench.cpp`, reference run of record (`bench/reports/phase0-topology-reference-2026-10-20.md`, `docs/performance.rst`, *Topology*):
+
+| Criterion | Measured | |
+| --- | --- | --- |
+| Faces of every edge, against `MapShapesAndAncestors` | 20× faster | met |
+| Edges of every vertex | 60× faster | met |
+| Pages copied by one surface replacement / one face deletion | 0.003% / 0.014% | met |
+| Pages copied by splitting a face or an edge | — | needs the Euler operators of ADR-0027 |
+| Release handles | 4 bytes, `static_assert` in `src/core/Handle.cppm` and `tests/topo/RecordLayoutTests.cpp` | met |
+| Seeded faults a handle check can detect | caught, `tests/topo/FaultTests.cpp` | met, except the accessors' contract violation, which has no test yet |
+| Memory per face | 1255 B against OCCT's 1601 B (78%); 887 B (55%) after smaller records and per-kind geometry wrappers (run 39433824401) | not met; the geometry pools are 60% of it, and typed pools for the built-in types are the next step |
+| Pretty-printers | every handle type, in CI | met; showing the entity behind a handle (safeguard 4) is open |
 
 ## Related traversal contracts
 

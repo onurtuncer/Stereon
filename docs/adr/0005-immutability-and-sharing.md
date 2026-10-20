@@ -1,9 +1,11 @@
 # ADR-0005: Immutability and structural sharing
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-28
 - **Revised:** 2026-10-17 (topology traversal contract cross-reference)
 - **Revised:** 2026-10-10 (sharing requires index-stable `Freeze()`; `OperationResult`; page size measured, not fixed)
+- **Revised:** 2026-10-20 (`Freeze` and `Compact` as the exceptions to the `OperationResult` rule; splitting edits measured once the Euler operators of ADR-0027 exist; the page size kept at 256; publication cost)
+- **Accepted:** 2026-10-20 by Onur Tuncer: 100 surface replacements and face deletions on a 10⁶-face body take 1.008× the body's memory, and each edit copies 0.003–0.014% of its pages (see *Results*)
 - **Owner:** Onur Tuncer
 - **Phase:** 0
 
@@ -21,22 +23,35 @@ CAD applications need undo, cheap copies of large bodies, and safe concurrent re
 
 Adopt option 3.
 
-- `Shape` is immutable after `Freeze()` (ADR-0004). All kernel operations take `const Shape&` and return `std::expected<OperationResult, KernelError>`, where `OperationResult` carries the new `Shape` together with its history and diagnostics (ADR-0006).
+- `Shape` is immutable after `Freeze()` (ADR-0004). All kernel operations take `const Shape&` and return `std::expected<OperationResult, KernelError>`, where `OperationResult` carries the new `Shape` together with its history and diagnostics (ADR-0006). Two low-level steps are the exceptions: `Freeze` publishes a builder and returns the `Shape`, and `Compact` returns the shape with its remap table; `Commit` and `CompactShape` are their `OperationResult` forms for operations to use.
 - Storage is paged; pages are `shared_ptr<const Page>`. Builders copy a page on first write. Sharing only works because `Freeze()` keeps indices stable and leaves tombstones for deleted entities (ADR-0004); renumbering is the explicit `Compact()` step, which by design copies everything.
-- The page size per table is a tuning constant, initially 256 entries. The verification below measures bytes per page, share ratio and copy cost on representative workloads for 128, 256 and 1 024 entries and fixes the values; nothing in the public API depends on them.
+- The page size per table is a tuning constant, 256 entries (`DefaultPageSize`). `bench/ArenaBench.cpp` measures bytes per page, share ratio and copy cost for 128, 256 and 1 024 entries; 256 stays until a reference run of that sweep shows a better value. Nothing in the public API depends on it.
 - Geometry pools follow the same scheme; large NURBS payloads are shared immutable buffers.
 - Undo is keeping the previous `Shape` value. No kernel-level undo log exists.
 
 ## Consequences
 
 - Shapes can be shared across threads without locks; ADR-0007 relies on this.
-- Memory use stays proportional to what changed, not to model size.
+- Memory use stays proportional to what changed, not to model size. Time does not yet: every publication runs the full structural check (ADR-0018), so one local edit on a 10⁶-face body takes about half a second, still four times faster than OCCT. Checking only what an edit touched is a later optimisation.
 - Reference-count traffic on pages must stay off hot paths: algorithms take raw spans of a page once, not per entity.
 - In-place editing APIs do not exist; users who want them build on `ShapeBuilder`.
 
 ## Verification
 
 Benchmark: a sequence of 100 local edits on a 10⁶-face body, mixing surface replacement, face deletion, face splitting and edge splitting in equal parts, with no `Compact()` in the sequence. Pass: total memory < 1.2× the single body; each edit's copy cost < 1% of the body's storage. A `Compact()` at the end returns the body to within 1.05× of a freshly built one.
+
+Splitting a face or an edge needs the Euler operators of ADR-0027; until they exist the sequence alternates surface replacement and face deletion, and the splitting edits join it with them.
+
+### Results
+
+`bench/TopoBench.cpp`, reference run of record (`bench/reports/phase0-topology-reference-2026-10-20.md`):
+
+| Criterion | Measured | |
+| --- | --- | --- |
+| Body and its copy after 100 edits, over the body | 1.008× | met |
+| Pages copied by one surface replacement / one face deletion | 0.003% / 0.014%; about 1 MB of heap against OCCT's 48 MB | met |
+| Splitting edits | — | waits for ADR-0027 |
+| `Compact()` after the edits, over a fresh body | reported as `compacted_over_body` from the next reference run | open |
 
 ## Related traversal contracts
 
