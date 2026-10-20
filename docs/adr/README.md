@@ -25,7 +25,7 @@ Open questions that have to be researched before they can be decided live in [`d
 | [0007](0007-threading-and-determinism.md) | Threading and determinism | 0 | Proposed |
 | [0008](0008-licence.md) | Licence | 0 | Accepted |
 | [0009](0009-parameter-space-representation.md) | Parameter-space curves (pcurves) | 1 | Proposed |
-| [0010](0010-ssi-strategy.md) | Surface–surface intersection strategy | 2 | Proposed |
+| [0010](0010-ssi-strategy.md) | Surface–surface intersection strategy | 2 | Accepted in part |
 | [0011](0011-history-and-naming.md) | Operation history and topological naming | 3 | Proposed |
 | [0012](0012-native-file-format.md) | Native file format and versioning | 3 | Proposed |
 | [0013](0013-boolean-classification.md) | Boolean classification | 4 | Proposed |
