@@ -72,7 +72,7 @@ jobs:
       - name: Build
         run: cmake --build --preset gcc16-debug --target stn-view stereon_viewer_tests stereon_viewer_dumps
       - name: Test the scene
-        run: ctest --preset gcc16-debug -R "^(viewer: |docs: the viewer)"
+        run: ctest --preset gcc16-debug -R viewer
       - name: Render the manual's screenshots
         env:
           LIBGL_ALWAYS_SOFTWARE: "1"
