@@ -56,6 +56,14 @@ struct RevolvedPiece;
 [[nodiscard]] std::shared_ptr<const RevolvedPiece>
 MakeRevolvedPiece(const Curve& profile, const Point3& origin, const Vec3& axis);
 
+/// The finite, non-zero vector v divided by its length, for every such v:
+/// scaled first by the power of two that brings its largest component into
+/// [1, 2), so that the squared length neither overflows (an axis of 1e200)
+/// nor underflows (one of 1e-200). The scaling is exact, so wherever
+/// Normalized(v) does not overflow or underflow the result is the same bit
+/// for bit, and v and 2^k v give the same unit vector.
+[[nodiscard]] Vec3 UnitVector(const Vec3& v);
+
 } // namespace Stereon::Detail
 
 export namespace Stereon {
@@ -95,12 +103,12 @@ private:
 class RevolutionSurface {
 public:
     /// Unchecked: the profile must not be empty, the origin finite and the
-    /// axis finite and non-zero; it is normalised. MakeRevolution checks
-    /// data from outside the kernel.
+    /// axis finite and non-zero; it is normalised (Detail::UnitVector), at
+    /// any scale. MakeRevolution checks data from outside the kernel.
     RevolutionSurface(Curve profile, const Point3& origin, const Vec3& axis)
         : m_Profile(std::move(profile))
         , m_Origin(origin)
-        , m_Axis(Normalized(axis))
+        , m_Axis(Detail::UnitVector(axis))
         , m_Piece(Detail::MakeRevolvedPiece(m_Profile, m_Origin, m_Axis))
     {}
 
@@ -133,8 +141,10 @@ private:
 };
 
 /// The surfaces after validating data from outside the kernel (ADR-0006):
-/// InvalidInput unless the profile is not empty, the origin is finite and
-/// the direction or axis is finite and non-zero.
+/// InvalidInput unless the profile is not empty, the origin is finite, the
+/// axis is finite and non-zero, of any length, and the direction is finite
+/// with a squared length that is a finite, non-zero double: an extrusion
+/// keeps its direction as given and divides by that squared length.
 [[nodiscard]] Result<ExtrusionSurface> MakeExtrusion(const Curve& profile, const Vec3& direction);
 [[nodiscard]] Result<RevolutionSurface> MakeRevolution(const Curve& profile, const Point3& origin,
                                                        const Vec3& axis);

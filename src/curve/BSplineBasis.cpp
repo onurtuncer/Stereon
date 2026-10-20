@@ -337,6 +337,11 @@ Result<void> CheckKnotVector(const int degree, const std::span<const double> kno
     if (!IsNonDecreasingAndFinite(knots)) {
         return Invalid(where, "knots must be finite and non-decreasing");
     }
+    // The basis functions divide by differences of knots, which must not
+    // overflow: [-1e308, 1e308] is finite at both ends but 2e308 wide.
+    if (!std::isfinite(knots.back() - knots.front())) {
+        return Invalid(where, "the knot vector must span a finite width");
+    }
     const double low = knots[p];
     const double high = knots[poleCount];
     if (!(low < high)) {
@@ -364,6 +369,9 @@ Result<void> CheckWeights(const std::span<const double> weights, const std::size
     for (const double w : weights) {
         if (!std::isfinite(w) || !(w > 0.0)) {
             return Invalid(where, "weights must be finite and positive");
+        }
+        if (w < MinWeight || w > MaxWeight) {
+            return Invalid(where, "weights must lie in [MinWeight, MaxWeight], [2^-256, 2^256]");
         }
     }
     return {};

@@ -427,6 +427,26 @@ TEST_CASE("MakeBSplineSurface validates data from outside the kernel",
     REQUIRE(Stereon::ToBezierPatches(good).size() == 1);
 }
 
+TEST_CASE("surface weights outside the supported range are refused",
+          "[surface][bspline][factory][audit]")
+{
+    // Audit 2026-10-20, F6: the surface factory shares the curve's weight
+    // range, so no rational patch overflows its weighted sums either.
+    const std::vector<double> knots{0.0, 0.0, 1.0, 1.0};
+    const std::vector<Point3> poles{Point3{0.0, 0.0, 0.0}, Point3{0.0, 2.0, 0.0},
+                                    Point3{2.0, 0.0, 0.0}, Point3{2.0, 2.0, 4.0}};
+    const auto make = [&](const double w) {
+        return Stereon::MakeBSplineSurface(1, 1, knots, knots, poles, std::vector<double>(4, w));
+    };
+    REQUIRE(make(1e300).error().GetCode() == ErrorCode::InvalidInput);
+    REQUIRE(make(1e-300).error().GetCode() == ErrorCode::InvalidInput);
+    for (const double w : {Stereon::Detail::MinWeight, 1.0, Stereon::Detail::MaxWeight}) {
+        const auto patch = make(w);
+        REQUIRE(patch.has_value());
+        REQUIRE(Eval(*patch, Point2{0.5, 0.5}) == Point3{1.0, 1.0, 1.0});
+    }
+}
+
 TEST_CASE("Derivatives returns every partial at once", "[surface][bspline][property]")
 {
     rc::prop("the same values as Eval and Deriv, partial by partial", [] {

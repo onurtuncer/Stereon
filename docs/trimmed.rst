@@ -184,8 +184,12 @@ User curve types
 ^^^^^^^^^^^^^^^^
 
 A basis whose type is not built in has no NURBS form the kernel knows, so
-it has no piece, and ``GetPiece()`` is null. This includes a trimmed curve
-wrapped in a ``Curve`` and trimmed again. ``Project`` then takes the
+it has no piece, and ``GetPiece()`` is null. A trimmed curve wrapped in a
+``Curve`` and trimmed again is not such a basis: the erased
+``ToBSpline(curve, range)`` reaches a trimmed curve of a built-in basis,
+nested to any depth (*Conversion over a subrange*, below), so the inner
+trim has a piece too; a trimmed plane curve is lifted to :math:`z = 0`
+with its trim. For a user's type, ``Project`` then takes the
 basis's global projection :math:`t_g`, moves it into the range (by periods,
 then clamping), and compares it with the two ends. The answer is exact when
 the global minimiser of :math:`f` lies in the range, or when :math:`f` has
@@ -230,6 +234,25 @@ returns the form reversed with its knots reflected,
 :math:`u \mapsto a + b - u`, so that its domain is still :math:`[a, b]`
 and it runs as the trimmed curve runs. For a user type there is no form,
 and the result is ``NotSupported``.
+
+Conversion over a subrange
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``ToBSpline(trimmed, range)`` converts the part over any subrange of
+:math:`[a, b]`, and the erased ``ToBSpline(curve, range)`` reaches it for a
+trimmed curve wrapped in a ``Curve``, as a sweep of a trimmed profile or a
+trimmed surface of such a sweep asks for it. Its domain is ``range`` and it
+runs as the trimmed curve runs. Forwards, it is the basis's form over
+``range``. Reversed, the curve at :math:`t` is the basis at
+:math:`a + b - t`, so the part over :math:`[l, h]` is the basis's form over
+:math:`[a + b - h, a + b - l]`, run backwards, with each knot :math:`u`
+mapped to :math:`a + b - u` and the ends set to exactly :math:`l` and
+:math:`h`. Reversing alone would leave it on the reflected domain, and
+evaluating it at the trimmed curve's parameter would give the wrong point.
+The map is affine, so the form keeps the trimmed curve's parameter wherever
+the basis's form keeps the basis's (``Detail::KeepsParameter``: a line, a
+parabola, a B-spline, or a trimmed curve of one), and agrees with it at
+every knot otherwise. A trimmed basis converts the same way, to any depth.
 
 Trimmed surfaces
 ----------------

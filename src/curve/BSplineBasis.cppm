@@ -105,10 +105,19 @@ export namespace Stereon::Detail {
 [[nodiscard]] std::vector<double> PolynomialRoots(std::span<const double> coefficients,
                                                   Interval range);
 
+/// The range of weights a rational B-spline may have. Evaluation forms the
+/// weighted poles w P and the sums of w N over a span; a weight of 1e308
+/// overflows them although the curve itself is well inside the model, and
+/// one of 1e-320 loses all precision. Within [2^-256, 2^256] neither
+/// happens for any pole inside the size box, and scaling every weight by a
+/// common power of two in the range changes no computed point, bit for bit.
+inline constexpr double MinWeight = 0x1p-256;
+inline constexpr double MaxWeight = 0x1p256;
+
 /// InvalidInput unless there are no weights (a polynomial B-spline) or one
-/// finite, positive weight per pole. Positive weights keep a rational
-/// B-spline inside the convex hull of its poles and free of poles of its
-/// own.
+/// finite, positive weight per pole, each in [MinWeight, MaxWeight].
+/// Positive weights keep a rational B-spline inside the convex hull of its
+/// poles and free of poles of its own.
 [[nodiscard]] Result<void> CheckWeights(std::span<const double> weights, std::size_t poleCount,
                                         std::string_view where);
 

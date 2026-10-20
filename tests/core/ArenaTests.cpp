@@ -255,8 +255,9 @@ TEST_CASE("edits are scoped to a callback and never hand out a reference", "[cor
     REQUIRE(sum == 52 + 2 + 3 + 4);
     REQUIRE(ToVector(frozen) == std::vector<int>{0, 1, 2, 3, 4, 5});
 
-    // Copying, moving or resizing inside a callback is reported and stops
-    // the program; tests/probes/ContractProbe.cpp runs that case.
+    // Copying, moving, resizing or taking a page with GetPage() inside a
+    // callback is reported and stops the program; tests/probes/ContractProbe.cpp
+    // runs those cases.
 }
 
 TEST_CASE("resizing grows with value-initialised entries and drops whole pages", "[core][arena]")

@@ -472,14 +472,21 @@ private:
 
     // --- S12, S13: geometry associations ------------------------------------------
 
+    /// An entry of a geometry pool is a support only when it holds geometry:
+    /// an empty wrapper in the pool is as missing as an index past its end.
     void CheckGeometry()
     {
         for (std::uint32_t f = 0; f < m_T.Faces.GetSize(); ++f) {
             const SurfaceRef s = m_T.Faces[f].Surface;
-            if (m_T.Faces[f].Slot.Alive &&
-                !(s.IsValid() && s.GetIndex() < m_T.Surfaces.GetSize())) {
+            if (!m_T.Faces[f].Slot.Alive) {
+                continue;
+            }
+            if (!(s.IsValid() && s.GetIndex() < m_T.Surfaces.GetSize())) {
                 Report(TopologyRule::MissingGeometry, {Name(EntityKind::Face, f)},
                        "the face has no surface in the pool");
+            } else if (m_T.Surfaces[s.GetIndex()].IsEmpty()) {
+                Report(TopologyRule::MissingGeometry, {Name(EntityKind::Face, f)},
+                       "the face's surface in the pool is empty");
             }
         }
         for (std::uint32_t e = 0; e < m_T.Edges.GetSize(); ++e) {
@@ -502,6 +509,9 @@ private:
             Report(TopologyRule::MissingGeometry, {Name(EntityKind::Edge, e)},
                    HasOwnCurve(edge.Kind) ? "the edge has no 3D curve in the pool"
                                           : "the edge kind has no 3D curve of its own");
+        } else if (hasCurve && m_T.Curves[edge.Curve.GetIndex()].IsEmpty()) {
+            Report(TopologyRule::MissingGeometry, {Name(EntityKind::Edge, e)},
+                   "the edge's 3D curve in the pool is empty");
         }
         if (edge.Range.IsEmpty()) {
             Report(TopologyRule::MissingGeometry, {Name(EntityKind::Edge, e)},
@@ -521,6 +531,9 @@ private:
         if ((p.IsValid() && !inPool) || (!p.IsValid() && kind != EdgeCurveKind::Spatial)) {
             Report(TopologyRule::MissingGeometry, {Name(EntityKind::Coedge, c)},
                    "the coedge has no pcurve in the pool");
+        } else if (inPool && m_T.PCurves[p.GetIndex()].IsEmpty()) {
+            Report(TopologyRule::MissingGeometry, {Name(EntityKind::Coedge, c)},
+                   "the coedge's pcurve in the pool is empty");
         }
     }
 
@@ -553,21 +566,37 @@ private:
         }
     }
 
-    /// Joins the faces around edge e that lie in one shell.
+    /// Joins the faces around edge e that lie in one shell, for every shell
+    /// among them: each face to the first face of its shell on the ring. A
+    /// non-manifold edge may be shared by several shells, and which of them
+    /// holds the anchor must not matter.
     void JoinFacesOf(const std::uint32_t e, std::vector<std::uint32_t>& parent) const
     {
         const std::uint32_t anchor = m_T.Edges[e].RadialAnchor.GetIndex();
-        if (anchor == None || FaceOf(anchor) == None) {
+        if (anchor == None) {
             return;
         }
-        const std::uint32_t first = FaceOf(anchor);
-        for (std::uint32_t c = m_T.Coedges[anchor].Radial.GetIndex(); c != anchor;
-             c = m_T.Coedges[c].Radial.GetIndex()) {
+        std::vector<std::uint32_t> firsts; // the first face met in each shell
+        std::uint32_t c = anchor;
+        do {
             const std::uint32_t face = FaceOf(c);
-            if (face != None && m_T.Faces[face].Shell == m_T.Faces[first].Shell) {
+            if (face != None) {
+                JoinToShellFirst(face, firsts, parent);
+            }
+            c = m_T.Coedges[c].Radial.GetIndex();
+        } while (c != anchor);
+    }
+
+    void JoinToShellFirst(const std::uint32_t face, std::vector<std::uint32_t>& firsts,
+                          std::vector<std::uint32_t>& parent) const
+    {
+        for (const std::uint32_t first : firsts) {
+            if (m_T.Faces[first].Shell == m_T.Faces[face].Shell) {
                 parent[Find(parent, face)] = Find(parent, first);
+                return;
             }
         }
+        firsts.push_back(face);
     }
 
     void CheckShellComponent(const std::uint32_t s, std::vector<std::uint32_t>& parent)

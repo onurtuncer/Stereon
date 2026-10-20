@@ -49,7 +49,8 @@ Stereon::EdgeSpec ExactLine(Body& body, const BuilderVertexId a, const BuilderVe
     return {.Kind = EdgeCurveKind::Exact,
             .Start = a,
             .End = b,
-            .Curve = body.Builder.AddCurve(Stereon::Curve(Stereon::Line{{0, 0, 0}, Vec3{1, 0, 0}})),
+            .Curve = Must(
+                body.Builder.AddCurve(Stereon::Curve(Stereon::Line{{0, 0, 0}, Vec3{1, 0, 0}}))),
             .Range = Interval(0.0, 1.0),
             .Tolerance = 1e-7};
 }
@@ -148,11 +149,37 @@ TEST_CASE("AddFace needs a surface of the pool", "[topo][builder]")
     ShapeBuilder b;
     RequireRefused(b.AddFace(SurfaceRef{}), "surface");
     RequireRefused(b.AddFace(SurfaceRef::FromIndex(0)), "surface");
-    const SurfaceRef plane = b.AddSurface(XyPlane());
+    const SurfaceRef plane = Must(b.AddSurface(XyPlane()));
     const BuilderFaceId f = Must(b.AddFace(plane));
     const BuilderFaceId g = Must(b.AddFace(plane, true));
     REQUIRE(f != g);
     REQUIRE(b.Count<EntityKind::Face>() == 2);
+}
+
+TEST_CASE("the geometry pools refuse empty geometry and a spent builder", "[topo][builder][audit]")
+{
+    // Audit 2026-10-20, F3: an empty wrapper took a pool index that a face
+    // or an edge then accepted, and the certified shape crashed Describe.
+    ShapeBuilder b;
+    RequireRefused(b.AddCurve(Stereon::Curve{}), "empty");
+    RequireRefused(b.AddPCurve(Stereon::Curve2d{}), "empty");
+    RequireRefused(b.AddSurface(Stereon::Surface{}), "empty");
+    // Nothing was stored: the first geometry added takes index 0.
+    REQUIRE(Must(b.AddSurface(XyPlane())).GetIndex() == 0);
+    REQUIRE(Must(b.AddPCurve(AnyPCurve())).GetIndex() == 0);
+    const Stereon::Curve line(Stereon::Line{{0, 0, 0}, Vec3{1, 0, 0}});
+    REQUIRE(Must(b.AddCurve(line)).GetIndex() == 0);
+
+    // Moved from or frozen, a builder refuses geometry as it refuses
+    // everything else.
+    ShapeBuilder c(std::move(b));
+    RequireRefused(b.AddCurve(line), "moved from or frozen"); // NOLINT(bugprone-use-after-move)
+    RequireRefused(b.AddPCurve(AnyPCurve()), "moved from or frozen");
+    RequireRefused(b.AddSurface(XyPlane()), "moved from or frozen");
+    REQUIRE(Stereon::Freeze(std::move(c)).has_value());
+    RequireRefused(c.AddCurve(line), "moved from or frozen"); // NOLINT(bugprone-use-after-move)
+    RequireRefused(c.AddPCurve(AnyPCurve()), "moved from or frozen");
+    RequireRefused(c.AddSurface(XyPlane()), "moved from or frozen");
 }
 
 TEST_CASE("AppendCoedge needs a pcurve except for a Spatial edge", "[topo][builder]")
@@ -168,7 +195,7 @@ TEST_CASE("AppendCoedge needs a pcurve except for a Spatial edge", "[topo][build
         body.Builder.AppendCoedge(loop, exact, EdgeUseSense::Same, PCurveRef::FromIndex(4)),
         "not in this builder's pool");
     RequireRefused(body.Builder.AppendCoedge(BuilderLoopId{}, exact, EdgeUseSense::Same,
-                                             body.Builder.AddPCurve(AnyPCurve())),
+                                             Must(body.Builder.AddPCurve(AnyPCurve()))),
                    "not a live entity");
     REQUIRE(body.Builder.Count<EntityKind::Coedge>() == 0);
 
@@ -280,7 +307,7 @@ TEST_CASE("every change advances the epoch; refusals do not", "[topo][builder][e
     };
     const BuilderVertexId v = Must(b.AddVertex({0, 0, 0}, 0.0));
     REQUIRE(advanced());
-    const SurfaceRef s = b.AddSurface(XyPlane());
+    const SurfaceRef s = Must(b.AddSurface(XyPlane()));
     REQUIRE_FALSE(advanced()); // geometry pools are not topology
     const BuilderFaceId f = Must(b.AddFace(s));
     REQUIRE(advanced());
@@ -289,7 +316,7 @@ TEST_CASE("every change advances the epoch; refusals do not", "[topo][builder][e
     const BuilderEdgeId e = Must(b.AddEdge(
         {.Kind = EdgeCurveKind::Boundary, .Start = v, .End = v, .Range = Interval(0.0, 1.0)}));
     REQUIRE(advanced());
-    Must(b.AppendCoedge(l, e, EdgeUseSense::Same, b.AddPCurve(AnyPCurve())));
+    Must(b.AppendCoedge(l, e, EdgeUseSense::Same, Must(b.AddPCurve(AnyPCurve()))));
     REQUIRE(advanced());
     const BuilderShellId sh = Must(b.AddShell());
     REQUIRE(advanced());

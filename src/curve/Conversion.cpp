@@ -33,6 +33,7 @@ import :Ellipse;
 import :Erased;
 import :Hyperbola;
 import :Line;
+import :Trimmed;
 import :Visit;
 
 namespace Stereon {
@@ -205,6 +206,15 @@ Result<BSplineCurve> ToBSpline(const BSplineCurve& curve, const Interval range)
 
 Result<BSplineCurve> ToBSpline(const Curve& curve, const Interval range)
 {
+    if (curve.IsEmpty()) {
+        return Fail(ErrorCode::InvalidInput, "ToBSpline: the curve is empty");
+    }
+    // A trimmed curve is not a built-in type, but its piece of a built-in
+    // basis has an exact form: sweeps and trims of trimmed profiles rely on
+    // reaching it through the wrapper.
+    if (const auto* trimmed = curve.Target<TrimmedCurve>()) {
+        return ToBSpline(*trimmed, range);
+    }
     return VisitBuiltin(curve, [&]<typename G>(const G& geometry) -> Result<BSplineCurve> {
         if constexpr (std::is_same_v<G, Curve>) {
             return Fail(ErrorCode::NotSupported,
@@ -220,6 +230,24 @@ Result<BSplineCurve> ToBSpline(const Curve& curve, const Interval range)
 namespace Stereon::Detail {
 
 namespace {
+
+template <std::size_t D>
+[[nodiscard]] bool KeepsParameterOf(const BasicErasedCurve<D>& curve)
+{
+    if (curve.IsEmpty()) {
+        return false;
+    }
+    // A trimmed curve's form is its basis's piece, reflected affinely when
+    // reversed: it keeps the parameter exactly when the basis's form does.
+    if (const auto* trimmed = curve.template Target<BasicTrimmedCurve<D>>()) {
+        return KeepsParameterOf(trimmed->GetBasis());
+    }
+    return VisitBuiltin(curve, []<typename G>(const G&) {
+        return std::is_same_v<G, BasicBSplineCurve<double, D>> ||
+               std::is_same_v<G, BasicLine<double, D>> ||
+               std::is_same_v<G, BasicParabola<double, D>>;
+    });
+}
 
 /// (cos a, sin a), exact where a is a multiple of the double nearest pi/2:
 /// the angle is reduced by quarter turns first, and the turns applied
@@ -241,6 +269,16 @@ namespace {
 }
 
 } // namespace
+
+bool KeepsParameter(const Curve& curve)
+{
+    return KeepsParameterOf(curve);
+}
+
+bool KeepsParameter(const Curve2d& curve)
+{
+    return KeepsParameterOf(curve);
+}
 
 UnitArc MakeUnitArc(const double start, const double end)
 {

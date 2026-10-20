@@ -69,7 +69,7 @@ std::size_t SideFor(const std::size_t faces)
 Shape MakeSheet(const std::size_t n)
 {
     ShapeBuilder b;
-    const Stereon::SurfaceRef plane = b.AddSurface(
+    const Stereon::SurfaceRef plane = *b.AddSurface(
         Stereon::Surface(Stereon::Plane{Point3{0, 0, 0}, Vec3{1, 0, 0}, Vec3{0, 1, 0}}));
     const std::size_t side = n + 1;
     std::vector<BuilderVertexId> vertices;
@@ -89,7 +89,7 @@ Shape MakeSheet(const std::size_t n)
     horizontal.reserve(n * side);
     vertical.reserve(n * side);
     const auto line = [&](const Point3& from, const Vec3& direction) {
-        return b.AddCurve(Stereon::Curve(Stereon::Line{from, direction}));
+        return *b.AddCurve(Stereon::Curve(Stereon::Line{from, direction}));
     };
     for (std::size_t j = 0; j < side; ++j) {
         for (std::size_t i = 0; i < n; ++i) {
@@ -119,7 +119,7 @@ Shape MakeSheet(const std::size_t n)
     }
     const Stereon::BuilderShellId shell = *b.AddShell();
     const auto pcurve = [&](const Point2& from, const Vec2& direction) {
-        return b.AddPCurve(Stereon::Curve2d(Stereon::Line2d{from, direction}));
+        return *b.AddPCurve(Stereon::Curve2d(Stereon::Line2d{from, direction}));
     };
     for (std::size_t j = 0; j < n; ++j) {
         for (std::size_t i = 0; i < n; ++i) {
@@ -279,7 +279,7 @@ void OneEdit(benchmark::State& state, Edit edit)
 
 void ReplaceSurface(ShapeBuilder& b, const Shape& shape, const std::size_t n)
 {
-    const Stereon::SurfaceRef moved = b.AddSurface(
+    const Stereon::SurfaceRef moved = *b.AddSurface(
         Stereon::Surface(Stereon::Plane{Point3{0, 0, 1}, Vec3{1, 0, 0}, Vec3{0, 1, 0}}));
     static_cast<void>(*b.SetSurface(b.Handle(MiddleFace(shape, n)), moved));
 }
@@ -320,7 +320,7 @@ void EditSequence(benchmark::State& state)
             const FaceId face = current.GetSnapshot()->MakeId<EntityKind::Face>(
                 static_cast<std::uint32_t>(j * n + i));
             if (k % 2 == 0) {
-                const Stereon::SurfaceRef moved = b.AddSurface(Stereon::Surface(Stereon::Plane{
+                const Stereon::SurfaceRef moved = *b.AddSurface(Stereon::Surface(Stereon::Plane{
                     Point3{0, 0, static_cast<double>(k)}, Vec3{1, 0, 0}, Vec3{0, 1, 0}}));
                 static_cast<void>(*b.SetSurface(b.Handle(face), moved));
             } else {

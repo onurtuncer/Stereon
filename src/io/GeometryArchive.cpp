@@ -23,9 +23,11 @@ module;
 #include <fstream>
 #include <iterator>
 #include <optional>
+#include <ostream>
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -109,11 +111,21 @@ void PutChunk(std::vector<std::byte>& out, const std::string_view tag, const boo
     return std::isfinite(x) && x > 0.0;
 }
 
+/// Every value finite and positive, in millimetres, and the resolution at
+/// most the tolerance ceiling, as Context requires of its settings.
 [[nodiscard]] bool ValidPolicy(const ModelPolicy& p)
 {
     return p.Unit == LengthUnit::Millimetre && PositiveFinite(p.Resolution) &&
            PositiveFinite(p.AngularResolution) && PositiveFinite(p.ToleranceCeiling) &&
-           PositiveFinite(p.FrameAllowance);
+           PositiveFinite(p.FrameAllowance) && p.Resolution <= p.ToleranceCeiling;
+}
+
+/// The factories that validate geometry, on write and on read, check frames
+/// against the kernel's FrameAllowance and no other; a policy that states
+/// another would claim a validation that never happened.
+[[nodiscard]] bool AppliedFrameAllowance(const ModelPolicy& p)
+{
+    return p.FrameAllowance == FrameAllowance;
 }
 
 void PutHeader(std::vector<std::byte>& out, const ModelPolicy& policy)
@@ -524,7 +536,26 @@ template <typename T, typename Wrapper>
 
 template <typename Wrapper, typename... Ts>
 [[nodiscard]] Result<Wrapper> DecodeAny(TypeList<Ts...> types, const RawRecord& record,
-                                        const std::string& where, int depth);
+                                        const std::string& where, int depth, std::uint32_t version);
+
+/// The format versions that introduced the composite records.
+constexpr std::uint32_t TrimmedCurvesVersion = 2;
+constexpr std::uint32_t SurfaceRecordsVersion = 3;
+
+/// ParseError unless the file's format version has the record's type: no
+/// writer of version 1 stored a trimmed curve, so a version-1 file with one
+/// was not written as it claims.
+[[nodiscard]] Result<void> RequireVersion(const RawRecord& record, const std::string& where,
+                                          const std::uint32_t since, const std::uint32_t version)
+{
+    if (version < since) {
+        return Fail(ErrorCode::ParseError,
+                    std::format("ReadGeometry: {} is a \"{}\" record, which format version {} "
+                                "does not have (it came in version {})",
+                                where, record.Name, version, since));
+    }
+    return {};
+}
 
 /// A composite record's parts, unless it nests deeper than the format
 /// allows or does not split: ParseError naming the record either way.
@@ -591,12 +622,13 @@ template <typename Wrapper, typename T>
 /// then its trim, validated by MakeTrimmedCurve.
 template <std::size_t D, typename Types>
 [[nodiscard]] Result<BasicErasedCurve<D>> DecodeTrimmed(Types types, const RawRecord& record,
-                                                        const std::string& where, const int depth)
+                                                        const std::string& where, const int depth,
+                                                        const std::uint32_t version)
 {
     STEREON_TRY(const RawComposite parts, Parts(record, where, depth));
-    STEREON_TRY(
-        const BasicErasedCurve<D> basis,
-        DecodeAny<BasicErasedCurve<D>>(types, parts.Inner, where + ", its basis", depth + 1));
+    STEREON_TRY(const BasicErasedCurve<D> basis,
+                DecodeAny<BasicErasedCurve<D>>(types, parts.Inner, where + ", its basis", depth + 1,
+                                               version));
     STEREON_TRY(const Detail::TrimRecord trim, TailValue<Detail::TrimRecord>(parts, record, where));
     if (!FiniteNonEmpty(trim.Lower, trim.Upper)) {
         return RangeError<BasicErasedCurve<D>>(record, where);
@@ -613,11 +645,12 @@ template <std::size_t D, typename Types>
 /// MakeTrimmedSurface.
 template <typename Types>
 [[nodiscard]] Result<Surface> DecodeTrimmedSurface(Types types, const RawRecord& record,
-                                                   const std::string& where, const int depth)
+                                                   const std::string& where, const int depth,
+                                                   const std::uint32_t version)
 {
     STEREON_TRY(const RawComposite parts, Parts(record, where, depth));
     STEREON_TRY(const Surface basis,
-                DecodeAny<Surface>(types, parts.Inner, where + ", its basis", depth + 1));
+                DecodeAny<Surface>(types, parts.Inner, where + ", its basis", depth + 1, version));
     STEREON_TRY(const Detail::SurfaceTrimRecord trim,
                 TailValue<Detail::SurfaceTrimRecord>(parts, record, where));
     if (!FiniteNonEmpty(trim.LowerU, trim.UpperU) || !FiniteNonEmpty(trim.LowerV, trim.UpperV)) {
@@ -634,11 +667,11 @@ template <typename Types>
 /// of the curve chunk, then its sweep, validated by `make`.
 template <typename Record, typename Make>
 [[nodiscard]] Result<Surface> DecodeSwept(const RawRecord& record, const std::string& where,
-                                          const int depth, Make make)
+                                          const int depth, const std::uint32_t version, Make make)
 {
     STEREON_TRY(const RawComposite parts, Parts(record, where, depth));
     STEREON_TRY(const Curve profile, DecodeAny<Curve>(BuiltinCurveTypes{}, parts.Inner,
-                                                      where + ", its profile", depth + 1));
+                                                      where + ", its profile", depth + 1, version));
     STEREON_TRY(const Record sweep, TailValue<Record>(parts, record, where));
     return AsRead<Surface>(make(profile, sweep), record, where);
 }
@@ -663,26 +696,35 @@ template <typename Record, typename Make>
 /// surface or a sweep in the surface chunk.
 template <typename Wrapper, typename... Ts>
 Result<Wrapper> DecodeAny(TypeList<Ts...> types, const RawRecord& record, const std::string& where,
-                          const int depth)
+                          const int depth, const std::uint32_t version)
 {
     if constexpr (std::is_same_v<Wrapper, Curve> || std::is_same_v<Wrapper, Curve2d>) {
         constexpr std::size_t D = std::is_same_v<Wrapper, Curve> ? 3 : 2;
         if (record.Name == TrimmedName<D>) {
-            return DecodeTrimmed<D>(types, record, where, depth);
+            STEREON_TRY_VOID(RequireVersion(record, where, TrimmedCurvesVersion, version));
+            return DecodeTrimmed<D>(types, record, where, depth, version);
         }
     }
     if constexpr (std::is_same_v<Wrapper, Surface>) {
+        const bool composite = record.Name == GeometryTypeName<TrimmedSurface> ||
+                               record.Name == GeometryTypeName<ExtrusionSurface> ||
+                               record.Name == GeometryTypeName<RevolutionSurface>;
+        if (composite) {
+            STEREON_TRY_VOID(RequireVersion(record, where, SurfaceRecordsVersion, version));
+        }
         if (record.Name == GeometryTypeName<TrimmedSurface>) {
-            return DecodeTrimmedSurface(types, record, where, depth);
+            return DecodeTrimmedSurface(types, record, where, depth, version);
         }
         if (record.Name == GeometryTypeName<ExtrusionSurface>) {
             return DecodeSwept<Detail::ExtrusionRecord>(
-                record, where, depth, [](const Curve& profile, const Detail::ExtrusionRecord& r) {
+                record, where, depth, version,
+                [](const Curve& profile, const Detail::ExtrusionRecord& r) {
                     return MakeExtrusion(profile, r.Direction);
                 });
         }
         if (record.Name == GeometryTypeName<RevolutionSurface>) {
-            return DecodeSwept<Detail::RevolutionRecord>(record, where, depth, RestoredRevolution);
+            return DecodeSwept<Detail::RevolutionRecord>(record, where, depth, version,
+                                                         RestoredRevolution);
         }
     }
     std::optional<Result<Wrapper>> decoded;
@@ -699,14 +741,15 @@ Result<Wrapper> DecodeAny(TypeList<Ts...> types, const RawRecord& record, const 
 }
 
 template <typename Wrapper, typename Types>
-[[nodiscard]] Result<std::vector<Wrapper>> DecodeChunk(const Chunk& chunk, Types types)
+[[nodiscard]] Result<std::vector<Wrapper>> DecodeChunk(const Chunk& chunk, Types types,
+                                                       const std::uint32_t version)
 {
     STEREON_TRY(const std::vector<RawRecord> records, ReadRecords(chunk));
     std::vector<Wrapper> items;
     items.reserve(records.size());
     for (std::size_t i = 0; i < records.size(); ++i) {
         const std::string where = std::format("record {} of chunk \"{}\"", i, chunk.Tag);
-        STEREON_TRY(Wrapper item, DecodeAny<Wrapper>(types, records[i], where, 0));
+        STEREON_TRY(Wrapper item, DecodeAny<Wrapper>(types, records[i], where, 0, version));
         items.push_back(std::move(item));
     }
     return items;
@@ -724,28 +767,51 @@ template <typename Wrapper, typename Types>
     return {};
 }
 
-/// What the chunks of a file set, and which required ones were seen.
+/// Which of the chunks every archive has one of were seen. Each must appear
+/// exactly once: a missing one would read as an empty collection and a
+/// repeated one would replace what the first decoded, losing geometry with
+/// every checksum intact.
 struct ChunkState {
     bool Policy = false;
+    bool Curves = false;
+    bool PlaneCurves = false;
+    bool Surfaces = false;
 };
+
+/// Marks the chunk's kind seen; ParseError if it was already.
+[[nodiscard]] Result<void> FirstOfKind(const Chunk& chunk, bool& seen)
+{
+    if (seen) {
+        return Fail(ErrorCode::ParseError,
+                    std::format("ReadGeometry: a second \"{}\" chunk at offset {}; an archive has "
+                                "exactly one",
+                                chunk.Tag, chunk.Offset));
+    }
+    seen = true;
+    return {};
+}
 
 [[nodiscard]] Result<void> ApplyChunk(const Chunk& chunk, LoadedGeometry& loaded, ChunkState& state)
 {
     GeometryArchive& archive = loaded.Archive;
+    const std::uint32_t version = loaded.FormatVersion;
     if (chunk.Tag == PolicyTag) {
-        state.Policy = true;
+        STEREON_TRY_VOID(FirstOfKind(chunk, state.Policy));
         return ReadPolicy(chunk, archive.Policy);
     }
     if (chunk.Tag == CurvesTag) {
-        STEREON_TRY(archive.Curves, DecodeChunk<Curve>(chunk, BuiltinCurveTypes{}));
+        STEREON_TRY_VOID(FirstOfKind(chunk, state.Curves));
+        STEREON_TRY(archive.Curves, DecodeChunk<Curve>(chunk, BuiltinCurveTypes{}, version));
         return {};
     }
     if (chunk.Tag == PlaneCurvesTag) {
-        STEREON_TRY(archive.Curves2d, DecodeChunk<Curve2d>(chunk, BuiltinCurve2dTypes{}));
+        STEREON_TRY_VOID(FirstOfKind(chunk, state.PlaneCurves));
+        STEREON_TRY(archive.Curves2d, DecodeChunk<Curve2d>(chunk, BuiltinCurve2dTypes{}, version));
         return {};
     }
     if (chunk.Tag == SurfacesTag) {
-        STEREON_TRY(archive.Surfaces, DecodeChunk<Surface>(chunk, BuiltinSurfaceTypes{}));
+        STEREON_TRY_VOID(FirstOfKind(chunk, state.Surfaces));
+        STEREON_TRY(archive.Surfaces, DecodeChunk<Surface>(chunk, BuiltinSurfaceTypes{}, version));
         return {};
     }
     if (chunk.Required) {
@@ -763,8 +829,16 @@ struct ChunkState {
 {
     if (!ValidPolicy(policy)) {
         return Fail(ErrorCode::ParseError,
-                    "ReadGeometry: the stored policy has a unit this reader does not know or a "
-                    "value that is not finite and positive");
+                    "ReadGeometry: the stored policy has a unit this reader does not know, a "
+                    "value that is not finite and positive, or a resolution above its tolerance "
+                    "ceiling");
+    }
+    if (!AppliedFrameAllowance(policy)) {
+        // ADR-0028: never claim to restore a policy the reader did not apply.
+        return Fail(ErrorCode::NotSupported,
+                    std::format("ReadGeometry: the stored frame allowance {} is not the one this "
+                                "reader validates frames against, FrameAllowance ({})",
+                                policy.FrameAllowance, FrameAllowance));
     }
     return {};
 }
@@ -790,7 +864,13 @@ Result<std::vector<std::byte>> WriteGeometry(const GeometryArchive& archive)
     if (!ValidPolicy(archive.Policy)) {
         return Fail(ErrorCode::InvalidInput,
                     "WriteGeometry: every policy value must be finite and positive, in "
-                    "millimetres and radians");
+                    "millimetres and radians, and the resolution at most the tolerance ceiling");
+    }
+    if (!AppliedFrameAllowance(archive.Policy)) {
+        return Fail(ErrorCode::InvalidInput,
+                    std::format("WriteGeometry: the frame allowance {} is not the one this kernel "
+                                "validates frames against, FrameAllowance ({})",
+                                archive.Policy.FrameAllowance, FrameAllowance));
     }
     STEREON_TRY(const std::vector<std::byte> curves,
                 GeometryPayload(archive.Curves, std::string_view{"curve"}));
@@ -828,6 +908,18 @@ Result<LoadedGeometry> ReadGeometry(const std::span<const std::byte> bytes)
         // ADR-0028: never substitute the reader's defaults for missing policy.
         return Fail(ErrorCode::ParseError, "ReadGeometry: the archive has no policy chunk");
     }
+    // Every writer stores all three geometry chunks, empty or not, so one
+    // that is missing was cut off or removed, not left out.
+    for (const auto& [seen, tag] :
+         {std::pair{state.Curves, CurvesTag}, std::pair{state.PlaneCurves, PlaneCurvesTag},
+          std::pair{state.Surfaces, SurfacesTag}}) {
+        if (!seen) {
+            return Fail(ErrorCode::ParseError,
+                        std::format("ReadGeometry: the archive has no \"{}\" chunk; it was cut "
+                                    "short or the chunk removed",
+                                    tag));
+        }
+    }
     STEREON_TRY_VOID(CheckPolicy(loaded.Archive.Policy));
     return loaded;
 }
@@ -835,12 +927,34 @@ Result<LoadedGeometry> ReadGeometry(const std::span<const std::byte> bytes)
 Result<void> SaveGeometry(const std::filesystem::path& path, const GeometryArchive& archive)
 {
     STEREON_TRY(const std::vector<std::byte> bytes, WriteGeometry(archive));
-    std::ofstream file(path, std::ios::binary | std::ios::trunc);
-    file.write(reinterpret_cast<const char*>(bytes.data()), // NOLINT: byte I/O
-               static_cast<std::streamsize>(bytes.size()));
-    if (!file) {
-        return Fail(ErrorCode::InvalidInput,
-                    std::format("SaveGeometry: cannot write \"{}\"", path.string()));
+    // Written beside the target and renamed over it only once complete and
+    // closed: a failed save leaves an existing file as it was, and an error
+    // the stream reports only when it flushes (a full disk) is reported
+    // rather than lost in its destructor.
+    std::filesystem::path partial = path;
+    partial += ".partial";
+    std::error_code ignored;
+    {
+        std::ofstream file(partial, std::ios::binary | std::ios::trunc);
+        if (!file.is_open()) {
+            // Nothing was created, so nothing is removed.
+            return Fail(ErrorCode::InvalidInput,
+                        std::format("SaveGeometry: cannot write \"{}\"", path.string()));
+        }
+        const bool written = Detail::WriteAll(file, bytes);
+        file.close();
+        if (!written || file.fail()) {
+            std::filesystem::remove(partial, ignored);
+            return Fail(ErrorCode::InvalidInput,
+                        std::format("SaveGeometry: cannot write \"{}\"", path.string()));
+        }
+    }
+    std::error_code error;
+    std::filesystem::rename(partial, path, error);
+    if (error) {
+        std::filesystem::remove(partial, ignored);
+        return Fail(ErrorCode::InvalidInput, std::format("SaveGeometry: cannot replace \"{}\": {}",
+                                                         path.string(), error.message()));
     }
     return {};
 }
@@ -1013,6 +1127,14 @@ namespace {
 constexpr std::array<std::uint32_t, 256> Crc32Lookup = Crc32Table();
 
 } // namespace
+
+bool WriteAll(std::ostream& out, const std::span<const std::byte> bytes)
+{
+    out.write(reinterpret_cast<const char*>(bytes.data()), // NOLINT: byte I/O
+              static_cast<std::streamsize>(bytes.size()));
+    out.flush();
+    return !out.fail();
+}
 
 std::uint32_t Crc32(const std::span<const std::byte> bytes) noexcept
 {

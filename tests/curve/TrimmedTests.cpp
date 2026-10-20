@@ -232,12 +232,165 @@ TEST_CASE("a trimmed curve is wrapped as any curve", "[curve][trimmed][erased]")
     REQUIRE(std::abs(Project(wrapped, Point3{0.1, -0.5, 0.0}) - 0.0) <= Tolerance);
 
     // Trimming it again: the wrapped trimmed curve is not a built-in type,
-    // so the inner trim projects by the basis's projection and the ends.
+    // but its piece of a circle has an exact form, so the inner trim has one
+    // too (audit 2026-10-20, F2) and projects onto it.
     const TrimmedCurve inner = Trim(wrapped, Interval{0.5, 2.5});
-    REQUIRE(inner.GetPiece() == nullptr);
-    REQUIRE(Stereon::ToBSpline(inner).error().GetCode() == ErrorCode::NotSupported);
+    REQUIRE(inner.GetPiece() != nullptr);
+    const BSplineCurve nurbs = *Stereon::ToBSpline(inner);
+    REQUIRE(Domain(nurbs) == Interval{0.5, 2.5});
+    REQUIRE(Distance(Eval(nurbs, 0.5), Eval(UnitCircle(), 0.5)) <= Tolerance);
+    REQUIRE(Distance(Eval(nurbs, 2.5), Eval(UnitCircle(), 2.5)) <= Tolerance);
     REQUIRE(std::abs(Project(inner, Point3{0.0, 3.0, 0.0}) - Pi / 2.0) <= 1e-9);
     REQUIRE(Project(inner, Point3{1.0, -0.1, 0.0}) == 0.5);
+}
+
+namespace {
+
+/// The NURBS form of `curve` over `range` through the erased wrapper, as a
+/// sweep or a trimmed surface asks for it.
+BSplineCurve ErasedForm(const TrimmedCurve& curve, const Interval range)
+{
+    const auto form = Stereon::ToBSpline(Curve(curve), range);
+    REQUIRE(form.has_value());
+    return *form;
+}
+
+/// The form agrees with the trimmed curve at every knot in its domain, and
+/// everywhere when the basis keeps its parameter.
+void RequireFormOf(const TrimmedCurve& curve, const Interval range)
+{
+    const BSplineCurve form = ErasedForm(curve, range);
+    REQUIRE(Domain(form) == range);
+    for (const double k : form.Knots) {
+        REQUIRE(Distance(Eval(form, k), Eval(curve, k)) <= Tolerance);
+    }
+    if (Stereon::Detail::KeepsParameter(Curve(curve))) {
+        for (int i = 0; i <= 16; ++i) {
+            const double t = range.GetLower() + Width(range) * i / 16.0;
+            REQUIRE(Distance(Eval(form, t), Eval(curve, t)) <= Tolerance);
+        }
+    }
+    // Run as the curve runs: the tangents agree in direction at the ends.
+    for (const double t : {range.GetLower(), range.GetUpper()}) {
+        REQUIRE(Dot(Deriv(form, t, 1), Deriv(curve, t, 1)) > 0.0);
+    }
+}
+
+} // namespace
+
+TEST_CASE("a trimmed curve converts through the erased wrapper over any subrange",
+          "[curve][trimmed][conversion][audit]")
+{
+    // Audit 2026-10-20, F2: ToBSpline(const Curve&, Interval) knew only the
+    // built-in types, so a sweep or trimmed surface of a trimmed profile
+    // found no exact form and fell back to approximation. Every basis kind,
+    // forwards and reversed, over its whole range and over subranges.
+    const Transform tilt = Stereon::MakeRotation(Vec3{1.0, 1.0, -2.0}, 0.9);
+    const Vec3 x = Transformed(Vec3{1.0, 0.0, 0.0}, tilt);
+    const Vec3 y = Transformed(Vec3{0.0, 1.0, 0.0}, tilt);
+    const Point3 c{1.0, -2.0, 0.5};
+    const std::vector<TrimmedCurve> curves{
+        Trim(Curve(Line{c, Vec3{0.5, -1.0, 2.0}}), Interval{-1.0, 3.0}),
+        Trim(Curve(Circle{c, 2.0, x, y}), Interval{5.0, 7.0}), // across the seam
+        Trim(Curve(Ellipse{c, 3.0, 1.0, x, y}), Interval{0.4, 3.9}),
+        Trim(Curve(Hyperbola{c, 2.0, 1.0, x, y}), Interval{-1.2, 0.8}),
+        Trim(Curve(Parabola{c, 0.5, x, y}), Interval{-2.0, 1.0}),
+        Trim(Curve(*Stereon::MakeBSplineCurve(
+                 3, {0, 0, 0, 0, 1, 2, 2, 2, 2},
+                 {{0, 0, 0}, {1, 2, 0}, {2, -1, 1}, {3, 1, 0}, {4, 0, 2}}, {1, 2, 1, 0.5, 1})),
+             Interval{0.3, 1.6}),
+    };
+    for (const TrimmedCurve& forwards : curves) {
+        for (const TrimmedCurve& curve : {forwards, Reversed(forwards)}) {
+            const Interval whole = Domain(curve);
+            const double a = whole.GetLower();
+            const double w = Width(whole);
+            INFO("range " << a << " + " << w << (curve.IsReversed() ? ", reversed" : ""));
+            // The whole range: the same form as the concrete conversion.
+            const BSplineCurve concrete = *Stereon::ToBSpline(curve);
+            const BSplineCurve erased = ErasedForm(curve, whole);
+            REQUIRE(Domain(erased) == Domain(concrete));
+            for (const double k : concrete.Knots) {
+                REQUIRE(Distance(Eval(erased, k), Eval(concrete, k)) <= Tolerance);
+            }
+            RequireFormOf(curve, whole);
+            // Subranges at either end and inside.
+            RequireFormOf(curve, Interval{a, a + 0.4 * w});
+            RequireFormOf(curve, Interval{a + 0.6 * w, a + w});
+            RequireFormOf(curve, Interval{a + 0.15 * w, a + 0.7 * w});
+        }
+    }
+}
+
+TEST_CASE("the reversed piece of a line is the line, parameter for parameter",
+          "[curve][trimmed][conversion][audit]")
+{
+    // C(t) = (t, 0, 0) on [0, 4], reversed: the trimmed curve at t is the
+    // line at 4 - t. Its form over [1, 2] must have domain [1, 2] and run
+    // from (3, 0, 0) to (2, 0, 0) on that parameter, not on [2, 3].
+    const TrimmedCurve back =
+        Reversed(Trim(Curve(Line{{0.0, 0.0, 0.0}, {1.0, 0.0, 0.0}}), Interval{0.0, 4.0}));
+    const BSplineCurve form = ErasedForm(back, Interval{1.0, 2.0});
+    REQUIRE(Domain(form) == Interval{1.0, 2.0});
+    REQUIRE(Eval(form, 1.0) == Point3{3.0, 0.0, 0.0});
+    REQUIRE(Eval(form, 2.0) == Point3{2.0, 0.0, 0.0});
+    REQUIRE(Distance(Eval(form, 1.25), Point3{2.75, 0.0, 0.0}) <= Tolerance);
+    REQUIRE(Stereon::Detail::KeepsParameter(Curve(back)));
+}
+
+TEST_CASE("nested trims convert to any depth, in space and in the plane",
+          "[curve][trimmed][conversion][audit]")
+{
+    const Curve circle(UnitCircle());
+    Curve nested = circle;
+    TrimmedCurve innermost = Trim(circle, Interval{0.0, 6.0});
+    for (int depth = 0; depth < 4; ++depth) {
+        innermost = Trim(nested, Interval{0.5 + 0.25 * depth, 5.5 - 0.25 * depth});
+        if (depth % 2 == 1) {
+            innermost = Reversed(innermost);
+        }
+        nested = Curve(innermost);
+        REQUIRE(innermost.GetPiece() != nullptr);
+        RequireFormOf(innermost, Domain(innermost));
+        RequireFormOf(innermost, Interval{2.0, 3.0});
+    }
+    REQUIRE_FALSE(Stereon::Detail::KeepsParameter(nested));
+    REQUIRE(ProjectsClosest(innermost, Point3{0.3, -0.9, 0.2}));
+
+    // A line trimmed twice keeps its parameter through both trims.
+    const Curve line(Line{{0.0, 0.0, 0.0}, {0.0, 2.0, 0.0}});
+    const TrimmedCurve twice =
+        Reversed(Trim(Curve(Trim(line, Interval{-3.0, 3.0})), Interval{-1.0, 2.0}));
+    REQUIRE(Stereon::Detail::KeepsParameter(Curve(twice)));
+    RequireFormOf(twice, Interval{0.0, 1.5});
+
+    // A plane curve trimmed twice has its piece too, lifted to z = 0.
+    const Curve2d arc(Circle2d{{1.0, 1.0}, 2.0, {1.0, 0.0}, {0.0, 1.0}});
+    const TrimmedCurve2d inner = *Stereon::MakeTrimmedCurve(
+        Curve2d(*Stereon::MakeTrimmedCurve(arc, Interval{0.0, Pi})), Interval{0.5, 2.5});
+    REQUIRE(inner.GetPiece() != nullptr);
+    REQUIRE(ProjectsClosest(inner, Point2{1.2, 1.5}));
+    REQUIRE(ProjectsClosest(Reversed(inner), Point2{-3.0, 0.0}));
+    REQUIRE(Stereon::BoundingBox(inner).Y.GetLower() >= 1.0 + 2.0 * std::sin(0.5) - 1e-9);
+}
+
+TEST_CASE("the erased conversion refuses empty curves and ranges outside the trim",
+          "[curve][trimmed][conversion][audit]")
+{
+    const auto code = [](const auto& result) { return result.error().GetCode(); };
+    REQUIRE(code(Stereon::ToBSpline(Curve{}, Interval{0.0, 1.0})) == ErrorCode::InvalidInput);
+    REQUIRE_FALSE(Stereon::Detail::KeepsParameter(Curve{}));
+    REQUIRE_FALSE(Stereon::Detail::KeepsParameter(Curve2d{}));
+    const TrimmedCurve arc = Trim(Curve(UnitCircle()), Interval{1.0, 2.0});
+    for (const TrimmedCurve& curve : {arc, Reversed(arc)}) {
+        const Curve wrapped(curve);
+        REQUIRE(code(Stereon::ToBSpline(wrapped, Interval{0.5, 1.5})) == ErrorCode::InvalidInput);
+        REQUIRE(code(Stereon::ToBSpline(wrapped, Interval{1.5, 2.5})) == ErrorCode::InvalidInput);
+        REQUIRE(code(Stereon::ToBSpline(wrapped, Interval{1.5, 1.5})) == ErrorCode::InvalidInput);
+        REQUIRE(code(Stereon::ToBSpline(wrapped,
+                                        Interval{1.0, std::numeric_limits<double>::infinity()})) ==
+                ErrorCode::InvalidInput);
+    }
 }
 
 TEST_CASE("trimmed plane curves project in the plane", "[curve][trimmed][2d]")

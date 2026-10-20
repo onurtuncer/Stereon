@@ -329,8 +329,8 @@ TEST_CASE("SetSurface replaces a face's surface and copies one page", "[topo][ed
     Body box = MakeBox();
     const Shape a = std::move(box).Freeze();
     ShapeBuilder b = Must(ShapeBuilder::Open(a));
-    const Stereon::SurfaceRef moved =
-        b.AddSurface(Stereon::Surface(Stereon::Plane{{0, 0, 7}, Vec3{1, 0, 0}, Vec3{0, 1, 0}}));
+    const Stereon::SurfaceRef moved = Must(
+        b.AddSurface(Stereon::Surface(Stereon::Plane{{0, 0, 7}, Vec3{1, 0, 0}, Vec3{0, 1, 0}})));
     const BuilderFaceId face = b.Handle(a.Resolve(box.Faces[0]));
     Must(b.SetSurface(face, moved));
     const Shape c = Must(Stereon::Freeze(std::move(b)));

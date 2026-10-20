@@ -24,7 +24,10 @@
 #include <iterator>
 #include <limits>
 #include <numbers>
+#include <ostream>
 #include <span>
+#include <sstream>
+#include <streambuf>
 #include <string>
 #include <vector>
 
@@ -921,4 +924,326 @@ TEST_CASE("a revolution's unit axis survives the round trip whatever its directi
         }
     }
     REQUIRE(count == 9 * 9 * 9 - 1);
+}
+
+// ---------------------------------------------------------------------------
+// Audit 2026-10-20: archive integrity (F1), policy (F8), saving (F7) and
+// sweeps of trimmed profiles read back (F2)
+
+namespace {
+
+/// One chunk of an archive: its tag and its bytes [Start, End), header and
+/// payload.
+struct ChunkSpan {
+    std::string Tag;
+    std::size_t Start;
+    std::size_t End;
+};
+
+/// The chunks of an archive in order: the header is 32 bytes and each chunk
+/// header 20.
+std::vector<ChunkSpan> ChunksOf(const Bytes& b)
+{
+    std::vector<ChunkSpan> chunks;
+    for (std::size_t at = 32; at + 20 <= b.size();) {
+        const std::string tag{static_cast<char>(b[at]), static_cast<char>(b[at + 1]),
+                              static_cast<char>(b[at + 2]), static_cast<char>(b[at + 3])};
+        const std::size_t end = at + 20 + U32At(b, at + 8);
+        chunks.push_back({tag, at, end});
+        at = end;
+    }
+    return chunks;
+}
+
+Bytes Slice(const Bytes& b, const std::size_t from, const std::size_t to)
+{
+    return {b.begin() + static_cast<std::ptrdiff_t>(from),
+            b.begin() + static_cast<std::ptrdiff_t>(to)};
+}
+
+/// The bytes with a required chunk appended, `payload` its content.
+Bytes Appended(Bytes b, const std::string& tag, const Bytes& payload)
+{
+    for (const char c : tag) {
+        b.push_back(static_cast<std::byte>(c));
+    }
+    const std::size_t at = b.size();
+    b.resize(b.size() + 16);
+    PutU32At(b, at, 1);
+    PutU32At(b, at + 4, static_cast<std::uint32_t>(payload.size()));
+    PutU32At(b, at + 8, 0);
+    PutU32At(b, at + 12, Stereon::Detail::Crc32(payload));
+    b.insert(b.end(), payload.begin(), payload.end());
+    return b;
+}
+
+/// The error of reading `b`, which must fail with `code`.
+std::string ReadError(const Bytes& b, const ErrorCode code = ErrorCode::ParseError)
+{
+    const auto read = ReadGeometry(b);
+    REQUIRE_FALSE(read.has_value());
+    const std::string message(read.error().GetMessage());
+    INFO(message);
+    REQUIRE(read.error().GetCode() == code);
+    return message;
+}
+
+} // namespace
+
+TEST_CASE("an archive missing a chunk, cut at a chunk boundary or repeating one is refused",
+          "[io][archive][audit]")
+{
+    if constexpr (!Stereon::SerializationAvailable) {
+        return;
+    }
+    // F1: the reader tracked only the policy chunk, so a file cut after a
+    // complete chunk read as one with no curves or surfaces, every checksum
+    // intact, and a repeated chunk replaced what the first had decoded.
+    for (const int version : {1, 2, 3}) {
+        INFO("the committed version-" << version << " file");
+        const Bytes golden = FileBytes(GoldenFile(version));
+        const std::vector<ChunkSpan> chunks = ChunksOf(golden);
+        REQUIRE(chunks.size() == 4);
+        REQUIRE(chunks.back().End == golden.size());
+        if (version == 3) {
+            // The boundaries the audit found.
+            REQUIRE(chunks[0].End == 76);
+            REQUIRE(chunks[1].End == 1670);
+            REQUIRE(chunks[2].End == 2327);
+        }
+        // Cut after each complete chunk but the last: the next is missing.
+        for (std::size_t k = 0; k + 1 < chunks.size(); ++k) {
+            const std::string message = ReadError(Slice(golden, 0, chunks[k].End));
+            REQUIRE(message.find("no \"" + chunks[k + 1].Tag + "\" chunk") != std::string::npos);
+        }
+        for (const ChunkSpan& gone : chunks) {
+            // Each chunk removed whole.
+            Bytes without = Slice(golden, 0, gone.Start);
+            without.insert(without.end(), golden.begin() + static_cast<std::ptrdiff_t>(gone.End),
+                           golden.end());
+            const std::string missing = ReadError(without);
+            REQUIRE(missing.find(gone.Tag == "POLI"
+                                     ? std::string("no policy chunk")
+                                     : "no \"" + gone.Tag + "\" chunk") != std::string::npos);
+            // Each chunk repeated as it is.
+            Bytes twice = golden;
+            twice.insert(twice.end(), golden.begin() + static_cast<std::ptrdiff_t>(gone.Start),
+                         golden.begin() + static_cast<std::ptrdiff_t>(gone.End));
+            REQUIRE(ReadError(twice).find("a second \"" + gone.Tag + "\" chunk") !=
+                    std::string::npos);
+        }
+        // A valid, empty curve chunk after the real one would have erased
+        // every curve.
+        const Bytes emptyCurves = Appended(golden, "CRVS", Bytes(8, std::byte{0}));
+        REQUIRE(ReadError(emptyCurves).find("a second \"CRVS\" chunk") != std::string::npos);
+    }
+
+    // Cut anywhere at all, an archive is refused.
+    const Bytes good = Written(EveryType());
+    for (std::size_t cut = 0; cut < good.size(); ++cut) {
+        const auto read = ReadGeometry(Slice(good, 0, cut));
+        REQUIRE_FALSE(read.has_value());
+        REQUIRE(read.error().GetCode() == ErrorCode::ParseError);
+    }
+    // Chunks in another order are still one of each, and read.
+    const std::vector<ChunkSpan> chunks = ChunksOf(good);
+    Bytes shuffled = Slice(good, 0, 32);
+    for (const std::size_t k : {std::size_t{3}, std::size_t{1}, std::size_t{0}, std::size_t{2}}) {
+        shuffled.insert(shuffled.end(), good.begin() + static_cast<std::ptrdiff_t>(chunks[k].Start),
+                        good.begin() + static_cast<std::ptrdiff_t>(chunks[k].End));
+    }
+    REQUIRE(Written(Read(shuffled).Archive) == good);
+}
+
+TEST_CASE("a record newer than the file's format version is refused", "[io][archive][audit]")
+{
+    if constexpr (!Stereon::SerializationAvailable) {
+        return;
+    }
+    // F1: the decoder took any record name it knew, whatever version the
+    // file claimed; a version-1 file with a trimmed curve was not written by
+    // a version-1 writer.
+    const auto relabelled = [](const GeometryArchive& a, const std::uint32_t version) {
+        Bytes b = Written(a);
+        PutU32At(b, 4, version);
+        return b;
+    };
+    const Curve arc(*Stereon::MakeTrimmedCurve(Curve(Circle{O, 2.5, X, Y}), Interval{5.0, 7.0}));
+    GeometryArchive trimmed;
+    trimmed.Curves = {arc};
+    REQUIRE(ReadError(relabelled(trimmed, 1))
+                .find("\"TrimmedCurve\" record, which format version 1 does not have") !=
+            std::string::npos);
+    REQUIRE(Read(relabelled(trimmed, 2)).FormatVersion == 2);
+    GeometryArchive plane;
+    plane.Curves2d = {Curve2d(*Stereon::MakeTrimmedCurve(
+        Curve2d(Line2d{Point2{0.0, 0.0}, Vec2{1.0, 0.0}}), Interval{0.0, 1.0}))};
+    REQUIRE(ReadError(relabelled(plane, 1)).find("\"TrimmedCurve2d\" record") != std::string::npos);
+
+    const std::vector<Surface> composites{
+        Surface(*Stereon::MakeTrimmedSurface(Surface(Plane{O, X, Y}),
+                                             Box2{Interval{0.0, 1.0}, Interval{0.0, 1.0}})),
+        Surface(*Stereon::MakeExtrusion(Curve(Circle{O, 2.5, X, Y}), Vec3{0.0, 0.0, 1.0})),
+        Surface(*Stereon::MakeRevolution(Curve(Line{O, X}), Point3{}, Vec3{0.0, 0.0, 1.0})),
+    };
+    for (const Surface& s : composites) {
+        GeometryArchive a;
+        a.Surfaces = {s};
+        for (const std::uint32_t version : {1U, 2U}) {
+            REQUIRE(ReadError(relabelled(a, version)).find("which format version") !=
+                    std::string::npos);
+        }
+        REQUIRE(Read(relabelled(a, 3)).Archive.Surfaces.size() == 1);
+    }
+    // Nested: a version-2 file may hold a trimmed curve, but not as the
+    // profile of a sweep.
+    GeometryArchive swept;
+    swept.Surfaces = {Surface(*Stereon::MakeExtrusion(arc, Vec3{0.0, 0.0, 1.0}))};
+    REQUIRE(ReadError(relabelled(swept, 2)).find("\"ExtrusionSurface\" record") !=
+            std::string::npos);
+}
+
+TEST_CASE("the stored policy is one the reader applies", "[io][archive][audit]")
+{
+    if constexpr (!Stereon::SerializationAvailable) {
+        return;
+    }
+    // F8: the frame allowance was stored and read back, but the factories
+    // that validate the geometry checked the compiled FrameAllowance, so a
+    // file claimed a validation that never happened; and a resolution above
+    // the tolerance ceiling, which no Context can have, was accepted.
+    GeometryArchive above = EveryType();
+    above.Policy.Resolution = 1e-2;
+    above.Policy.ToleranceCeiling = 1e-3;
+    REQUIRE(WriteGeometry(above).error().GetCode() == ErrorCode::InvalidInput);
+    for (const double allowance : {1e-16, 1e-6}) {
+        GeometryArchive other = EveryType();
+        other.Policy.FrameAllowance = allowance;
+        REQUIRE(WriteGeometry(other).error().GetCode() == ErrorCode::InvalidInput);
+    }
+    // Any Context's policy can be written.
+    GeometryArchive fromContext = EveryType();
+    fromContext.Policy = Stereon::PolicyOf(
+        Stereon::Context::Default().WithToleranceCeiling(1e-1).WithResolution(1e-3));
+    REQUIRE(Read(Written(fromContext)).Archive.Policy == fromContext.Policy);
+
+    // The same refused on read, from a file edited after writing. The policy
+    // chunk holds the angular resolution, the tolerance ceiling and the frame
+    // allowance, in that order.
+    const Bytes good = Written(EveryType());
+    const auto withPolicyValue = [&](const std::size_t index, const double value) {
+        Bytes b = good;
+        const std::size_t policy = ChunkAt(b, "POLI");
+        const Bytes word = DoubleBytes(value);
+        std::ranges::copy(word, b.begin() + static_cast<std::ptrdiff_t>(policy + 20 + 8 * index));
+        Reseal(b, policy);
+        return b;
+    };
+    // A ceiling of 1e-6 below the stored resolution of 2e-5.
+    REQUIRE(ReadError(withPolicyValue(1, 1e-6)).find("resolution above") != std::string::npos);
+    for (const double allowance : {1e-16, 2e-13, 1e-6}) {
+        INFO("frame allowance " << allowance);
+        REQUIRE(ReadError(withPolicyValue(2, allowance), ErrorCode::NotSupported)
+                    .find("frame allowance") != std::string::npos);
+    }
+    REQUIRE(Read(withPolicyValue(2, Stereon::FrameAllowance)).Archive.Policy == EveryType().Policy);
+}
+
+namespace {
+
+/// A stream buffer that takes every byte and fails when flushed: a disk
+/// that fills up after the write call returned.
+class FailsOnFlush : public std::streambuf {
+protected:
+    std::streamsize xsputn(const char* /*bytes*/, const std::streamsize count) override
+    {
+        return count;
+    }
+    int_type overflow(const int_type c) override { return traits_type::not_eof(c); }
+    int sync() override { return -1; }
+};
+
+/// A stream buffer that takes nothing.
+class FailsOnWrite : public std::streambuf {
+protected:
+    std::streamsize xsputn(const char* /*bytes*/, std::streamsize /*count*/) override { return 0; }
+    int_type overflow(int_type /*c*/) override { return traits_type::eof(); }
+};
+
+} // namespace
+
+TEST_CASE("a save that fails is reported and leaves the file it would replace",
+          "[io][archive][audit]")
+{
+    if constexpr (!Stereon::SerializationAvailable) {
+        return;
+    }
+    // F7: SaveGeometry checked the stream after write() and returned, so an
+    // archive still in the stream's buffer could fail to reach the disk
+    // without the caller hearing of it.
+    const Bytes bytes = Written(EveryType());
+    FailsOnFlush flushing;
+    std::ostream full(&flushing);
+    REQUIRE_FALSE(Stereon::Detail::WriteAll(full, bytes));
+    FailsOnWrite writing;
+    std::ostream none(&writing);
+    REQUIRE_FALSE(Stereon::Detail::WriteAll(none, bytes));
+    std::ostringstream fine;
+    REQUIRE(Stereon::Detail::WriteAll(fine, bytes));
+    REQUIRE(fine.str().size() == bytes.size());
+
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() / "stereon-save-test";
+    fs::remove_all(dir);
+    fs::create_directories(dir);
+    const fs::path path = dir / "model.stn";
+    GeometryArchive other;
+    other.Curves = {Curve(Line{O, X})};
+    // Replacing a file: the new content, and nothing left beside it.
+    REQUIRE(Stereon::SaveGeometry(path, EveryType()).has_value());
+    REQUIRE(Stereon::SaveGeometry(path, other).has_value());
+    REQUIRE(FileBytes(path) == Written(other));
+    REQUIRE_FALSE(fs::exists(dir / "model.stn.partial"));
+    // A target that cannot be replaced, a directory: reported, nothing left.
+    fs::create_directory(dir / "taken.stn");
+    REQUIRE(Stereon::SaveGeometry(dir / "taken.stn", other).error().GetCode() ==
+            ErrorCode::InvalidInput);
+    REQUIRE(fs::is_directory(dir / "taken.stn"));
+    REQUIRE_FALSE(fs::exists(dir / "taken.stn.partial"));
+    // A directory that does not exist: nothing written.
+    REQUIRE(Stereon::SaveGeometry(dir / "missing" / "model.stn", other).error().GetCode() ==
+            ErrorCode::InvalidInput);
+    REQUIRE_FALSE(fs::exists(dir / "missing"));
+    // A save that cannot write leaves the file it would have replaced as it
+    // was: here the partial file's name is taken by a directory.
+    fs::create_directory(dir / "model.stn.partial");
+    REQUIRE(Stereon::SaveGeometry(path, EveryType()).error().GetCode() == ErrorCode::InvalidInput);
+    REQUIRE(FileBytes(path) == Written(other));
+    REQUIRE(fs::is_directory(dir / "model.stn.partial"));
+    fs::remove_all(dir);
+}
+
+TEST_CASE("sweeps of trimmed profiles read from a file keep their exact forms",
+          "[io][archive][audit]")
+{
+    if constexpr (!Stereon::SerializationAvailable) {
+        return;
+    }
+    // F2: the committed version-3 file extrudes a circle arc, a trimmed
+    // curve, which had no exact form through the erased wrapper.
+    const LoadedGeometry loaded = Read(FileBytes(GoldenFile(3)));
+    const auto* extrusion = loaded.Archive.Surfaces[8].Target<ExtrusionSurface>();
+    REQUIRE(extrusion != nullptr);
+    REQUIRE(extrusion->GetProfile().Target<TrimmedCurve>() != nullptr);
+    REQUIRE(extrusion->GetProjection() != nullptr);
+    const Box2 box{Domain(extrusion->GetProfile()), Interval{-1.0, 1.0}};
+    REQUIRE(ToBSpline(*extrusion, box).has_value());
+    for (const double u : {5.0, 5.7, 6.4, 7.0}) {
+        const Point3 p = Eval(*extrusion, Point2{u, 0.5});
+        REQUIRE(Distance(Eval(*extrusion, Project(*extrusion, p)), p) <= 1e-9);
+    }
+    // The trimmed curve of a trimmed curve has its piece too.
+    const auto* nested = loaded.Archive.Curves[8].Target<TrimmedCurve>();
+    REQUIRE(nested != nullptr);
+    REQUIRE(nested->GetPiece() != nullptr);
 }

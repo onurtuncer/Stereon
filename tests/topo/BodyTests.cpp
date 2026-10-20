@@ -320,7 +320,7 @@ TEST_CASE("two edges may share one curve over their own ranges", "[topo][bodies]
     const BuilderVertexId b = body.AddVertex({1, 0, 0});
     const BuilderVertexId c = body.AddVertex({3, 0, 0});
     const Stereon::CurveRef line =
-        body.Builder.AddCurve(Stereon::Curve(Stereon::Line{{0, 0, 0}, Vec3{1, 0, 0}}));
+        Must(body.Builder.AddCurve(Stereon::Curve(Stereon::Line{{0, 0, 0}, Vec3{1, 0, 0}})));
     const BuilderEdgeId first = body.AddEdge({.Kind = EdgeCurveKind::Spatial,
                                               .Start = a,
                                               .End = b,

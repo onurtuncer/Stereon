@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <memory>
 
 import Stereon.Surface;
 
@@ -112,6 +113,20 @@ int ProbeArena(const double value)
     return shared == 7 ? 0 : 1;
 }
 
+int ProbeArenaPage(const double value)
+{
+    // Taking a page inside the edit callback: the page is already unique, so
+    // the holder would see the callback's write (audit 2026-10-20, F4).
+    Stereon::PagedArena<int, 4> arena;
+    arena.PushBack(static_cast<int>(value));
+    std::shared_ptr<const Stereon::PagedArena<int, 4>::Page> held;
+    arena.Modify(0, [&](int& entry) {
+        held = arena.GetPage(0);
+        entry = 7;
+    });
+    return (*held)[0] == 7 ? 0 : 1;
+}
+
 int ProbeEvaluatorNan(const double value)
 {
     // A NaN parameter, through the erased wrapper.
@@ -140,11 +155,12 @@ struct Probe {
     int (*Run)(double);
 };
 
-constexpr std::array<Probe, 7> Probes{{
+constexpr std::array<Probe, 8> Probes{{
     {"inline", &ProbeInline},
     {"handle", &ProbeHandle},
     {"predicate", &ProbePredicate},
     {"arena", &ProbeArena},
+    {"arena-page", &ProbeArenaPage},
     {"evaluator-nan", &ProbeEvaluatorNan},
     {"evaluator-domain", &ProbeEvaluatorDomain},
     {"template", &ProbeTemplate},

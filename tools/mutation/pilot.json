@@ -1,5 +1,5 @@
 {
-  "description": "ADR-0032 Phase 0 pilot: the critical seeded faults of core, robust and curve, conventional mutants, and one example of each non-scoring outcome.",
+  "description": "ADR-0032 Phase 0 pilot: the critical seeded faults of core, robust, curve, io and topo (the guards the audit of 2026-10-20 added among them), conventional mutants, and one example each of the invalid and inconclusive outcomes. The former equivalent example, EQUIV-PRUNE, claimed a weaker tie rule than Project's contract and is now REL-PRUNE, killed by an exact tie.",
   "preset": "gcc16-debug",
   "mutants": [
     {
@@ -135,10 +135,10 @@
       "tests": "^curve: "
     },
     {
-      "id": "EQUIV-PRUNE",
+      "id": "REL-PRUNE",
       "critical": false,
       "operator": "relational: > to >= in best-first pruning",
-      "contract": "Curve projection searches segments in order of their distance bound",
+      "contract": "Project(BSplineCurve): the global closest point, the smaller parameter on equal distance (ADR-0007), so a segment whose bound equals the best distance is still searched",
       "file": "src/curve/BSplineCurve.cpp",
       "find": "        if (bound > best.DistanceSquared) {",
       "replace": "        if (bound >= best.DistanceSquared) {",
@@ -148,7 +148,151 @@
         "stereon_contract_probe"
       ],
       "tests": "^curve: ",
-      "equivalent": "A segment whose lower bound equals the best squared distance can at best tie it, and a tie keeps the earlier parameter (ADR-0007), which the search already holds unless the tied point has a smaller parameter in a later segment; segments are ordered by bound, not parameter, so the result can differ only in an exact tie of distances between two segments, which the supported semantics leave to either answer. Expert review: no observable difference within the declared semantics."
+      "diagnostic": "curve: a projection tie across segments goes to the smaller parameter"
+    },
+    {
+      "id": "IO-CHUNK-REPEAT",
+      "critical": true,
+      "operator": "domain: a repeated chunk accepted",
+      "contract": "ADR-0012: each of POLI, CRVS, PCRV and SRFS appears exactly once; a second would replace what the first decoded",
+      "file": "src/io/GeometryArchive.cpp",
+      "find": "    if (seen) {",
+      "replace": "    if (false && seen) {",
+      "site": "statement",
+      "target": [
+        "stereon_io_tests",
+        "stereon_contract_probe"
+      ],
+      "tests": "^io: ",
+      "diagnostic": "io: an archive missing a chunk, cut at a chunk boundary or repeating one is refused"
+    },
+    {
+      "id": "IO-CHUNK-MISSING",
+      "critical": true,
+      "operator": "domain: a missing chunk accepted",
+      "contract": "ADR-0012: an archive cut after a complete chunk is refused, not read as empty geometry",
+      "file": "src/io/GeometryArchive.cpp",
+      "find": "        if (!seen) {",
+      "replace": "        if (false && !seen) {",
+      "site": "statement",
+      "target": [
+        "stereon_io_tests",
+        "stereon_contract_probe"
+      ],
+      "tests": "^io: ",
+      "diagnostic": "io: an archive missing a chunk, cut at a chunk boundary or repeating one is refused"
+    },
+    {
+      "id": "IO-VERSION",
+      "critical": false,
+      "operator": "domain: a record newer than the file's version accepted",
+      "contract": "ADR-0012: a format version reads only the records it has",
+      "file": "src/io/GeometryArchive.cpp",
+      "find": "    if (version < since) {",
+      "replace": "    if (false && version < since) {",
+      "site": "statement",
+      "target": [
+        "stereon_io_tests",
+        "stereon_contract_probe"
+      ],
+      "tests": "^io: ",
+      "diagnostic": "io: a record newer than the file's format version is refused"
+    },
+    {
+      "id": "TOPO-EMPTY-SUPPORT",
+      "critical": true,
+      "operator": "domain: a checker finding suppressed",
+      "contract": "ADR-0018/ADR-0025: S12, a face's surface in the pool must hold geometry",
+      "file": "src/topo/Validate.cpp",
+      "find": "            } else if (m_T.Surfaces[s.GetIndex()].IsEmpty()) {",
+      "replace": "            } else if (false && m_T.Surfaces[s.GetIndex()].IsEmpty()) {",
+      "site": "statement",
+      "target": [
+        "stereon_topo_tests",
+        "stereon_contract_probe"
+      ],
+      "tests": "^topo: ",
+      "diagnostic": "topo: S12 MissingGeometry: an empty curve, pcurve or surface in the pool"
+    },
+    {
+      "id": "TOPO-POOL-EMPTY",
+      "critical": false,
+      "operator": "domain: an empty surface admitted to the pool",
+      "contract": "ADR-0027: the builder refuses an empty surface",
+      "file": "src/topo/Builder.cpp",
+      "find": "    if (surface.IsEmpty()) {",
+      "replace": "    if (false && surface.IsEmpty()) {",
+      "site": "statement",
+      "target": [
+        "stereon_topo_tests",
+        "stereon_contract_probe"
+      ],
+      "tests": "^topo: ",
+      "diagnostic": "topo: the geometry pools refuse empty geometry and a spent builder"
+    },
+    {
+      "id": "TOPO-RADIAL",
+      "critical": true,
+      "operator": "domain: faces joined only in the radial anchor's shell",
+      "contract": "ADR-0018: S15, the faces of every shell around a shared edge are edge-connected, whichever shell holds the anchor",
+      "file": "src/topo/Validate.cpp",
+      "find": "        firsts.push_back(face);",
+      "replace": "        if (firsts.empty()) {\n            firsts.push_back(face);\n        }",
+      "site": "statement",
+      "target": [
+        "stereon_topo_tests",
+        "stereon_contract_probe"
+      ],
+      "tests": "^topo: ",
+      "diagnostic": "topo: S15: an edge shared by two shells connects the faces of each, whichever holds its anchor"
+    },
+    {
+      "id": "ARENA-PAGE",
+      "critical": true,
+      "operator": "domain: the edit guard skipped",
+      "contract": "ADR-0005: no page is shared while an edit callback holds a reference into it",
+      "file": "src/core/Arena.cppm",
+      "find": "        CheckNotEditing(\"GetPage\");",
+      "replace": "        static_cast<void>(0);",
+      "site": "statement",
+      "target": [
+        "stereon_core_tests",
+        "stereon_contract_probe"
+      ],
+      "tests": "^core: ",
+      "diagnostic": "core: taking an arena page inside its edit callback is reported"
+    },
+    {
+      "id": "CURVE-TRIMMED-ERASED",
+      "critical": true,
+      "operator": "domain: the trimmed-curve conversion skipped",
+      "contract": "ADR-0003: ToBSpline through the wrapper reaches a trimmed curve's exact form",
+      "file": "src/curve/Conversion.cpp",
+      "find": "    if (const auto* trimmed = curve.Target<TrimmedCurve>()) {",
+      "replace": "    if (const auto* trimmed = curve.Target<TrimmedCurve>(); false && trimmed != nullptr) {",
+      "site": "statement",
+      "target": [
+        "stereon_curve_tests",
+        "stereon_contract_probe"
+      ],
+      "tests": "^curve: ",
+      "diagnostic": "curve: a trimmed curve converts through the erased wrapper over any subrange"
+    },
+    {
+      "id": "WEIGHT-RANGE",
+      "critical": false,
+      "operator": "domain: weights outside the supported range accepted",
+      "contract": "ADR-0006: MakeBSplineCurve refuses weights outside [MinWeight, MaxWeight]",
+      "file": "src/curve/BSplineBasis.cpp",
+      "find": "        if (w < MinWeight || w > MaxWeight) {",
+      "replace": "        if (false && (w < MinWeight || w > MaxWeight)) {",
+      "site": "statement",
+      "target": [
+        "stereon_curve_tests",
+        "stereon_contract_probe"
+      ],
+      "tests": "^curve: ",
+      "diagnostic": "curve: weights outside the supported range are refused, and a common scale changes nothing"
     },
     {
       "id": "INVALID-DEMO",

@@ -565,11 +565,22 @@ message unless
 
 - :math:`1 \le p \le 25` and there are at least :math:`p + 1` poles;
 - there are exactly :math:`n + p + 2` knots, finite and non-decreasing, with
-  a non-empty domain;
+  a non-empty domain, and the last minus the first is finite: the basis
+  functions divide by differences of knots, and :math:`10^{308} -
+  (-10^{308})` is not a double;
 - no knot value is repeated more than :math:`p + 1` times, and none inside
   the domain more than :math:`p` times;
-- the poles are finite, and the weights are absent or one positive, finite
-  weight per pole.
+- the poles are finite, and the weights are absent or one positive weight
+  per pole in :math:`[2^{-256}, 2^{256}]` (``Detail::MinWeight`` and
+  ``Detail::MaxWeight``).
+
+The weight range is the numerical domain evaluation can serve. Weights of
+:math:`10^{308}` are finite, but the weighted poles :math:`w_i P_i`
+overflow even for a curve well inside the model; within the range neither
+they nor the denominator overflow or lose precision to underflow. Inside it
+a rational curve is invariant under a common scale of its weights, and a
+scale by a power of two changes no computed point or derivative, bit for
+bit. ``MakeBSplineSurface`` applies the same rules to its weights.
 
 ``ExpandKnots(values, multiplicities)`` converts the knot form STEP and OCCT
 store, distinct values with multiplicities, into the full knot vector.

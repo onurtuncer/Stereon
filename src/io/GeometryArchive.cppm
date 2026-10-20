@@ -12,6 +12,7 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <ostream>
 #include <span>
 #include <string>
 #include <vector>
@@ -61,11 +62,16 @@ import Stereon.Surface;
 /// without its new records, so a version-1 or version-2 file reads
 /// unchanged.
 ///
-/// A reader refuses a newer format version, a damaged chunk, an unknown
-/// required chunk, an unknown type in a geometry chunk and any value its
-/// type's checked factory rejects, each with a ParseError that says where;
-/// it skips an unknown optional chunk with a warning. It never substitutes
-/// its own defaults for the stored policy.
+/// A reader refuses a newer format version, a damaged chunk, a missing or
+/// repeated "POLI", "CRVS", "PCRV" or "SRFS" chunk (each appears exactly
+/// once, empty or not), an unknown required chunk, an unknown type in a
+/// geometry chunk, a record of a type newer than the file's format version
+/// and any value its type's checked factory rejects, each with a ParseError
+/// that says where; it skips an unknown optional chunk with a warning. It
+/// never substitutes its own defaults for the stored policy, and refuses
+/// with NotSupported a policy whose frame allowance is not the one its
+/// factories validate frames against (FrameAllowance), rather than claim to
+/// have applied it.
 
 export namespace Stereon {
 
@@ -128,14 +134,17 @@ inline constexpr int MaxTrimmedNesting = 8;
 /// no record for (the built-in types, trimmed curves and surfaces of them,
 /// and extrusions and revolutions of any stored profile have one) and
 /// without static reflection; InvalidInput for a policy value that is not
-/// finite and positive.
+/// finite and positive, a resolution above the tolerance ceiling (which no
+/// Context has) or a frame allowance other than FrameAllowance.
 [[nodiscard]] Result<std::vector<std::byte>> WriteGeometry(const GeometryArchive& archive);
 
 /// The archive in bytes; ParseError for anything malformed (see above).
 [[nodiscard]] Result<LoadedGeometry> ReadGeometry(std::span<const std::byte> bytes);
 
-/// WriteGeometry to a file, replacing it; InvalidInput if it cannot be
-/// written.
+/// WriteGeometry to a file, replacing it: written to "<path>.partial",
+/// flushed and closed, each step checked, then renamed over the path, so a
+/// failed save leaves an existing file untouched. InvalidInput if it cannot
+/// be written or renamed.
 [[nodiscard]] Result<void> SaveGeometry(const std::filesystem::path& path,
                                         const GeometryArchive& archive);
 
@@ -154,5 +163,10 @@ export namespace Stereon::Detail {
 /// The CRC-32 (IEEE 802.3, reflected, polynomial 0xEDB88320) of the bytes,
 /// as each chunk stores for its payload.
 [[nodiscard]] std::uint32_t Crc32(std::span<const std::byte> bytes) noexcept;
+
+/// Writes the bytes and flushes the stream; false if either failed, so that
+/// an error the stream reports only on flushing is not lost. SaveGeometry's
+/// write, separate so that a failing stream can be tested.
+[[nodiscard]] bool WriteAll(std::ostream& out, std::span<const std::byte> bytes);
 
 } // namespace Stereon::Detail

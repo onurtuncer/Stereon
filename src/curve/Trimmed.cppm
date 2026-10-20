@@ -174,4 +174,14 @@ template <std::size_t D>
 /// NotSupported for a user's basis type.
 [[nodiscard]] Result<BSplineCurve> ToBSpline(const TrimmedCurve& curve);
 
+/// The exact NURBS form of the part of the trimmed curve over `range`, a
+/// subrange of its own, run as the trimmed curve runs, with domain `range`
+/// and the trimmed curve's parameter at every knot (everywhere when
+/// Detail::KeepsParameter holds). A reversed curve's form is its basis's
+/// piece run backwards with its knots reflected into `range`. A trimmed
+/// basis converts the same way, to any depth. InvalidInput unless the range
+/// is finite, non-empty and inside the trimmed curve's; NotSupported when
+/// the innermost basis has no exact NURBS form the kernel knows.
+[[nodiscard]] Result<BSplineCurve> ToBSpline(const TrimmedCurve& curve, Interval range);
+
 } // namespace Stereon
