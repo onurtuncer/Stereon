@@ -12,6 +12,7 @@ module;
 // calls core's inline functions with contracts and parses none itself
 // leaves __tu_has_violation undefined, which the macOS linker rejects.
 #include <Stereon/Core/Contracts.hpp>
+#include <Stereon/Core/Parallel.hpp>
 #include <Stereon/Core/Try.hpp>
 
 #include <algorithm>
@@ -792,6 +793,26 @@ double CurveProjector::Project(const Point3& p) const
 double CurveProjector::Project(const Point2& p) const
 {
     return Project(Point3{p.X, p.Y, 0.0});
+}
+
+std::vector<double> ProjectAll(const CurveProjector& projector,
+                               const std::span<const Point3> points, const Context& context)
+{
+    std::vector<double> parameters(points.size());
+    struct Work {
+        const CurveProjector* Projector;
+        const Point3* Points;
+        double* Parameters;
+    } work{&projector, points.data(), parameters.data()};
+    Detail::ParallelFor(points.size(), context.GetThreadCount(),
+                        context.GetScheduler() == Scheduler::Serial, &work,
+                        [](void* state, const std::size_t begin, const std::size_t end) {
+                            const Work& w = *static_cast<const Work*>(state);
+                            for (std::size_t i = begin; i < end; ++i) {
+                                w.Parameters[i] = w.Projector->Project(w.Points[i]);
+                            }
+                        });
+    return parameters;
 }
 
 double Project(const BSplineCurve& curve, const Point3& p)

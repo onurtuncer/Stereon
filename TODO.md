@@ -44,7 +44,7 @@ See the [roadmap and versioning plan](docs/planning/roadmap-and-versioning.md) f
 - [x] Clang (latest) and MSVC (latest): non-blocking, reported
 - [x] Coverage report (gcov/llvm-cov) published per PR
 - [ ] Benchmark job on `main` with results stored for trend tracking
-- [ ] Nightly job: full test suite + determinism check (1, 2, 8, 32 threads) (ADR-0007)
+- [x] Nightly job: full test suite + determinism check (1, 2, 8, 32 threads) (ADR-0007). `.github/workflows/nightly.yml`: the suite on gcc16-debug and gcc16-release, and `stereon_determinism` per configuration in its own process, twice, compared byte for byte (`docs/testing.rst`, *Determinism*)
 - [x] Dependabot keeps the GitHub Actions and the pip pins (`docs/requirements.txt`, `tools/requirements.txt`) current: monthly, grouped
 - [ ] Check the CMake FetchContent pins (stdexec, xsimd, Catch2, RapidCheck, Google Benchmark, nanobind) and the `gcc:16.2` image against upstream at each phase gate; Dependabot cannot read them
 
@@ -140,7 +140,7 @@ Per [ADR-0035](docs/adr/0035-debug-viewer.md): objects reach the viewer as `.stn
 - [ ] **ADR-0005:** 100 local edits on a 10⁶-face body (surface replacement, face deletion, face and edge splitting; no `Compact()`): memory and copy cost; page-size sweep 128/256/1 024. `bench/TopoBench.cpp` runs the sequence with replacement and deletion; splitting waits for the Euler operators, and the page-size sweep is in `bench/ArenaBench.cpp`
 - [ ] **ADR-0001:** merge-policy test with vertex chains at 0.8× tolerance; result deterministic and radius-bounded
 - [ ] **ADR-0018:** seeded-fault corpus for the checker; zero false positives on valid bodies
-- [ ] **ADR-0007:** determinism check across thread counts on the prototype operations
+- [x] **ADR-0007:** determinism check across thread counts on the prototype operations. The operations that run in parallel so far, `ProjectAll` onto B-spline curves and surfaces through `Detail::ParallelFor`, give the same bits serially and at 1, 2, 8 and 32 threads (`[determinism]`, CTest and the nightly run); booleans, tessellation and import join as they are parallelised
 - [ ] **ADR-0009:** early review of the edge representation, since ADR-0004's edge record depends on it (full acceptance is due before Phase 1 topology work)
 - [ ] Review ADRs 0001–0008, 0015–0018 and 0021 and move each to **Accepted** or revise
 
@@ -165,7 +165,7 @@ All of the following must pass in CI before Phase 1 starts:
 - [ ] Release-build handles are 4 bytes; seeded-fault suite caught 100% in debug builds
 - [x] Pretty-printers pass their scripted GDB and LLDB tests. Linux Debug CI (`tests/debugger/check_printers.py`); skipped on macOS and MSVC, whose debug information the debuggers cannot read. Rerun when handles resolve to entities (§8)
 - [ ] Handle design decided (index throughout, or hybrid) and recorded in ADR-0004
-- [ ] Output identical for 1, 2, 8 and 32 threads
+- [x] Output identical for 1, 2, 8 and 32 threads. For every operation that runs in parallel today (batch projection), on every pull request and nightly across processes (§3, §10); each new parallel operation adds its case
 - [ ] ADR-0021 foundation types in place; no geometric operation can be added without a capability declaration
 - [ ] All blocking CI jobs green on Linux, Windows and macOS
 - [ ] ADRs 0001–0008, 0015–0017 accepted

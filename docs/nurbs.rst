@@ -290,6 +290,11 @@ which do not depend on the point. A ``CurveProjector`` extracts the Bezier
 segments and computes them once; a query only forms the combination, a few
 multiply-adds per coefficient. Build one to project many points onto the
 same curve; ``Project(curve, p)`` builds one for its single point.
+``ProjectAll(projector, points, context)`` projects a batch on the
+``Context``'s scheduler and thread count, each point's answer in its own
+slot, so it returns the same bits serially and on any number of threads
+(ADR-0007; :doc:`testing`, *Determinism*); ``ProjectAll`` on a
+``SurfaceProjector`` does the same for surfaces.
 
 **Assembly.** ``Project`` extracts the Bezier segments, skips any whose
 pole box is farther from :math:`\mathbf p` than the best candidate so far

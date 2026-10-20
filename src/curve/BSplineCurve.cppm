@@ -360,6 +360,14 @@ private:
     std::shared_ptr<const Detail::CurveProjectorData> m_Data;
 };
 
+/// The parameter of a closest point of the curve to each point, in the
+/// points' order: what Project gives one by one, computed on the Context's
+/// scheduler with its thread count (ADR-0007). Each point's answer goes to
+/// its own slot, so the result is the same, bit for bit, for the serial
+/// scheduler and for every thread count.
+[[nodiscard]] std::vector<double>
+ProjectAll(const CurveProjector& projector, std::span<const Point3> points, const Context& context);
+
 /// The same curve traversed the other way:
 /// Eval(Reversed(c), a + b - t) == Eval(c, t) on the domain [a, b], up to
 /// the rounding of the reflected knots.

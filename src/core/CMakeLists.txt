@@ -36,7 +36,12 @@ stereon_add_library(core
         Handle.cpp
         Serialize.cpp
         Trigonometry.cpp
-        Log.cpp)
+        Log.cpp
+        Parallel.cpp)
+
+# Parallel.cpp builds sender graphs, which GCC 16.2 cannot compile in a unit
+# scanned for modules (Stereon/Core/Exec.hpp).
+stereon_exec_sources(Parallel.cpp)
 
 # stdexec is PUBLIC: <Stereon/Core/Exec.hpp> is a public header that includes
 # it. xsimd is only included in the global module fragment of the Simd

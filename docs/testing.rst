@@ -106,6 +106,39 @@ reports rather than gates on a score; it fails only when the baseline
 fails or a critical fault goes undetected. The pilot's results, and what
 they changed in the tests, are in ``docs/planning/mutation-pilot.md``.
 
+Determinism
+-----------
+
+ADR-0007 promises bit-identical results for any scheduler and thread count
+on one executable and one machine (G1), and says every parallel algorithm
+needs a determinism test. Parallel work runs through
+``Detail::ParallelFor`` (``Stereon/Core/Parallel.hpp``). It cuts the index
+range into chunks of fixed size whatever the thread count, runs them on the
+calling thread for the serial scheduler, and otherwise on a pool of exactly
+the ``Context``'s thread count (stdexec's ``static_thread_pool``). Each
+chunk writes only its own indices' slots, so nothing depends on which
+thread ran what or when. The operations built on it so far are
+``ProjectAll`` onto B-spline curves and surfaces.
+
+They are checked at three levels:
+
+- Every pull request runs ``[determinism]`` in the test executables: the
+  serial scheduler, 1, 2, 8 and 32 threads and the hardware's count, each
+  twice, compared bit for bit with one another and with ``Project`` called
+  point by point. It also runs the CTest case ``determinism: serial and 1,
+  2, 8 and 32 threads give the same bytes``. The TSan job runs both, so a
+  data race shows up there too.
+- The ``Nightly`` workflow runs ``stereon_determinism`` once per
+  configuration, each in its own process and twice, on 200 000 points. It
+  compares the files byte for byte, puts their SHA-256 digests in the run's
+  summary, and fails if any two differ. It also runs the full test suite on
+  the debug and release presets.
+- A new parallel operation adds its case to
+  ``tests/support/DeterminismCases.hpp``, so that both checks cover it.
+
+The cross-platform comparison (G2, Linux against Windows within tolerance)
+is not run yet.
+
 .. todo::
 
    Write the rest of this chapter: unit and property tests, fuzzing,
