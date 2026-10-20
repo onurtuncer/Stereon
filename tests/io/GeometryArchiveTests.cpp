@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -29,6 +30,7 @@
 
 import Stereon.Io;
 
+using Stereon::Box2;
 using Stereon::BSplineCurve;
 using Stereon::BSplineCurve2d;
 using Stereon::BSplineSurface;
@@ -41,9 +43,11 @@ using Stereon::Cylinder;
 using Stereon::Ellipse;
 using Stereon::Ellipse2d;
 using Stereon::ErrorCode;
+using Stereon::ExtrusionSurface;
 using Stereon::GeometryArchive;
 using Stereon::Hyperbola;
 using Stereon::Hyperbola2d;
+using Stereon::Interval;
 using Stereon::Line;
 using Stereon::Line2d;
 using Stereon::LoadedGeometry;
@@ -53,11 +57,13 @@ using Stereon::Plane;
 using Stereon::Point2;
 using Stereon::Point3;
 using Stereon::ReadGeometry;
+using Stereon::RevolutionSurface;
 using Stereon::Sphere;
 using Stereon::Surface;
 using Stereon::Torus;
 using Stereon::TrimmedCurve;
 using Stereon::TrimmedCurve2d;
+using Stereon::TrimmedSurface;
 using Stereon::Vec2;
 using Stereon::Vec3;
 using Stereon::WriteGeometry;
@@ -133,6 +139,44 @@ GeometryArchive WithTrimmed()
     a.Curves2d.push_back(
         Curve2d(*Stereon::MakeTrimmedCurve(a.Curves2d[1], Stereon::Interval{0.5, 2.0})));
     return a;
+}
+
+/// WithTrimmed with the surface records of format version 3 added: a
+/// cylinder patch across its seam, a reversed corner of the B-spline
+/// surface, an extrusion of the circle arc (a trimmed profile), a
+/// revolution of the B-spline curve about a tilted axis, and a band of that
+/// revolution. The content of the committed version-3 file.
+GeometryArchive WithSurfaces()
+{
+    GeometryArchive a = WithTrimmed();
+    const TrimmedSurface patch =
+        *Stereon::MakeTrimmedSurface(a.Surfaces[1], Box2{Interval{5.0, 7.0}, Interval{-1.0, 2.0}});
+    const TrimmedSurface corner =
+        Stereon::MakeTrimmedSurface(a.Surfaces[5], Box2{Interval{0.25, 0.75}, Interval{0.0, 0.5}})
+            ->Reversed();
+    const ExtrusionSurface extrusion = *Stereon::MakeExtrusion(a.Curves[6], Vec3{0.5, -1.0, 2.0});
+    const RevolutionSurface revolution =
+        *Stereon::MakeRevolution(a.Curves[5], O, Vec3{2.0, -1.0, 3.0});
+    const TrimmedSurface band = *Stereon::MakeTrimmedSurface(
+        Surface(revolution), Box2{Interval{1.0, 4.0}, Interval{0.2, 0.8}});
+    a.Surfaces.push_back(Surface(patch));
+    a.Surfaces.push_back(Surface(corner));
+    a.Surfaces.push_back(Surface(extrusion));
+    a.Surfaces.push_back(Surface(revolution));
+    a.Surfaces.push_back(Surface(band));
+    return a;
+}
+
+/// A parameter inside the surface's domain, away from its edges.
+Point2 SomewhereOn(const Surface& s)
+{
+    const Box2 d = Domain(s);
+    const auto inside = [](const Interval& i) {
+        return std::isfinite(i.GetLower()) && std::isfinite(i.GetUpper())
+                   ? i.GetLower() + 0.3 * (i.GetUpper() - i.GetLower())
+                   : 0.3;
+    };
+    return {inside(d.X), inside(d.Y)};
 }
 
 Bytes Written(const GeometryArchive& a)
@@ -426,7 +470,7 @@ TEST_CASE("files round-trip, and the JSON view shows them", "[io][archive]")
 
     const auto json = Stereon::GeometryToJson(Written(EveryType()));
     REQUIRE(json.has_value());
-    REQUIRE(json->starts_with(R"({"format":2,)"));
+    REQUIRE(json->starts_with(R"({"format":3,)"));
     REQUIRE(json->find(R"("resolution":2e-05)") != std::string::npos);
     REQUIRE(
         json->find(R"({"type":"Circle","value":{"Center":{"X":1,"Y":-2,"Z":0.5},"Radius":2.5,)") !=
@@ -447,7 +491,7 @@ TEST_CASE("the committed files of every format version still read and rewrite by
     const struct {
         int Version;
         GeometryArchive Content;
-    } files[] = {{1, EveryType()}, {2, WithTrimmed()}};
+    } files[] = {{1, EveryType()}, {2, WithTrimmed()}, {3, WithSurfaces()}};
     for (const auto& [version, content] : files) {
         const Bytes golden = FileBytes(GoldenFile(version));
         const LoadedGeometry loaded = Read(golden);
@@ -455,10 +499,11 @@ TEST_CASE("the committed files of every format version still read and rewrite by
         REQUIRE(loaded.Archive.Policy == content.Policy);
         REQUIRE(loaded.Archive.Curves.size() == content.Curves.size());
         REQUIRE(loaded.Archive.Curves2d.size() == content.Curves2d.size());
+        REQUIRE(loaded.Archive.Surfaces.size() == content.Surfaces.size());
         // The format and kernel versions in the header are the writer's, so
         // compare the rest: everything after the header's version fields.
-        // Version 1 is version 2 without trimmed curves, so rewriting it as
-        // version 2 changes nothing else.
+        // Each version is the next without its new records, so rewriting an
+        // earlier one as the current version changes nothing else.
         const Bytes rewritten = Written(loaded.Archive);
         REQUIRE(rewritten.size() == golden.size());
         REQUIRE(std::equal(rewritten.begin() + 16, rewritten.end(), golden.begin() + 16));
@@ -468,9 +513,9 @@ TEST_CASE("the committed files of every format version still read and rewrite by
 
 TEST_CASE("regenerate the committed file of the current format version", "[.regenerate]")
 {
-    static_assert(Stereon::GeometryFormatVersion == 2,
+    static_assert(Stereon::GeometryFormatVersion == 3,
                   "a new format version gets a new committed file; earlier ones stay frozen");
-    REQUIRE(Stereon::SaveGeometry(GoldenFile(2), WithTrimmed()).has_value());
+    REQUIRE(Stereon::SaveGeometry(GoldenFile(3), WithSurfaces()).has_value());
 }
 
 TEST_CASE("trimmed curves are saved with their bases and read back bit for bit",
@@ -507,7 +552,7 @@ TEST_CASE("trimmed curves are saved with their bases and read back bit for bit",
     // The JSON view shows the basis and the trim.
     const auto json = Stereon::GeometryToJson(bytes);
     REQUIRE(json.has_value());
-    REQUIRE(json->starts_with(R"({"format":2,)"));
+    REQUIRE(json->starts_with(R"({"format":3,)"));
     REQUIRE(json->find(R"({"type":"TrimmedCurve","value":{"basis":{"type":"Circle","value":)") !=
             std::string::npos);
     REQUIRE(json->find(R"("trim":{"Lower":5,"Upper":7,"Reversed":false})") != std::string::npos);
@@ -528,19 +573,19 @@ Curve NestedTrims(const int depth)
     return curve;
 }
 
-/// The archive with its one curve record wrapped in one more trimmed-curve
-/// record with the same trim, written by hand: the writer refuses to nest
-/// so deep, a hostile file need not.
-Bytes WrappedOnceMore(Bytes b)
+/// The archive with the one record of chunk `tag` wrapped in one more
+/// composite record `name` with the same tail (the record's last `tail`
+/// bytes), written by hand: the writer refuses to nest so deep, a hostile
+/// file need not.
+Bytes WrappedOnceMore(Bytes b, const std::string& tag, const std::string& name,
+                      const std::size_t tail)
 {
-    const std::size_t chunk = ChunkAt(b, "CRVS");
+    const std::size_t chunk = ChunkAt(b, tag);
     const std::size_t length = U32At(b, chunk + 8);
     const Bytes record(b.begin() + static_cast<std::ptrdiff_t>(chunk + 20 + 8),
                        b.begin() + static_cast<std::ptrdiff_t>(chunk + 20 + length));
-    // The record ends with its trim: two doubles and a bool.
     Bytes value = record;
-    value.insert(value.end(), record.end() - 17, record.end());
-    const std::string name = "TrimmedCurve";
+    value.insert(value.end(), record.end() - static_cast<std::ptrdiff_t>(tail), record.end());
     Bytes payload(8, std::byte{0});
     payload[0] = std::byte{1};
     payload.push_back(static_cast<std::byte>(name.size()));
@@ -576,14 +621,16 @@ TEST_CASE("trimmed-curve records are validated and their nesting bounded", "[io]
     GeometryArchive deeper;
     deeper.Curves = {NestedTrims(Stereon::MaxTrimmedNesting + 1)};
     REQUIRE(WriteGeometry(deeper).error().GetCode() == ErrorCode::NotSupported);
-    const auto tooDeep = ReadGeometry(WrappedOnceMore(deepest));
+    const auto tooDeep = ReadGeometry(WrappedOnceMore(deepest, "CRVS", "TrimmedCurve", 17));
     REQUIRE(tooDeep.error().GetCode() == ErrorCode::ParseError);
     REQUIRE(std::string(tooDeep.error().GetMessage()).find("more than 8 deep") !=
             std::string::npos);
     // The hand-made wrapping is a valid record at a legal depth.
     GeometryArchive shallow;
     shallow.Curves = {NestedTrims(1)};
-    REQUIRE(Read(WrappedOnceMore(Written(shallow))).Archive.Curves.size() == 1);
+    REQUIRE(
+        Read(WrappedOnceMore(Written(shallow), "CRVS", "TrimmedCurve", 17)).Archive.Curves.size() ==
+        1);
 
     // A trim edited in the file: the trimmed curve record is the circle arc
     // [5, 7]; its trim is the record's last 17 bytes.
@@ -643,4 +690,235 @@ TEST_CASE("swept NURBS surfaces survive the geometry archive", "[io][swept]")
     const auto writtenAgain = WriteGeometry(loaded->Archive);
     REQUIRE(writtenAgain.has_value());
     REQUIRE(*writtenAgain == *bytes);
+}
+
+TEST_CASE("trimmed surfaces and sweeps are saved with their bases and profiles and read back "
+          "bit for bit",
+          "[io][archive][surfaces]")
+{
+    if constexpr (!Stereon::SerializationAvailable) {
+        return;
+    }
+    const GeometryArchive original = WithSurfaces();
+    const Bytes bytes = Written(original);
+    const LoadedGeometry loaded = Read(bytes);
+    REQUIRE(loaded.FormatVersion == 3);
+    REQUIRE(Written(loaded.Archive) == bytes);
+    const std::vector<Surface>& after = loaded.Archive.Surfaces;
+    REQUIRE(after.size() == original.Surfaces.size());
+    for (std::size_t i = 6; i < after.size(); ++i) {
+        REQUIRE(Domain(after[i]) == Domain(original.Surfaces[i]));
+        const Point2 uv = SomewhereOn(original.Surfaces[i]);
+        REQUIRE(Eval(after[i], uv) == Eval(original.Surfaces[i], uv));
+        REQUIRE(Deriv(after[i], uv, 1, 1) == Deriv(original.Surfaces[i], uv, 1, 1));
+    }
+    const auto* patch = after[6].Target<TrimmedSurface>();
+    REQUIRE(patch != nullptr);
+    REQUIRE(patch->GetRange() == Box2{Interval{5.0, 7.0}, Interval{-1.0, 2.0}});
+    REQUIRE_FALSE(patch->IsReversed());
+    REQUIRE(patch->GetBasis().Target<Cylinder>() != nullptr);
+    const auto* corner = after[7].Target<TrimmedSurface>();
+    REQUIRE(corner != nullptr);
+    REQUIRE(corner->IsReversed());
+    const auto* extrusion = after[8].Target<ExtrusionSurface>();
+    REQUIRE(extrusion != nullptr);
+    REQUIRE(extrusion->GetDirection() == Vec3{0.5, -1.0, 2.0});
+    REQUIRE(extrusion->GetProfile().Target<TrimmedCurve>() != nullptr);
+    const auto* revolution = after[9].Target<RevolutionSurface>();
+    REQUIRE(revolution != nullptr);
+    REQUIRE(revolution->GetOrigin() == O);
+    REQUIRE(revolution->GetAxis() == original.Surfaces[9].Target<RevolutionSurface>()->GetAxis());
+    REQUIRE(revolution->GetProfile().Target<BSplineCurve>() != nullptr);
+    const auto* band = after[10].Target<TrimmedSurface>();
+    REQUIRE(band != nullptr);
+    REQUIRE(band->GetBasis().Target<RevolutionSurface>() != nullptr);
+
+    // The JSON view shows the parts.
+    const auto json = Stereon::GeometryToJson(bytes);
+    REQUIRE(json.has_value());
+    REQUIRE(
+        json->find(R"({"type":"TrimmedSurface","value":{"basis":{"type":"Cylinder","value":)") !=
+        std::string::npos);
+    REQUIRE(
+        json->find(R"("trim":{"LowerU":5,"UpperU":7,"LowerV":-1,"UpperV":2,"Reversed":false})") !=
+        std::string::npos);
+    REQUIRE(json->find(R"({"type":"ExtrusionSurface","value":{"profile":{"type":"TrimmedCurve")") !=
+            std::string::npos);
+    REQUIRE(json->find(R"("sweep":{"Direction":{"X":0.5,"Y":-1,"Z":2}})") != std::string::npos);
+    REQUIRE(
+        json->find(R"({"type":"RevolutionSurface","value":{"profile":{"type":"BSplineCurve")") !=
+        std::string::npos);
+    REQUIRE(json->find(R"("sweep":{"Origin":{"X":1,"Y":-2,"Z":0.5},"Axis":{"X":)") !=
+            std::string::npos);
+    REQUIRE(
+        json->find(R"({"type":"TrimmedSurface","value":{"basis":{"type":"RevolutionSurface")") !=
+        std::string::npos);
+}
+
+namespace {
+
+/// A plane trimmed `depth` times, each box inside the one before.
+Surface NestedSurfaceTrims(const int depth)
+{
+    Surface surface(Plane{O, X, Y});
+    for (int k = 0; k < depth; ++k) {
+        const double half = 10.0 - k;
+        surface = Surface(*Stereon::MakeTrimmedSurface(
+            surface, Box2{Interval{-half, half}, Interval{-half, half}}));
+    }
+    return surface;
+}
+
+/// The error message of reading `b` with `bytes` written over its surface
+/// chunk's last `tail` bytes, resealed.
+std::string ReadWithTail(Bytes b, const Bytes& bytes)
+{
+    const std::size_t surfaces = ChunkAt(b, "SRFS");
+    const std::size_t end = surfaces + 20 + U32At(b, surfaces + 8);
+    std::ranges::copy(bytes, b.begin() + static_cast<std::ptrdiff_t>(end - bytes.size()));
+    Reseal(b, surfaces);
+    return std::string(ReadGeometry(b).error().GetMessage());
+}
+
+Bytes DoubleBytes(const double x)
+{
+    Bytes out(8);
+    const auto bits = std::bit_cast<std::uint64_t>(x);
+    for (std::size_t i = 0; i < 8; ++i) {
+        out[i] = static_cast<std::byte>((bits >> (8 * i)) & 0xFFU);
+    }
+    return out;
+}
+
+} // namespace
+
+TEST_CASE("trimmed-surface and sweep records are validated and their nesting bounded",
+          "[io][archive][surfaces]")
+{
+    if constexpr (!Stereon::SerializationAvailable) {
+        return;
+    }
+    // The deepest nesting the format allows is written and read back...
+    GeometryArchive deep;
+    deep.Surfaces = {NestedSurfaceTrims(Stereon::MaxTrimmedNesting)};
+    const Bytes deepest = Written(deep);
+    REQUIRE(Written(Read(deepest).Archive) == deepest);
+    // ...one more is refused on write, and on read from a file made by hand.
+    GeometryArchive deeper;
+    deeper.Surfaces = {NestedSurfaceTrims(Stereon::MaxTrimmedNesting + 1)};
+    REQUIRE(WriteGeometry(deeper).error().GetCode() == ErrorCode::NotSupported);
+    const auto tooDeep = ReadGeometry(WrappedOnceMore(deepest, "SRFS", "TrimmedSurface", 33));
+    REQUIRE(tooDeep.error().GetCode() == ErrorCode::ParseError);
+    REQUIRE(std::string(tooDeep.error().GetMessage()).find("more than 8 deep") !=
+            std::string::npos);
+    // Trims and sweeps count together: an extrusion of a curve trimmed as
+    // deep as the format allows is one level too many.
+    const Vec3 up{0.0, 0.0, 1.0};
+    GeometryArchive sweptDeep;
+    sweptDeep.Surfaces = {
+        Surface(*Stereon::MakeExtrusion(NestedTrims(Stereon::MaxTrimmedNesting), up))};
+    REQUIRE(WriteGeometry(sweptDeep).error().GetCode() == ErrorCode::NotSupported);
+    GeometryArchive sweptEnough;
+    sweptEnough.Surfaces = {
+        Surface(*Stereon::MakeExtrusion(NestedTrims(Stereon::MaxTrimmedNesting - 1), up))};
+    const Bytes swept = Written(sweptEnough);
+    REQUIRE(Written(Read(swept).Archive) == swept);
+
+    // A trim edited in the file: the trimmed-surface record is the cylinder
+    // patch u in [5, 7], v in [-1, 2]; its trim is the record's last 33
+    // bytes, four doubles and the sense byte.
+    GeometryArchive patch;
+    patch.Surfaces = {Surface(*Stereon::MakeTrimmedSurface(
+        Surface(Cylinder{O, 1.5, X, Y, false}), Box2{Interval{5.0, 7.0}, Interval{-1.0, 2.0}}))};
+    const Bytes good = Written(patch);
+    const auto withUpperU = [&](const double upper) {
+        Bytes tail = DoubleBytes(upper);
+        const Bytes rest = DoubleBytes(-1.0);
+        tail.insert(tail.end(), rest.begin(), rest.end());
+        const Bytes upperV = DoubleBytes(2.0);
+        tail.insert(tail.end(), upperV.begin(), upperV.end());
+        tail.push_back(std::byte{0});
+        return ReadWithTail(good, tail);
+    };
+    REQUIRE(withUpperU(std::numeric_limits<double>::quiet_NaN()).find("not finite and non-empty") !=
+            std::string::npos);
+    REQUIRE(withUpperU(4.0).find("not finite and non-empty") != std::string::npos);
+    // A box wider than a period is caught by MakeTrimmedSurface.
+    REQUIRE(withUpperU(12.0).find("(TrimmedSurface) is not valid geometry") != std::string::npos);
+    // A sense byte that is not 0 or 1.
+    REQUIRE(ReadWithTail(good, Bytes{std::byte{2}}).find("TrimmedSurface") != std::string::npos);
+
+    // A sweep edited in the file: the extrusion's direction is its record's
+    // last 24 bytes, the revolution's origin and axis its last 48.
+    GeometryArchive sweeps;
+    sweeps.Surfaces = {Surface(*Stereon::MakeExtrusion(Curve(Line{O, X}), up)),
+                       Surface(*Stereon::MakeRevolution(Curve(Line{O, X}), O, up))};
+    const Bytes goodSweeps = Written(sweeps);
+    const Bytes zeros(24, std::byte{0});
+    const std::string zeroAxis = ReadWithTail(goodSweeps, zeros);
+    CAPTURE(zeroAxis);
+    REQUIRE(zeroAxis.find("(RevolutionSurface) is not valid geometry") != std::string::npos);
+    GeometryArchive extrusion;
+    extrusion.Surfaces = {sweeps.Surfaces[0]};
+    const std::string zeroDirection = ReadWithTail(Written(extrusion), zeros);
+    CAPTURE(zeroDirection);
+    REQUIRE(zeroDirection.find("(ExtrusionSurface) is not valid geometry") != std::string::npos);
+    // Origin (NaN, 0, 0), axis (0, 0, 1).
+    Bytes nanOrigin = DoubleBytes(std::numeric_limits<double>::quiet_NaN());
+    const Bytes sixteen(16, std::byte{0});
+    const Bytes one = DoubleBytes(1.0);
+    nanOrigin.insert(nanOrigin.end(), sixteen.begin(), sixteen.end());
+    nanOrigin.insert(nanOrigin.end(), sixteen.begin(), sixteen.end());
+    nanOrigin.insert(nanOrigin.end(), one.begin(), one.end());
+    const std::string badOrigin = ReadWithTail(goodSweeps, nanOrigin);
+    CAPTURE(badOrigin);
+    REQUIRE(badOrigin.find("(RevolutionSurface) is not valid geometry") != std::string::npos);
+    // An axis that is not of unit length is not a surface's state: origin O,
+    // axis (0, 0, 2).
+    Bytes longAxis;
+    for (const double x : {O.X, O.Y, O.Z, 0.0, 0.0, 2.0}) {
+        const Bytes word = DoubleBytes(x);
+        longAxis.insert(longAxis.end(), word.begin(), word.end());
+    }
+    const std::string notUnit = ReadWithTail(goodSweeps, longAxis);
+    CAPTURE(notUnit);
+    REQUIRE(notUnit.find("the axis is not of unit length") != std::string::npos);
+
+    // A composite record under an unknown name is of an unknown type.
+    Bytes renamed = good;
+    const std::size_t surfaces = ChunkAt(renamed, "SRFS");
+    // "TrimmedSurface" -> "TrimmedSurfacx": the name, after count and length.
+    renamed[surfaces + 20 + 8 + 2 + 13] = std::byte{'x'};
+    Reseal(renamed, surfaces);
+    REQUIRE(std::string(ReadGeometry(renamed).error().GetMessage()).find("unknown type") !=
+            std::string::npos);
+}
+
+TEST_CASE("a revolution's unit axis survives the round trip whatever its direction",
+          "[io][archive][surfaces]")
+{
+    if constexpr (!Stereon::SerializationAvailable) {
+        return;
+    }
+    // The writer stores the unit axis the surface keeps. Normalising it
+    // again on read could move it by an ulp, so the reader keeps it as
+    // stored: the round trip is bit for bit in every direction.
+    const Curve profile(Line{O, X});
+    int count = 0;
+    for (int i = -4; i <= 4; ++i) {
+        for (int j = -4; j <= 4; ++j) {
+            for (int k = -4; k <= 4; ++k) {
+                const Vec3 axis{0.37 * i + 0.011 * j, 0.59 * j - 0.023 * k, 0.83 * k + 0.007 * i};
+                if (!(Dot(axis, axis) > 0.0)) {
+                    continue;
+                }
+                GeometryArchive a;
+                a.Surfaces = {Surface(*Stereon::MakeRevolution(profile, O, axis))};
+                const Bytes bytes = Written(a);
+                REQUIRE(Written(Read(bytes).Archive) == bytes);
+                ++count;
+            }
+        }
+    }
+    REQUIRE(count == 9 * 9 * 9 - 1);
 }

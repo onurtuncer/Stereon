@@ -280,7 +280,9 @@ and ``ToBSpline`` reports ``NotSupported``.
 A trimmed surface is not one of the built-in types that ``VisitBuiltin``
 dispatches on, as a trimmed curve is not: it is wrapped in a ``Surface``
 like any user type, and ``Surface::Target<TrimmedSurface>()`` finds it.
-The erased ``ToBSpline(surface, range)`` reaches it all the same.
+The erased ``ToBSpline(surface, range)`` reaches it all the same, and the
+geometry archive stores it as its basis and its box (:doc:`data_exchange`,
+format version 3).
 
 Correspondence with the exchange formats
 ----------------------------------------

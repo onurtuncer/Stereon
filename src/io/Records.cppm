@@ -36,6 +36,29 @@ struct TrimRecord {
     bool Reversed = false;
 };
 
+/// The trim of a trimmed-surface record (format version 3), after its
+/// basis record: the box and the sense.
+struct SurfaceTrimRecord {
+    double LowerU = 0.0;
+    double UpperU = 0.0;
+    double LowerV = 0.0;
+    double UpperV = 0.0;
+    bool Reversed = false;
+};
+
+/// The sweep of an extrusion record (format version 3), after its profile
+/// record.
+struct ExtrusionRecord {
+    Vec3 Direction;
+};
+
+/// The sweep of a revolution record (format version 3), after its profile
+/// record: the axis as the surface keeps it, of unit length.
+struct RevolutionRecord {
+    Point3 Origin;
+    Vec3 Axis;
+};
+
 template <typename T>
 [[nodiscard]] std::vector<std::byte> RecordBytes(const T& value);
 

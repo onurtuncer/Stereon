@@ -104,6 +104,19 @@ public:
         , m_Piece(Detail::MakeRevolvedPiece(m_Profile, m_Origin, m_Axis))
     {}
 
+    /// The tag of the constructor below.
+    struct UnitAxis {};
+
+    /// Unchecked, as above, with an axis already of unit length that is
+    /// kept bit for bit: normalising a unit vector again can move it by an
+    /// ulp. For restoring a surface's state, as the geometry archive does.
+    RevolutionSurface(Curve profile, const Point3& origin, const Vec3& unitAxis, UnitAxis)
+        : m_Profile(std::move(profile))
+        , m_Origin(origin)
+        , m_Axis(unitAxis)
+        , m_Piece(Detail::MakeRevolvedPiece(m_Profile, m_Origin, m_Axis))
+    {}
+
     [[nodiscard]] const Curve& GetProfile() const noexcept { return m_Profile; }
     [[nodiscard]] const Point3& GetOrigin() const noexcept { return m_Origin; }
     /// Unit length.
