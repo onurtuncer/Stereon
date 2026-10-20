@@ -250,7 +250,8 @@ anchor need not be the primary coedge.
 
 O(1) accessors read one record: ``PositionOf``, ``ToleranceOf``,
 ``KindOf``, ``StartOf``, ``EndOf``, ``RangeOf``, ``PrimaryCoedgeOf``,
-``CurveOf``, ``EdgeOf``, ``LoopOf``, ``StoredEdgeUseSense``, ``PCurveOf``,
+``CurveOf``, ``CachedCurveOf``, ``CacheCertificateOf``, ``CacheBoundOf``,
+``EdgeOf``,``LoopOf``, ``StoredEdgeUseSense``, ``PCurveOf``,
 ``FaceOf``, ``SurfaceOf``, ``IsReversed``, ``ShellOf`` and ``SolidOf``.
 Their handle must name a live entity of the shape; checked builds report
 one that does not, and handles from a range carry their snapshot's store
@@ -274,6 +275,99 @@ handle to an entity of the source, invalid for one that was dead. The
 source shape is left as it is, and its handles do not reach the compacted
 shape: checked builds tell the two stores apart. Traversal order is
 preserved by the renumbering but not promised across it (ADR-0037).
+
+Cached edge curves
+------------------
+
+An ``Intersection`` or ``Trim`` edge has no 3D curve of its own: it is
+``S(c(t))``, its primary coedge's pcurve on that face's surface (ADR-0009).
+ADR-0009 gives such an edge a cached B-spline approximation, for bounding
+boxes, display and quick distance queries: a cache, never the truth.
+
+``builder.CacheEdgeCurve(edge)`` builds it. It samples ``S(c(t))`` at
+``ShapeBuilder::CacheSamples`` parameters spread evenly over the edge's
+range and interpolates them with a cubic B-spline on the edge's own
+parameter, so the cache passes through the primary side at every sample.
+The same pcurve and surface give the same cache. ``CachedCurveOf(shape,
+edge)`` reads the cache, ``CacheCertificateOf`` what is known of its
+deviation, and ``CacheBoundOf`` the proven bound.
+
+ADR-0009 asks for a *certificate*: a bound on the deviation over the whole
+range, proven by interval evaluation of ``S(c(t))``. The kernel has no
+interval evaluation of composed curves yet, so every cache is
+``CacheCertificate::Uncertified``, with an infinite bound.
+``CacheCertificate::Certified`` is reserved for when interval evaluation
+lands. Sampling the deviation is a regression check in the tests, never a
+certificate.
+
+Any change to what a cache was built from drops it, as ADR-0004 requires:
+
+- a new use of the edge (``AppendCoedge``);
+- a use removed (``RemoveCoedge``, ``RemoveLoop``, ``RemoveFace``);
+- the primary coedge moved (``SetPrimaryCoedge``);
+- a new surface on a face that uses the edge (``SetSurface``).
+
+``Commit`` reports each dropped cache as a ``CacheDropped`` warning.
+``Compact`` keeps caches and remaps them. Rule S17 checks that an edge's
+cache fields agree with one another and with its kind.
+
+Operation results
+-----------------
+
+A shape-producing operation returns an ``OperationResult`` (ADR-0006):
+
+- ``Shape``, the result;
+- ``History``, what became of the input's entities;
+- ``ToleranceChanges``, the tolerances it changed;
+- ``Warnings``, structured warnings that each carry a code, a message and
+  the entities it names;
+- ``Checked``, the validity level the result was checked at.
+
+Everything is published together, and only after validation.
+``Commit(std::move(builder), context)`` and ``CompactShape(shape,
+context)`` return one. ``Freeze`` and ``Compact`` remain their building
+blocks.
+
+The History (ADR-0011, ADR-0030) covers one input. An entity of the input
+continues ``Unchanged`` or ``Modified`` at one index of the result, or is
+``Deleted``. An entity of the result with no source is ``Generated``: the
+operation's creation root. Each entry carries the input's ordinal, the
+kind and both indices. The entries are ordered by kind, input, source and
+target, so two runs give the same History. ``History::OfSource`` and
+``OfTarget`` look an entity up.
+
+For ``Commit`` the History compares the result with the shape the builder
+was opened on; a new builder's entities are all ``Generated``. An edit
+keeps every index, so a slot live in both continues. It is ``Unchanged``
+when the entity's own fields and what it bounds are as they were, and
+``Modified`` otherwise. The links that only chain siblings in a parent's
+list don't count, so a face is not modified because its neighbour was
+deleted, but its shell is. ``CompactShape`` composes the remap: every
+live entity continues ``Unchanged`` at its new index. Split and merge
+events join with the Euler operators that make them.
+
+``builder.SetTolerance(entity, value, reason)`` is the explicit operation
+through which ADR-0001 lets a local tolerance change. ``Commit`` reports
+one change per entity: the first old value, the last new one, and the
+reasons in order. It warns with ``ToleranceGrown`` for a tolerance that
+grew. It fails with ``ToleranceExceeded`` for a tolerance above the
+``Context``'s ceiling, and for any growth when the ``Context`` sets
+``ToleranceGrowth::Fail``.
+
+Validation happens where a shape is published: ``Freeze``, ``Commit``,
+``Compact`` and ``CompactShape``. A builder's single steps are not
+validated, because a valid edit passes through states that are not valid;
+removing a face leaves its edges' other uses alone until the edit
+continues. Publication always runs the structural validator. Checked
+builds (the debug, ASan and fuzzing presets) also validate the input
+again at ``ShapeBuilder::Open``, ``Commit`` and ``CompactShape``, rather
+than trust its certificate (ADR-0004, safeguard 5). Before an operation
+publishes, it checks that its History accounts for every live entity of
+both sides and names only live ones; a gap is ``InvalidResult``, a kernel
+bug.
+
+The Geometric and Solid levels of ADR-0018 do not exist yet, so
+``Checked`` is ``Structural`` whatever the ``Context`` asks for.
 
 The structural validator
 ------------------------
@@ -307,6 +401,8 @@ S14   ``EmptyLoop``           a loop without coedges
 S15   ``ShellDisconnected``   the faces of a shell are not connected through shared edges
 S16   ``VertexIncidence``     a vertex's list names an edge not at it, twice or out of order,
                               or an edge is missing from one of its ends' lists
+S17   ``EdgeCache``           a cached curve on a kind that keeps none or naming no pool entry,
+                              a cache status without a cache, a bound its status does not allow
 ====  ======================  ===================================================================
 
 ``Testing::TopologyFaults`` writes link fields directly, for the
@@ -330,4 +426,7 @@ Related design decisions
 
 - `ADR-0004: Topology storage and handles <https://github.com/onurtuncer/Stereon/blob/main/docs/adr/0004-topology-storage-and-handles.md>`_
 - `ADR-0005: Immutability and structural sharing <https://github.com/onurtuncer/Stereon/blob/main/docs/adr/0005-immutability-and-sharing.md>`_
+- `ADR-0006: Error handling <https://github.com/onurtuncer/Stereon/blob/main/docs/adr/0006-error-handling.md>`_
+- `ADR-0009: Parameter-space representation <https://github.com/onurtuncer/Stereon/blob/main/docs/adr/0009-parameter-space-representation.md>`_
+- `ADR-0030: Entity lineage in operation results <https://github.com/onurtuncer/Stereon/blob/main/docs/adr/0030-entity-lineage-in-operation-results.md>`_
 

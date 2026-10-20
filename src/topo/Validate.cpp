@@ -10,8 +10,10 @@ module;
 // The contract anchor (docs/toolchain/gcc16-feature-probe.md).
 #include <Stereon/Core/Contracts.hpp>
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -63,6 +65,12 @@ constexpr std::uint32_t None = 0xFFFFFFFFu;
     return false;
 }
 
+/// A certified cache's bound: a finite length, never negative.
+[[nodiscard]] bool IsProvenBound(const double bound) noexcept
+{
+    return std::isfinite(bound) && bound >= 0.0; // STEREON-LINT-ALLOW(epsilon): a sign test
+}
+
 class StructureValidator {
 public:
     explicit StructureValidator(const TopologyTables& tables)
@@ -85,6 +93,7 @@ public:
         CheckFaceLists();
         CheckShellLists();
         CheckGeometry();
+        CheckEdgeCaches();
         CheckShellConnectivity();
         CheckIncidence();
         return std::move(m_Report);
@@ -534,6 +543,41 @@ private:
         } else if (inPool && m_T.PCurves[p.GetIndex()].IsEmpty()) {
             Report(TopologyRule::MissingGeometry, {Name(EntityKind::Coedge, c)},
                    "the coedge's pcurve in the pool is empty");
+        }
+    }
+
+    // --- S17: cached edge curves and their certificates ---------------------------
+
+    void CheckEdgeCaches()
+    {
+        for (std::uint32_t e = 0; e < m_T.Edges.GetSize(); ++e) {
+            if (m_EdgeOk[e]) {
+                CheckEdgeCache(e);
+            }
+        }
+    }
+
+    /// The edge's cache fields agree with one another and with its kind;
+    /// whether the cache is close to S(c(t)) is a Geometric matter.
+    void CheckEdgeCache(const std::uint32_t e)
+    {
+        const EdgeRecord& edge = m_T.Edges[e];
+        const bool cached = edge.Cached.IsValid();
+        const bool certified = edge.CacheStatus == CacheCertificate::Certified;
+        const char* problem = nullptr;
+        if (cached && !HasCachedCurve(edge.Kind)) {
+            problem = "the edge kind keeps no cached curve";
+        } else if (cached && (edge.Cached.GetIndex() >= m_T.Curves.GetSize() ||
+                              m_T.Curves[edge.Cached.GetIndex()].IsEmpty())) {
+            problem = "the cached curve names no non-empty pool entry";
+        } else if (cached != (edge.CacheStatus != CacheCertificate::None)) {
+            problem = "the cache status does not say whether there is a cache";
+        } else if (certified ? !IsProvenBound(edge.CacheBound)
+                             : edge.CacheBound != std::numeric_limits<double>::infinity()) {
+            problem = "the cache bound does not fit its status";
+        }
+        if (problem != nullptr) {
+            Report(TopologyRule::EdgeCache, {Name(EntityKind::Edge, e)}, problem);
         }
     }
 

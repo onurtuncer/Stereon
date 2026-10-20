@@ -100,6 +100,7 @@ struct UsedGeometry {
         , Surfaces(t.Surfaces.GetSize(), false)
     {
         MarkUsed(t.Edges, &Detail::EdgeRecord::Curve, Curves);
+        MarkUsed(t.Edges, &Detail::EdgeRecord::Cached, Curves);
         MarkUsed(t.Coedges, &Detail::CoedgeRecord::PCurve, PCurves);
         MarkUsed(t.Faces, &Detail::FaceRecord::Surface, Surfaces);
     }
@@ -158,6 +159,7 @@ void CopyEntities(const Detail::TopologyTables& old, Detail::TopologyTables& fre
         e.NextAtStart = Mapped(e.NextAtStart, m.Edges);
         e.NextAtEnd = Mapped(e.NextAtEnd, m.Edges);
         e.Curve = Mapped(e.Curve, m.Curves);
+        e.Cached = Mapped(e.Cached, m.Curves);
     });
     CopyLive(old.Coedges, fresh.Coedges, [&](Detail::CoedgeRecord& c) {
         c.Next = Mapped(c.Next, m.Coedges);

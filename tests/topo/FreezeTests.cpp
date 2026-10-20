@@ -33,7 +33,7 @@ TEST_CASE("Freeze certifies the snapshot it makes", "[topo][freeze]")
     REQUIRE_FALSE(shape.IsEmpty());
     const Stereon::ValidationCertificate certificate = shape.GetSnapshot()->GetCertificate();
     REQUIRE(certificate.ValidatorVersion == Stereon::Detail::StructuralValidatorVersion);
-    REQUIRE(certificate.Invariants == "Structural S01-S16");
+    REQUIRE(certificate.Invariants == "Structural S01-S17");
     REQUIRE(certificate.Invariants == Stereon::Detail::StructuralInvariants);
     REQUIRE(certificate.Snapshot != 0);
     REQUIRE(certificate.Snapshot == shape.GetSnapshot()->GetStore());
