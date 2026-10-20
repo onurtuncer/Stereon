@@ -195,46 +195,55 @@ void AddKind(const TopologyTables* source, const TopologyTables& result,
     }
 }
 
+/// Marks the slot one side of an entry names, if the relation gives it
+/// that side; false when the entry is malformed or names no live entity
+/// (a published target must be live, ADR-0030).
+template <EntityKind K>
+[[nodiscard]] bool MarkSide(const bool present, const std::uint32_t index,
+                            const TopologyTables* tables, std::vector<std::uint8_t>& marks)
+{
+    if (present != (index != NoEntity)) {
+        return false;
+    }
+    if (!present) {
+        return true;
+    }
+    if (tables == nullptr || !tables->IsLive<K>(index)) {
+        return false;
+    }
+    marks[index] = 1;
+    return true;
+}
+
+/// True when every live slot of the table of kind K is marked.
+template <EntityKind K>
+[[nodiscard]] bool EveryLiveMarked(const TopologyTables* tables,
+                                   const std::vector<std::uint8_t>& marks)
+{
+    for (std::uint32_t i = 0; i < marks.size(); ++i) {
+        if (tables->IsLive<K>(i) && marks[i] == 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
 template <EntityKind K>
 [[nodiscard]] bool KindIsComplete(const History& history, const TopologyTables* source,
                                   const TopologyTables& result)
 {
-    const auto& table = result.Table<K>();
-    std::vector<std::uint8_t> targeted(table.GetSize(), 0);
+    std::vector<std::uint8_t> targeted(result.Table<K>().GetSize(), 0);
     std::vector<std::uint8_t> sourced(source != nullptr ? source->Table<K>().GetSize() : 0, 0);
     for (const HistoryEntry& e : history.GetEntries()) {
-        if (e.Kind != K) {
-            continue;
-        }
-        const bool hasTarget = e.Relation != HistoryRelation::Deleted;
-        const bool hasSource = e.Relation != HistoryRelation::Generated;
-        if (hasTarget != (e.Target != NoEntity) || hasSource != (e.Source != NoEntity)) {
+        if (e.Kind == K &&
+            (!MarkSide<K>(e.Relation != HistoryRelation::Deleted, e.Target, &result, targeted) ||
+             !MarkSide<K>(e.Relation != HistoryRelation::Generated, e.Source, source, sourced))) {
             return false;
         }
-        if (hasTarget) {
-            if (!result.IsLive<K>(e.Target)) {
-                return false; // a published target must be a live entity
-            }
-            targeted[e.Target] = 1;
-        }
-        if (hasSource) {
-            if (source == nullptr || !source->IsLive<K>(e.Source)) {
-                return false;
-            }
-            sourced[e.Source] = 1;
-        }
     }
-    for (std::uint32_t i = 0; i < table.GetSize(); ++i) {
-        if (table[i].Slot.Alive && targeted[i] == 0) {
-            return false; // a live entity of the result without provenance
-        }
-    }
-    for (std::uint32_t i = 0; i < sourced.size(); ++i) {
-        if (source->IsLive<K>(i) && sourced[i] == 0) {
-            return false; // a live input entity without a disposition
-        }
-    }
-    return true;
+    // Every live entity of the result has provenance, and every live input
+    // entity a disposition.
+    return EveryLiveMarked<K>(&result, targeted) && EveryLiveMarked<K>(source, sourced);
 }
 
 } // namespace
