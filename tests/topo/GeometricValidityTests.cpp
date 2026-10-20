@@ -200,8 +200,7 @@ TEST_CASE("an edge's range is bounded", "[topo][validity]")
                                                    .Tolerance = Tight});
         REQUIRE_FALSE(refused);
         REQUIRE(refused.error().GetCode() == ErrorCode::InvalidInput);
-        REQUIRE(std::string(refused.error().GetMessage()).find("not bounded") !=
-                std::string::npos);
+        REQUIRE(std::string(refused.error().GetMessage()).find("not bounded") != std::string::npos);
     }
     // Bounded ranges inside and outside the curve's domain: the first holds,
     // the second is a finding, never skipped.
@@ -210,9 +209,8 @@ TEST_CASE("an edge's range is bounded", "[topo][validity]")
         const Stereon::Circle circle{{0, 0, 0}, 1.0, Vec3{1, 0, 0}, Vec3{0, 1, 0}};
         const auto a = body.AddVertex(Eval(circle, range.GetLower()));
         const auto b = body.AddVertex(Eval(circle, range.GetUpper()));
-        const auto curve = Must(
-            body.Builder.AddCurve(Stereon::Curve(*Stereon::MakeTrimmedCurve(
-                Stereon::Curve(circle), Interval(0.0, 1.0)))));
+        const auto curve = Must(body.Builder.AddCurve(Stereon::Curve(
+            *Stereon::MakeTrimmedCurve(Stereon::Curve(circle), Interval(0.0, 1.0)))));
         body.AddEdge({.Kind = Stereon::EdgeCurveKind::Spatial,
                       .Start = a,
                       .End = b,
@@ -245,8 +243,9 @@ TEST_CASE("G02: a degenerate edge's trace stays at its vertex", "[topo][validity
                                         .Tolerance = Tight});
         for (std::size_t k = 0; k < uses; ++k) {
             const auto loop = body.AddLoop(body.AddFace(XyPlane()));
-            body.AddCoedge(loop, pole, Stereon::EdgeUseSense::Same,
-                           Stereon::Curve2d(Stereon::Circle2d{{0, 0}, 1.0, Vec2{1, 0}, Vec2{0, 1}}));
+            body.AddCoedge(
+                loop, pole, Stereon::EdgeUseSense::Same,
+                Stereon::Curve2d(Stereon::Circle2d{{0, 0}, 1.0, Vec2{1, 0}, Vec2{0, 1}}));
         }
         return std::move(body).Freeze();
     };

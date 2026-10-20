@@ -94,8 +94,7 @@ TEST_CASE("a parameter id belongs to its set", "[core][sensitivity]")
     REQUIRE(std::isnan(parameters.GetReference(ParameterId{})));
 
     // An id cannot be made from an index: only a set makes one.
-    STATIC_REQUIRE_FALSE(
-        std::is_constructible_v<ParameterId, std::uint32_t, ParameterQuantity>);
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<ParameterId, std::uint32_t, ParameterQuantity>);
 }
 
 TEST_CASE("a parameter id of another set is foreign, whatever its index", "[core][sensitivity]")

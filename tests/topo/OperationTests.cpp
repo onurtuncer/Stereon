@@ -472,7 +472,8 @@ TEST_CASE("every published tolerance is within the Context's bounds, logged or n
     }
 }
 
-TEST_CASE("CompactShape publishes under the Context's validity policy", "[topo][operation][compact]")
+TEST_CASE("CompactShape publishes under the Context's validity policy",
+          "[topo][operation][compact]")
 {
     // A structurally sound wire whose end vertex is off its line: Freeze()
     // accepts it, the Geometric level does not.
