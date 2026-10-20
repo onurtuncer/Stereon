@@ -63,7 +63,7 @@ TEST_CASE("Freeze consumes the builder whether it succeeds or not", "[topo][free
     SECTION("failure")
     {
         ShapeBuilder b;
-        const BuilderFaceId f = Must(b.AddFace(b.AddSurface(XyPlane())));
+        const BuilderFaceId f = Must(b.AddFace(Must(b.AddSurface(XyPlane()))));
         static_cast<void>(Must(b.AddLoop(f)));
         REQUIRE_FALSE(Stereon::Freeze(std::move(b)).has_value());
         REQUIRE_FALSE(b.GetToken().IsValid()); // NOLINT(bugprone-use-after-move)
@@ -74,7 +74,7 @@ TEST_CASE("Freeze consumes the builder whether it succeeds or not", "[topo][free
 TEST_CASE("a refused Freeze reports the findings by rule", "[topo][freeze]")
 {
     ShapeBuilder b;
-    const BuilderFaceId f = Must(b.AddFace(b.AddSurface(XyPlane())));
+    const BuilderFaceId f = Must(b.AddFace(Must(b.AddSurface(XyPlane()))));
     static_cast<void>(Must(b.AddLoop(f)));
     const Stereon::ValidityReport report = b.Validate();
     REQUIRE_FALSE(report.IsValid());

@@ -14,6 +14,7 @@
 #include <limits>
 #include <numbers>
 #include <string_view>
+#include <vector>
 
 import Stereon.Surface;
 
@@ -448,4 +449,141 @@ TEST_CASE("MakeExtrusion and MakeRevolution validate their data", "[surface][swe
     REQUIRE(invalid(MakeRevolution(profile, Point3{}, Vec3{})));
     REQUIRE(invalid(MakeRevolution(profile, Point3{}, Vec3{0.0, nan, 1.0})));
     REQUIRE(MakeRevolution(profile, Point3{}, Vec3{0.0, 0.0, -5.0}).has_value());
+}
+
+// ---------------------------------------------------------------------------
+// Audit 2026-10-20: trimmed profiles (F2) and the numerical domain (F6)
+
+TEST_CASE("an oblique extrusion of a trimmed line projects exactly", "[surface][swept][audit]")
+{
+    // F2: the profile C(u) = (u, 0, 0) trimmed to [0, 1], extruded along
+    // d = (1, 1, 0). The point (0.5, 0.5, 0) lies on the surface at
+    // (u, v) = (0, 0.5). Without the trimmed profile's exact form,
+    // projection took the profile's own closest point, u = 0.5, and
+    // returned (0.75, 0.25, 0): 0.35 from a point on the surface.
+    const Curve profile(
+        *MakeTrimmedCurve(Curve(Line{Point3{}, Vec3{1.0, 0.0, 0.0}}), Interval{0.0, 1.0}));
+    const ExtrusionSurface s = *MakeExtrusion(profile, Vec3{1.0, 1.0, 0.0});
+    REQUIRE(s.GetProjection() != nullptr);
+    const Point3 p{0.5, 0.5, 0.0};
+    const Point2 found = Project(s, p);
+    REQUIRE(std::abs(found.X) <= 1e-12);
+    REQUIRE(std::abs(found.Y - 0.5) <= 1e-12);
+    REQUIRE(Distance(Eval(s, found), p) <= 1e-12);
+
+    // Its exact patch, and a trimmed surface of it, which builds that patch.
+    const Box2 box{Interval{0.0, 1.0}, Interval{-1.0, 1.0}};
+    const BSplineSurface patch = *ToBSpline(s, box);
+    REQUIRE(Distance(Eval(patch, Point2{0.0, 0.5}), p) <= 1e-12);
+    const TrimmedSurface band = *MakeTrimmedSurface(Surface(s), box);
+    REQUIRE(band.GetPatch() != nullptr);
+    REQUIRE(ToBSpline(band).has_value());
+    REQUIRE(Distance(Eval(band, Project(band, p)), p) <= 1e-12);
+}
+
+namespace {
+
+/// Trimmed profiles of every kind of basis, forwards and reversed, and a
+/// trimmed curve of a trimmed curve.
+std::vector<Curve> TrimmedProfiles()
+{
+    const Curve line(Line{Point3{1.0, 0.0, 0.0}, Vec3{0.3, 0.2, 1.0}});
+    const Curve spline(Profile());
+    return {
+        Curve(*MakeTrimmedCurve(line, Interval{-1.0, 2.0})),
+        Curve(MakeTrimmedCurve(line, Interval{-1.0, 2.0})->Reversed()),
+        Curve(*MakeTrimmedCurve(CircleProfile(), Interval{0.5, 2.5})),
+        Curve(MakeTrimmedCurve(CircleProfile(), Interval{5.0, 7.0})->Reversed()),
+        Curve(*MakeTrimmedCurve(spline, Interval{0.2, 0.7})),
+        Curve(*MakeTrimmedCurve(Curve(*MakeTrimmedCurve(spline, Interval{0.1, 0.9})),
+                                Interval{0.2, 0.6})),
+    };
+}
+
+/// Points of the surface over a grid of the box project back onto it.
+template <typename S>
+void RequireProjectsBack(const S& s, const Box2& box, const double tolerance)
+{
+    for (int i = 0; i <= 6; ++i) {
+        for (int j = 0; j <= 4; ++j) {
+            const Point2 uv{box.X.GetLower() + Width(box.X) * i / 6.0,
+                            box.Y.GetLower() + Width(box.Y) * j / 4.0};
+            const Point3 p = Eval(s, uv);
+            INFO("uv = (" << uv.X << ", " << uv.Y << ")");
+            REQUIRE(Distance(Eval(s, Project(s, p)), p) <= tolerance);
+        }
+    }
+}
+
+} // namespace
+
+TEST_CASE("sweeps of trimmed profiles have exact forms and project onto the surface",
+          "[surface][swept][audit]")
+{
+    // F2: an extrusion or revolution of a trimmed profile keeps the
+    // profile's exact NURBS form, so it projects exactly, converts to a
+    // patch and can be trimmed in turn.
+    int index = 0;
+    for (const Curve& profile : TrimmedProfiles()) {
+        INFO("profile " << index++);
+        const Interval u = Domain(profile);
+        const ExtrusionSurface e = *MakeExtrusion(profile, Vec3{0.4, -0.3, 1.0});
+        REQUIRE(e.GetProjection() != nullptr);
+        RequireProjectsBack(e, Box2{u, Interval{-1.5, 2.0}}, 1e-9);
+        REQUIRE(ToBSpline(e, Box2{u, Interval{-1.0, 1.0}}).has_value());
+        REQUIRE(MakeTrimmedSurface(Surface(e), Box2{u, Interval{0.0, 1.0}})->GetPatch() != nullptr);
+
+        const RevolutionSurface r = *MakeRevolution(profile, Point3{}, Vec3{0.0, 0.0, 1.0});
+        REQUIRE(r.GetPiece() != nullptr);
+        RequireProjectsBack(r, Box2{Interval{0.1, 6.0}, u}, 1e-8);
+        const Box2 part{Interval{0.0, 2.0}, u};
+        REQUIRE(ToBSpline(r, part).has_value());
+        REQUIRE(MakeTrimmedSurface(Surface(r), part)->GetPatch() != nullptr);
+    }
+}
+
+TEST_CASE("a revolution's axis is normalised at any scale", "[surface][swept][audit]")
+{
+    // F6: Dot(axis, axis) overflowed for an axis of 1e200, which then
+    // normalised to zero, and underflowed for one of 1e-200, which was
+    // refused as zero although it has a direction. A power-of-two scale
+    // changes nothing, bit for bit, and an ordinary axis normalises as
+    // before.
+    const Curve profile = CircleProfile();
+    const Vec3 axis{2.0, -1.0, 3.0};
+    const RevolutionSurface reference = *MakeRevolution(profile, Point3{}, axis);
+    REQUIRE(reference.GetAxis() == Normalized(axis));
+    for (const int e : {-1070, -1000, -600, -100, 1, 100, 600, 1021}) {
+        INFO("scaled by 2^" << e);
+        const Vec3 scaled{std::ldexp(axis.X, e), std::ldexp(axis.Y, e), std::ldexp(axis.Z, e)};
+        const auto s = MakeRevolution(profile, Point3{}, scaled);
+        REQUIRE(s.has_value());
+        REQUIRE(s->GetAxis() == reference.GetAxis());
+        REQUIRE(Eval(*s, Point2{0.7, 1.1}) == Eval(reference, Point2{0.7, 1.1}));
+    }
+    for (const double scale : {1e200, 1e-200, 1e-310, std::numeric_limits<double>::max()}) {
+        INFO("scale " << scale);
+        const auto up = MakeRevolution(profile, Point3{}, Vec3{0.0, 0.0, scale});
+        REQUIRE(up.has_value());
+        REQUIRE(up->GetAxis() == Vec3{0.0, 0.0, 1.0});
+        const auto back = MakeRevolution(profile, Point3{}, Vec3{-scale, 0.0, 0.0});
+        REQUIRE(back.has_value());
+        REQUIRE(back->GetAxis() == Vec3{-1.0, 0.0, 0.0});
+    }
+}
+
+TEST_CASE("an extrusion refuses a direction whose squared length is not a finite double",
+          "[surface][swept][audit]")
+{
+    // F6: the extrusion keeps its direction as given and divides by its
+    // squared length, which overflowed for a direction of 1e200 and turned
+    // projection into nonsense; it is refused, as one of 1e-200 always was.
+    const Curve profile(Profile());
+    const auto code = [](const auto& result) { return result.error().GetCode(); };
+    REQUIRE(code(MakeExtrusion(profile, Vec3{1e200, 0.0, 0.0})) == ErrorCode::InvalidInput);
+    REQUIRE(code(MakeExtrusion(profile, Vec3{0.0, -1e200, 1.0})) == ErrorCode::InvalidInput);
+    REQUIRE(code(MakeExtrusion(profile, Vec3{0.0, 1e-200, 0.0})) == ErrorCode::InvalidInput);
+    const ExtrusionSurface large = *MakeExtrusion(profile, Vec3{0.0, 0.0, 1e150});
+    const Point3 p = Eval(large, Point2{0.4, 1e-150});
+    REQUIRE(Distance(Eval(large, Project(large, p)), p) <= 1e-9);
 }

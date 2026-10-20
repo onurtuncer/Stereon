@@ -41,13 +41,22 @@ export namespace Stereon {
 [[nodiscard]] Result<BSplineCurve> ToBSpline(const Parabola& parabola, Interval range);
 /// A B-spline restricted to `range`: the piece between the range's ends.
 [[nodiscard]] Result<BSplineCurve> ToBSpline(const BSplineCurve& curve, Interval range);
-/// Any built-in curve through the wrapper; NotSupported for other types,
-/// which have no exact representation the kernel knows of.
+/// Any built-in curve through the wrapper, and a trimmed curve of one,
+/// nested to any depth (ToBSpline(const TrimmedCurve&, Interval));
+/// NotSupported for other types, which have no exact representation the
+/// kernel knows of, and InvalidInput for an empty wrapper.
 [[nodiscard]] Result<BSplineCurve> ToBSpline(const Curve& curve, Interval range);
 
 } // namespace Stereon
 
 export namespace Stereon::Detail {
+
+/// True when ToBSpline keeps the curve's parametrisation everywhere, not
+/// only at its knots: a line, a parabola, a B-spline, or a trimmed curve of
+/// one, nested to any depth. A conic's rational arcs agree with it only at
+/// their knots. False for an empty wrapper.
+[[nodiscard]] bool KeepsParameter(const Curve& curve);
+[[nodiscard]] bool KeepsParameter(const Curve2d& curve);
 
 /// The unit circle arc from angle `start` to `end` (end > start, at most
 /// 2 pi apart) as a rational quadratic B-spline in the plane: split into

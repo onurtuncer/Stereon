@@ -49,7 +49,8 @@ export module Stereon.Core:Arena;
 /// No mutable reference is ever returned, because a reference that outlived
 /// the copy-on-write step would write into a page that a later copy shares,
 /// changing a snapshot that is meant to be immutable. During fn the arena
-/// must not be copied, moved, assigned, cleared, resized or edited again;
+/// must not be copied, moved, assigned, cleared, resized or edited again,
+/// nor have a page taken with GetPage(), which would share it likewise;
 /// each of those checks this on every build and reports a violation from a
 /// module implementation unit (Arena.cpp), so the check does not depend on
 /// GCC 16.2 honouring contracts in imported templates.
@@ -233,10 +234,14 @@ public:
 
     /// The page itself, for code that holds pages (a serialiser, a diff).
     /// While the pointer lives the page counts as shared, so a write to it
-    /// through this arena copies it and the holder keeps what it read.
+    /// through this arena copies it and the holder keeps what it read. Not
+    /// during an edit callback: the page being edited is already unique, and
+    /// the callback's reference would write into the page the holder keeps,
+    /// as a copy of the arena would.
     [[nodiscard]] std::shared_ptr<const Page> GetPage(const std::size_t page) const
         STEREON_PRE(page < GetPageCount())
     {
+        CheckNotEditing("GetPage");
         return m_Pages[page];
     }
 

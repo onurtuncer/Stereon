@@ -210,7 +210,7 @@ Stereon::Shape MakeStereonSheet(const std::size_t n)
     using Stereon::Vec2;
     using Stereon::Vec3;
     Stereon::ShapeBuilder b;
-    const Stereon::SurfaceRef plane = b.AddSurface(
+    const Stereon::SurfaceRef plane = *b.AddSurface(
         Stereon::Surface(Stereon::Plane{Point3{0, 0, 0}, Vec3{1, 0, 0}, Vec3{0, 1, 0}}));
     const std::size_t side = n + 1;
     std::vector<Stereon::BuilderVertexId> vertices;
@@ -231,7 +231,7 @@ Stereon::Shape MakeStereonSheet(const std::size_t n)
         return *b.AddEdge({.Kind = EdgeCurveKind::Exact,
                            .Start = from,
                            .End = to,
-                           .Curve = b.AddCurve(Stereon::Curve(Stereon::Line{origin, direction})),
+                           .Curve = *b.AddCurve(Stereon::Curve(Stereon::Line{origin, direction})),
                            .Range = Stereon::Interval(0.0, 1.0),
                            .Tolerance = 1e-7});
     };
@@ -251,7 +251,7 @@ Stereon::Shape MakeStereonSheet(const std::size_t n)
     }
     const Stereon::BuilderShellId shell = *b.AddShell();
     const auto pcurve = [&](const Point2& from, const Vec2& direction) {
-        return b.AddPCurve(Stereon::Curve2d(Stereon::Line2d{from, direction}));
+        return *b.AddPCurve(Stereon::Curve2d(Stereon::Line2d{from, direction}));
     };
     for (std::size_t j = 0; j < n; ++j) {
         for (std::size_t i = 0; i < n; ++i) {

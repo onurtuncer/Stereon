@@ -209,7 +209,7 @@ TEST_CASE("a primary coedge is not removed alone, and passes on with its loop",
         REQUIRE_FALSE(report.Has(TopologyRule::PrimaryCoedge));
         // ...until it is made a Boundary edge of the remaining face.
         Stereon::Testing::TopologyFaults::SetKind(b, triangles.Edges[0], EdgeCurveKind::Boundary);
-        for (const std::size_t e : {1, 2}) {
+        for (const std::size_t e : {std::size_t{1}, std::size_t{2}}) {
             Must(b.RemoveEdge(triangles.Edges[e]));
         }
         Must(b.RemoveVertex(triangles.Vertices[2]));
@@ -329,15 +329,15 @@ TEST_CASE("SetSurface replaces a face's surface and copies one page", "[topo][ed
     Body box = MakeBox();
     const Shape a = std::move(box).Freeze();
     ShapeBuilder b = Must(ShapeBuilder::Open(a));
-    const Stereon::SurfaceRef moved =
-        b.AddSurface(Stereon::Surface(Stereon::Plane{{0, 0, 7}, Vec3{1, 0, 0}, Vec3{0, 1, 0}}));
+    const Stereon::SurfaceRef moved = Must(
+        b.AddSurface(Stereon::Surface(Stereon::Plane{{0, 0, 7}, Vec3{1, 0, 0}, Vec3{0, 1, 0}})));
     const BuilderFaceId face = b.Handle(a.Resolve(box.Faces[0]));
     Must(b.SetSurface(face, moved));
     const Shape c = Must(Stereon::Freeze(std::move(b)));
     const auto* plane = SurfaceOf(c, c.Resolve(face)).Target<Stereon::Plane>();
     REQUIRE(plane != nullptr);
     REQUIRE(plane->Origin == Point3{0, 0, 7});
-    REQUIRE(SurfaceOf(a, a.Resolve(box.Faces[0])).Target<Stereon::Plane>()->Origin ==
+    REQUIRE(Deref(SurfaceOf(a, a.Resolve(box.Faces[0])).Target<Stereon::Plane>()).Origin ==
             Point3{0, 0, 0});
     const Stereon::Detail::TopologyTables& ta = a.GetSnapshot()->GetTables();
     const Stereon::Detail::TopologyTables& tc = c.GetSnapshot()->GetTables();

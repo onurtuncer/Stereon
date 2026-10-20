@@ -259,6 +259,49 @@ TEST_CASE("S12 MissingGeometry: a use without its pcurve", "[topo][validator][S1
     }
 }
 
+TEST_CASE("S12 MissingGeometry: an empty curve, pcurve or surface in the pool",
+          "[topo][validator][S12][audit]")
+{
+    // Audit 2026-10-20, F3: an index inside the pool is not a support unless
+    // the entry holds geometry. The findings name the entities with
+    // Describe, which must not visit the empty wrapper. In the bodies here
+    // every face, edge and coedge added its own geometry, in order, so its
+    // index in the pool is its creation index.
+    const auto requireEmptyFound = [](Body& body, const std::string& named) {
+        const ValidityReport report = body.Builder.Validate();
+        const std::string text = report.ToText();
+        INFO(text);
+        REQUIRE(report.GetCount() == 1);
+        REQUIRE(text.find("in the pool is empty") != std::string::npos);
+        REQUIRE(text.find(named) != std::string::npos);
+        RequireFinds(body, TopologyRule::MissingGeometry);
+    };
+    SECTION("an empty surface under a face")
+    {
+        Body body = MakeBox();
+        Faults::EmptySurface(body.Builder, Stereon::SurfaceRef::FromIndex(2));
+        requireEmptyFound(body, "Face#2 [empty geometry");
+    }
+    SECTION("an empty curve under an Exact edge")
+    {
+        Body body = MakeBox();
+        Faults::EmptyCurve(body.Builder, Stereon::CurveRef::FromIndex(4));
+        requireEmptyFound(body, "Edge#4 [Exact empty geometry");
+    }
+    SECTION("an empty curve under a Spatial edge")
+    {
+        Body body = MakeWire(3);
+        Faults::EmptyCurve(body.Builder, Stereon::CurveRef::FromIndex(1));
+        requireEmptyFound(body, "Edge#1 [Spatial empty geometry");
+    }
+    SECTION("an empty pcurve under a coedge")
+    {
+        Body body = MakeCylinder();
+        Faults::EmptyPCurve(body.Builder, PCurveRef::FromIndex(5));
+        requireEmptyFound(body, "Coedge#5");
+    }
+}
+
 TEST_CASE("S13 EdgeEndpoints: a degenerate edge with two vertices", "[topo][validator][S13]")
 {
     Body body = MakeDegenerateFace();
@@ -283,6 +326,56 @@ TEST_CASE("S15 ShellDisconnected: faces that share no edge chain", "[topo][valid
         AddBoundaryPolygon(body, face, std::vector<Point3>{{x, 0, 0}, {x + 1, 0, 0}, {x, 1, 0}});
         Must(body.Builder.AddFaceToShell(shell, face));
     }
+    RequireFinds(body, TopologyRule::ShellDisconnected);
+}
+
+namespace {
+
+/// The fan of k faces around one spine, its faces moved into two open
+/// shells: face i into the second when bit i of `mask` is set. Face 0 was
+/// added first, so its use of the spine is the edge's radial anchor.
+Body FanInTwoShells(const std::size_t k, const unsigned mask)
+{
+    Body body = MakeFan(k);
+    Must(body.Builder.RemoveShell(body.Shells[0]));
+    const BuilderShellId first = body.Shells.emplace_back(Must(body.Builder.AddShell()));
+    const BuilderShellId second = body.Shells.emplace_back(Must(body.Builder.AddShell()));
+    for (std::size_t i = 0; i < k; ++i) {
+        Must(body.Builder.AddFaceToShell(((mask >> i) & 1U) != 0 ? second : first, body.Faces[i]));
+    }
+    return body;
+}
+
+} // namespace
+
+TEST_CASE("S15: an edge shared by two shells connects the faces of each, whichever holds its "
+          "anchor",
+          "[topo][validator][S15][audit]")
+{
+    // Audit 2026-10-20, F5: the faces around an edge were joined only when
+    // they lay in the anchor face's shell, so a shell sharing a
+    // non-manifold edge with another was reported as disconnected, or not,
+    // depending on which shell's face came first. Every split of the fan's
+    // faces between two shells keeps each shell connected through the
+    // spine.
+    for (const std::size_t k : {std::size_t{3}, std::size_t{4}}) {
+        for (unsigned mask = 1; mask + 1 < (1U << k); ++mask) {
+            Body body = FanInTwoShells(k, mask);
+            const ValidityReport report = body.Builder.Validate();
+            INFO("k = " << k << ", mask = " << mask << "\n" << report.ToText());
+            REQUIRE_FALSE(report.Has(TopologyRule::ShellDisconnected));
+            REQUIRE(report.IsValid());
+            REQUIRE(Stereon::Freeze(std::move(body.Builder)).has_value());
+        }
+    }
+
+    // A shell in two pieces is still found when the edge it shares lies in
+    // another shell's anchor face: faces 1 and 2 share the spine with face
+    // 0, but the square shares nothing with them.
+    Body body = FanInTwoShells(3, 0b110U);
+    const BuilderFaceId apart = body.AddFace(XyPlane());
+    AddBoundaryPolygon(body, apart, std::vector<Point3>{{5, 5, 0}, {6, 5, 0}, {5, 6, 0}});
+    Must(body.Builder.AddFaceToShell(body.Shells[2], apart));
     RequireFinds(body, TopologyRule::ShellDisconnected);
 }
 

@@ -231,20 +231,32 @@ void ShapeBuilder::UnlinkAtVertex(const std::uint32_t edge, const std::uint32_t 
     m_Tables.Edges.Modify(edge, [&](Detail::EdgeRecord& e) { LinkAt(e, vertex) = EdgeId{}; });
 }
 
-CurveRef ShapeBuilder::AddCurve(Curve curve)
+Result<CurveRef> ShapeBuilder::AddCurve(Curve curve)
 {
+    STEREON_TRY_VOID(RequireToken("AddCurve"));
+    if (curve.IsEmpty()) {
+        return Fail(ErrorCode::InvalidInput, "AddCurve: the curve is empty");
+    }
     return CurveRef::FromIndex(
         static_cast<std::uint32_t>(m_Tables.Curves.PushBack(std::move(curve))));
 }
 
-PCurveRef ShapeBuilder::AddPCurve(Curve2d pcurve)
+Result<PCurveRef> ShapeBuilder::AddPCurve(Curve2d pcurve)
 {
+    STEREON_TRY_VOID(RequireToken("AddPCurve"));
+    if (pcurve.IsEmpty()) {
+        return Fail(ErrorCode::InvalidInput, "AddPCurve: the pcurve is empty");
+    }
     return PCurveRef::FromIndex(
         static_cast<std::uint32_t>(m_Tables.PCurves.PushBack(std::move(pcurve))));
 }
 
-SurfaceRef ShapeBuilder::AddSurface(Surface surface)
+Result<SurfaceRef> ShapeBuilder::AddSurface(Surface surface)
 {
+    STEREON_TRY_VOID(RequireToken("AddSurface"));
+    if (surface.IsEmpty()) {
+        return Fail(ErrorCode::InvalidInput, "AddSurface: the surface is empty");
+    }
     return SurfaceRef::FromIndex(
         static_cast<std::uint32_t>(m_Tables.Surfaces.PushBack(std::move(surface))));
 }
@@ -822,6 +834,21 @@ void TopologyFaults::SetNextOutOfRange(ShapeBuilder& b, const BuilderCoedgeId c)
     const auto past = static_cast<std::uint32_t>(b.m_Tables.Coedges.GetSize() + 7);
     b.m_Tables.Coedges.Modify(c.GetIndex(),
                               [&](Detail::CoedgeRecord& r) { r.Next = CoedgeId::FromIndex(past); });
+}
+
+void TopologyFaults::EmptyCurve(ShapeBuilder& b, const CurveRef curve)
+{
+    b.m_Tables.Curves.Set(curve.GetIndex(), Curve{});
+}
+
+void TopologyFaults::EmptyPCurve(ShapeBuilder& b, const PCurveRef pcurve)
+{
+    b.m_Tables.PCurves.Set(pcurve.GetIndex(), Curve2d{});
+}
+
+void TopologyFaults::EmptySurface(ShapeBuilder& b, const SurfaceRef surface)
+{
+    b.m_Tables.Surfaces.Set(surface.GetIndex(), Surface{});
 }
 
 } // namespace Stereon::Testing

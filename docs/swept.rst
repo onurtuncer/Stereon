@@ -100,7 +100,9 @@ sense follows the map and ``Eval(Transformed(s, x), uv)`` stays
 ``Transformed(Eval(s, uv), x)``.
 
 **Projection.** Where the kernel knows the profile's exact NURBS form over
-a finite domain (a circle, an ellipse, a B-spline), projection is exact.
+a finite domain (a circle, an ellipse, a B-spline, or a trimmed curve of
+any built-in curve, a line segment included, reversed or nested:
+:doc:`trimmed`, *Conversion over a subrange*), projection is exact.
 An extrusion keeps that form flattened along the direction, its poles
 moved onto the plane through the origin normal to it, with a
 ``CurveProjector``: the closest point of the surface to :math:`\mathbf p`
@@ -131,6 +133,14 @@ reaches them.
 
 Limits and validation
 ---------------------
+
+A revolution's axis may have any finite, non-zero length: it is scaled by
+the power of two that brings its largest component into :math:`[1, 2)`
+before it is normalised, so an axis of :math:`10^{200}` or
+:math:`10^{-200}` has a direction like any other, and :math:`2^k` times an
+axis gives the same unit axis bit for bit. An extrusion keeps its direction
+as given and divides by its squared length, so ``MakeExtrusion`` requires
+that squared length to be a finite, non-zero double.
 
 Collapsed patches, axis crossings and poles on the axis are allowed.
 Construction does not certify regularity, injectivity, orientation of a

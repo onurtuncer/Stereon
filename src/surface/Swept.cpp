@@ -89,19 +89,10 @@ Result<BSplineSurface> CheckedSurface(BSplineSurface surface)
 
 // --- The profile's NURBS form ---------------------------------------------
 
-/// True when the profile's NURBS form keeps its parametrisation: a line, a
-/// parabola or a B-spline (src/curve/Conversion.cppm); a conic's rational
-/// arcs agree with it only at their knots.
-bool KeepsParameter(const Curve& profile)
-{
-    return VisitBuiltin(profile, []<typename G>(const G&) {
-        return std::is_same_v<G, Line> || std::is_same_v<G, Parabola> ||
-               std::is_same_v<G, BSplineCurve>;
-    });
-}
-
 /// The profile's exact NURBS form over its domain, when the kernel knows
-/// one and the domain is finite.
+/// one and the domain is finite: a built-in curve's, or a trimmed curve's
+/// of one (ToBSpline(const Curve&, Interval)), whose parameter it keeps
+/// when Detail::KeepsParameter holds.
 std::optional<BSplineCurve> FormOf(const Curve& profile)
 {
     if (profile.IsEmpty()) {
@@ -297,6 +288,19 @@ Box3 RevolvedBox(const RevolutionSurface& s, const Box3& box)
 
 namespace Detail {
 
+Vec3 UnitVector(const Vec3& v)
+{
+    const double largest = std::max({std::abs(v.X), std::abs(v.Y), std::abs(v.Z)});
+    if (!(largest > 0.0) || !std::isfinite(largest)) {
+        return Normalized(v); // whose contract reports a zero or non-finite vector
+    }
+    // A power of two, so the scaling rounds nothing: 2^-e brings the largest
+    // component into [1, 2).
+    const int e = std::ilogb(largest);
+    const Vec3 scaled{std::ldexp(v.X, -e), std::ldexp(v.Y, -e), std::ldexp(v.Z, -e)};
+    return Normalized(scaled);
+}
+
 std::shared_ptr<const ExtrusionProfile> MakeExtrusionProfile(const Curve& profile,
                                                              const Vec3& direction)
 {
@@ -310,8 +314,9 @@ std::shared_ptr<const ExtrusionProfile> MakeExtrusionProfile(const Curve& profil
         pole = ToPoint(Across(ToVec(pole), n));
     }
     CurveProjector projector(flattened);
-    return std::make_shared<const ExtrusionProfile>(ExtrusionProfile{
-        *std::move(form), std::move(flattened), std::move(projector), KeepsParameter(profile)});
+    return std::make_shared<const ExtrusionProfile>(
+        ExtrusionProfile{*std::move(form), std::move(flattened), std::move(projector),
+                         Detail::KeepsParameter(profile)});
 }
 
 std::shared_ptr<const RevolvedPiece> MakeRevolvedPiece(const Curve& profile, const Point3& origin,
@@ -328,7 +333,7 @@ std::shared_ptr<const RevolvedPiece> MakeRevolvedPiece(const Curve& profile, con
     }
     SurfaceProjector projector(*surface);
     return std::make_shared<const RevolvedPiece>(
-        RevolvedPiece{*std::move(surface), std::move(projector), KeepsParameter(profile)});
+        RevolvedPiece{*std::move(surface), std::move(projector), Detail::KeepsParameter(profile)});
 }
 
 } // namespace Detail
@@ -341,8 +346,11 @@ Result<ExtrusionSurface> MakeExtrusion(const Curve& profile, const Vec3& directi
         return Fail(ErrorCode::InvalidInput, "MakeExtrusion: the profile curve is empty");
     }
     STEREON_TRY_VOID(Detail::CheckFinite(direction, "the direction", "MakeExtrusion"));
-    if (!(Dot(direction, direction) > 0.0)) {
-        return Fail(ErrorCode::InvalidInput, "MakeExtrusion: the direction must not be zero");
+    const double squared = Dot(direction, direction);
+    if (!(squared > 0.0) || !std::isfinite(squared)) {
+        return Fail(ErrorCode::InvalidInput,
+                    "MakeExtrusion: the direction must not be zero, and its squared length must "
+                    "be a finite, non-zero double");
     }
     return ExtrusionSurface(profile, direction);
 }
@@ -423,7 +431,9 @@ Result<RevolutionSurface> MakeRevolution(const Curve& profile, const Point3& ori
     }
     STEREON_TRY_VOID(Detail::CheckFinite(origin, "the origin", "MakeRevolution"));
     STEREON_TRY_VOID(Detail::CheckFinite(axis, "the axis", "MakeRevolution"));
-    if (!(Dot(axis, axis) > 0.0)) {
+    // Not Dot(axis, axis) > 0: that underflows to 0 for an axis of 1e-200
+    // and overflows for one of 1e200, which UnitVector normalises alike.
+    if (axis == Vec3{}) {
         return Fail(ErrorCode::InvalidInput, "MakeRevolution: the axis must not be zero");
     }
     return RevolutionSurface(profile, origin, axis);

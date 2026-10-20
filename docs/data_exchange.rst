@@ -35,13 +35,20 @@ them back bit for bit:
    archive.Surfaces.push_back(Surface(nurbs));
 
    if (const Result<void> saved = SaveGeometry("part.stn", archive); !saved) {
-       // InvalidInput (cannot write, bad policy) or NotSupported (a user type)
+       // InvalidInput (cannot write, bad policy) or NotSupported (a user type);
+       // an existing part.stn is left as it was
    }
    const Result<LoadedGeometry> loaded = LoadGeometry("part.stn");
    if (loaded) {
        // loaded->Archive.Policy is the stored policy, not this kernel's defaults;
        // loaded->Warnings lists the optional chunks the reader skipped.
    }
+
+``SaveGeometry`` writes the archive to ``part.stn.partial`` beside the
+target, flushes and closes it, checking each step, and only then renames it
+over ``part.stn``. A failure at any step, including one the stream reports
+only when its buffer reaches the disk, is returned as ``InvalidInput``, and
+leaves an existing file untouched.
 
 ``WriteGeometry`` and ``ReadGeometry`` do the same with bytes, and
 ``GeometryToJson`` gives a JSON view of an archive for debugging and diffs,
@@ -83,11 +90,20 @@ same geometry gives the same bytes on every platform (ADR-0007).
      - Each: a tag of four ASCII letters, flags (u32, bit 0 = required), the
        payload length (u64), the CRC-32 of the payload (u32), the payload
 
-The format has four chunks, all required:
+The format has four chunks, all required, each exactly once and in any
+order. Every writer stores all four, empty or not, so the reader refuses
+an archive that lacks one (a file cut after a complete chunk, whose
+checksums are all intact) or repeats one (which would replace what the
+first decoded), with a ``ParseError`` naming the chunk:
 
 - ``POLI``, the rest of the numerical policy: the angular resolution, the
   tolerance ceiling and the frame allowance under which the geometry was
-  accepted;
+  accepted. The resolution must not exceed the tolerance ceiling, as in a
+  ``Context``. The frame allowance must be this kernel's
+  ``FrameAllowance``, the one its factories check frames against when they
+  validate the geometry on write and on read; the writer refuses another
+  with ``InvalidInput``, and the reader with ``NotSupported``, rather than
+  claim to restore a policy it did not apply;
 - ``CRVS``, ``PCRV`` and ``SRFS``: curves in space, curves in a surface's
   parameter plane, and surfaces. A payload is a record count (u64) and the
   records. A record is the type's name (a u16 length and its bytes, such as
@@ -97,7 +113,10 @@ The format has four chunks, all required:
   (:doc:`geometry`, *Serialisation*).
 
 Records are named, not numbered, so adding a built-in type never changes
-what an existing name means.
+what an existing name means. A record of a type that came in a later
+format version than the file states (a ``TrimmedCurve`` in a version-1
+file, a sweep in a version-2 one) is refused with a ``ParseError``: no
+writer of that version produced it.
 
 Format version 2 adds trimmed curves (:doc:`trimmed`) to ``CRVS`` and
 ``PCRV``, named ``TrimmedCurve`` and ``TrimmedCurve2d``. The value of a

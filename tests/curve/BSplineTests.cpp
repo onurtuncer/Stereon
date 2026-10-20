@@ -429,6 +429,32 @@ TEST_CASE("Project handles degenerate and simple cases", "[curve][bspline]")
     REQUIRE_THAT(Project(planar, Point2{1.5, 1.0}), WithinAbs(0.75, Tolerance));
 }
 
+TEST_CASE("a projection tie across segments goes to the smaller parameter",
+          "[curve][bspline][projection][audit]")
+{
+    // Audit 2026-10-20, F9. The polyline (20, 0) -> (5, 0) -> (12, -1) ->
+    // (3, 4) on the knots 0, 1, 2, 3 is at distance 5 from the origin at
+    // t = 1, the vertex (5, 0), and at t = 3, the vertex (3, 4), and farther
+    // everywhere else; every distance and box bound here is exact. The last
+    // segment's pole box comes within 3 of the origin, so the search meets
+    // it first and holds t = 3. The first two segments' boxes are at exactly
+    // 5, the best distance so far, and must still be searched: a tie goes to
+    // the smaller parameter, so pruning a segment whose bound only equals
+    // the best distance would answer 3.
+    const BSplineCurve polyline{1,
+                                {0.0, 0.0, 1.0, 2.0, 3.0, 3.0},
+                                {Point3{20.0, 0.0, 0.0}, Point3{5.0, 0.0, 0.0},
+                                 Point3{12.0, -1.0, 0.0}, Point3{3.0, 4.0, 0.0}},
+                                {}};
+    const Point3 origin{};
+    REQUIRE(DistanceSquared(Eval(polyline, 1.0), origin) == 25.0);
+    REQUIRE(DistanceSquared(Eval(polyline, 3.0), origin) == 25.0);
+    REQUIRE(Project(polyline, origin) == 1.0);
+    REQUIRE(Stereon::CurveProjector(polyline).Project(origin) == 1.0);
+    // Reversed, the tie is between t = 0, the start, and t = 2.
+    REQUIRE(Project(Reversed(polyline), origin) == 0.0);
+}
+
 TEST_CASE("MakeBSplineCurve validates data from outside the kernel", "[curve][bspline][factory]")
 {
     const std::vector<Point3> poles{Point3{}, Point3{1.0, 0.0, 0.0}, Point3{1.0, 1.0, 0.0}};
@@ -455,6 +481,68 @@ TEST_CASE("MakeBSplineCurve validates data from outside the kernel", "[curve][bs
                                              {Point3{}, Point3{}, Point3{}, Point3{}})) == invalid);
     REQUIRE(Stereon::MakeBSplineCurve(2, clamped, poles, {1.0, -1.0, 1.0}).error().GetMessage() ==
             "MakeBSplineCurve: weights must be finite and positive");
+}
+
+TEST_CASE("weights outside the supported range are refused, and a common scale changes nothing",
+          "[curve][bspline][factory][audit]")
+{
+    // Audit 2026-10-20, F6: weights of 1e308 were admitted, and the weighted
+    // pole sum overflowed at t = 0.5 although the curve is the segment from
+    // (10, 0, 0) to (20, 0, 0).
+    constexpr double MinWeight = Stereon::Detail::MinWeight;
+    constexpr double MaxWeight = Stereon::Detail::MaxWeight;
+    const std::vector<double> knots{0.0, 0.0, 1.0, 1.0};
+    const std::vector<Point3> poles{Point3{10.0, 0.0, 0.0}, Point3{20.0, 0.0, 0.0}};
+    const auto codeOf = [](const auto& r) { return r.error().GetCode(); };
+    const auto invalid = ErrorCode::InvalidInput;
+    REQUIRE(codeOf(Stereon::MakeBSplineCurve(1, knots, poles, {1e308, 1e308})) == invalid);
+    REQUIRE(codeOf(Stereon::MakeBSplineCurve(1, knots, poles, {1e-320, 1.0})) == invalid);
+    REQUIRE(codeOf(Stereon::MakeBSplineCurve(1, knots, poles, {2.0 * MaxWeight, 1.0})) == invalid);
+    REQUIRE(codeOf(Stereon::MakeBSplineCurve(1, knots, poles, {1.0, 0.5 * MinWeight})) == invalid);
+    // At the ends of the range the sums are exact.
+    for (const double w : {MinWeight, MaxWeight}) {
+        const auto curve = Stereon::MakeBSplineCurve(1, knots, poles, {w, w});
+        REQUIRE(curve.has_value());
+        REQUIRE(Eval(*curve, 0.5) == Point3{15.0, 0.0, 0.0});
+    }
+
+    // A rational cubic with every weight scaled by one power of two: the
+    // same points and derivatives, bit for bit, and the same projection.
+    const std::vector<double> cubicKnots{0.0, 0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0, 1.0};
+    const std::vector<Point3> cubicPoles{Point3{0.0, 0.0, 0.0}, Point3{1.0, 2.0, 0.0},
+                                         Point3{2.0, -1.0, 1.0}, Point3{3.0, 1.0, 2.0},
+                                         Point3{4.0, 0.0, 0.0}};
+    const std::vector<double> weights{1.0, 0.5, 2.0, 0.75, 1.0};
+    const BSplineCurve reference = *Stereon::MakeBSplineCurve(3, cubicKnots, cubicPoles, weights);
+    const Point3 p{1.0, 2.0, -0.5};
+    for (const int e : {-200, -60, 1, 60, 200}) {
+        INFO("weights scaled by 2^" << e);
+        std::vector<double> scaled;
+        for (const double w : weights) {
+            scaled.push_back(std::ldexp(w, e));
+        }
+        const BSplineCurve curve = *Stereon::MakeBSplineCurve(3, cubicKnots, cubicPoles, scaled);
+        for (const double t : {0.0, 0.1, 0.37, 0.5, 0.81, 1.0}) {
+            REQUIRE(Eval(curve, t) == Eval(reference, t));
+            REQUIRE(Deriv(curve, t, 1) == Deriv(reference, t, 1));
+            REQUIRE(Deriv(curve, t, 2) == Deriv(reference, t, 2));
+        }
+        REQUIRE_THAT(Project(curve, p), WithinAbs(Project(reference, p), Tolerance));
+        const BSplineCurve refined = *Stereon::InsertKnot(curve, 0.3, 2);
+        REQUIRE(Near(Eval(refined, 0.7), Eval(reference, 0.7)));
+    }
+}
+
+TEST_CASE("a knot vector whose width overflows is refused", "[curve][bspline][factory][audit]")
+{
+    // Audit 2026-10-20, F6: knots of -1e308 and 1e308 are each finite, but
+    // the basis functions divide by their difference, which is not.
+    const std::vector<Point3> poles{Point3{}, Point3{1.0, 0.0, 0.0}};
+    REQUIRE(Stereon::MakeBSplineCurve(1, {-1e308, -1e308, 1e308, 1e308}, poles).error().GetCode() ==
+            ErrorCode::InvalidInput);
+    const auto wide = Stereon::MakeBSplineCurve(1, {-1e307, -1e307, 1e307, 1e307}, poles);
+    REQUIRE(wide.has_value());
+    REQUIRE(Near(Eval(*wide, 0.0), Point3{0.5, 0.0, 0.0}));
 }
 
 TEST_CASE("the knot operations validate their parameters", "[curve][bspline][factory]")

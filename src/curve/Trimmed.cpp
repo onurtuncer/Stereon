@@ -10,6 +10,7 @@ module;
 // The contract anchor (docs/toolchain/gcc16-feature-probe.md); see
 // src/curve/Conversion.cpp.
 #include <Stereon/Core/Contracts.hpp>
+#include <Stereon/Core/Try.hpp>
 
 #include <algorithm>
 #include <array>
@@ -107,25 +108,20 @@ std::optional<Curve> InSpace(const Curve& basis)
 
 std::optional<Curve> InSpace(const Curve2d& basis)
 {
+    // A trimmed plane curve lifts as its basis does, trimmed the same way.
+    if (const auto* trimmed = basis.Target<TrimmedCurve2d>()) {
+        std::optional<Curve> inner = InSpace(trimmed->GetBasis());
+        if (!inner) {
+            return std::nullopt;
+        }
+        return Curve(TrimmedCurve(*std::move(inner), trimmed->GetRange(), trimmed->IsReversed()));
+    }
     return VisitBuiltin(basis, []<typename G>(const G& g) -> std::optional<Curve> {
         if constexpr (std::is_same_v<G, Curve2d>) {
             return std::nullopt;
         } else {
             return Curve(Lift(g));
         }
-    });
-}
-
-/// True when the basis's NURBS form keeps its parametrisation: a line, a
-/// parabola or a B-spline (src/curve/Conversion.cppm); a conic's rational
-/// arcs agree with it only at their knots.
-template <std::size_t D>
-bool KeepsParameter(const BasicErasedCurve<D>& basis)
-{
-    return VisitBuiltin(basis, []<typename G>(const G&) {
-        return std::is_same_v<G, BasicBSplineCurve<double, D>> ||
-               std::is_same_v<G, BasicLine<double, D>> ||
-               std::is_same_v<G, BasicParabola<double, D>>;
     });
 }
 
@@ -227,7 +223,7 @@ std::shared_ptr<const TrimmedPiece> MakePieceFor(const BasicErasedCurve<D>& basi
     }
     CurveProjector projector(*piece);
     return std::make_shared<const TrimmedPiece>(
-        TrimmedPiece{*std::move(piece), std::move(projector), KeepsParameter(basis)});
+        TrimmedPiece{*std::move(piece), std::move(projector), Detail::KeepsParameter(basis)});
 }
 
 std::shared_ptr<const TrimmedPiece> MakePiece(const Curve& basis, const Interval range)
@@ -294,6 +290,39 @@ Result<BSplineCurve> ToBSpline(const TrimmedCurve& curve)
                     "kernel knows");
     }
     return curve.IsReversed() ? Reversed(piece->Curve) : piece->Curve;
+}
+
+Result<BSplineCurve> ToBSpline(const TrimmedCurve& curve, const Interval range)
+{
+    const double low = range.GetLower();
+    const double high = range.GetUpper();
+    if (!std::isfinite(low) || !std::isfinite(high) || !(low < high) ||
+        !Contains(curve.GetRange(), range)) {
+        return Fail(ErrorCode::InvalidInput,
+                    "ToBSpline(TrimmedCurve): the range must be finite, non-empty and inside the "
+                    "trimmed curve's range");
+    }
+    if (!curve.IsReversed()) {
+        // The trimmed curve's parameter is its basis's.
+        return ToBSpline(curve.GetBasis(), range);
+    }
+    // Reversed, the curve at t is the basis at Reflect(t), so the part over
+    // [low, high] is the basis's over [Reflect(high), Reflect(low)], run
+    // backwards. Reversed(piece) would put it on that reflected domain; its
+    // knots are reflected into `range` instead, an affine reparametrisation,
+    // with the ends exact and the rest kept in the range where rounding
+    // would leave it.
+    STEREON_TRY(const BSplineCurve piece,
+                ToBSpline(curve.GetBasis(), Interval{curve.Reflect(high), curve.Reflect(low)}));
+    BSplineCurve form = Reversed(piece);
+    const std::size_t n = piece.Knots.size();
+    for (std::size_t i = 0; i < n; ++i) {
+        const double knot = piece.Knots[n - 1 - i];
+        form.Knots[i] = knot == piece.Knots.front()  ? high
+                        : knot == piece.Knots.back() ? low
+                                                     : std::clamp(curve.Reflect(knot), low, high);
+    }
+    return form;
 }
 
 } // namespace Stereon

@@ -126,6 +126,10 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT STEREON_CONTRACT_SEMANTIC STREQU
         COMMAND stereon_contract_probe arena)
     set_tests_properties("core: copying an arena inside its edit callback is reported"
         PROPERTIES PASS_REGULAR_EXPRESSION "PagedArena copy during an edit callback.*contract violation")
+    add_test(NAME "core: taking an arena page inside its edit callback is reported"
+        COMMAND stereon_contract_probe arena-page)
+    set_tests_properties("core: taking an arena page inside its edit callback is reported"
+        PROPERTIES PASS_REGULAR_EXPRESSION "PagedArena GetPage during an edit callback.*contract violation")
     if(STEREON_CHECKED_HANDLES)
         add_test(NAME "core: checked handles report a stale handle"
             COMMAND stereon_contract_probe handle)

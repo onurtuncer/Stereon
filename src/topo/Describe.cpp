@@ -24,11 +24,15 @@ namespace {
 
 using Detail::TopologyTables;
 
-/// The diagnostic name of a curve or surface's type: "Line", "Plane", or
-/// "geometry" for a type that is not built in.
+/// The diagnostic name of a curve or surface's type: "Line", "Plane",
+/// "geometry" for a type that is not built in, or "empty geometry" for an
+/// empty wrapper, which the validator reports and Describe must still name.
 template <typename Wrapper>
 [[nodiscard]] std::string_view TypeNameOf(const Wrapper& wrapper)
 {
+    if (wrapper.IsEmpty()) {
+        return "empty geometry";
+    }
     return VisitBuiltin(
         wrapper, []<typename G>(const G&) -> std::string_view { return GeometryTypeName<G>; });
 }

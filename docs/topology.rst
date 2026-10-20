@@ -134,14 +134,14 @@ consistent, so no caller writes a link field:
 .. code-block:: cpp
 
    ShapeBuilder b;
-   const SurfaceRef plane = b.AddSurface(Surface(Plane{...}));
+   const SurfaceRef plane = *b.AddSurface(Surface(Plane{...}));
    const BuilderFaceId face = *b.AddFace(plane);
    const BuilderLoopId loop = *b.AddLoop(face);
    const BuilderEdgeId edge = *b.AddEdge({.Kind = EdgeCurveKind::Exact,
                                           .Start = v0, .End = v1,
-                                          .Curve = b.AddCurve(Curve(line)),
+                                          .Curve = *b.AddCurve(Curve(line)),
                                           .Range = Interval(0, 1)});
-   *b.AppendCoedge(loop, edge, EdgeUseSense::Same, b.AddPCurve(pcurve));
+   *b.AppendCoedge(loop, edge, EdgeUseSense::Same, *b.AddPCurve(pcurve));
    Result<Shape> shape = Freeze(std::move(b));
 
 ``AppendCoedge`` appends to the loop's cycle and inserts the coedge into its
@@ -151,6 +151,7 @@ primary coedge, which only ``SetPrimaryCoedge`` changes. ``AddLoop``,
 members come back in the order they were added. Every operation checks its
 handles and its request and reports ``InvalidInput`` without changing
 anything: a handle that is not a live entity of this builder, an empty
+curve, pcurve or surface offered to a geometry pool, an empty
 parameter range, a missing pcurve, an edge kind given a curve it does not
 have, a face added to a second shell. Every change advances the builder's
 topology epoch; its ``BuilderToken`` is stable across moves, and a

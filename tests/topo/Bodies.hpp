@@ -80,7 +80,8 @@ struct Body {
     }
     BuilderFaceId AddFace(const Stereon::Surface& surface, const bool reversed = false)
     {
-        return Faces.emplace_back(Must(Builder.AddFace(Builder.AddSurface(surface), reversed)));
+        return Faces.emplace_back(
+            Must(Builder.AddFace(Must(Builder.AddSurface(surface)), reversed)));
     }
     BuilderLoopId AddLoop(const BuilderFaceId face)
     {
@@ -90,7 +91,7 @@ struct Body {
                               const EdgeUseSense sense, const Stereon::Curve2d& pcurve)
     {
         return Coedges.emplace_back(
-            Must(Builder.AppendCoedge(loop, edge, sense, Builder.AddPCurve(pcurve))));
+            Must(Builder.AppendCoedge(loop, edge, sense, Must(Builder.AddPCurve(pcurve)))));
     }
 
     Stereon::Shape Freeze() && { return Must(Stereon::Freeze(std::move(Builder))); }
@@ -140,7 +141,7 @@ inline Body MakePolyhedron(std::span<const Point3> points,
             .Kind = EdgeCurveKind::Exact,
             .Start = body.Vertices[key.first],
             .End = body.Vertices[key.second],
-            .Curve = body.Builder.AddCurve(Stereon::Curve(Stereon::Line{start, end - start})),
+            .Curve = Must(body.Builder.AddCurve(Stereon::Curve(Stereon::Line{start, end - start}))),
             .Range = Interval(0.0, 1.0),
             .Tolerance = 1e-7,
         });
@@ -219,8 +220,8 @@ inline Body MakeCylinder(const double r = 1.5, const double h = 4.0)
     const BuilderVertexId v0 = body.AddVertex({r, 0, 0});
     const BuilderVertexId v1 = body.AddVertex({r, 0, h});
     const auto circle = [&](const double z) {
-        return body.Builder.AddCurve(
-            Stereon::Curve(Stereon::Circle{{0, 0, z}, r, Vec3{1, 0, 0}, Vec3{0, 1, 0}}));
+        return Must(body.Builder.AddCurve(
+            Stereon::Curve(Stereon::Circle{{0, 0, z}, r, Vec3{1, 0, 0}, Vec3{0, 1, 0}})));
     };
     const BuilderEdgeId bottom = body.AddEdge({.Kind = EdgeCurveKind::Exact,
                                                .Start = v0,
@@ -338,7 +339,8 @@ inline Body MakeFan(const std::size_t k)
         {.Kind = EdgeCurveKind::Exact,
          .Start = v0,
          .End = v1,
-         .Curve = body.Builder.AddCurve(Stereon::Curve(Stereon::Line{{0, 0, 0}, Vec3{0, 0, 1}})),
+         .Curve =
+             Must(body.Builder.AddCurve(Stereon::Curve(Stereon::Line{{0, 0, 0}, Vec3{0, 0, 1}}))),
          .Range = Interval(0.0, 1.0),
          .Tolerance = 1e-7});
     const BuilderShellId shell = body.Shells.emplace_back(Must(body.Builder.AddShell()));
@@ -384,7 +386,7 @@ inline Body MakeWire(const std::size_t n)
         body.AddEdge({.Kind = EdgeCurveKind::Spatial,
                       .Start = body.Vertices[i],
                       .End = body.Vertices[i + 1],
-                      .Curve = body.Builder.AddCurve(Stereon::Curve(Stereon::Line{a, b - a})),
+                      .Curve = Must(body.Builder.AddCurve(Stereon::Curve(Stereon::Line{a, b - a}))),
                       .Range = Interval(0.0, 1.0),
                       .Tolerance = 1e-7});
     }
@@ -439,6 +441,19 @@ inline const Stereon::Curve2d& PCurveOfUse(const Stereon::Shape& shape, const St
         std::abort(); // FAIL throws; this keeps the compiler from seeing a null path
     }
     return *pcurve;
+}
+
+/// The object a pointer the test expects to be set points to; the test fails
+/// on null. Dereferencing the call directly lets GCC 16.2 at -O3 see a null
+/// path and warn (-Wnull-dereference).
+template <typename T>
+const T& Deref(const T* pointer)
+{
+    if (pointer == nullptr) {
+        FAIL("unexpected null pointer");
+        std::abort(); // FAIL throws; this keeps the compiler from seeing a null path
+    }
+    return *pointer;
 }
 
 /// Collects a range into a vector.

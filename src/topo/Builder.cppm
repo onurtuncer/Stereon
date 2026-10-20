@@ -106,11 +106,13 @@ public:
 
     // --- Geometry pools ----------------------------------------------------
     // Values are shared by reference: several edges may use one curve, and
-    // several faces one surface, each with its own bounds (ADR-0025).
+    // several faces one surface, each with its own bounds (ADR-0025). An
+    // empty wrapper supports nothing and is refused with InvalidInput, as is
+    // any addition to a builder that was moved from or frozen.
 
-    [[nodiscard]] CurveRef AddCurve(Curve curve);
-    [[nodiscard]] PCurveRef AddPCurve(Curve2d pcurve);
-    [[nodiscard]] SurfaceRef AddSurface(Surface surface);
+    [[nodiscard]] Result<CurveRef> AddCurve(Curve curve);
+    [[nodiscard]] Result<PCurveRef> AddPCurve(Curve2d pcurve);
+    [[nodiscard]] Result<SurfaceRef> AddSurface(Surface surface);
 
     // --- Entities ----------------------------------------------------------
 
@@ -371,6 +373,11 @@ public:
     static void KillCoedge(ShapeBuilder& b, BuilderCoedgeId c);
     /// Points a link at a slot past the end of its table.
     static void SetNextOutOfRange(ShapeBuilder& b, BuilderCoedgeId c);
+    /// Empties a geometry pool's entry, which AddCurve, AddPCurve and
+    /// AddSurface refuse to store.
+    static void EmptyCurve(ShapeBuilder& b, CurveRef curve);
+    static void EmptyPCurve(ShapeBuilder& b, PCurveRef pcurve);
+    static void EmptySurface(ShapeBuilder& b, SurfaceRef surface);
 };
 
 } // namespace Stereon::Testing

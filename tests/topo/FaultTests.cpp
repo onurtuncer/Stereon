@@ -116,7 +116,7 @@ TEST_CASE("handles from another builder are refused", "[topo][fault]")
     REQUIRE_FALSE(wire.Builder.RemoveFace(a.Faces[0]).has_value());
     REQUIRE_FALSE(wire.Builder
                       .AppendCoedge(a.Loops[0], wire.Edges[0], EdgeUseSense::Same,
-                                    wire.Builder.AddPCurve(AnyPCurve()))
+                                    Must(wire.Builder.AddPCurve(AnyPCurve())))
                       .has_value());
 }
 
