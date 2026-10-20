@@ -2,7 +2,13 @@
 # SPDX-License-Identifier: MPL-2.0
 #
 # The nightly run (TODO.md, section 3; ADR-0007): the full test suite on the
-# debug and release presets, and the determinism check across processes.
+# debug, release and observe presets, the fuzz targets at length under the
+# sanitizers, and the determinism check across processes.
+#
+# Observe (ADR-0016): contracts evaluated with the observe semantic, so a
+# violation is reported and the run continues; the fuzz targets count the
+# violations their inputs cause and fail when there is one, which is the
+# observe-mode corpus run the ADR asks for before every release.
 #
 # Determinism (ADR-0007, G1): for the same executable, hardware and Context
 # settings, results are bit-identical for any thread count and scheduler.
@@ -40,7 +46,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        preset: [gcc16-debug, gcc16-release]
+        preset: [gcc16-debug, gcc16-release, gcc16-observe]
     steps:
       - name: Install CMake and Ninja
         run: |
@@ -53,6 +59,39 @@ jobs:
         run: cmake --build --preset ${{ matrix.preset }}
       - name: Test
         run: ctest --preset ${{ matrix.preset }}
+
+  fuzz:
+    # The fuzz targets of tests/fuzz/ at length, under AddressSanitizer and
+    # UBSan: every input must give a KernelError, never a crash or a
+    # contract violation (ADR-0006). Findings are uploaded for reproduction.
+    name: Fuzz targets, 200000 mutations each (gcc16-asan)
+    runs-on: ubuntu-24.04
+    container:
+      image: gcc:16.2
+      options: --cap-add SYS_PTRACE
+    timeout-minutes: 120
+    steps:
+      - name: Install CMake and Ninja
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends cmake ninja-build python3
+      - uses: actions/checkout@v7
+      - name: Configure
+        run: cmake --preset gcc16-asan -DSTEREON_WARNINGS_AS_ERRORS=ON
+      - name: Build the fuzz targets
+        run: cmake --build --preset gcc16-asan --target stereon_fuzz_StnReadFuzz stereon_fuzz_BSplineFuzz
+      - name: Run them
+        run: |
+          mkdir -p findings && cd findings
+          seed=$(date +%Y%m%d)
+          echo "seed $seed (rerun with --seed $seed to reproduce)"
+          ../build/gcc16-asan/tests/stereon_fuzz_StnReadFuzz --runs 200000 --seed "$seed" ../tests/io/data
+          ../build/gcc16-asan/tests/stereon_fuzz_BSplineFuzz --runs 200000 --seed "$seed"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: fuzz-findings
+          path: findings/
 
   determinism:
     name: Determinism, serial and 1, 2, 8, 32 threads (gcc16-release)

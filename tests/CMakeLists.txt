@@ -73,6 +73,33 @@ if(TARGET stereon_viewer_scene)
     catch_discover_tests(stereon_viewer_tests TEST_PREFIX "viewer: " DISCOVERY_MODE PRE_TEST)
 endif()
 
+# Fuzz targets (ADR-0006, ADR-0016): bytes from outside the kernel must give
+# a KernelError, never a crash or a contract violation. Each target exports
+# LLVMFuzzerTestOneInput. GCC has no libFuzzer, so fuzz/StandaloneMain.cpp
+# drives them over their seed corpus and seeded mutations, counting contract
+# violations (so the observe-mode build sees them); a Clang build with
+# STEREON_LIBFUZZER=ON links libFuzzer instead. CTest runs a short smoke
+# pass in every configuration, the sanitizer presets included; the nightly
+# workflow runs them longer.
+option(STEREON_LIBFUZZER "Link the fuzz targets with libFuzzer (Clang) instead of the standalone driver" OFF)
+set(stereon_fuzz_corpus_StnReadFuzz "${CMAKE_CURRENT_SOURCE_DIR}/io/data")
+set(stereon_fuzz_corpus_BSplineFuzz "")
+foreach(name StnReadFuzz BSplineFuzz)
+    if(STEREON_LIBFUZZER)
+        add_executable(stereon_fuzz_${name} fuzz/${name}.cpp)
+        target_compile_options(stereon_fuzz_${name} PRIVATE -fsanitize=fuzzer)
+        target_link_options(stereon_fuzz_${name} PRIVATE -fsanitize=fuzzer)
+    else()
+        add_executable(stereon_fuzz_${name} fuzz/${name}.cpp fuzz/StandaloneMain.cpp)
+        add_test(NAME "fuzz: ${name}, seed corpus and 2000 mutations"
+            COMMAND stereon_fuzz_${name} --runs 2000 --seed 1 ${stereon_fuzz_corpus_${name}})
+        set_tests_properties("fuzz: ${name}, seed corpus and 2000 mutations"
+            PROPERTIES LABELS fuzz PASS_REGULAR_EXPRESSION " 0 contract violations")
+    endif()
+    target_link_libraries(stereon_fuzz_${name} PRIVATE stereon::io stereon_options)
+    stereon_anchor_contracts(stereon_fuzz_${name})
+endforeach()
+
 # The dumps behind the manual's stn-view screenshots (docs/figures/): built
 # and run with the tests so that they keep compiling; the viewer CI job
 # renders them.

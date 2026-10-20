@@ -106,6 +106,42 @@ reports rather than gates on a score; it fails only when the baseline
 fails or a critical fault goes undetected. The pilot's results, and what
 they changed in the tests, are in ``docs/planning/mutation-pilot.md``.
 
+Fuzzing
+-------
+
+Bytes from outside the kernel must give a ``KernelError``, never a crash or a
+contract violation (ADR-0006, ADR-0016). The fuzz targets in ``tests/fuzz/``
+feed such bytes to the kernel's entry points:
+
+- ``StnReadFuzz``: the ``.stn`` reader and its JSON view. An archive the
+  reader accepts must also write and read back.
+- ``BSplineFuzz``: the checked B-spline factory, then evaluation,
+  derivatives, bounds and projection of whatever it accepts, through the
+  erased wrapper whose parameter checks are compiled.
+
+Each target exports ``LLVMFuzzerTestOneInput``, the libFuzzer entry point.
+GCC has no libFuzzer, so ``tests/fuzz/StandaloneMain.cpp`` drives the targets
+instead. It runs a target over its seed corpus, then over mutations of it:
+flipped bits, boundary bytes, dropped, duplicated and inserted slices, and
+overwritten eight-byte words. The mutations come from a seeded generator, so
+a run can be repeated exactly:
+
+.. code-block:: sh
+
+   build/gcc16-asan/tests/stereon_fuzz_StnReadFuzz --runs 200000 --seed 20261020 tests/io/data
+
+The driver counts contract violations and fails when there is one, writing
+the input to ``fuzz-finding-<n>.bin``. That is what makes the ``observe``
+build useful: violations are reported and the run continues, so one run
+finds them all.
+
+CTest runs every target on its corpus and 2000 mutations in every
+configuration. The nightly workflow runs 200 000 mutations each under
+AddressSanitizer and UBSan, with the day's date as the seed. It also runs the
+whole suite in the ``gcc16-observe`` configuration.
+
+A Clang build can link the targets with libFuzzer instead
+(``-DSTEREON_LIBFUZZER=ON``), once Clang builds the kernel.
 Determinism
 -----------
 

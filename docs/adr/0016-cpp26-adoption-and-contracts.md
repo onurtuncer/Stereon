@@ -59,5 +59,5 @@ CI confirms the GCC build with contracts enforced passes all tests; a test confi
 | The enforced GCC build passes all tests | Met: blocking CI on Linux, Windows and macOS |
 | `HotContracts` matches the build | Met: `tests/core/ContractTests.cpp` |
 | Feature-test macros select standard or polyfill | Met: the `Exec` and `Simd` wrappers |
-| Observe-mode corpus run reports no violation | A release gate: `gcc16-observe` exists as a preset and is not yet in a workflow; it runs before the first release |
-| Fuzzing triggers no contract violation | A release gate: needs the fuzzing harness (TODO.md, section 9) |
+| Observe-mode corpus run reports no violation | Nightly: the full suite on `gcc16-observe`, where the fuzz targets count the violations their corpus and mutations cause and fail on one; a clean run is a release gate |
+| Fuzzing triggers no contract violation | Nightly (`tests/fuzz/`), and on every pull request in short; a clean run is a release gate |
