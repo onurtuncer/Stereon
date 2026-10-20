@@ -8,7 +8,7 @@ The Phase 0 exit gate has one open line: ADR-0007 accepted, which waits for a Bo
 
 ## 1. What the prototype is
 
-Union, cut and common of solids bounded by planes and cylinders: boxes, cylinders and the solids they make together. Out of scope: other surfaces, skew or intersecting cylinder pairs (RS-0001 Tier B, which return `NotSupported`), sewing of imported data and blends.
+Union, cut and common of solids bounded by planes and cylinders: boxes, cylinders and the solids they make together. Cylinder pairs with skew or intersecting axes (RS-0001 Tier B) are in scope too, through a dedicated handler (ADR-0010's acceptance). Out of scope: other surfaces, sewing of imported data and blends.
 
 It must pass:
 
@@ -41,6 +41,7 @@ Each milestone merges on its own, with tests. Estimates are working days.
 | M1 | Primitives | `Stereon.Build`: `MakeBox` and `MakeCylinder` solids with `Exact` edges and exact pcurves, valid at the Geometric level; the test bodies' builders reused. | 2 |
 | M2 | Outcome types | `SurfaceSurfaceIntersection` grows into ADR-0029's outcome: kind, parameter domains on both surfaces, contact, side-transition evidence, a proved-empty flag, overlap correspondence, and the snaps applied. | 2 |
 | M3 | Analytic handlers | Plane–plane; plane–cylinder (disjoint, tangent line, two lines, circle, ellipse); parallel cylinder–cylinder (disjoint, tangent, two lines, coincident). Exact decisions, `Exact` curves and pcurves on one parameter. Runs on `corpus/analytic-ssi/` and against OCCT. | 6 |
+| M3b | Cylinder–cylinder, skew and intersecting axes | The quartic as two branches v±(u) on one cylinder, branch points found exactly, pcurves on both cylinders as certified B-splines, `Intersection` edges with cached 3D curves; tangency decided exactly; corpus cases with OCCT agreement. | 9 |
 | M4 | Certificates | An interval bound of each branch's deviation from both surfaces, from the closed forms and core's outward-rounded `Interval`, stored as a `Certified` edge bound. | 3 |
 | M5 | Controlled operators | `SplitEdge(edge, t)` and `SplitFace(face, chain)` per ADR-0027: every incident coedge, pcurve restriction and certificate updated together; transactions as discardable builder copies; history events. ADR-0005's splitting edits join its benchmark. | 6 |
 | M6 | Face clipping and imprinting | Branch against loop in parameter space (line and conic against line and circle pcurves, exactly decided); imprinting with M5. | 6 |
@@ -50,7 +51,7 @@ Each milestone merges on its own, with tests. Estimates are working days.
 | M10 | Parallelism and determinism | Pair finding and surface intersection run in parallel through `ParallelFor`; the thread-count identity check; the 5× speed-up on a many-face fixture (a box with a grid of cylindrical holes); the G2 comparison job. | 4 |
 | M11 | OCCT differential tests | Volumes, areas and face counts against `BRepAlgoAPI` on the same fixtures. | 2 |
 
-About 48 working days in sequence. M0 comes first, and M1 needs none of it. M1, M2 and M5 have no dependencies on each other and can go in parallel; M3 needs M2, M6 needs M3 and M5, M7 needs M6, M8 needs M7, and M9 to M11 follow M8.
+About 57 working days in sequence. M0 comes first, and M1 needs none of it. M1, M2 and M5 have no dependencies on each other and can go in parallel; M3 needs M2, M3b needs M3 and M4, M6 needs M3 and M5, M7 needs M6, M8 needs M7, and M9 to M11 follow M8.
 
 ## 4. Decisions (2026-10-20, Onur Tuncer)
 
