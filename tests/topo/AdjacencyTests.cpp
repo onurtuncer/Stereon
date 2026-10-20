@@ -160,7 +160,11 @@ TEST_CASE("the index follows deletions", "[topo][adjacency][edit]")
     Must(b.RemoveEdge(b.Handle(before.Resolve(fan.Edges[4]))));
     const Shape after = Must(Stereon::Freeze(std::move(b)));
     CheckAgainstReferee(after);
-    REQUIRE_FALSE(after.Resolve(fan.Edges[0]).IsValid());
+    if constexpr (STEREON_CHECKED_HANDLES) {
+        // Only the store tells the original builder's handle apart: the
+        // spine's slot is live at the same generation in the edited shape.
+        REQUIRE_FALSE(after.Resolve(fan.Edges[0]).IsValid());
+    }
     REQUIRE(Must(Stereon::FacesOf(after, after.Resolve(spine))).size() == 3);
     REQUIRE(Collect(Must(Stereon::EdgesOf(after, after.Resolve(origin)))).size() == 4);
     // The tip of the removed face is now an isolated vertex.
