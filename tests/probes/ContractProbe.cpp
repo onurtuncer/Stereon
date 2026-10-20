@@ -15,13 +15,15 @@
 
 #include <array>
 #include <contracts>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <utility>
 
-import Stereon.Surface;
+import Stereon.Topo;
 
 void handle_contract_violation(const std::contracts::contract_violation& violation)
 {
@@ -150,12 +152,73 @@ int ProbeTemplate(const double value)
     return unit.X == unit.X ? 0 : 1;
 }
 
+// The topology accessors (PositionOf, CurveOf, ...) treat a handle that does
+// not name a live entity of the shape as a contract violation in checked
+// builds (ADR-0006: the O(1) tier); the report comes from the topology
+// module's own unit, so it fires at every optimisation level.
+
+#if STEREON_CHECKED_HANDLES
+Stereon::Shape Vertices(const double x, const int count, const int removed)
+{
+    Stereon::ShapeBuilder b;
+    for (int i = 0; i < count; ++i) {
+        const auto v = *b.AddVertex(Stereon::Point3{x + i, 0.0, 0.0}, 1e-7);
+        if (i == removed) {
+            static_cast<void>(*b.RemoveVertex(v));
+        }
+    }
+    return *Stereon::Freeze(std::move(b));
+}
+
+int ProbeShapeForeign(const double value)
+{
+    // A vertex of another shape.
+    const Stereon::Shape a = Vertices(value, 1, -1);
+    const Stereon::Shape b = Vertices(value, 1, -1);
+    const Stereon::VertexId foreign = b.GetSnapshot()->MakeId<Stereon::EntityKind::Vertex>(0);
+    return PositionOf(a, foreign).X == value ? 0 : 1;
+}
+
+int ProbeShapeRange(const double value)
+{
+    // An index past the end of the shape's vertex table (5: two vertices).
+    const Stereon::Shape a = Vertices(value, 2, -1);
+    const auto past = Stereon::VertexId::Make(static_cast<std::uint32_t>(value) + 3U,
+                                              a.GetSnapshot()->GetStore(), 0);
+    return PositionOf(a, past).X == value ? 0 : 1;
+}
+
+int ProbeShapeDead(const double value)
+{
+    // The slot of a vertex the builder removed: a tombstone in the shape.
+    const Stereon::Shape a = Vertices(value, 2, 1);
+    const Stereon::VertexId dead = a.GetSnapshot()->MakeId<Stereon::EntityKind::Vertex>(1);
+    return PositionOf(a, dead).X == value ? 0 : 1;
+}
+#else
+int ProbeShapeForeign(double)
+{
+    return 2;
+}
+int ProbeShapeRange(double)
+{
+    return 2;
+}
+int ProbeShapeDead(double)
+{
+    return 2;
+}
+#endif
+
 struct Probe {
     const char* Name;
     int (*Run)(double);
 };
 
-constexpr std::array<Probe, 8> Probes{{
+constexpr std::array<Probe, 11> Probes{{
+    {"shape-foreign", &ProbeShapeForeign},
+    {"shape-range", &ProbeShapeRange},
+    {"shape-dead", &ProbeShapeDead},
     {"inline", &ProbeInline},
     {"handle", &ProbeHandle},
     {"predicate", &ProbePredicate},

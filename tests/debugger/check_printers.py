@@ -13,7 +13,7 @@ in StereonDebuggerStop(), prints every variable of main() and compares each
 line with the expected summary below. Both debuggers must produce the same
 summaries, so the GDB and LLDB printers cannot drift apart.
 
-Usage: check_printers.py --debugger gdb|lldb --target <exe> --printers <script>
+Usage: check_printers.py --debugger gdb|lldb --target <exe> --printers <script> [--checked-handles]
 
 Exit codes: 0 when every summary matches, 1 on a mismatch, 77 when the
 debugger is not installed (CTest reads 77 as "skipped").
@@ -59,6 +59,15 @@ EXPECTED = {
     "sign": "Negative",
 }
 
+# Handles of a live shape. In a build with checked handles the printers ask
+# the process to describe the entity (ADR-0004, safeguard 4); otherwise they
+# show the plain handle.
+SHAPE_HANDLES_CHECKED = {
+    "wireVertex": "Vertex#1 [(1, 0, 0), tol 1e-07, 1 edges]",
+    "wireEdge": "Edge#0 [Spatial Line, tol 1e-07, faces none]",
+}
+SHAPE_HANDLES_PLAIN = {"wireVertex": "Vertex#1", "wireEdge": "Edge#0"}
+
 
 def native_path(path: Path) -> str:
     """The path as the debugger takes it. Under MSYS2 a native Windows
@@ -70,7 +79,7 @@ def native_path(path: Path) -> str:
     return text
 
 
-def gdb_session(target: Path, printers: Path) -> list[str]:
+def gdb_session(target: Path, printers: Path, names: list[str]) -> list[str]:
     commands = [
         "set pagination off",
         "set print pretty off",
@@ -78,7 +87,7 @@ def gdb_session(target: Path, printers: Path) -> list[str]:
         "break StereonDebuggerStop",
         "run",
         "up",
-    ] + [f'printf "@@{name}@@ "\nprint {name}' for name in EXPECTED]
+    ] + [f'printf "@@{name}@@ "\nprint {name}' for name in names]
     with tempfile.NamedTemporaryFile("w", suffix=".gdb", delete=False) as script:
         script.write("\n".join(commands) + "\n")
     result = subprocess.run(["gdb", "-batch", "-nx", "-x", script.name, str(target)],
@@ -86,7 +95,7 @@ def gdb_session(target: Path, printers: Path) -> list[str]:
     return (result.stdout + result.stderr).splitlines()
 
 
-def lldb_session(target: Path, printers: Path) -> list[str]:
+def lldb_session(target: Path, printers: Path, names: list[str]) -> list[str]:
     commands = [
         f"command script import {native_path(printers)}",
         "breakpoint set --name StereonDebuggerStop",
@@ -95,7 +104,7 @@ def lldb_session(target: Path, printers: Path) -> list[str]:
         "settings set target.disable-aslr false",
         "process launch",
         "up",
-    ] + [f'script print("@@{name}@@ ", end="")\nframe variable {name}' for name in EXPECTED]
+    ] + [f'script print("@@{name}@@ ", end="")\nframe variable {name}' for name in names]
     with tempfile.NamedTemporaryFile("w", suffix=".lldb", delete=False) as script:
         script.write("\n".join(commands) + "\nquit\n")
     result = subprocess.run(["lldb", "--batch", "--no-lldbinit", "-s", script.name, str(target)],
@@ -131,28 +140,31 @@ def main() -> int:
     parser.add_argument("--debugger", choices=["gdb", "lldb"], required=True)
     parser.add_argument("--target", type=Path, required=True)
     parser.add_argument("--printers", type=Path, required=True)
+    parser.add_argument("--checked-handles", action="store_true",
+                        help="the target was built with STEREON_CHECKED_HANDLES")
     args = parser.parse_args()
+    expected = EXPECTED | (SHAPE_HANDLES_CHECKED if args.checked_handles else SHAPE_HANDLES_PLAIN)
 
     if shutil.which(args.debugger) is None:
         print(f"check_printers: {args.debugger} not found; skipping")
         return SKIP_EXIT_CODE
 
     session = gdb_session if args.debugger == "gdb" else lldb_session
-    lines = session(args.target.resolve(), args.printers.resolve())
+    lines = session(args.target.resolve(), args.printers.resolve(), list(expected))
     found = summaries(lines)
 
     failures = 0
-    for name, expected in EXPECTED.items():
+    for name, summary in expected.items():
         actual = found.get(name)
-        if actual is None or not actual.startswith(expected):
-            print(f"{name}: expected {expected!r}, got {actual!r}")
+        if actual is None or not actual.startswith(summary):
+            print(f"{name}: expected {summary!r}, got {actual!r}")
             failures += 1
     if failures:
-        print(f"check_printers ({args.debugger}): {failures} of {len(EXPECTED)} summaries wrong")
+        print(f"check_printers ({args.debugger}): {failures} of {len(expected)} summaries wrong")
         print("--- session output ---")
         print("\n".join(lines[-80:]))
         return 1
-    print(f"check_printers ({args.debugger}): {len(EXPECTED)} summaries match")
+    print(f"check_printers ({args.debugger}): {len(expected)} summaries match")
     return 0
 
 

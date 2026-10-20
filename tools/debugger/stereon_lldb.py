@@ -99,8 +99,43 @@ def handle_text(kind: str, index: int) -> str:
     return f"{kind}#-" if index == INVALID_INDEX else f"{kind}#{index}"
 
 
+def described_in_process(value, kind: str, index: int, store: int) -> str | None:
+    """The Describe() text of the entity, from the live process through
+    stereon_describe_handle() (src/topo/Shape.cpp), or None when there is no
+    live process, the build checks no handles or the snapshot is gone."""
+    target = value.GetTarget()
+    process = target.GetProcess() if target.IsValid() else None
+    if process is None or not process.IsValid():
+        return None
+    expression = (f"(const char*)stereon_describe_handle({ENTITY_KINDS.index(kind)}, "
+                  f"{index}u, {store}u)")
+    frame = value.GetFrame()
+    result = (frame.EvaluateExpression(expression) if frame.IsValid()
+              else target.EvaluateExpression(expression))
+    if not result.IsValid() or result.GetError().Fail():
+        return None
+    address = result.GetValueAsUnsigned()
+    if address == 0:
+        return None
+    error = lldb.SBError()
+    text = process.ReadCStringFromMemory(address, 4096, error)
+    return text if error.Success() else None
+
+
 def id_text(value) -> str:
-    return handle_text(kind_of(plain_name(value)), member(value, "m_Index").GetValueAsUnsigned())
+    """Edge#4 [Exact Line, tol 1e-07, faces 0|1] when a checked build's
+    handle names an entity of a live snapshot (ADR-0004, safeguard 4),
+    otherwise Edge#4."""
+    kind = kind_of(plain_name(value))
+    index = member(value, "m_Index").GetValueAsUnsigned()
+    text = handle_text(kind, index)
+    store_member = member(value, "m_Store")
+    if index == INVALID_INDEX or not store_member.IsValid():
+        return text  # invalid, or a release build: the handle carries no store
+    store = store_member.GetValueAsUnsigned()
+    if store == 0:
+        return text
+    return described_in_process(value, kind, index, store) or text
 
 
 def builder_id_text(value) -> str:

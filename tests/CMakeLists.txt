@@ -146,7 +146,7 @@ endif()
 # contracts, and an "ignore" build (the bench preset) checks nothing.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT STEREON_CONTRACT_SEMANTIC STREQUAL "ignore")
     add_executable(stereon_contract_probe probes/ContractProbe.cpp)
-    target_link_libraries(stereon_contract_probe PRIVATE stereon::surface stereon_options)
+    target_link_libraries(stereon_contract_probe PRIVATE stereon::topo stereon_options)
     stereon_anchor_contracts(stereon_contract_probe)
     if(STEREON_HOT_CONTRACTS)
         # The geometry evaluators check their preconditions with plain branches
@@ -190,6 +190,20 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT STEREON_CONTRACT_SEMANTIC STREQU
             COMMAND stereon_contract_probe handle)
         set_tests_properties("core: checked handles report a stale handle"
             PROPERTIES PASS_REGULAR_EXPRESSION "invalid handle Vertex#0@0.*slot released.*contract violation")
+        # ADR-0004's seeded faults at the topology accessors, which report
+        # rather than return a Result (ADR-0006, the O(1) tier).
+        add_test(NAME "topo: an accessor reports a handle from another shape"
+            COMMAND stereon_contract_probe shape-foreign)
+        set_tests_properties("topo: an accessor reports a handle from another shape"
+            PROPERTIES PASS_REGULAR_EXPRESSION "invalid handle Vertex#0@.*handle from another store.*contract violation")
+        add_test(NAME "topo: an accessor reports an index out of range"
+            COMMAND stereon_contract_probe shape-range)
+        set_tests_properties("topo: an accessor reports an index out of range"
+            PROPERTIES PASS_REGULAR_EXPRESSION "invalid handle Vertex#5@0.*index out of range.*contract violation")
+        add_test(NAME "topo: an accessor reports a removed entity"
+            COMMAND stereon_contract_probe shape-dead)
+        set_tests_properties("topo: an accessor reports a removed entity"
+            PROPERTIES PASS_REGULAR_EXPRESSION "invalid handle Vertex#1@.*slot released.*contract violation")
     endif()
 endif()
 
@@ -202,7 +216,7 @@ endif()
 # failed there, LLDB after a 300 s timeout). A missing debugger makes the
 # check exit 77, which CTest reports as skipped.
 add_executable(stereon_debugger_target debugger/DebuggerTarget.cpp)
-target_link_libraries(stereon_debugger_target PRIVATE stereon::surface stereon_options)
+target_link_libraries(stereon_debugger_target PRIVATE stereon::topo stereon_options)
 stereon_anchor_contracts(stereon_debugger_target)
 find_package(Python3 3.9 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND AND CMAKE_BUILD_TYPE STREQUAL "Debug" AND NOT APPLE AND NOT MSVC)
@@ -211,7 +225,8 @@ if(Python3_Interpreter_FOUND AND CMAKE_BUILD_TYPE STREQUAL "Debug" AND NOT APPLE
             COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/debugger/check_printers.py"
                     --debugger ${debugger}
                     --target $<TARGET_FILE:stereon_debugger_target>
-                    --printers "${PROJECT_SOURCE_DIR}/tools/debugger/stereon_${debugger}.py")
+                    --printers "${PROJECT_SOURCE_DIR}/tools/debugger/stereon_${debugger}.py"
+                    $<$<BOOL:${STEREON_CHECKED_HANDLES}>:--checked-handles>)
         set_tests_properties("tools: ${debugger} pretty-printers" PROPERTIES SKIP_RETURN_CODE 77)
     endforeach()
 endif()

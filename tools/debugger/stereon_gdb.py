@@ -275,8 +275,7 @@ MATCHERS = [
     (re.compile(r"^Stereon::Interval$"), interval_text),
     (re.compile(r"^Stereon::Box2$"), lambda v: box_text(v, ["X", "Y"])),
     (re.compile(r"^Stereon::Box3$"), lambda v: box_text(v, ["X", "Y", "Z"])),
-    (re.compile(r"^Stereon::Id<.*>$"),
-     lambda v: handle_text(kind_of(str(v.type.strip_typedefs())), int(v["m_Index"]))),
+    (re.compile(r"^Stereon::Id<.*>$"), lambda v: id_text(v)),
     (re.compile(r"^Stereon::BuilderId<.*>$"), lambda v: (
         handle_text(kind_of(str(v.type.strip_typedefs())), int(v["m_Index"]))
         + ("" if int(v["m_Index"]) == INVALID_INDEX else f"@{int(v['m_Generation'])}"))),
@@ -290,6 +289,36 @@ MATCHERS = [
     (re.compile(r"^Stereon::Sign$"), lambda v: {-1: "Negative", 0: "Zero", 1: "Positive"}.get(int(v), str(int(v)))),
     (re.compile(r"^Stereon::Expansion<.*>$"), lambda v: expansion_text(v)),
 ]
+
+
+def described_in_process(kind: str, index: int, store: int) -> str | None:
+    """The Describe() text of the entity, from the live process through
+    stereon_describe_handle() (src/topo/Shape.cpp), or None when there is no
+    live process, the build checks no handles or the snapshot is gone."""
+    try:
+        text = gdb.parse_and_eval(
+            f"stereon_describe_handle({ENTITY_KINDS.index(kind)}, {index}u, {store}u)")
+        return None if int(text) == 0 else text.string()
+    except (gdb.error, ValueError):
+        return None
+
+
+def id_text(value) -> str:
+    """Edge#4 [Exact Line, tol 1e-07, faces 0|1] when a checked build's
+    handle names an entity of a live snapshot (ADR-0004, safeguard 4),
+    otherwise Edge#4."""
+    kind = kind_of(str(value.type.strip_typedefs()))
+    index = int(value["m_Index"])
+    text = handle_text(kind, index)
+    if index == INVALID_INDEX:
+        return text
+    try:
+        store = int(value["m_Store"])
+    except gdb.error:
+        return text  # a release build: the handle carries no store
+    if store == 0:
+        return text
+    return described_in_process(kind, index, store) or text
 
 
 def oriented_text(value) -> str:

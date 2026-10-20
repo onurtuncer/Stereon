@@ -16,9 +16,11 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 module Stereon.Topo;
@@ -41,6 +43,56 @@ void ShapeHandleViolation(const EntityKind kind, const std::uint32_t index,
         .SlotGeneration = 0,
         .SlotAlive = alive,
     });
+}
+
+namespace {
+
+/// The registry behind RegisterSnapshot(), built on first use.
+struct SnapshotRegistry {
+    std::mutex Mutex;
+    std::unordered_map<StoreId, const TopologyTables*> Tables;
+    /// The text stereon_describe_handle() returns, valid until its next call.
+    std::string Text;
+};
+
+SnapshotRegistry& Registry()
+{
+    static SnapshotRegistry registry;
+    return registry;
+}
+
+} // namespace
+
+void RegisterSnapshot(const StoreId store, const TopologyTables* tables) noexcept
+{
+    SnapshotRegistry& r = Registry();
+    const std::lock_guard lock(r.Mutex);
+    r.Tables[store] = tables;
+}
+
+void UnregisterSnapshot(const StoreId store) noexcept
+{
+    SnapshotRegistry& r = Registry();
+    const std::lock_guard lock(r.Mutex);
+    r.Tables.erase(store);
+}
+
+/// The registered description of slot `index` of kind `kind` in `store`, or
+/// null when no live snapshot has that store.
+[[nodiscard]] const char* DescribeRegistered(const int kind, const std::uint32_t index,
+                                             const StoreId store)
+{
+    if (kind < 0 || static_cast<std::size_t>(kind) >= EntityKindCount) {
+        return nullptr;
+    }
+    SnapshotRegistry& r = Registry();
+    const std::lock_guard lock(r.Mutex);
+    const auto found = r.Tables.find(store);
+    if (found == r.Tables.end()) {
+        return nullptr;
+    }
+    r.Text = DescribeEntity(*found->second, static_cast<EntityKind>(kind), index);
+    return r.Text.c_str();
 }
 
 } // namespace Detail
@@ -179,3 +231,17 @@ std::string ValidityReport::ToText() const
 }
 
 } // namespace Stereon
+
+/// For a debugger (ADR-0004, safeguard 4): the Describe() text of slot
+/// `index` of the entity kind `kind` (EntityKind's order) in the live
+/// snapshot with store `store`, or null when there is none or the build
+/// checks no handles. The GDB and LLDB pretty-printers call it to show the
+/// entity behind a handle; the text stays valid until the next call.
+extern "C" const char* stereon_describe_handle(const int kind, const unsigned int index,
+                                               const unsigned int store)
+{
+    if constexpr (STEREON_CHECKED_HANDLES) {
+        return Stereon::Detail::DescribeRegistered(kind, index, store);
+    }
+    return nullptr;
+}
