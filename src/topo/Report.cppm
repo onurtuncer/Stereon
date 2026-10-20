@@ -23,9 +23,10 @@ export module Stereon.Topo:Report;
 
 export namespace Stereon {
 
-/// The Structural rules (ADR-0018, ADR-0038's Freeze invariants). The
-/// number is the stable rule ID: S01 is DanglingLink. Geometric (G) and
-/// Solid (L) rules join as those levels arrive.
+/// The rules of the validity checker (ADR-0018). The number is the stable
+/// rule ID: the Structural rules (ADR-0038's Freeze invariants) from 1, S01
+/// being DanglingLink; the Geometric rules from 101, G01 being
+/// VertexContainment. Solid (L) rules join as that level arrives.
 enum class TopologyRule : std::uint8_t {
     /// A link names a slot out of range or a dead one.
     DanglingLink = 1,
@@ -72,10 +73,22 @@ enum class TopologyRule : std::uint8_t {
     /// cache that names no non-empty pool entry, a status without a cache,
     /// or a bound that the status does not allow.
     EdgeCache,
+
+    /// G01 (ADR-0001's containment invariant): an end of an edge lies
+    /// outside the tolerance sphere of its vertex.
+    VertexContainment = 101,
+    /// G02 (ADR-0001's containment invariant): the edge's 3D curve or one of
+    /// its pcurves mapped through its face's surface leaves the edge's
+    /// tolerance tube, or does not cover the edge's range.
+    EdgeContainment,
 };
 
 /// "S01", "S02", ...
+/// The stable ID of a rule: S01 to S17, G01 and G02.
 [[nodiscard]] std::string RuleId(TopologyRule rule);
+
+/// The Geometric rules are numbered from one past this.
+inline constexpr int GeometricRuleBase = 100;
 /// "DanglingLink", ...
 [[nodiscard]] std::string_view RuleName(TopologyRule rule) noexcept;
 

@@ -215,9 +215,11 @@ TEST_CASE("a cache is dropped whenever a pcurve, the primary or a surface of its
     }
     SECTION("a face of the edge takes another surface")
     {
+        // A new surface, equal to the old one: any surface change drops the
+        // cache, and the result stays geometrically valid (Commit checks).
         ShapeBuilder edit = Must(ShapeBuilder::Open(base));
-        const Stereon::SurfaceRef moved = Must(edit.AddSurface(
-            Stereon::Surface(Stereon::Plane{{0, 0, 2}, Vec3{1, 0, 0}, Vec3{0, 1, 0}})));
+        const Stereon::SurfaceRef moved =
+            Must(edit.AddSurface(Stereon::SurfaceOf(base, base.Resolve(hinge.Faces[1]))));
         Must(edit.SetSurface(edit.Handle(base.Resolve(hinge.Faces[1])), moved));
         requireDropped(std::move(edit));
     }
@@ -325,9 +327,12 @@ TEST_CASE("a surface replaced: the face is modified, nothing else", "[topo][oper
 {
     Body box = MakeBox();
     const Shape a = std::move(box).Freeze();
+    // A new surface reference with the face's own plane, so that Commit's
+    // Geometric check passes; tests/topo/GeometricValidityTests.cpp covers a
+    // surface that moves away from its edges.
     ShapeBuilder edit = Must(ShapeBuilder::Open(a));
-    const Stereon::SurfaceRef moved = Must(
-        edit.AddSurface(Stereon::Surface(Stereon::Plane{{0, 0, 7}, Vec3{1, 0, 0}, Vec3{0, 1, 0}})));
+    const Stereon::SurfaceRef moved =
+        Must(edit.AddSurface(Stereon::SurfaceOf(a, a.Resolve(box.Faces[2]))));
     Must(edit.SetSurface(edit.Handle(a.Resolve(box.Faces[2])), moved));
     const OperationResult result = MustCommit(std::move(edit));
     REQUIRE(Fate(result, EntityKind::Face, 2).Relation == HistoryRelation::Modified);

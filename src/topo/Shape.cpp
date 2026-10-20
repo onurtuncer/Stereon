@@ -191,7 +191,9 @@ Result<std::vector<FaceId>> FacesOf(const Shape& shape, const EdgeId edge)
 
 std::string RuleId(const TopologyRule rule)
 {
-    return std::format("S{:02}", static_cast<int>(rule));
+    const int number = static_cast<int>(rule);
+    return number > GeometricRuleBase ? std::format("G{:02}", number - GeometricRuleBase)
+                                      : std::format("S{:02}", number);
 }
 
 std::string_view RuleName(const TopologyRule rule) noexcept
@@ -204,8 +206,18 @@ std::string_view RuleName(const TopologyRule rule) noexcept
         "EdgeEndpoints",   "EmptyLoop",         "ShellDisconnected", "VertexIncidence",
         "EdgeCache",
     };
-    const auto index = static_cast<std::size_t>(rule) - 1;
-    return index < Names.size() ? Names[index] : std::string_view{"UnknownRule"};
+    static constexpr std::array<std::string_view, 2> GeometricNames{
+        "VertexContainment",
+        "EdgeContainment",
+    };
+    const auto number = static_cast<std::size_t>(rule);
+    constexpr auto geometric = static_cast<std::size_t>(GeometricRuleBase);
+    if (number > geometric) {
+        const std::size_t index = number - geometric - 1;
+        return index < GeometricNames.size() ? GeometricNames[index]
+                                             : std::string_view{"UnknownRule"};
+    }
+    return number - 1 < Names.size() ? Names[number - 1] : std::string_view{"UnknownRule"};
 }
 
 std::string ValidityReport::ToText() const

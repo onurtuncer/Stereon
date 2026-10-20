@@ -366,8 +366,12 @@ publishes, it checks that its History accounts for every live entity of
 both sides and names only live ones; a gap is ``InvalidResult``, a kernel
 bug.
 
-The Geometric and Solid levels of ADR-0018 do not exist yet, so
-``Checked`` is ``Structural`` whatever the ``Context`` asks for.
+``Commit`` also runs the Geometric level (below) when the ``Context``'s
+validity level asks for it, which is the default, and always in checked
+builds. A result that fails it is ``InvalidResult``, and ``Checked`` says
+which level ran. ``Freeze`` certifies structure only, so a builder can
+publish geometry that is still being repaired. The Solid level does not
+exist yet; asking for it checks the Geometric level.
 
 The structural validator
 ------------------------
@@ -404,6 +408,31 @@ S16   ``VertexIncidence``     a vertex's list names an edge not at it, twice or 
 S17   ``EdgeCache``           a cached curve on a kind that keeps none or naming no pool entry,
                               a cache status without a cache, a bound its status does not allow
 ====  ======================  ===================================================================
+
+The geometric validator
+-----------------------
+
+The Geometric level checks ADR-0001's containment invariant on a
+structurally valid shape (``ValidateTopology(shape,
+ValidityLevel::Geometric)``):
+
+====  ======================  ===================================================================
+ID    Rule                    Finding
+====  ======================  ===================================================================
+G01   ``VertexContainment``   an end of an edge lies outside its vertex's tolerance sphere
+G02   ``EdgeContainment``     a pcurve on its surface, or the edge's 3D curve, leaves the edge's
+                              tolerance tube; or a trace does not cover the edge's range or a
+                              pcurve leaves its surface's domain
+====  ======================  ===================================================================
+
+Each edge has a reference trace: its own 3D curve, or for a kind without
+one, its primary coedge's pcurve on that coedge's surface (ADR-0009). Every
+other trace is compared with the reference at 17 evenly spread parameters,
+ends included, on the edge's shared parameter. A gap between samples can
+pass, so the check is sampled, not certified. A trace that cannot be
+evaluated over the whole range is a finding, never a contract violation.
+A local tolerance large enough to hold a gap makes the same geometry
+valid, which is what ADR-0001's local tolerances are for.
 
 ``Testing::TopologyFaults`` writes link fields directly, for the
 validator's seeded-fault tests (ADR-0027, section 8); production code has

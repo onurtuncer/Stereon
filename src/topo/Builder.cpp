@@ -897,6 +897,15 @@ ValidityReport ValidateTopology(const Shape& shape)
     return Detail::ValidateStructure(shape.GetSnapshot()->GetTables());
 }
 
+ValidityReport ValidateTopology(const Shape& shape, const ValidityLevel level)
+{
+    ValidityReport report = ValidateTopology(shape);
+    if (level == ValidityLevel::Structural || !report.IsValid()) {
+        return report;
+    }
+    return Detail::ValidateGeometry(shape.GetSnapshot()->GetTables());
+}
+
 // --- Shape-producing operations (ADR-0006) ------------------------------------
 
 namespace {
@@ -1036,6 +1045,19 @@ Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context)
     const Detail::TopologyTables* before = source != nullptr ? &source->GetTables() : nullptr;
     std::vector<ToleranceChange> changes = Coalesced(std::move(calls), result);
     STEREON_TRY_VOID(CheckTolerances(changes, context, *frozen));
+    // The Geometric level when the Context asks for it, and always in
+    // checked builds, which check every level (ADR-0018). A result that
+    // fails it is a kernel bug or a caller's inconsistent geometry; either
+    // way it is not published (ADR-0006).
+    const bool geometric =
+        STEREON_CHECKED_HANDLES || context.GetValidityLevel() != ValidityLevel::Structural;
+    if (geometric) {
+        const ValidityReport report = Detail::ValidateGeometry(result);
+        if (!report.IsValid()) {
+            return Fail(ErrorCode::InvalidResult,
+                        "Commit: the result is not geometrically valid:\n" + report.ToText());
+        }
+    }
     History history = Detail::HistoryBetween(before, result);
     // ADR-0030: missing history fails the operation before publication.
     if (!Detail::HistoryIsComplete(history, before, result)) {
@@ -1047,7 +1069,7 @@ Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context)
     published.ToleranceChanges = std::move(changes);
     published.History = std::move(history);
     published.Shape = *std::move(frozen);
-    published.Checked = ValidityLevel::Structural;
+    published.Checked = geometric ? ValidityLevel::Geometric : ValidityLevel::Structural;
     return published;
 }
 

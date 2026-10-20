@@ -376,6 +376,14 @@ public:
 /// validator: what Freeze() certified, re-derived (ADR-0036).
 [[nodiscard]] ValidityReport ValidateTopology(const Shape& shape);
 
+/// The checks of a level and of every level below it (ADR-0018). Geometric
+/// adds ADR-0001's containment invariant, sampled: each vertex's tolerance
+/// sphere holds its edges' ends (G01), and each edge's tolerance tube holds
+/// its 3D curve and its pcurves mapped through their surfaces (G02). It runs
+/// only on a structurally valid shape. Solid has no rules yet and checks as
+/// Geometric.
+[[nodiscard]] ValidityReport ValidateTopology(const Shape& shape, ValidityLevel level);
+
 /// Publishes the builder's tables as a shape-producing operation does
 /// (ADR-0006, ADR-0026): Freeze() and its structural certification, then the
 /// OperationResult. Its History compares the result with the shape the
@@ -386,9 +394,11 @@ public:
 /// publishing nothing, with InvalidInput when the tables are not
 /// structurally valid or, in checked builds, when the shape the builder was
 /// opened on no longer is; ToleranceExceeded when a tolerance passes the
-/// Context's ceiling or grew under ToleranceGrowth::Fail; and InvalidResult,
-/// a kernel bug, when the History does not account for every entity. The
-/// builder is consumed either way.
+/// Context's ceiling or grew under ToleranceGrowth::Fail; and InvalidResult
+/// when the History does not account for every entity (a kernel bug) or the
+/// result fails the Geometric checks (ADR-0001's containment invariant),
+/// which run when the Context's validity level asks for them and always in
+/// checked builds. The builder is consumed either way.
 [[nodiscard]] Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context);
 
 /// Compact() as a shape-producing operation: the compacted shape with a
@@ -405,6 +415,10 @@ export namespace Stereon::Detail {
 /// bounded walks over the raw tables, checking every link before following
 /// it, so it terminates and reads nothing out of range on any input.
 [[nodiscard]] ValidityReport ValidateStructure(const TopologyTables& tables);
+
+/// The Geometric checks of ADR-0018 on structurally valid tables: ADR-0001's
+/// containment invariant, sampled (G01, G02).
+[[nodiscard]] ValidityReport ValidateGeometry(const TopologyTables& tables);
 
 /// Describe() over raw tables, safe on corrupt ones: it checks every index
 /// and bounds every walk, for the validator's findings.

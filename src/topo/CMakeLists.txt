@@ -21,5 +21,6 @@ stereon_add_library(topo
         Operation.cpp
         Shape.cpp
         Validate.cpp
+        ValidateGeometry.cpp
     DEPENDS
         intersect)
