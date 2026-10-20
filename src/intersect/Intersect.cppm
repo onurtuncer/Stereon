@@ -14,3 +14,4 @@ export import Stereon.Surface;
 
 export import :Capabilities;
 export import :Dispatch;
+export import :Outcome;

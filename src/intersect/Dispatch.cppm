@@ -18,6 +18,7 @@ module;
 export module Stereon.Intersect:Dispatch;
 
 import Stereon.Surface;
+import :Outcome;
 
 /// The type-pair dispatch of ADR-0003 for binary operations: one handler per
 /// ordered pair of built-in types, in a table generated at compile time from
@@ -33,51 +34,19 @@ import Stereon.Surface;
 /// Tier C (ADR-0015): this is scaffolding for line-by-line review. It
 /// contains no intersection algorithm.
 
-export namespace Stereon {
-
-/// How two surfaces meet along a branch (ADR-0010, ADR-0013).
-enum class ContactType : std::uint8_t {
-    Crossing,
-    Tangential,
-    Overlap,
-};
-
-/// A point where two curves meet: its parameter on each and its position.
-struct CurveCurvePoint {
-    double ParameterA = 0.0;
-    double ParameterB = 0.0;
-    Point3 Position;
-};
-
-struct CurveCurveIntersection {
-    std::vector<CurveCurvePoint> Points;
-};
-
-/// One branch of a surface-surface intersection: its 3D curve, its pcurve on
-/// each surface on the shared parameter (ADR-0009), and how the surfaces
-/// meet along it. The certificate of ADR-0009 joins it with the first
-/// analytic handler.
-struct IntersectionBranch {
-    Curve Curve3d;
-    Curve2d OnA;
-    Curve2d OnB;
-    ContactType Contact = ContactType::Crossing;
-};
-
-struct SurfaceSurfaceIntersection {
-    std::vector<IntersectionBranch> Branches;
-};
-
-} // namespace Stereon
-
 export namespace Stereon::Detail {
 
-using CurveHandler = Result<CurveCurveIntersection> (*)(const Curve&, const Curve&, const Context&);
-using SurfaceHandler = Result<SurfaceSurfaceIntersection> (*)(const Surface&, const Surface&,
+/// A handler: the two geometries, each with the parameter domain the
+/// intersection is requested over (ADR-0029 section 1).
+using CurveHandler = Result<CurveCurveIntersection> (*)(const Curve&, const Interval&, const Curve&,
+                                                        const Interval&, const Context&);
+using SurfaceHandler = Result<SurfaceSurfaceIntersection> (*)(const Surface&, const Box2&,
+                                                              const Surface&, const Box2&,
                                                               const Context&);
 
 template <typename A, typename B>
-Result<CurveCurveIntersection> CurveStub(const Curve&, const Curve&, const Context&)
+Result<CurveCurveIntersection> CurveStub(const Curve&, const Interval&, const Curve&,
+                                         const Interval&, const Context&)
 {
     // The names are read at compile time.
     constexpr std::string_view nameA = GeometryTypeName<A>;
@@ -90,7 +59,8 @@ Result<CurveCurveIntersection> CurveStub(const Curve&, const Curve&, const Conte
 }
 
 template <typename A, typename B>
-Result<SurfaceSurfaceIntersection> SurfaceStub(const Surface&, const Surface&, const Context&)
+Result<SurfaceSurfaceIntersection> SurfaceStub(const Surface&, const Box2&, const Surface&,
+                                               const Box2&, const Context&)
 {
     // The names are read at compile time.
     constexpr std::string_view nameA = GeometryTypeName<A>;
@@ -138,39 +108,28 @@ inline constexpr auto SurfacePairTable =
 
 export namespace Stereon {
 
-/// The points where two curves meet. Built-in pairs dispatch through the
-/// pair table; other types are NotSupported.
-[[nodiscard]] inline Result<CurveCurveIntersection> Intersect(const Curve& a, const Curve& b,
-                                                              const Context& ctx)
-{
-    if (a.IsEmpty() || b.IsEmpty()) {
-        return Fail(ErrorCode::InvalidInput, "cannot intersect an empty curve");
-    }
-    const std::size_t i = BuiltinIndexOf(a);
-    const std::size_t j = BuiltinIndexOf(b);
-    if (i == BuiltinCurveTypes::Size || j == BuiltinCurveTypes::Size) {
-        return Fail(ErrorCode::NotSupported,
-                    "curve intersection needs built-in curve types until user types can declare "
-                    "the capabilities of tiers 2 and 3 (ADR-0003)");
-    }
-    return Detail::CurvePairTable[i][j](a, b, ctx);
-}
+/// The intersection of two curves over the requested parameter domains
+/// (ADR-0029): a complete result, or the reason there is none. InvalidInput
+/// for an empty curve or a domain that is empty or NaN-bounded; NotSupported
+/// for a type that is not built in. Built-in pairs dispatch through the pair
+/// table.
+[[nodiscard]] Result<CurveCurveIntersection> Intersect(const Curve& a, const Interval& domainA,
+                                                       const Curve& b, const Interval& domainB,
+                                                       const Context& ctx);
 
-/// The branches along which two surfaces meet; see Intersect(Curve, Curve).
-[[nodiscard]] inline Result<SurfaceSurfaceIntersection>
-Intersect(const Surface& a, const Surface& b, const Context& ctx)
-{
-    if (a.IsEmpty() || b.IsEmpty()) {
-        return Fail(ErrorCode::InvalidInput, "cannot intersect an empty surface");
-    }
-    const std::size_t i = BuiltinIndexOf(a);
-    const std::size_t j = BuiltinIndexOf(b);
-    if (i == BuiltinSurfaceTypes::Size || j == BuiltinSurfaceTypes::Size) {
-        return Fail(ErrorCode::NotSupported,
-                    "surface intersection needs built-in surface types until user types can "
-                    "declare the capabilities of tiers 2 and 3 (ADR-0003)");
-    }
-    return Detail::SurfacePairTable[i][j](a, b, ctx);
-}
+/// Over the curves' whole domains.
+[[nodiscard]] Result<CurveCurveIntersection> Intersect(const Curve& a, const Curve& b,
+                                                       const Context& ctx);
+
+/// The intersection of two surfaces over the requested parameter domains
+/// (ADR-0029); see Intersect(Curve, Interval, Curve, Interval). A face's
+/// boxes bound what a face-level operation asks for.
+[[nodiscard]] Result<SurfaceSurfaceIntersection> Intersect(const Surface& a, const Box2& domainA,
+                                                           const Surface& b, const Box2& domainB,
+                                                           const Context& ctx);
+
+/// Over the surfaces' whole domains.
+[[nodiscard]] Result<SurfaceSurfaceIntersection> Intersect(const Surface& a, const Surface& b,
+                                                           const Context& ctx);
 
 } // namespace Stereon
