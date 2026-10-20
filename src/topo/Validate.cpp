@@ -525,6 +525,10 @@ private:
         if (edge.Range.IsEmpty()) {
             Report(TopologyRule::MissingGeometry, {Name(EntityKind::Edge, e)},
                    "the edge has an empty parameter range");
+        } else if (!edge.Range.IsBounded()) {
+            // Its vertices sit at the range's ends, which must be finite.
+            Report(TopologyRule::MissingGeometry, {Name(EntityKind::Edge, e)},
+                   "the edge's parameter range is not bounded");
         }
         if (edge.Kind == EdgeCurveKind::Degenerate && edge.Start != edge.End) {
             Report(TopologyRule::EdgeEndpoints, {Name(EntityKind::Edge, e)},

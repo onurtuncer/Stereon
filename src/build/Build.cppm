@@ -5,8 +5,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-/// Stereon.Build: primitives, extrude, revolve, sweep, loft and sewing.
-/// Empty until Phase 1.
+/// Stereon.Build: primitives, extrude, revolve, sweep, loft and sewing. So far
+/// the box and cylinder solids of the Boolean prototype (:Primitives).
 export module Stereon.Build;
 
 export import Stereon.Topo;
+export import :Capabilities;
+export import :Primitives;

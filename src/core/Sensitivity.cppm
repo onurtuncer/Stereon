@@ -81,17 +81,17 @@ enum class ParameterQuantity : std::uint8_t {
     return "?";
 }
 
-/// A design parameter: its position in the ParameterSet that made it, and
-/// what it measures. Default-constructed it names nothing.
+class ParameterSet;
+
+/// A design parameter: the ParameterSet that made it, its position there,
+/// and what it measures. Only a set makes one, so an id is never a bare
+/// index: two sets' first lengths are different ids, and neither set
+/// accepts the other's. Default-constructed it names nothing.
 class ParameterId {
 public:
     static constexpr std::uint32_t Invalid = 0xFFFFFFFFu;
 
     constexpr ParameterId() = default;
-    constexpr ParameterId(const std::uint32_t index, const ParameterQuantity quantity) noexcept
-        : m_Index(index)
-        , m_Quantity(quantity)
-    {}
 
     [[nodiscard]] constexpr bool IsValid() const noexcept { return m_Index != Invalid; }
     /// The parameter's position in every vector over its set.
@@ -101,6 +101,17 @@ public:
     constexpr bool operator==(const ParameterId&) const = default;
 
 private:
+    friend class ParameterSet;
+
+    constexpr ParameterId(const std::uint32_t set, const std::uint32_t index,
+                          const ParameterQuantity quantity) noexcept
+        : m_Set(set)
+        , m_Index(index)
+        , m_Quantity(quantity)
+    {}
+
+    /// The identity of the set that made it; 0 for none.
+    std::uint32_t m_Set = 0;
     std::uint32_t m_Index = Invalid;
     ParameterQuantity m_Quantity = ParameterQuantity::Dimensionless;
 };
@@ -111,25 +122,39 @@ private:
 /// Each parameter has a reference scale in its unit: seeds and derivatives
 /// are per reference, so a step of 1 in a seed moves the parameter by its
 /// reference, which keeps millimetre and radian parameters comparable.
+///
+/// Every set has an identity of its own, which the ids it makes carry. It
+/// moves with the set and cannot be copied, so that two sets that grew apart
+/// never share an id; a moved-from set is empty, with a new identity.
 class ParameterSet {
 public:
+    ParameterSet();
+    ParameterSet(const ParameterSet&) = delete;
+    ParameterSet& operator=(const ParameterSet&) = delete;
+    ParameterSet(ParameterSet&& other) noexcept;
+    ParameterSet& operator=(ParameterSet&& other) noexcept;
+    ~ParameterSet() = default;
+
     /// Adds a parameter at the end. InvalidInput for an empty or repeated
     /// name, or a reference that is not finite and positive.
     [[nodiscard]] Result<ParameterId> Add(std::string_view name, ParameterQuantity quantity,
                                           double reference = 1.0);
 
     [[nodiscard]] std::size_t GetSize() const noexcept { return m_Names.size(); }
-    /// True when the id is one this set made.
+    /// True when the id is one this set made: its identity, an index in
+    /// range, and that parameter's quantity.
     [[nodiscard]] bool Contains(ParameterId id) const noexcept;
-    /// The parameter's name, unit and reference scale; the id must be one
-    /// this set made.
-    [[nodiscard]] std::string_view GetName(ParameterId id) const;
-    [[nodiscard]] std::string_view GetUnit(ParameterId id) const;
-    [[nodiscard]] double GetReference(ParameterId id) const;
+    /// The parameter's name, unit and reference scale. For an id this set
+    /// did not make they are empty, empty and NaN: never another
+    /// parameter's.
+    [[nodiscard]] std::string_view GetName(ParameterId id) const noexcept;
+    [[nodiscard]] std::string_view GetUnit(ParameterId id) const noexcept;
+    [[nodiscard]] double GetReference(ParameterId id) const noexcept;
     /// The parameter of that name, invalid if there is none.
     [[nodiscard]] ParameterId Find(std::string_view name) const noexcept;
 
 private:
+    std::uint32_t m_Identity = 0;
     std::vector<std::string> m_Names;
     std::vector<ParameterQuantity> m_Quantities;
     std::vector<double> m_References;
