@@ -281,6 +281,29 @@ TrimmedCurve Transformed(const TrimmedCurve& curve, const Transform& x)
     return {Transformed(curve.GetBasis(), x), curve.GetRange(), curve.IsReversed()};
 }
 
+namespace {
+
+/// The basis's piece, a form over [Reflect(high), Reflect(low)], run
+/// backwards on [low, high]: reversed, with each knot u reflected to
+/// Reflect(u) rather than to the sum of the piece's ends minus u, so that
+/// the ends are exactly `low` and `high` and the rest stays in the range
+/// where rounding would leave it. An affine reparametrisation.
+[[nodiscard]] BSplineCurve Backwards(const TrimmedCurve& curve, const BSplineCurve& piece,
+                                     const double low, const double high)
+{
+    BSplineCurve form = Reversed(piece);
+    const std::size_t n = piece.Knots.size();
+    for (std::size_t i = 0; i < n; ++i) {
+        const double knot = piece.Knots[n - 1 - i];
+        form.Knots[i] = knot == piece.Knots.front()  ? high
+                        : knot == piece.Knots.back() ? low
+                                                     : std::clamp(curve.Reflect(knot), low, high);
+    }
+    return form;
+}
+
+} // namespace
+
 Result<BSplineCurve> ToBSpline(const TrimmedCurve& curve)
 {
     const Detail::TrimmedPiece* piece = curve.GetPiece();
@@ -289,7 +312,11 @@ Result<BSplineCurve> ToBSpline(const TrimmedCurve& curve)
                     "ToBSpline(TrimmedCurve): the basis's type has no exact NURBS form the "
                     "kernel knows");
     }
-    return curve.IsReversed() ? Reversed(piece->Curve) : piece->Curve;
+    if (!curve.IsReversed()) {
+        return piece->Curve;
+    }
+    const Interval range = curve.GetRange();
+    return Backwards(curve, piece->Curve, range.GetLower(), range.GetUpper());
 }
 
 Result<BSplineCurve> ToBSpline(const TrimmedCurve& curve, const Interval range)
@@ -308,21 +335,11 @@ Result<BSplineCurve> ToBSpline(const TrimmedCurve& curve, const Interval range)
     }
     // Reversed, the curve at t is the basis at Reflect(t), so the part over
     // [low, high] is the basis's over [Reflect(high), Reflect(low)], run
-    // backwards. Reversed(piece) would put it on that reflected domain; its
-    // knots are reflected into `range` instead, an affine reparametrisation,
-    // with the ends exact and the rest kept in the range where rounding
-    // would leave it.
+    // backwards. Reversed(piece) alone would put it on that reflected
+    // domain, not on `range`.
     STEREON_TRY(const BSplineCurve piece,
                 ToBSpline(curve.GetBasis(), Interval{curve.Reflect(high), curve.Reflect(low)}));
-    BSplineCurve form = Reversed(piece);
-    const std::size_t n = piece.Knots.size();
-    for (std::size_t i = 0; i < n; ++i) {
-        const double knot = piece.Knots[n - 1 - i];
-        form.Knots[i] = knot == piece.Knots.front()  ? high
-                        : knot == piece.Knots.back() ? low
-                                                     : std::clamp(curve.Reflect(knot), low, high);
-    }
-    return form;
+    return Backwards(curve, piece, low, high);
 }
 
 } // namespace Stereon
