@@ -1,8 +1,10 @@
 # ADR-0027: Controlled Topology Mutation and Euler Operators
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-13
 - **Revised:** 2026-10-17 (topology traversal contract cross-reference)
+- **Revised:** 2026-10-20 (the decisions on acceptance below: transactions as discarded candidate copies, the first operator catalogue, local checks in checked builds)
+- **Accepted:** 2026-10-20 by Onur Tuncer, before the Boolean prototype that builds on it (`docs/planning/boolean-prototype-plan.md`, decision D7). The controlled access of verification 1 holds already (the tables are private to `ShapeBuilder`'s operations and `Testing::TopologyFaults`); the rest is built with the operators.
 - **Owner:** Onur Tuncer
 - **Phase:** 0 (contract); implementation staged with topology work
 - **Related:** ADR-0004, ADR-0005, ADR-0006, ADR-0009, ADR-0011, ADR-0016, ADR-0018, ADR-0025, ADR-0026
@@ -116,6 +118,13 @@ Operator composition and history output shall respect ADR-0007's deterministic o
 Import and repair operations must uphold the same published-state guarantees. A bulk loader may populate private tables through a dedicated controlled construction path with a declared validation and commit contract; it must not expose unchecked tables as valid topology.
 
 Tests may deliberately construct invalid records through isolated fault-injection facilities. Such facilities are unavailable to production modelling paths and exist to test the checker and failure handling.
+
+### 9. Decisions on acceptance (2026-10-20)
+
+- **Transactions are candidate copies.** A compound edit works on a copy of the builder, whose pages are shared with the original until written (ADR-0005), so the copy costs almost nothing. On success the candidate replaces the builder; on failure it is discarded, and the caller's builder is exactly as it was. This is §5's rollback for a reusable builder and its discard for a private candidate at once, with no undo journal. A candidate is never frozen unless its transaction committed.
+- **The first catalogue is the classical Euler set, under Stereon's contracts.** The pairs MVFS/KVFS (make or kill a vertex, face and shell), MEV/KEV (edge and vertex), MEF/KEF (edge and face), KEMR/MEKR (edge and ring, a loop), KFMRH/MFKRH (face and ring with a hole: genus), and SEMV/JEKV (split an edge at a new vertex, and join two edges at one). Each has the contract §1 asks for, written for Stereon's store rather than taken from a textbook: radial rings with any number of uses (§4), explicit primary coedges, pcurves restricted or split on the edge's shared parameter, and certificates kept by restriction or dropped (§2). SEMV restricts the edge's curve, pcurves and certified bounds to the two sub-ranges; a restriction keeps a certified bound valid. Inverse pairs carry the property tests of verification 4 and 10.
+- **Operators that are not Euler operators get the same contracts.** The Booleans also need `MergeVertices`, which follows ADR-0001's representative policy, and the edge and face identifications of their assembly; each is contracted like the Euler operators.
+- **Local checks cover the touched neighbourhood, in checked builds.** After each operator, the loops, radial rings and incidence lists it touched and their immediate neighbours are checked in the debug and sanitizer builds. Release builds rely on the independent validator, which always runs at `Freeze` and `Commit` (§6).
 
 ## Consequences
 

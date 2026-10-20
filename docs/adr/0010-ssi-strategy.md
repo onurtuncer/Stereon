@@ -1,9 +1,11 @@
 # ADR-0010: Surface–surface intersection strategy
 
-- **Status:** Proposed (to be accepted before Phase 2)
+- **Status:** Accepted in part: the analytic table (2026-10-20); the generic path stays Proposed until Phase 2
 - **Date:** 2026-09-28
 - **Revised:** 2026-10-10 (completeness and accuracy as separate obligations; contact types)
 - **Revised:** 2026-10-14 (dimension-aware outcomes and independent side-transition evidence in ADR-0029)
+- **Revised:** 2026-10-20 (the decisions on acceptance below: the analytic table accepted, a cylinder–cylinder handler for skew and intersecting axes, a Tier A corpus for the Boolean prototype)
+- **Accepted (analytic table):** 2026-10-20 by Onur Tuncer, before the Boolean prototype that builds on it (`docs/planning/boolean-prototype-plan.md`, decision D7). The generic path (subdivision, marching, normal-cone pruning) and the Phase 2 verification below stay Proposed until Phase 2.
 - **Owner:** Onur Tuncer
 - **Phase:** 2
 
@@ -32,6 +34,12 @@ Adopt option 4.
 - **Contact and side transition.** Follow [ADR-0029](0029-intersection-and-classification-outcomes.md): distinguish transverse `Crossing` branches, `Tangential` branches and `Overlap` regions/boundaries. Normal bounds help establish regular contact type, but parallel normals alone prove neither coincidence nor a same-side transition. Carry separate SameSide/OppositeSide/Unresolved evidence for the relevant adjacent fragments. Split where contact or transition changes; unresolved domains require refinement or explicit failure before downstream use. Overlap regions carry their extent and parameter correspondence, with boundaries where present.
 - **Output.** A complete intersection may contain isolated points, curves and overlap regions, or be provably empty over the requested domain (ADR-0029). Curves use exact analytic geometry where available, otherwise the ADR-0009 surface/pcurve representation and certified 3D approximation; include parameter domains, certificates and contact/transition evidence. Coincident supports do not imply overlapping trims. Partial components are diagnostic evidence on failure, never a complete successful result.
 - **Inputs.** Both surfaces must be tier 2 (`BoundedGeometry`, ADR-0003) for the generic path; tier 1 surfaces return `KernelError::NotSupported`.
+
+### Decisions on acceptance (2026-10-20)
+
+- **The analytic table is accepted; the generic path is not yet.** The Boolean prototype builds the handlers for plane–plane, plane–cylinder and cylinder–cylinder. Subdivision, marching and normal-cone pruning stay Proposed, and are decided with the Phase 2 work that builds them.
+- **Cylinder–cylinder in full, including skew and intersecting axes.** Parallel axes have closed forms (lines, or a coaxial overlap). Skew and intersecting axes give a quartic with no closed form, which RS-0001 leaves as Tier B; the prototype handles it with a dedicated handler rather than `NotSupported`. On one cylinder, at angle u, the other cylinder's equation is a quadratic in the height v, so the curve is the two branches v±(u) where its discriminant is not negative, meeting at the branch points where it vanishes, found exactly. Each branch's pcurves on both cylinders are B-splines fitted to the closed form and certified by interval evaluation of the residual (decision D3), and the edges are ADR-0009 `Intersection` edges with a cached 3D curve. Tangency between the cylinders (a double root along a branch) is decided exactly and reported as such.
+- **The corpus.** The prototype needs a complete Tier A analytic corpus, plus the cylinder–cylinder cases above, with analytic ground truth and OCCT agreement, before its handlers merge: every plane–plane, plane–cylinder and cylinder–cylinder configuration, disjoint, tangent, crossing and coincident, near-degenerate on either side of each decision, and loosened. The 500-case corpus stays the gate of the generic path.
 
 ## Consequences
 
