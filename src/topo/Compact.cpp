@@ -76,6 +76,18 @@ template <typename Tag>
                : GeometryRef<Tag>{};
 }
 
+/// Marks in `used` the pool entries that the live records' `member` names.
+template <typename Record, typename Ref>
+void MarkUsed(const PagedArena<Record>& records, Ref Record::* member, std::vector<bool>& used)
+{
+    for (const Record& record : records) {
+        const Ref ref = record.*member;
+        if (record.Slot.Alive && ref.IsValid() && ref.GetIndex() < used.size()) {
+            used[ref.GetIndex()] = true;
+        }
+    }
+}
+
 /// Marks the pool entries the live records reference.
 struct UsedGeometry {
     std::vector<bool> Curves;
@@ -87,21 +99,9 @@ struct UsedGeometry {
         , PCurves(t.PCurves.GetSize(), false)
         , Surfaces(t.Surfaces.GetSize(), false)
     {
-        for (const Detail::EdgeRecord& e : t.Edges) {
-            if (e.Slot.Alive && e.Curve.IsValid() && e.Curve.GetIndex() < Curves.size()) {
-                Curves[e.Curve.GetIndex()] = true;
-            }
-        }
-        for (const Detail::CoedgeRecord& c : t.Coedges) {
-            if (c.Slot.Alive && c.PCurve.IsValid() && c.PCurve.GetIndex() < PCurves.size()) {
-                PCurves[c.PCurve.GetIndex()] = true;
-            }
-        }
-        for (const Detail::FaceRecord& f : t.Faces) {
-            if (f.Slot.Alive && f.Surface.IsValid() && f.Surface.GetIndex() < Surfaces.size()) {
-                Surfaces[f.Surface.GetIndex()] = true;
-            }
-        }
+        MarkUsed(t.Edges, &Detail::EdgeRecord::Curve, Curves);
+        MarkUsed(t.Coedges, &Detail::CoedgeRecord::PCurve, PCurves);
+        MarkUsed(t.Faces, &Detail::FaceRecord::Surface, Surfaces);
     }
 };
 
@@ -130,6 +130,67 @@ void CopyUsed(const PagedArena<T>& from, PagedArena<T>& to, const std::vector<bo
     }
 }
 
+/// The old-to-new maps Compact rewrites every link with.
+struct LinkMaps {
+    const std::vector<std::uint32_t>& Vertices;
+    const std::vector<std::uint32_t>& Edges;
+    const std::vector<std::uint32_t>& Coedges;
+    const std::vector<std::uint32_t>& Loops;
+    const std::vector<std::uint32_t>& Faces;
+    const std::vector<std::uint32_t>& Shells;
+    const std::vector<std::uint32_t>& Solids;
+    const std::vector<std::uint32_t>& Curves;
+    const std::vector<std::uint32_t>& PCurves;
+    const std::vector<std::uint32_t>& Surfaces;
+};
+
+/// Copies the live entities of `old` into `fresh` with every link mapped.
+void CopyEntities(const Detail::TopologyTables& old, Detail::TopologyTables& fresh,
+                  const LinkMaps& m)
+{
+    CopyLive(old.Vertices, fresh.Vertices,
+             [&](Detail::VertexRecord& v) { v.FirstEdge = Mapped(v.FirstEdge, m.Edges); });
+    CopyLive(old.Edges, fresh.Edges, [&](Detail::EdgeRecord& e) {
+        e.Start = Mapped(e.Start, m.Vertices);
+        e.End = Mapped(e.End, m.Vertices);
+        e.RadialAnchor = Mapped(e.RadialAnchor, m.Coedges);
+        e.Primary = Mapped(e.Primary, m.Coedges);
+        e.NextAtStart = Mapped(e.NextAtStart, m.Edges);
+        e.NextAtEnd = Mapped(e.NextAtEnd, m.Edges);
+        e.Curve = Mapped(e.Curve, m.Curves);
+    });
+    CopyLive(old.Coedges, fresh.Coedges, [&](Detail::CoedgeRecord& c) {
+        c.Next = Mapped(c.Next, m.Coedges);
+        c.Prev = Mapped(c.Prev, m.Coedges);
+        c.Radial = Mapped(c.Radial, m.Coedges);
+        c.Edge = Mapped(c.Edge, m.Edges);
+        c.Loop = Mapped(c.Loop, m.Loops);
+        c.PCurve = Mapped(c.PCurve, m.PCurves);
+    });
+    CopyLive(old.Loops, fresh.Loops, [&](Detail::LoopRecord& l) {
+        l.Face = Mapped(l.Face, m.Faces);
+        l.Anchor = Mapped(l.Anchor, m.Coedges);
+        l.NextInFace = Mapped(l.NextInFace, m.Loops);
+    });
+    CopyLive(old.Faces, fresh.Faces, [&](Detail::FaceRecord& f) {
+        f.Shell = Mapped(f.Shell, m.Shells);
+        f.FirstLoop = Mapped(f.FirstLoop, m.Loops);
+        f.LastLoop = Mapped(f.LastLoop, m.Loops);
+        f.NextInShell = Mapped(f.NextInShell, m.Faces);
+        f.Surface = Mapped(f.Surface, m.Surfaces);
+    });
+    CopyLive(old.Shells, fresh.Shells, [&](Detail::ShellRecord& s) {
+        s.Solid = Mapped(s.Solid, m.Solids);
+        s.FirstFace = Mapped(s.FirstFace, m.Faces);
+        s.LastFace = Mapped(s.LastFace, m.Faces);
+        s.NextInSolid = Mapped(s.NextInSolid, m.Shells);
+    });
+    CopyLive(old.Solids, fresh.Solids, [&](Detail::SolidRecord& s) {
+        s.FirstShell = Mapped(s.FirstShell, m.Shells);
+        s.LastShell = Mapped(s.LastShell, m.Shells);
+    });
+}
+
 } // namespace
 
 Result<Compacted> Compact(const Shape& shape)
@@ -153,56 +214,16 @@ Result<Compacted> Compact(const Shape& shape)
     remap.m_PCurves = DenseNumbering(used.PCurves);
     remap.m_Surfaces = DenseNumbering(used.Surfaces);
 
-    const auto& vertices = remap.m_Entities[static_cast<std::size_t>(EntityKind::Vertex)];
-    const auto& edges = remap.m_Entities[static_cast<std::size_t>(EntityKind::Edge)];
-    const auto& coedges = remap.m_Entities[static_cast<std::size_t>(EntityKind::Coedge)];
-    const auto& loops = remap.m_Entities[static_cast<std::size_t>(EntityKind::Loop)];
-    const auto& faces = remap.m_Entities[static_cast<std::size_t>(EntityKind::Face)];
-    const auto& shells = remap.m_Entities[static_cast<std::size_t>(EntityKind::Shell)];
-    const auto& solids = remap.m_Entities[static_cast<std::size_t>(EntityKind::Solid)];
-
+    const auto entities = [&](const EntityKind k) -> const std::vector<std::uint32_t>& {
+        return remap.m_Entities[static_cast<std::size_t>(k)];
+    };
     Detail::TopologyTables fresh;
-    CopyLive(old.Vertices, fresh.Vertices,
-             [&](Detail::VertexRecord& v) { v.FirstEdge = Mapped(v.FirstEdge, edges); });
-    CopyLive(old.Edges, fresh.Edges, [&](Detail::EdgeRecord& e) {
-        e.Start = Mapped(e.Start, vertices);
-        e.End = Mapped(e.End, vertices);
-        e.RadialAnchor = Mapped(e.RadialAnchor, coedges);
-        e.Primary = Mapped(e.Primary, coedges);
-        e.NextAtStart = Mapped(e.NextAtStart, edges);
-        e.NextAtEnd = Mapped(e.NextAtEnd, edges);
-        e.Curve = Mapped(e.Curve, remap.m_Curves);
-    });
-    CopyLive(old.Coedges, fresh.Coedges, [&](Detail::CoedgeRecord& c) {
-        c.Next = Mapped(c.Next, coedges);
-        c.Prev = Mapped(c.Prev, coedges);
-        c.Radial = Mapped(c.Radial, coedges);
-        c.Edge = Mapped(c.Edge, edges);
-        c.Loop = Mapped(c.Loop, loops);
-        c.PCurve = Mapped(c.PCurve, remap.m_PCurves);
-    });
-    CopyLive(old.Loops, fresh.Loops, [&](Detail::LoopRecord& l) {
-        l.Face = Mapped(l.Face, faces);
-        l.Anchor = Mapped(l.Anchor, coedges);
-        l.NextInFace = Mapped(l.NextInFace, loops);
-    });
-    CopyLive(old.Faces, fresh.Faces, [&](Detail::FaceRecord& f) {
-        f.Shell = Mapped(f.Shell, shells);
-        f.FirstLoop = Mapped(f.FirstLoop, loops);
-        f.LastLoop = Mapped(f.LastLoop, loops);
-        f.NextInShell = Mapped(f.NextInShell, faces);
-        f.Surface = Mapped(f.Surface, remap.m_Surfaces);
-    });
-    CopyLive(old.Shells, fresh.Shells, [&](Detail::ShellRecord& s) {
-        s.Solid = Mapped(s.Solid, solids);
-        s.FirstFace = Mapped(s.FirstFace, faces);
-        s.LastFace = Mapped(s.LastFace, faces);
-        s.NextInSolid = Mapped(s.NextInSolid, shells);
-    });
-    CopyLive(old.Solids, fresh.Solids, [&](Detail::SolidRecord& s) {
-        s.FirstShell = Mapped(s.FirstShell, shells);
-        s.LastShell = Mapped(s.LastShell, shells);
-    });
+    CopyEntities(old, fresh,
+                 LinkMaps{entities(EntityKind::Vertex), entities(EntityKind::Edge),
+                          entities(EntityKind::Coedge), entities(EntityKind::Loop),
+                          entities(EntityKind::Face), entities(EntityKind::Shell),
+                          entities(EntityKind::Solid), remap.m_Curves, remap.m_PCurves,
+                          remap.m_Surfaces});
     for (std::size_t k = 0; k < EntityKindCount; ++k) {
         fresh.LiveCounts[k] = old.LiveCounts[k];
     }
