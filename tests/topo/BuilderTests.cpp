@@ -241,7 +241,7 @@ TEST_CASE("the first use of a surface-defined edge becomes its primary coedge",
         const Shape shape = std::move(body).Freeze();
         for (const BuilderEdgeId e : body.Edges) {
             REQUIRE_FALSE(Stereon::PrimaryCoedgeOf(shape, shape.Resolve(e)).IsValid());
-            REQUIRE(Stereon::CurveOf(shape, shape.Resolve(e)) != nullptr);
+            REQUIRE(Stereon::CurveOf(shape, shape.Resolve(e)).has_value());
         }
     }
     SECTION("the seam's first use, at u = 2 pi")

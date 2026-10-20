@@ -7,11 +7,15 @@
 
 module;
 
+#include <Stereon/Core/Contracts.hpp>
+
 #include <compare>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <string_view>
+#include <tuple>
 #include <utility>
 
 export module Stereon.Topo:Records;
@@ -290,6 +294,142 @@ struct SolidRecord {
     ShellId LastShell;
 };
 
+/// A pool of geometry for a topology store (ADR-0004, B0.4): the common
+/// built-in types stored by value, each in its own paged arena with no
+/// wrapper around it, and everything else (B-splines, trimmed and swept
+/// geometry, user types) as erased wrappers. A dense table of slots maps
+/// each index the topology refers to onto its arena and its place there,
+/// so that geometry references stay dense indices and every page, slots
+/// included, is shared copy-on-write as the entity tables are (ADR-0005).
+///
+/// A line pcurve takes 32 bytes and its slot 4, against 80 for a Curve2d:
+/// a shape keeps one curve per edge and one pcurve per coedge, so the pools
+/// are most of its memory. Reading an entry gives the wrapper by value
+/// (operator[]), or the stored value itself without one (Visit).
+template <typename Wrapper, typename... Builtins>
+class GeometryPool {
+public:
+    static constexpr std::size_t KindCount = sizeof...(Builtins) + 1;
+
+    /// Appends the geometry and returns its index: in its type's arena when
+    /// it is one of Builtins, among the wrappers otherwise.
+    std::size_t PushBack(Wrapper value)
+    {
+        const std::uint32_t slot = Place<0>(std::move(value));
+        return m_Slots.PushBack(slot);
+    }
+
+    /// Replaces the entry at index. The previous value stays in its arena,
+    /// unreferenced, until Compact() rebuilds the pool.
+    void Set(const std::size_t index, Wrapper value)
+    {
+        m_Slots.Set(index, Place<0>(std::move(value)));
+    }
+
+    /// Calls f with the stored value: the built-in type itself, or the
+    /// wrapper. Every call of f must return the same type.
+    template <typename F>
+    decltype(auto) Visit(const std::size_t index, F&& f) const
+    {
+        const std::uint32_t slot = m_Slots[index];
+        return VisitKind<0>(slot >> LocalBits, slot & LocalMask, f);
+    }
+
+    /// The entry, wrapped: a copy of the built-in value in a wrapper, or of
+    /// the stored wrapper.
+    [[nodiscard]] Wrapper operator[](const std::size_t index) const
+    {
+        return Visit(index, [](const auto& g) { return Wrapper(g); });
+    }
+
+    [[nodiscard]] std::size_t GetSize() const noexcept { return m_Slots.GetSize(); }
+
+    /// The pages of the slots and of every arena.
+    [[nodiscard]] std::size_t GetPageBytes() const noexcept
+    {
+        return m_Slots.GetPageBytes() + m_Other.GetPageBytes() +
+               std::apply(
+                   [](const auto&... a) { return (std::size_t{0} + ... + a.GetPageBytes()); },
+                   m_Typed);
+    }
+    [[nodiscard]] std::size_t GetPageCount() const noexcept
+    {
+        return m_Slots.GetPageCount() + m_Other.GetPageCount() +
+               std::apply(
+                   [](const auto&... a) { return (std::size_t{0} + ... + a.GetPageCount()); },
+                   m_Typed);
+    }
+
+    /// Pages two pools share, over the slots and every arena.
+    friend std::size_t SharedPageCount(const GeometryPool& a, const GeometryPool& b) noexcept
+    {
+        return SharedPageCount(a.m_Slots, b.m_Slots) + SharedPageCount(a.m_Other, b.m_Other) +
+               SharedTyped(a, b, std::index_sequence_for<Builtins...>{});
+    }
+
+private:
+    /// A slot: the arena (Builtins in order, then the wrappers) in the top
+    /// bits, the place in it below.
+    static constexpr std::uint32_t LocalBits = 28;
+    static constexpr std::uint32_t LocalMask = (1U << LocalBits) - 1U;
+    static_assert(KindCount <= (1U << (32U - LocalBits)));
+
+    template <std::size_t I>
+    using BuiltinAt = std::tuple_element_t<I, std::tuple<Builtins...>>;
+
+    [[nodiscard]] static std::uint32_t Encode(const std::size_t kind, const std::size_t local)
+    {
+        // An arena of 2^28 geometries of one type is past any body the
+        // 32-bit entity indices can describe.
+        STEREON_ASSERT(local <= LocalMask);
+        return (static_cast<std::uint32_t>(kind) << LocalBits) | static_cast<std::uint32_t>(local);
+    }
+
+    template <std::size_t I>
+    [[nodiscard]] std::uint32_t Place(Wrapper&& value)
+    {
+        if constexpr (I == sizeof...(Builtins)) {
+            return Encode(I, m_Other.PushBack(std::move(value)));
+        } else {
+            if (const BuiltinAt<I>* builtin = value.template Target<BuiltinAt<I>>()) {
+                return Encode(I, std::get<I>(m_Typed).PushBack(*builtin));
+            }
+            return Place<I + 1>(std::move(value));
+        }
+    }
+
+    template <std::size_t I, typename F>
+    decltype(auto) VisitKind(const std::uint32_t kind, const std::uint32_t local, F& f) const
+    {
+        if constexpr (I == sizeof...(Builtins)) {
+            return std::invoke(f, m_Other[local]);
+        } else {
+            if (kind == I) {
+                return std::invoke(f, std::get<I>(m_Typed)[local]);
+            }
+            return VisitKind<I + 1>(kind, local, f);
+        }
+    }
+
+    template <std::size_t... I>
+    [[nodiscard]] static std::size_t SharedTyped(const GeometryPool& a, const GeometryPool& b,
+                                                 std::index_sequence<I...>) noexcept
+    {
+        return (std::size_t{0} + ... +
+                SharedPageCount(std::get<I>(a.m_Typed), std::get<I>(b.m_Typed)));
+    }
+
+    PagedArena<std::uint32_t> m_Slots;
+    std::tuple<PagedArena<Builtins>...> m_Typed;
+    PagedArena<Wrapper> m_Other;
+};
+
+/// The pools of a topology store. The built-in types stored by value are
+/// the ones bodies are made of in bulk: the conics and analytic surfaces.
+using CurvePool = GeometryPool<Curve, Line, Circle, Ellipse>;
+using PCurvePool = GeometryPool<Curve2d, Line2d, Circle2d, Ellipse2d>;
+using SurfacePool = GeometryPool<Surface, Plane, Cylinder, Cone, Sphere, Torus>;
+
 /// The record type of each entity kind.
 template <EntityKind K>
 struct RecordFor;
@@ -337,9 +477,9 @@ struct TopologyTables {
     PagedArena<SolidRecord> Solids;
     std::uint32_t LiveCounts[EntityKindCount] = {};
 
-    PagedArena<Curve> Curves;
-    PagedArena<Curve2d> PCurves;
-    PagedArena<Surface> Surfaces;
+    CurvePool Curves;
+    PCurvePool PCurves;
+    SurfacePool Surfaces;
 
     template <EntityKind K>
     [[nodiscard]] const PagedArena<Record<K>>& Table() const noexcept

@@ -78,13 +78,13 @@ using DumpResult = Result<std::optional<std::filesystem::path>>;
 [[nodiscard]] std::vector<Point3> EdgePoints(const Shape& shape, const EdgeId edge)
 {
     const Interval range = RangeOf(shape, edge);
-    if (const Curve* curve = CurveOf(shape, edge)) {
+    if (const std::optional<Curve> curve = CurveOf(shape, edge)) {
         const Result<Polyline> line = SampleCurve(*curve, DisplayTolerance{}, range);
         return line ? line->Points : std::vector<Point3>{};
     }
     const CoedgeId coedge = PrimaryCoedgeOf(shape, edge);
-    const Curve2d* pcurve = coedge.IsValid() ? PCurveOf(shape, coedge) : nullptr;
-    if (pcurve == nullptr) {
+    const std::optional<Curve2d> pcurve = coedge.IsValid() ? PCurveOf(shape, coedge) : std::nullopt;
+    if (!pcurve) {
         return {};
     }
     const Result<Polyline2d> line = SampleCurve(*pcurve, DisplayTolerance{}, range);
@@ -134,7 +134,7 @@ using DumpResult = Result<std::optional<std::filesystem::path>>;
 {
     STEREON_TRY(auto edges, AllEntities<EntityKind::Edge>(shape));
     for (const EdgeId e : edges) {
-        if (const Curve* curve = CurveOf(shape, e)) {
+        if (const std::optional<Curve> curve = CurveOf(shape, e)) {
             archive.Curves.push_back(EdgeGeometry(*curve, RangeOf(shape, e)));
         }
         std::vector<Point3> points = EdgePoints(shape, e);
@@ -180,8 +180,8 @@ void Extend(Point2& lower, Point2& upper, const std::vector<Point2>& points)
             continue;
         }
         for (const CoedgeId c : *coedges) {
-            const Curve2d* pcurve = PCurveOf(shape, c);
-            if (pcurve == nullptr) {
+            const std::optional<Curve2d> pcurve = PCurveOf(shape, c);
+            if (!pcurve) {
                 continue;
             }
             const Result<Polyline2d> line =
@@ -219,7 +219,7 @@ void Extend(Point2& lower, Point2& upper, const std::vector<Point2>& points)
     }
     STEREON_TRY(const auto coedges, AllEntities<EntityKind::Coedge>(shape));
     for (const CoedgeId c : coedges) {
-        if (const Curve2d* pcurve = PCurveOf(shape, c)) {
+        if (const std::optional<Curve2d> pcurve = PCurveOf(shape, c)) {
             archive.Curves2d.push_back(*pcurve);
         }
     }

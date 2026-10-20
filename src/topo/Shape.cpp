@@ -16,6 +16,7 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -43,6 +44,38 @@ void ShapeHandleViolation(const EntityKind kind, const std::uint32_t index,
 }
 
 } // namespace Detail
+
+std::optional<Curve> CurveOf(const Shape& shape, const EdgeId e)
+{
+    const CurveRef curve = Detail::RecordOf(shape, e).Curve;
+    if (!curve.IsValid()) {
+        return std::nullopt;
+    }
+    return shape.GetSnapshot()->GetTables().Curves[curve.GetIndex()];
+}
+
+std::optional<Curve> CachedCurveOf(const Shape& shape, const EdgeId e)
+{
+    const CurveRef curve = Detail::RecordOf(shape, e).Cached;
+    if (!curve.IsValid()) {
+        return std::nullopt;
+    }
+    return shape.GetSnapshot()->GetTables().Curves[curve.GetIndex()];
+}
+
+std::optional<Curve2d> PCurveOf(const Shape& shape, const CoedgeId c)
+{
+    const PCurveRef pcurve = Detail::RecordOf(shape, c).PCurve;
+    if (!pcurve.IsValid()) {
+        return std::nullopt;
+    }
+    return shape.GetSnapshot()->GetTables().PCurves[pcurve.GetIndex()];
+}
+
+Surface SurfaceOf(const Shape& shape, const FaceId f)
+{
+    return shape.GetSnapshot()->GetTables().Surfaces[Detail::RecordOf(shape, f).Surface.GetIndex()];
+}
 
 Result<LoopRange> LoopsOf(const Shape& shape, const FaceId face)
 {

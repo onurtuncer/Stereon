@@ -18,6 +18,7 @@
 #include <cstdlib>
 #include <map>
 #include <numbers>
+#include <optional>
 #include <ranges>
 #include <span>
 #include <string>

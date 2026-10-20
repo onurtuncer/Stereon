@@ -13,6 +13,7 @@ module;
 #include <cstdint>
 #include <iterator>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <string>
 #include <string_view>
@@ -571,20 +572,18 @@ template <EntityKind K>
     return primary.IsValid() ? shape.GetSnapshot()->MakeId<EntityKind::Coedge>(primary.GetIndex())
                              : CoedgeId{};
 }
-/// The edge's own 3D curve, or null for a kind without one.
-[[nodiscard]] inline const Curve* CurveOf(const Shape& shape, const EdgeId e)
-{
-    const CurveRef curve = Detail::RecordOf(shape, e).Curve;
-    return curve.IsValid() ? &shape.GetSnapshot()->GetTables().Curves[curve.GetIndex()] : nullptr;
-}
+// The geometry accessors return the geometry by value, wrapped: the pools
+// keep the built-in types without a wrapper (GeometryPool), so there is no
+// stored Curve to point to. A wrapper of a built-in type is a copy of a few
+// dozen bytes; one of a B-spline shares its payload. Defined in Shape.cpp,
+// as they instantiate the geometry modules' templates.
+
+/// The edge's own 3D curve, or nothing for a kind without one.
+[[nodiscard]] std::optional<Curve> CurveOf(const Shape& shape, EdgeId e);
 /// The cached 3D curve of an Intersection or Trim edge (ADR-0009, section
 /// 5): S(c(t)) of its primary side, approximated on the edge's parameter; a
-/// cache, never the truth. Null when the edge keeps none.
-[[nodiscard]] inline const Curve* CachedCurveOf(const Shape& shape, const EdgeId e)
-{
-    const CurveRef curve = Detail::RecordOf(shape, e).Cached;
-    return curve.IsValid() ? &shape.GetSnapshot()->GetTables().Curves[curve.GetIndex()] : nullptr;
-}
+/// cache, never the truth. Nothing when the edge keeps none.
+[[nodiscard]] std::optional<Curve> CachedCurveOf(const Shape& shape, EdgeId e);
 /// What is known of the cached curve's deviation (CacheCertificate).
 [[nodiscard]] inline CacheCertificate CacheCertificateOf(const Shape& shape, const EdgeId e)
 {
@@ -613,24 +612,18 @@ template <EntityKind K>
 {
     return Detail::RecordOf(shape, c).Sense;
 }
-/// The coedge's curve on its face's surface, on the edge's parameter; null
-/// where the edge kind has none (a Spatial edge's optional projection).
-[[nodiscard]] inline const Curve2d* PCurveOf(const Shape& shape, const CoedgeId c)
-{
-    const PCurveRef pcurve = Detail::RecordOf(shape, c).PCurve;
-    return pcurve.IsValid() ? &shape.GetSnapshot()->GetTables().PCurves[pcurve.GetIndex()]
-                            : nullptr;
-}
+/// The coedge's curve on its face's surface, on the edge's parameter;
+/// nothing where the edge kind has none (a Spatial edge's optional
+/// projection).
+[[nodiscard]] std::optional<Curve2d> PCurveOf(const Shape& shape, CoedgeId c);
 
 [[nodiscard]] inline FaceId FaceOf(const Shape& shape, const LoopId l)
 {
     return shape.GetSnapshot()->MakeId<EntityKind::Face>(
         Detail::RecordOf(shape, l).Face.GetIndex());
 }
-[[nodiscard]] inline const Surface& SurfaceOf(const Shape& shape, const FaceId f)
-{
-    return shape.GetSnapshot()->GetTables().Surfaces[Detail::RecordOf(shape, f).Surface.GetIndex()];
-}
+/// The face's surface.
+[[nodiscard]] Surface SurfaceOf(const Shape& shape, FaceId f);
 /// True when the face's normal is its surface's reversed.
 [[nodiscard]] inline bool IsReversed(const Shape& shape, const FaceId f)
 {
