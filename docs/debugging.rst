@@ -158,9 +158,37 @@ line, so two versions of a file diff line by line:
 
 It is built with the kernel unless ``STEREON_BUILD_TOOLS=OFF``.
 
-.. todo::
+The debug viewer
+----------------
 
-   Describe the debug viewer (``stn-view``) when it exists.
+``stn-view`` shows the dumps of a directory and reloads them when they
+change, so a dump made in a running test or a debugger session appears
+within a second. Configure with ``-DSTEREON_BUILD_VIEWER=ON``. It needs
+GLFW, OpenGL 3.3 and Dear ImGui, which only the viewer may link
+(ADR-0035):
+
+.. code-block:: sh
+
+   STEREON_DUMP_DIR=/tmp/dumps ctest -R my-test
+   stn-view /tmp/dumps        # or no argument: $STEREON_DUMP_DIR
+
+- Left drag orbits, right or middle drag pans, the wheel zooms, and ``F``
+  fits everything in view.
+- The **Objects** window lists every dump with its visibility, colour, name
+  and source location. Selecting a row highlights the object. A file that
+  does not load is listed with its error.
+- The **Layers** window shows or hides geometry, control polygons and nets,
+  knots, parameter ticks, direction arrows, debug primitives and labels.
+- The **Parameter space** window draws plane curves and pcurves.
+
+Curves and surfaces are sampled for display (``Stereon.Mesh:Sampling``).
+Unbounded geometry, such as a line, a plane or a cylinder, is drawn around
+the bounded content of the scene. The scene behind the window,
+``viewer/scene``, is headless and tested without a window, so other
+frontends can reuse it.
+
+``stn-view --screenshot file.png`` renders the window once, writes it as a
+PNG and exits.
 
 Related design decisions
 ------------------------
