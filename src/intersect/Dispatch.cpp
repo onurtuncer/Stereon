@@ -12,13 +12,13 @@ module;
 
 #include <cmath>
 #include <cstddef>
+#include <expected>
 #include <string>
 #include <string_view>
 
 module Stereon.Intersect;
 
 import :Dispatch;
-import :Outcome;
 
 namespace Stereon {
 

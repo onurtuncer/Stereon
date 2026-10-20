@@ -10,7 +10,6 @@ stereon_add_library(intersect
         Capabilities.cppm
         Dispatch.cppm
         Intersect.cppm
-        Outcome.cppm
     SOURCES
         Dispatch.cpp
     DEPENDS
