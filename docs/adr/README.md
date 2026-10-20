@@ -28,7 +28,7 @@ Open questions that have to be researched before they can be decided live in [`d
 | [0010](0010-ssi-strategy.md) | Surface–surface intersection strategy | 2 | Accepted in part |
 | [0011](0011-history-and-naming.md) | Operation history and topological naming | 3 | Proposed |
 | [0012](0012-native-file-format.md) | Native file format and versioning | 3 | Proposed |
-| [0013](0013-boolean-classification.md) | Boolean classification | 4 | Proposed |
+| [0013](0013-boolean-classification.md) | Boolean classification | 4 | Accepted |
 | [0014](0014-mesh-generation-boundary.md) | Mesh generation boundary | 5 | Proposed |
 | [0015](0015-ai-contribution-policy.md) | AI contribution policy | 0 | Accepted |
 | [0016](0016-cpp26-adoption-and-contracts.md) | C++26 adoption and contracts policy | 0 | Accepted |
