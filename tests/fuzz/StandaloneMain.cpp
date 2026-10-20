@@ -230,13 +230,13 @@ int main(const int argc, char** argv)
     const std::vector<Bytes> corpus = ReadCorpus(options.Paths);
     std::size_t findings = 0;
     for (const Bytes& input : corpus) {
-        findings += Run(input) ? 1 : 0;
+        findings += static_cast<std::size_t>(Run(input));
     }
     Generator g(options.Seed);
     for (std::size_t run = 0; run < options.Runs; ++run) {
         Bytes input = corpus.empty() ? Bytes(g.Below(256)) : corpus[g.Below(corpus.size())];
         Mutate(input, g, options.MaxSize);
-        findings += Run(input) ? 1 : 0;
+        findings += static_cast<std::size_t>(Run(input));
     }
     std::printf("fuzz: %zu corpus inputs and %zu mutations, %zu contract violations\n",
                 corpus.size(), options.Runs, findings);
