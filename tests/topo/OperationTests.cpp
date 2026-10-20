@@ -270,7 +270,7 @@ TEST_CASE("a new body is all Generated, checked and published together", "[topo]
     Body hinge = MakeHinge();
     const OperationResult result = MustCommit(std::move(hinge.Builder));
     REQUIRE(Stereon::ValidateTopology(result.Shape).IsValid());
-    REQUIRE(result.Checked == Stereon::ValidityLevel::Structural);
+    REQUIRE(result.Checked == Stereon::ValidityLevel::Geometric); // the default level
     REQUIRE(result.ToleranceChanges.empty());
     REQUIRE(result.Warnings.empty());
     REQUIRE(result.History.Count(HistoryRelation::Unchanged) == 0);

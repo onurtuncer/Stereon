@@ -77,7 +77,8 @@ TEST_CASE("every test body holds its geometry within its tolerances", "[topo][va
     bodies.emplace_back("sheet with a hole", MakeHoleSheet().Freeze());
     bodies.emplace_back("fan", MakeFan(3).Freeze());
     bodies.emplace_back("wire", MakeWire(3).Freeze());
-    bodies.emplace_back("degenerate face", MakeDegenerateFace().Freeze());
+    // Not MakeDegenerateFace: a structural fixture whose pcurves are
+    // placeholders (Bodies.hpp), so its geometry is not meant to hold.
     bodies.emplace_back("hinge", MakeHinge().Freeze());
     for (const auto& [name, shape] : bodies) {
         INFO(name);
