@@ -5,7 +5,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-#include "ResidentMemory.hpp"
+#include "Memory.hpp"
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -15,6 +15,10 @@
 #include <unistd.h>
 
 #include <fstream>
+#endif
+
+#if defined(__GLIBC__)
+#include <malloc.h>
 #endif
 
 namespace StereonBench {
@@ -38,6 +42,25 @@ std::size_t ResidentBytes()
     return 0;
 #else
     return 0;
+#endif
+}
+
+std::size_t HeapBytes()
+{
+#if defined(__GLIBC__)
+    const struct mallinfo2 info = mallinfo2();
+    return info.uordblks + info.hblkhd;
+#else
+    return ResidentBytes();
+#endif
+}
+
+bool HeapBytesAreExact()
+{
+#if defined(__GLIBC__)
+    return true;
+#else
+    return false;
 #endif
 }
 

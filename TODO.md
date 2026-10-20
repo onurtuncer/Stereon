@@ -126,7 +126,7 @@ Per [ADR-0035](docs/adr/0035-debug-viewer.md): objects reach the viewer as `.stn
 - [ ] OCCT differential-testing harness: build OCCT in CI, compare volumes/areas/face counts on shared cases. OCCT 8.0.1 is built and cached in CI (`tools/occt/build_occt.sh`, `.github/workflows/occt.yml`) and `stereon_occt_tests` compares the built-in curves and surfaces with OCCT's; volumes, areas and face counts follow the topology prototype
 - [x] `corpus/` layout, metadata format and `corpus/LICENSES.md` ([`corpus/README.md`](corpus/README.md)); cases validated by `tools/check_corpus.py` in CI
 - [ ] Regression-case workflow: failing case → minimal file + journal → never deleted
-- [ ] Benchmark harness against OCCT per `docs/benchmarks.md`: pinned OCCT build in CI, Phase 0 benchmarks B0.1–B0.5 running and reported. The pinned build exists; the OCCT side of B0.2–B0.5 is next
+- [ ] Benchmark harness against OCCT per `docs/benchmarks.md`: pinned OCCT build in CI, Phase 0 benchmarks B0.1–B0.5 running and reported. The pinned build exists; B0.3–B0.5 run in the OCCT reference workflow with both libraries interleaved and are reported (`bench/reports/phase0-topology-reference-2026-10-20.md`); B0.2 is next
 - [x] Seeded-fault test suite for handles and topology: stale handles, handles from another shape, off-by-one indices, wrong entity kinds, corrupted adjacency (ADR-0004 verification). `tests/topo/FaultTests.cpp`: every fault is refused through a `Result` naming the entity or by `Freeze` with its rule; the accessors' contract violations are not testable in-process
 
 ## 10. ADR prototypes (weeks 6–12)
@@ -134,10 +134,10 @@ Per [ADR-0035](docs/adr/0035-debug-viewer.md): objects reach the viewer as `.stn
 - [ ] **ADR-0001:** union/cut/common on boxes and cylinders, including loosened-tolerance variants (1e-4 to 1e-2 mm); confirm tolerance growth is logged
 - [ ] **RS-0001:** build the ADR-0001 prototype's intersections to the contract in [RS-0001](docs/research/RS-0001-tolerant-analytic-intersection.md) and run it on `corpus/analytic-ssi/`. Before that, as a side track that needs no kernel code: the literature survey, the sweep generator, the exact reference oracle and the go/no-go decision (due week 12)
 - [ ] **ADR-0003:** dispatch benchmark, 10⁸ evaluations on line, circle, cubic B-spline
-- [ ] **ADR-0004:** ~10⁶-face body: adjacency speed and memory vs OCCT. `bench/TopoBench.cpp` and `bench/occt/OcctTopoBench.cpp` (B0.3–B0.5) run the sheet at 10⁴ and 10⁶ faces; the reference run and its report are next
+- [x] **ADR-0004:** ~10⁶-face body: adjacency speed and memory vs OCCT. Reference run of 2026-10-20 (`bench/reports/phase0-topology-reference-2026-10-20.md`): faces of every edge 20× and edges of every vertex 60× faster than OCCT; live heap per face 1255 B against OCCT's 1601 B, 78% (`docs/performance.rst`, *Topology*)
 - [ ] **ADR-0004:** debuggability check: seeded-fault suite caught 100% in debug builds; pretty-printers working in GDB and LLDB. The suite is in place (§9); the pretty-printers still resolve no handle to its entity
 - [ ] **ADR-0004 decision point:** keep index handles throughout, or switch to the hybrid (pointers in `ShapeBuilder`, indices in `Shape`). Decide before Phase 1 algorithms start
-- [ ] **ADR-0005:** 100 local edits on a 10⁶-face body (surface replacement, face deletion, face and edge splitting; no `Compact()`): memory and copy cost; page-size sweep 128/256/1 024. `bench/TopoBench.cpp` runs the sequence with replacement and deletion; splitting waits for the Euler operators, and the page-size sweep is in `bench/ArenaBench.cpp`
+- [ ] **ADR-0005:** 100 local edits on a 10⁶-face body (surface replacement, face deletion, face and edge splitting; no `Compact()`): memory and copy cost; page-size sweep 128/256/1 024. `bench/TopoBench.cpp` runs the sequence with replacement and deletion: 0.003% and 0.014% of the pages copied by one edit, the body and its copy after 100 edits 1.008× the body (reference run of 2026-10-20). Splitting waits for the Euler operators, and the page-size sweep is in `bench/ArenaBench.cpp`
 - [ ] **ADR-0001:** merge-policy test with vertex chains at 0.8× tolerance; result deterministic and radius-bounded
 - [ ] **ADR-0018:** seeded-fault corpus for the checker; zero false positives on valid bodies
 - [x] **ADR-0007:** determinism check across thread counts on the prototype operations. The operations that run in parallel so far, `ProjectAll` onto B-spline curves and surfaces through `Detail::ParallelFor`, give the same bits serially and at 1, 2, 8 and 32 threads (`[determinism]`, CTest and the nightly run); booleans, tessellation and import join as they are parallelised
@@ -161,7 +161,7 @@ All of the following must pass in CI before Phase 1 starts:
 
 - [x] Predicates pass the adversarial suite with zero inconsistent results. 20 000 cases per predicate in every CI run; the 10⁶ run is `stereon_robust_tests "[exhaustive]"` (§5)
 - [ ] Type-erased `Curve` with `VisitBuiltin` within 10% of direct calls; pure virtual fallback within 2×. `VisitBuiltin` meets it; the fallback does not for a line (2.6×, 1.03× for a circle; `bench/GeometryBench.cpp`, §6)
-- [ ] ADR-0004 prototype: adjacency ≥ 5× faster than OCCT, memory per face < 50% of OCCT
+- [ ] ADR-0004 prototype: adjacency ≥ 5× faster than OCCT, memory per face < 50% of OCCT. Adjacency is met (20× and 60×); memory is not, at 78% of OCCT, mostly the geometry pools by estimate (`docs/performance.rst`, *Topology*)
 - [ ] Release-build handles are 4 bytes; seeded-fault suite caught 100% in debug builds
 - [x] Pretty-printers pass their scripted GDB and LLDB tests. Linux Debug CI (`tests/debugger/check_printers.py`); skipped on macOS and MSVC, whose debug information the debuggers cannot read. Rerun when handles resolve to entities (§8)
 - [ ] Handle design decided (index throughout, or hybrid) and recorded in ADR-0004

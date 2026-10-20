@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 #
 # The reference run of the OpenCASCADE comparison benchmarks (docs/benchmarks.md,
-# B1.1–B1.6): stereon_occt_bench on the reference image, the gcc:16.2 container
+# B0.3–B0.5 and B1.1–B1.6): stereon_occt_bench on the reference image, the gcc:16.2 container
 # on a GitHub-hosted ubuntu-24.04 runner, against the pinned OCCT that occt.yml
 # builds and caches. Development runs happen on whatever machine is to hand;
 # the report a release gate cites comes from here (docs/performance.rst, Method).
@@ -14,6 +14,9 @@
 # Hosted runners differ from run to run (the CPU model is recorded) and share
 # their host, so every row is the median of interleaved repetitions and the
 # report shows the spread. A row whose spread is large is re-run, not quoted.
+# The topology rows build a 10^6-face sheet per repetition, seconds to
+# minutes each, so they run in a second invocation with fewer repetitions;
+# the report reads both files as one run.
 # Not a required check: timings cannot gate a merge on a shared runner.
 
 name: OCCT reference run
@@ -25,6 +28,8 @@ on:
   pull_request:
     paths:
       - bench/occt/**
+      - bench/TopoBench.cpp
+      - bench/Memory.*
       - bench/CMakeLists.txt
       - tools/bench_report.py
       - tools/occt/build_occt.sh
@@ -32,11 +37,19 @@ on:
   workflow_dispatch:
     inputs:
       repetitions:
-        description: Repetitions per benchmark (the median is reported)
+        description: Repetitions per curve and surface benchmark (the median is reported)
         type: number
         default: 15
       filter:
-        description: Google Benchmark regex of the benchmarks to run (empty for all)
+        description: Google Benchmark regex of the curve and surface benchmarks (empty for B1)
+        type: string
+        default: ""
+      topology_repetitions:
+        description: Repetitions per topology benchmark (B0.3–B0.5, ADR-0004, ADR-0005)
+        type: number
+        default: 5
+      topology_filter:
+        description: Google Benchmark regex of the topology benchmarks (empty for all of them)
         type: string
         default: ""
 
@@ -53,10 +66,10 @@ env:
 
 jobs:
   reference:
-    name: OCCT reference run (B1.1–B1.6)
+    name: OCCT reference run (B0.3–B0.5, B1.1–B1.6)
     runs-on: ubuntu-24.04
     container: gcc:16.2
-    timeout-minutes: 150
+    timeout-minutes: 240
     steps:
       - name: Install CMake, Ninja and Python
         run: |
@@ -105,9 +118,10 @@ jobs:
             echo "memory=$(awk '/MemTotal/ {printf "%.1f GB", $2 / 1048576}' /proc/meminfo)"
             echo "kernel=$(uname -sr)"
             echo "compiler=$(g++ --version | head -1)"
+            echo "memory_measure=live heap, glibc mallinfo2 (bench/Memory.hpp)"
             sed 's/^/occt_/' "$OCCT_PREFIX/stereon-occt-build.txt"
           } | tee build/reference/machine.txt
-      - name: Run the benchmarks
+      - name: Run the curve and surface benchmarks (B1)
         env:
           REPETITIONS: ${{ inputs.repetitions || 15 }}
           FILTER: ${{ inputs.filter }}
@@ -116,11 +130,23 @@ jobs:
           --benchmark_repetitions="$REPETITIONS"
           --benchmark_enable_random_interleaving=true
           --benchmark_display_aggregates_only=true
-          --benchmark_filter="${FILTER:-.}"
+          --benchmark_filter="${FILTER:-^B1\.}"
           --benchmark_out=build/reference/results.json --benchmark_out_format=json
+      - name: Run the topology benchmarks (B0.3–B0.5, ADR-0004, ADR-0005)
+        env:
+          REPETITIONS: ${{ inputs.topology_repetitions || 5 }}
+          FILTER: ${{ inputs.topology_filter }}
+        run: >
+          ./build/bench/bench/stereon_occt_bench
+          --benchmark_repetitions="$REPETITIONS"
+          --benchmark_enable_random_interleaving=true
+          --benchmark_display_aggregates_only=true
+          --benchmark_filter="${FILTER:-^(B0\.|ADR-)}"
+          --benchmark_out=build/reference/results-topology.json --benchmark_out_format=json
       - name: Render the report
         run: |
-          python3 tools/bench_report.py build/reference/results.json \
+          python3 tools/bench_report.py build/reference/results.json build/reference/results-topology.json \
+            --title "Benchmark reference run — topology (B0.3–B0.5), curves and surfaces (B1.1–B1.6)" \
             --machine build/reference/machine.txt --out build/reference/report.md
           cat build/reference/report.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload the run

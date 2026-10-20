@@ -553,6 +553,89 @@ which on a curve whose knot spans range from :math:`10^{-6}` to
 length. It now stops on the length residual, and all 400 are within
 :math:`10^{-9}`. That is the point of hunting both ways.
 
+Topology (B0.3–B0.5)
+--------------------
+
+The topology benchmarks build a sheet of :math:`n \times n` planar quads
+with each library: Stereon's tables and TopoDS faces sharing their edges and
+vertices. At 10⁶ faces this is the body that the gates of ADR-0004 and
+ADR-0005 name. The figures below come from the reference run of 2026-10-20
+(``bench/reports/phase0-topology-reference-2026-10-20.md``, run
+39399395722, commit ``2c24d79``): the same container and runner as above,
+5 interleaved repetitions for the topology rows, and both libraries in one
+process.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 10 46 14 14 16
+
+   * - ID
+     - Measure, 10⁶ faces
+     - Stereon
+     - OCCT
+     - Gate
+   * - B0.3
+     - Faces of every edge (OCCT builds its ancestor map)
+     - 123 ms
+     - 2516 ms
+     - ≥ 5×: **20×, met**
+   * - B0.3
+     - Edges of every vertex
+     - 53 ms
+     - 3158 ms
+     - ≥ 5×: **60×, met**
+   * - B0.4
+     - Live heap per face
+     - 1255 B
+     - 1601 B
+     - < 50%: **78%, not met**
+   * - B0.5
+     - Pages copied by one surface replacement
+     - 0.003 %
+     - —
+     - < 1%: **met**
+   * - B0.5
+     - Pages copied by one face deletion
+     - 0.014 %
+     - —
+     - < 1%: **met**
+   * - ADR-0005
+     - Body and its copy after 100 edits, over the body
+     - 1.008×
+     - —
+     - < 1.2×: **met**
+
+The adjacency queries read Stereon's maintained incidence: ``EdgesOf``
+walks the vertex's list, and ``FacesOf`` walks the radial ring. OCCT has to
+build ``TopExp::MapShapesAndAncestors`` before it can answer the first
+query, and the comparison counts that build, as a query session must pay
+for it. A local edit opened on the frozen body copies a few pages of the
+tables and nothing else. The whole edit adds about 1 MB of heap against
+OCCT's 48 MB for ``BRepTools_ReShape``.
+
+**Memory per face is not met.** The measure is the live heap the sheet
+holds with the shape alive, read through glibc's ``mallinfo2`` the same way
+for both libraries (``bench/Memory.hpp``), geometry included on both sides.
+Stereon's live heap per face is almost exactly its table pages per face
+(1253 B), so the cost is in the tables and geometry pools, not in anything
+else.
+
+A breakdown by table is not measured yet. An estimate from the record and
+wrapper sizes suggests that the pools dominate. Each of the 4 coedges of a
+face has its own pcurve and each of its 2 edges its own curve, and every
+one is an erased ``Curve`` or ``Curve2d`` with a 128-byte inline buffer.
+That is roughly two thirds of the total, against roughly a third for the
+topology records themselves. Ways to close the gap include smaller erased
+wrappers for small geometry, sharing pcurves between uses, and per-field
+storage (ADR-0004). Choosing between them needs that breakdown first.
+
+Splitting a face or an edge is part of ADR-0005's edit sequence and is not
+measured. It needs the Euler operators of ADR-0027, which do not exist yet.
+
+The run predates the cached-curve fields of the edge record (a cache
+reference, a status byte and a bound). Those make every edge record
+larger, so B0.4 should be measured again once they are in.
+
 Reproducing the numbers
 -----------------------
 

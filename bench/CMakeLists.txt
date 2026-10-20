@@ -11,17 +11,19 @@ file(GLOB sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
 add_executable(stereon_bench ${sources})
 target_link_libraries(stereon_bench
     PRIVATE stereon::core stereon::robust stereon::surface stereon::topo stereon_options
-            benchmark::benchmark_main)
+            benchmark::benchmark_main $<$<PLATFORM_ID:Windows>:psapi>)
 stereon_anchor_contracts(stereon_bench)
 
-# The Phase 1 comparison with OpenCASCADE (docs/benchmarks.md, B1.1-B1.5):
-# built when OCCT is available, -DSTEREON_WITH_OCCT=ON with OCCT's install
-# directory in CMAKE_PREFIX_PATH (tools/occt/build_occt.sh). OCCT is
-# LGPL-2.1 and linked into this executable only (ADR-0008).
+# The comparison with OpenCASCADE (docs/benchmarks.md, B0.3-B0.5 and
+# B1.1-B1.6): built when OCCT is available, -DSTEREON_WITH_OCCT=ON with
+# OCCT's install directory in CMAKE_PREFIX_PATH (tools/occt/build_occt.sh).
+# The topology rows' Stereon twins are TopoBench.cpp, compiled in here too so
+# that both libraries run interleaved in one process. OCCT is LGPL-2.1 and
+# linked into this executable only (ADR-0008).
 if(STEREON_WITH_OCCT)
     find_package(OpenCASCADE CONFIG REQUIRED)
-    add_executable(stereon_occt_bench occt/OcctBench.cpp occt/OcctTopoBench.cpp
-                                      occt/ResidentMemory.cpp)
+    add_executable(stereon_occt_bench occt/OcctBench.cpp occt/OcctTopoBench.cpp TopoBench.cpp
+                                      Memory.cpp)
     target_link_libraries(stereon_occt_bench
         PRIVATE stereon::surface stereon::topo stereon_options benchmark::benchmark_main
                 TKernel TKMath TKG3d TKGeomBase TKGeomAlgo TKBRep TKTopAlgo
