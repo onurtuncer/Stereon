@@ -154,6 +154,6 @@ template <Scalar T>
 }
 
 static_assert(SurfaceGeometry<Sphere>);
-static_assert(Detail::FitsInline<Sphere, GeometryBufferSize>);
+static_assert(Detail::FitsInline<Sphere, SurfaceBufferSize>);
 
 } // namespace Stereon

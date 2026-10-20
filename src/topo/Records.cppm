@@ -165,22 +165,51 @@ export namespace Stereon::Detail {
 
 /// Liveness and generation of a slot. Kept in the record rather than in a
 /// separate bitset so that it shares pages with the record (ADR-0005): a
-/// deletion copies one page, not a whole-table bitset.
-struct SlotState {
-    std::uint32_t Generation = 0;
-    bool Alive = false;
+/// deletion copies one page, not a whole-table bitset. One word, the top bit
+/// the liveness and the rest the generation, so that it costs every record
+/// four bytes rather than eight with padding (B0.4).
+class SlotState {
+public:
+    /// A live slot of generation 0.
+    [[nodiscard]] static constexpr SlotState Live() noexcept { return SlotState(AliveBit); }
+
+    [[nodiscard]] constexpr bool IsAlive() const noexcept { return (m_Word & AliveBit) != 0; }
+    /// Bumped by every deletion: a handle made before it no longer matches.
+    [[nodiscard]] constexpr std::uint32_t GetGeneration() const noexcept
+    {
+        return m_Word & ~AliveBit;
+    }
+    /// Deletes the slot: not alive, and a new generation.
+    constexpr void Kill() noexcept { m_Word = (GetGeneration() + 1U) & ~AliveBit; }
+
+    constexpr SlotState() = default;
+    constexpr bool operator==(const SlotState&) const = default;
+
+private:
+    static constexpr std::uint32_t AliveBit = 0x8000'0000U;
+
+    constexpr explicit SlotState(const std::uint32_t word) noexcept
+        : m_Word(word)
+    {}
+
+    std::uint32_t m_Word = 0;
 };
+
+// The records' fields are ordered so that the four-byte slot and handles
+// come first and fill the space before the first eight-byte field, and the
+// one-byte fields share the tail: the sizes in a release build are checked
+// in tests/topo/RecordLayoutTests.cpp (B0.4).
 
 struct VertexRecord {
     SlotState Slot;
-    Point3 Position;
-    double Tolerance = 0.0;
     /// The maintained vertex-incidence index (ADR-0004, ADR-0036): the first
     /// of the edges that start or end here, in ascending index order; each
     /// edge continues the list through NextAtStart or NextAtEnd, whichever
     /// of its ends this vertex is. A closed edge is listed once, through
     /// NextAtStart.
     EdgeId FirstEdge;
+    Point3 Position;
+    double Tolerance = 0.0;
 };
 
 /// ADR-0004's edge record, following ADR-0009: kind, tolerance, the primary
@@ -203,17 +232,15 @@ struct EdgeRecord {
     /// whenever a pcurve, the primary coedge or a surface of the edge
     /// changes (ADR-0004), and rebuilt from them deterministically.
     CurveRef Cached;
+    EdgeCurveKind Kind = EdgeCurveKind::Spatial;
+    /// What is known of the cache's deviation; None exactly when there is no
+    /// cache. Plain scalars, as the snapshot's certificate is kept.
+    CacheCertificate CacheStatus = CacheCertificate::None;
     Interval Range;
     double Tolerance = 0.0;
     /// The proven bound on the cache's deviation, for a Certified cache;
     /// infinite otherwise.
     double CacheBound = std::numeric_limits<double>::infinity();
-    EdgeCurveKind Kind = EdgeCurveKind::Spatial;
-    /// What is known of the cache's deviation; None exactly when there is no
-    /// cache. Plain scalars, as the snapshot's certificate is kept. The
-    /// fields are ordered so that the cache adds as little as it can to
-    /// every edge record (B0.4).
-    CacheCertificate CacheStatus = CacheCertificate::None;
 };
 
 /// A use of an edge in a loop: the loop cycle (Next, Prev), the radial ring
@@ -345,7 +372,7 @@ struct TopologyTables {
     [[nodiscard]] bool IsLive(const std::uint32_t index) const noexcept
     {
         const auto& table = Table<K>();
-        return index < table.GetSize() && table[index].Slot.Alive;
+        return index < table.GetSize() && table[index].Slot.IsAlive();
     }
 
     template <EntityKind K>

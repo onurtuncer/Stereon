@@ -99,7 +99,7 @@ TEST_CASE("ellipses satisfy the curve concepts and fit in the buffer", "[curve][
     STATIC_REQUIRE(Stereon::CurveGeometry<Ellipse>);
     STATIC_REQUIRE(Stereon::Curve2dGeometry<Ellipse2d>);
     STATIC_REQUIRE(Stereon::PeriodicCurve<Ellipse>);
-    STATIC_REQUIRE(Stereon::Detail::FitsInline<Ellipse, Stereon::GeometryBufferSize>);
+    STATIC_REQUIRE(Stereon::Detail::FitsInline<Ellipse, Stereon::CurveBufferSize>);
 }
 
 TEST_CASE("an ellipse is evaluated at its vertices", "[curve][ellipse]")

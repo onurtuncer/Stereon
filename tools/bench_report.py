@@ -107,7 +107,18 @@ COUNTER_ONLY_PREFIXES = ("B0.4/",)
 REPORTED_COUNTERS = {
     "heap_bytes_per_face", "heap_bytes_per_edge", "bytes_per_face", "bytes_per_edge",
     "copied_fraction", "pages_copied", "pages", "memory_ratio", "heap_delta_bytes",
+    "vertex_bytes_per_face", "edge_bytes_per_face", "coedge_bytes_per_face",
+    "loop_face_bytes_per_face", "curve_bytes_per_face", "pcurve_bytes_per_face",
+    "surface_bytes_per_face",
 }
+
+# B0.4's breakdown: the table pages per face of each table, at the gate size.
+BREAKDOWN = (
+    ("vertex_bytes_per_face", "vertices"), ("edge_bytes_per_face", "edges"),
+    ("coedge_bytes_per_face", "coedges"), ("loop_face_bytes_per_face", "loops and faces"),
+    ("curve_bytes_per_face", "curve pool"), ("pcurve_bytes_per_face", "pcurve pool"),
+    ("surface_bytes_per_face", "surface pool"),
+)
 
 # The memory and copying gates, one line each: (row key, counter, label, target,
 # check). A check is ("ratio below", r): Stereon's value over OCCT's below r;
@@ -120,6 +131,13 @@ for _size, _faces in TOPOLOGY_SIZES.items():
          "< 50% of OCCT" if _gate else "report", ("ratio below", 0.5) if _gate else None),
         (f"B0.4/HeapPerFace/{_size}", "heap_bytes_per_edge", f"Live heap per edge, {_faces}", "report", None),
         (f"B0.4/BytesPerFace/{_size}", "bytes_per_face", f"Table pages per face, {_faces}", "report", None),
+    ]
+    if _gate:
+        COUNTER_ROWS += [
+            (f"B0.4/BytesPerFace/{_size}", counter, f"  of which {label}", "report", None)
+            for counter, label in BREAKDOWN
+        ]
+    COUNTER_ROWS += [
         (f"B0.5/ReplaceSurface/{_size}", "copied_fraction", f"Pages copied, one surface replaced, {_faces}",
          "< 1% of body" if _gate else "report", ("below", 0.01) if _gate else None),
         (f"B0.5/ReplaceSurface/{_size}", "heap_delta_bytes", f"Heap added, one surface replaced, {_faces}",

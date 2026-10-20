@@ -253,9 +253,22 @@ void BytesPerFace(benchmark::State& state)
     for (auto _ : state) {
         benchmark::DoNotOptimize(TableBytes(shape));
     }
-    state.counters["faces"] = static_cast<double>(n * n);
-    state.counters["bytes_per_face"] =
-        static_cast<double>(TableBytes(shape)) / static_cast<double>(n * n);
+    const double faces = static_cast<double>(n * n);
+    state.counters["faces"] = faces;
+    state.counters["bytes_per_face"] = static_cast<double>(TableBytes(shape)) / faces;
+    // Where those bytes are, per face: each table's pages, so that the gap to
+    // B0.4's target is attributed rather than estimated.
+    const Stereon::Detail::TopologyTables& t = shape.GetSnapshot()->GetTables();
+    state.counters["vertex_bytes_per_face"] =
+        static_cast<double>(t.Vertices.GetPageBytes()) / faces;
+    state.counters["edge_bytes_per_face"] = static_cast<double>(t.Edges.GetPageBytes()) / faces;
+    state.counters["coedge_bytes_per_face"] = static_cast<double>(t.Coedges.GetPageBytes()) / faces;
+    state.counters["loop_face_bytes_per_face"] =
+        static_cast<double>(t.Loops.GetPageBytes() + t.Faces.GetPageBytes()) / faces;
+    state.counters["curve_bytes_per_face"] = static_cast<double>(t.Curves.GetPageBytes()) / faces;
+    state.counters["pcurve_bytes_per_face"] = static_cast<double>(t.PCurves.GetPageBytes()) / faces;
+    state.counters["surface_bytes_per_face"] =
+        static_cast<double>(t.Surfaces.GetPageBytes()) / faces;
     state.counters["bytes_per_edge"] = static_cast<double>(TableBytes(shape)) /
                                        static_cast<double>(shape.Count<EntityKind::Edge>());
 }

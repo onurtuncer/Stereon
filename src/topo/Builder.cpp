@@ -147,7 +147,7 @@ bool ShapeBuilder::IsLive(const BuilderId<K> h) const noexcept
             return false;
         }
     }
-    return m_Tables.template Table<K>()[h.GetIndex()].Slot.Generation == h.GetGeneration();
+    return m_Tables.template Table<K>()[h.GetIndex()].Slot.GetGeneration() == h.GetGeneration();
 }
 
 template <EntityKind K>
@@ -165,7 +165,7 @@ Result<void> ShapeBuilder::Require(const BuilderId<K> h, const char* operation) 
 template <EntityKind K>
 BuilderId<K> ShapeBuilder::Allocate(Detail::Record<K> record)
 {
-    record.Slot = {.Generation = 0, .Alive = true};
+    record.Slot = Detail::SlotState::Live();
     const std::size_t index = m_Tables.template Table<K>().PushBack(std::move(record));
     ++m_Tables.LiveCounts[static_cast<std::size_t>(K)];
     Advance();
@@ -177,10 +177,7 @@ BuilderId<K> ShapeBuilder::Allocate(Detail::Record<K> record)
 template <EntityKind K>
 void ShapeBuilder::Release(const std::uint32_t index)
 {
-    m_Tables.template Table<K>().Modify(index, [](Detail::Record<K>& r) {
-        r.Slot.Alive = false;
-        ++r.Slot.Generation;
-    });
+    m_Tables.template Table<K>().Modify(index, [](Detail::Record<K>& r) { r.Slot.Kill(); });
     --m_Tables.LiveCounts[static_cast<std::size_t>(K)];
     Advance();
 }
@@ -1191,10 +1188,7 @@ void TopologyFaults::SetNextAtEnd(ShapeBuilder& b, const BuilderEdgeId e, const 
 
 void TopologyFaults::KillCoedge(ShapeBuilder& b, const BuilderCoedgeId c)
 {
-    b.m_Tables.Coedges.Modify(c.GetIndex(), [](Detail::CoedgeRecord& r) {
-        r.Slot.Alive = false;
-        ++r.Slot.Generation;
-    });
+    b.m_Tables.Coedges.Modify(c.GetIndex(), [](Detail::CoedgeRecord& r) { r.Slot.Kill(); });
     --b.m_Tables.LiveCounts[static_cast<std::size_t>(EntityKind::Coedge)];
 }
 

@@ -148,6 +148,6 @@ template <Scalar T>
 }
 
 static_assert(SurfaceGeometry<Cylinder>);
-static_assert(Detail::FitsInline<Cylinder, GeometryBufferSize>);
+static_assert(Detail::FitsInline<Cylinder, SurfaceBufferSize>);
 
 } // namespace Stereon

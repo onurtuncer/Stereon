@@ -179,7 +179,7 @@ TEST_CASE("B-spline curves satisfy the curve concepts and are shared when wrappe
 {
     STATIC_REQUIRE(Stereon::CurveGeometry<BSplineCurve>);
     STATIC_REQUIRE(Stereon::Curve2dGeometry<BSplineCurve2d>);
-    STATIC_REQUIRE_FALSE(Stereon::Detail::FitsInline<BSplineCurve, Stereon::GeometryBufferSize>);
+    STATIC_REQUIRE_FALSE(Stereon::Detail::FitsInline<BSplineCurve, Stereon::CurveBufferSize>);
     const Curve curve(MonomialCurve());
     const Curve copy = curve; // NOLINT(performance-unnecessary-copy-initialization)
     REQUIRE(copy.Target<BSplineCurve>() == curve.Target<BSplineCurve>());

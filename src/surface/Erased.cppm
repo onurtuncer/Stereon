@@ -67,7 +67,7 @@ public:
                 SurfaceGeometry<std::remove_cvref_t<G>>
     explicit Surface(G&& geometry)
     {
-        using Model = Detail::SurfaceModel<std::remove_cvref_t<G>, GeometryBufferSize>;
+        using Model = Detail::SurfaceModel<std::remove_cvref_t<G>, SurfaceBufferSize>;
         m_Storage.Emplace<Model>(std::forward<G>(geometry));
     }
 
@@ -90,7 +90,7 @@ public:
     }
 
 private:
-    Detail::SmallBuffer<Detail::SurfaceConcept, GeometryBufferSize> m_Storage;
+    Detail::SmallBuffer<Detail::SurfaceConcept, SurfaceBufferSize> m_Storage;
 };
 
 } // namespace Stereon
@@ -205,6 +205,7 @@ export namespace Stereon {
 
 static_assert(SurfaceGeometry<Surface>);
 static_assert(std::semiregular<Surface>);
-static_assert(sizeof(Surface) <= GeometryBufferSize + alignof(std::max_align_t));
+// The buffer and the model pointer, nothing more (B0.4).
+static_assert(sizeof(Surface) == SurfaceBufferSize + sizeof(void*));
 
 } // namespace Stereon

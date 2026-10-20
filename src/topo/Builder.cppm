@@ -228,7 +228,7 @@ public:
             }
         }
         return BuilderId<K>::Make(h.GetIndex(),
-                                  m_Tables.template Table<K>()[h.GetIndex()].Slot.Generation,
+                                  m_Tables.template Table<K>()[h.GetIndex()].Slot.GetGeneration(),
                                   m_Token.GetValue());
     }
 

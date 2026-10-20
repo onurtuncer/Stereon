@@ -125,7 +125,7 @@ public:
     {
         if constexpr (STEREON_CHECKED_HANDLES) {
             return Id<K>::Make(index, GetStore(),
-                               m_Tables.template Table<K>()[index].Slot.Generation);
+                               m_Tables.template Table<K>()[index].Slot.GetGeneration());
         } else {
             return Id<K>::FromIndex(index);
         }
@@ -141,7 +141,8 @@ public:
         }
         if constexpr (STEREON_CHECKED_HANDLES) {
             return h.GetStore() == GetStore() &&
-                   h.GetGeneration() == m_Tables.template Table<K>()[h.GetIndex()].Slot.Generation;
+                   h.GetGeneration() ==
+                       m_Tables.template Table<K>()[h.GetIndex()].Slot.GetGeneration();
         }
         return true;
     }
@@ -195,7 +196,7 @@ public:
         }
         const Detail::SlotState& slot =
             m_Snapshot->GetTables().template Table<K>()[h.GetIndex()].Slot;
-        if (slot.Generation != h.GetGeneration()) {
+        if (slot.GetGeneration() != h.GetGeneration()) {
             return {};
         }
         return m_Snapshot->template MakeId<K>(h.GetIndex());
@@ -222,7 +223,7 @@ template <EntityKind K>
             const bool inRange = h.IsValid() && h.GetIndex() < table.GetSize();
             ShapeHandleViolation(K, h.GetIndex(), h.GetGeneration(), h.GetStore(),
                                  snapshot.GetStore(), static_cast<std::uint32_t>(table.GetSize()),
-                                 inRange && table[h.GetIndex()].Slot.Alive);
+                                 inRange && table[h.GetIndex()].Slot.IsAlive());
         }
     }
     return snapshot.GetTables().template Table<K>()[h.GetIndex()];
@@ -312,7 +313,7 @@ private:
     {
         const auto& table = snapshot.GetTables().template Table<K>();
         const std::uint32_t size = SizeOf(snapshot);
-        while (index < size && !table[index].Slot.Alive) {
+        while (index < size && !table[index].Slot.IsAlive()) {
             ++index;
         }
         return index;
