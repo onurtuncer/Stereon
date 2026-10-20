@@ -187,8 +187,29 @@ the bounded content of the scene. The scene behind the window,
 ``viewer/scene``, is headless and tested without a window, so other
 frontends can reuse it.
 
+.. figure:: figures/viewer-geometry.png
+   :width: 100%
+   :alt: stn-view with a B-spline curve, a B-spline patch and a circle in 3D, and two plane curves in the Parameter space window.
+
+   Geometry dumps. The cubic has a knot of multiplicity three at its
+   middle, and the polyline keeps the kink. The control polygon is grey
+   and the knots are yellow. The patch is drawn as iso-lines over its
+   control net. Arrows show the direction of each curve's parameter. The
+   two plane curves are in the Parameter space window.
+
+.. figure:: figures/viewer-topology.png
+   :width: 100%
+   :alt: stn-view with the closed cylinder of the topology tests, its edges coloured by kind and labelled with Describe().
+
+   A ``Shape`` dump: the closed cylinder of the topology tests. Each face
+   is drawn over the parameter box of its boundary. The edges are
+   coloured by kind: the seam in orange (``Boundary``) and the circles in
+   blue (``Exact``). Vertices and edges carry their ``Describe()`` labels.
+
 ``stn-view --screenshot file.png`` renders the window once, writes it as a
-PNG and exits.
+PNG and exits. The figures above come from the Linux viewer CI job: it
+writes the dumps of ``docs/figures/ViewerDumps.cpp`` and renders them under
+Xvfb with Mesa's software OpenGL.
 
 Related design decisions
 ------------------------
