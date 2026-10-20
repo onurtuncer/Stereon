@@ -67,6 +67,7 @@ class StructureValidator {
 public:
     explicit StructureValidator(const TopologyTables& tables)
         : m_T(tables)
+        , m_VertexOk(tables.Vertices.GetSize(), false)
         , m_EdgeOk(tables.Edges.GetSize(), false)
         , m_CoedgeOk(tables.Coedges.GetSize(), false)
         , m_LoopOk(tables.Loops.GetSize(), false)
@@ -85,6 +86,7 @@ public:
         CheckShellLists();
         CheckGeometry();
         CheckShellConnectivity();
+        CheckIncidence();
         return std::move(m_Report);
     }
 
@@ -121,6 +123,11 @@ private:
 
     void CheckLinks()
     {
+        for (std::uint32_t i = 0; i < m_T.Vertices.GetSize(); ++i) {
+            m_VertexOk[i] =
+                m_T.Vertices[i].Slot.Alive &&
+                Link(EntityKind::Vertex, i, m_T.Vertices[i].FirstEdge, false, "FirstEdge");
+        }
         for (std::uint32_t i = 0; i < m_T.Edges.GetSize(); ++i) {
             m_EdgeOk[i] = m_T.Edges[i].Slot.Alive && CheckEdgeLinks(i);
         }
@@ -140,6 +147,8 @@ private:
         bool ok = Link(k, i, e.Start, true, "Start");
         ok = Link(k, i, e.End, true, "End") && ok;
         ok = Link(k, i, e.RadialAnchor, false, "RadialAnchor") && ok;
+        ok = Link(k, i, e.NextAtStart, false, "NextAtStart") && ok;
+        ok = Link(k, i, e.NextAtEnd, false, "NextAtEnd") && ok;
         return Link(k, i, e.Primary, false, "Primary") && ok;
     }
 
@@ -581,8 +590,83 @@ private:
         }
     }
 
+    // --- S16: the vertex-incidence index ---------------------------------------
+
+    /// Walks every live vertex's list, then checks that every live edge was
+    /// reached from each of its ends once (a closed edge once in all).
+    void CheckIncidence()
+    {
+        std::vector<std::uint8_t> fromStart(m_T.Edges.GetSize(), 0);
+        std::vector<std::uint8_t> fromEnd(m_T.Edges.GetSize(), 0);
+        for (std::uint32_t v = 0; v < m_T.Vertices.GetSize(); ++v) {
+            if (m_VertexOk[v]) {
+                WalkIncidence(v, fromStart, fromEnd);
+            }
+        }
+        for (std::uint32_t e = 0; e < m_T.Edges.GetSize(); ++e) {
+            if (!m_EdgeOk[e]) {
+                continue;
+            }
+            const EdgeRecord& edge = m_T.Edges[e];
+            const bool closed = edge.Start == edge.End;
+            if (fromStart[e] != 1 && m_VertexOk[edge.Start.GetIndex()]) {
+                Report(TopologyRule::VertexIncidence,
+                       {Name(EntityKind::Edge, e), Name(EntityKind::Vertex, edge.Start.GetIndex())},
+                       "the edge is not in its start vertex's list exactly once");
+            }
+            if (!closed && fromEnd[e] != 1 && m_VertexOk[edge.End.GetIndex()]) {
+                Report(TopologyRule::VertexIncidence,
+                       {Name(EntityKind::Edge, e), Name(EntityKind::Vertex, edge.End.GetIndex())},
+                       "the edge is not in its end vertex's list exactly once");
+            }
+        }
+    }
+
+    /// One vertex's list: every edge live, at the vertex, after the one
+    /// before it in index, and reached once.
+    void WalkIncidence(const std::uint32_t v, std::vector<std::uint8_t>& fromStart,
+                       std::vector<std::uint8_t>& fromEnd)
+    {
+        std::uint32_t previous = None;
+        std::uint32_t e = m_T.Vertices[v].FirstEdge.GetIndex();
+        for (std::size_t steps = 0; e != None && steps <= m_T.Edges.GetSize(); ++steps) {
+            if (!m_EdgeOk[e]) {
+                return; // reported by S01
+            }
+            const EdgeRecord& edge = m_T.Edges[e];
+            const bool atStart = edge.Start.GetIndex() == v;
+            if (!atStart && edge.End.GetIndex() != v) {
+                Report(TopologyRule::VertexIncidence,
+                       {Name(EntityKind::Vertex, v), Name(EntityKind::Edge, e)},
+                       "the list names an edge that does not start or end at the vertex");
+                return;
+            }
+            if (previous != None && e <= previous) {
+                Report(TopologyRule::VertexIncidence,
+                       {Name(EntityKind::Vertex, v), Name(EntityKind::Edge, e)},
+                       "the list is not in ascending index order");
+                return;
+            }
+            std::uint8_t& reached = atStart ? fromStart[e] : fromEnd[e];
+            if (reached != 0) {
+                Report(TopologyRule::VertexIncidence,
+                       {Name(EntityKind::Vertex, v), Name(EntityKind::Edge, e)},
+                       "the list names an edge twice");
+                return;
+            }
+            reached = 1;
+            previous = e;
+            e = (atStart ? edge.NextAtStart : edge.NextAtEnd).GetIndex();
+        }
+        if (e != None) {
+            Report(TopologyRule::VertexIncidence, {Name(EntityKind::Vertex, v)},
+                   "the list does not end within the edge count");
+        }
+    }
+
     const TopologyTables& m_T;
     ValidityReport m_Report;
+    std::vector<bool> m_VertexOk;
     std::vector<bool> m_EdgeOk;
     std::vector<bool> m_CoedgeOk;
     std::vector<bool> m_LoopOk;

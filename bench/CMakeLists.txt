@@ -10,7 +10,8 @@
 file(GLOB sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
 add_executable(stereon_bench ${sources})
 target_link_libraries(stereon_bench
-    PRIVATE stereon::core stereon::robust stereon::surface stereon_options benchmark::benchmark_main)
+    PRIVATE stereon::core stereon::robust stereon::surface stereon::topo stereon_options
+            benchmark::benchmark_main)
 stereon_anchor_contracts(stereon_bench)
 
 # The Phase 1 comparison with OpenCASCADE (docs/benchmarks.md, B1.1-B1.5):
@@ -19,16 +20,19 @@ stereon_anchor_contracts(stereon_bench)
 # LGPL-2.1 and linked into this executable only (ADR-0008).
 if(STEREON_WITH_OCCT)
     find_package(OpenCASCADE CONFIG REQUIRED)
-    add_executable(stereon_occt_bench occt/OcctBench.cpp)
+    add_executable(stereon_occt_bench occt/OcctBench.cpp occt/OcctTopoBench.cpp
+                                      occt/ResidentMemory.cpp)
     target_link_libraries(stereon_occt_bench
-        PRIVATE stereon::surface stereon_options benchmark::benchmark_main
-                TKernel TKMath TKG3d TKGeomBase TKGeomAlgo)
+        PRIVATE stereon::surface stereon::topo stereon_options benchmark::benchmark_main
+                TKernel TKMath TKG3d TKGeomBase TKGeomAlgo TKBRep TKTopAlgo
+                $<$<PLATFORM_ID:Windows>:psapi>)
     stereon_anchor_contracts(stereon_occt_bench)
     # GCC's -Wnull-dereference fires inside OCCT's NCollection_Array1 accessors
     # once they are inlined at -O3, where -isystem does not reach, as it does
     # in stdexec's queue (stereon_exec_sources()); with -Werror that stops the
     # reference run's build.
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        set_property(SOURCE occt/OcctBench.cpp APPEND PROPERTY COMPILE_OPTIONS -Wno-null-dereference)
+        set_property(SOURCE occt/OcctBench.cpp occt/OcctTopoBench.cpp APPEND PROPERTY
+                     COMPILE_OPTIONS -Wno-null-dereference)
     endif()
 endif()

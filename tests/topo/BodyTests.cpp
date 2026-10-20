@@ -187,7 +187,7 @@ TEST_CASE("the hand-built box", "[topo][bodies][box]")
         REQUIRE(edge.starts_with("Edge#0 [Exact Line, tol 1e-07, faces "));
         REQUIRE(edge.find('|') != std::string::npos);
         REQUIRE(Stereon::Describe(shape, shape.Resolve(body.Vertices[1])) ==
-                "Vertex#1 [(2, 0, 0), tol 1e-07]");
+                "Vertex#1 [(2, 0, 0), tol 1e-07, 3 edges]");
         REQUIRE(Stereon::Describe(shape, shape.Resolve(body.Faces[0])) ==
                 "Face#0 [Plane, Shell#0, 1 loop]");
         REQUIRE(Stereon::Describe(shape, shape.Resolve(body.Loops[2])) ==

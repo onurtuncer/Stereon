@@ -7,8 +7,12 @@
 
 module;
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <string>
+#include <utility>
+#include <vector>
 
 export module Stereon.Topo:Builder;
 
@@ -30,6 +34,13 @@ import :Shape;
 /// edge in a loop of another builder, a face added to a second shell), is
 /// reported as InvalidInput and changes nothing. Every successful change
 /// advances the builder's topology epoch (ADR-0038).
+///
+/// A builder opened on a frozen Shape (Open) starts from the shape's
+/// tables and shares every page with it until it writes to one. Deletion
+/// (the Remove operations) leaves tombstones: a removed slot is dead, its
+/// generation bumped so that every handle to it is stale, and never reused
+/// by this builder, so an index live in both the shape and its edit names
+/// the same entity. Compact() is the separate, explicit renumbering.
 
 export namespace Stereon {
 
@@ -74,9 +85,17 @@ namespace Testing {
 class TopologyFaults;
 } // namespace Testing
 
+class Compacted;
+[[nodiscard]] Result<Compacted> Compact(const Shape& shape);
+
 class ShapeBuilder {
 public:
     ShapeBuilder();
+    /// A builder on the shape's tables, sharing every page with it until it
+    /// writes to one (ADR-0005). Its handles to the shape's entities come
+    /// from Handle(); new entities take slots after the shape's last one.
+    /// InvalidInput for an empty Shape.
+    [[nodiscard]] static Result<ShapeBuilder> Open(const Shape& shape);
     ShapeBuilder(const ShapeBuilder&) = delete;
     ShapeBuilder& operator=(const ShapeBuilder&) = delete;
     /// The token, the epoch and the tables move; the source is left with no
@@ -128,7 +147,56 @@ public:
     /// Adds a face of no shell at the end of the shell's face list.
     [[nodiscard]] Result<void> AddFaceToShell(BuilderShellId shell, BuilderFaceId face);
 
+    // --- Editing -----------------------------------------------------------
+    // Each operation unlinks what it removes from every list and ring it is
+    // in and tombstones the slot; nothing else changes.
+
+    /// Replaces the face's surface by another of the pool. The pcurves of its
+    /// coedges are the caller's to keep consistent.
+    [[nodiscard]] Result<void> SetSurface(BuilderFaceId face, SurfaceRef surface);
+
+    /// Removes one use of an edge from its loop and its edge's radial ring.
+    /// Refused when the coedge is its edge's primary and the edge has other
+    /// uses: the caller reassigns the primary first (ADR-0027, section 4).
+    [[nodiscard]] Result<void> RemoveCoedge(BuilderCoedgeId coedge);
+    /// Removes a loop with its coedges from its face. A primary coedge among
+    /// them passes the primary to the next use in the ring, since every use
+    /// of this loop goes; an edge left with no use loses its primary.
+    [[nodiscard]] Result<void> RemoveLoop(BuilderLoopId loop);
+    /// Removes a face with its loops and coedges from its shell, as
+    /// RemoveLoop does for each loop. Its edges and vertices stay.
+    [[nodiscard]] Result<void> RemoveFace(BuilderFaceId face);
+    /// Removes a shell from its solid; its faces stay, in no shell.
+    [[nodiscard]] Result<void> RemoveShell(BuilderShellId shell);
+    /// Removes a solid; its shells stay, of no solid.
+    [[nodiscard]] Result<void> RemoveSolid(BuilderSolidId solid);
+    /// Removes an edge with no uses from its vertices' lists; refused while
+    /// a coedge uses it.
+    [[nodiscard]] Result<void> RemoveEdge(BuilderEdgeId edge);
+    /// Removes a vertex no edge starts or ends at; refused otherwise.
+    [[nodiscard]] Result<void> RemoveVertex(BuilderVertexId vertex);
+
     // --- Inspection --------------------------------------------------------
+
+    /// The builder's handle to an entity of the shape it was opened on: the
+    /// same slot, at its current generation. Invalid when the handle names
+    /// no live entity of this builder, in checked builds also when it comes
+    /// from another shape.
+    template <EntityKind K>
+    [[nodiscard]] BuilderId<K> Handle(const Id<K> h) const noexcept
+    {
+        if (!h.IsValid() || !m_Tables.template IsLive<K>(h.GetIndex())) {
+            return {};
+        }
+        if constexpr (STEREON_CHECKED_HANDLES) {
+            if (h.GetStore() != m_SourceStore) {
+                return {};
+            }
+        }
+        return BuilderId<K>::Make(h.GetIndex(),
+                                  m_Tables.template Table<K>()[h.GetIndex()].Slot.Generation,
+                                  m_Token.GetValue());
+    }
 
     /// The structural check Freeze() will run, without freezing.
     [[nodiscard]] ValidityReport Validate() const;
@@ -144,6 +212,10 @@ public:
     /// Advanced by every change to connectivity, membership or liveness.
     [[nodiscard]] std::uint64_t GetEpoch() const noexcept { return m_Epoch; }
 
+    /// A builder on given tables, for Open() and Compact(): `source` is the
+    /// store the tables came from, which Handle() checks.
+    ShapeBuilder(Detail::TopologyTables tables, StoreId source, Detail::FreezeKey);
+
 private:
     friend Result<Shape> Freeze(ShapeBuilder&& builder);
     friend class Testing::TopologyFaults;
@@ -154,13 +226,99 @@ private:
     [[nodiscard]] Result<void> Require(BuilderId<K> h, const char* operation) const;
     template <EntityKind K>
     [[nodiscard]] BuilderId<K> Allocate(Detail::Record<K> record);
+    template <EntityKind K>
+    void Release(std::uint32_t index);
     [[nodiscard]] Result<void> RequireToken(const char* operation) const;
     void Advance() noexcept;
+
+    void LinkAtVertex(std::uint32_t edge, std::uint32_t vertex, bool atStart);
+    void UnlinkAtVertex(std::uint32_t edge, std::uint32_t vertex);
+    void DetachCoedge(std::uint32_t coedge, bool passPrimaryOn);
+    void RemoveLoopAt(std::uint32_t loop);
+    template <EntityKind P, EntityKind C>
+    void UnlinkChild(std::uint32_t child, Id<P> Detail::Record<C>::* parent,
+                     Id<C> Detail::Record<C>::* next, Id<C> Detail::Record<P>::* first,
+                     Id<C> Detail::Record<P>::* last);
 
     Detail::TopologyTables m_Tables;
     BuilderToken m_Token;
     std::uint64_t m_Epoch = 0;
+    StoreId m_SourceStore = 0;
 };
+
+/// The old-to-new slot map of one Compact() (ADR-0004), which feeds the
+/// history of ADR-0011: for every kind, the new index of each old slot,
+/// Invalid for a dead one, and the same for the three geometry pools, whose
+/// unreferenced entries are dropped.
+class RemapTable {
+public:
+    template <EntityKind K>
+    [[nodiscard]] std::uint32_t NewIndex(const std::uint32_t old) const noexcept
+    {
+        const std::vector<std::uint32_t>& map = m_Entities[static_cast<std::size_t>(K)];
+        return old < map.size() ? map[old] : Id<K>::Invalid;
+    }
+    [[nodiscard]] std::uint32_t NewCurve(const std::uint32_t old) const noexcept
+    {
+        return old < m_Curves.size() ? m_Curves[old] : CurveRef::Invalid;
+    }
+    [[nodiscard]] std::uint32_t NewPCurve(const std::uint32_t old) const noexcept
+    {
+        return old < m_PCurves.size() ? m_PCurves[old] : PCurveRef::Invalid;
+    }
+    [[nodiscard]] std::uint32_t NewSurface(const std::uint32_t old) const noexcept
+    {
+        return old < m_Surfaces.size() ? m_Surfaces[old] : SurfaceRef::Invalid;
+    }
+    /// Slots of kind K in the source, live or dead.
+    template <EntityKind K>
+    [[nodiscard]] std::size_t OldCount() const noexcept
+    {
+        return m_Entities[static_cast<std::size_t>(K)].size();
+    }
+
+private:
+    friend Result<Compacted> Compact(const Shape& shape);
+
+    std::array<std::vector<std::uint32_t>, EntityKindCount> m_Entities;
+    std::vector<std::uint32_t> m_Curves;
+    std::vector<std::uint32_t> m_PCurves;
+    std::vector<std::uint32_t> m_Surfaces;
+};
+
+/// What Compact() gives: the compacted shape, certified like any other,
+/// and the map from the source's slots to its own.
+class Compacted {
+public:
+    Stereon::Shape Shape;
+    RemapTable Remap;
+    /// The store of the shape that was compacted, which Translate() checks
+    /// in checked builds.
+    StoreId SourceStore = 0;
+
+    /// The compacted shape's handle to an entity of the source; invalid for a
+    /// handle that named no live entity of the source.
+    template <EntityKind K>
+    [[nodiscard]] Id<K> Translate(const Id<K> old) const noexcept
+    {
+        if (!old.IsValid() || Shape.IsEmpty()) {
+            return {};
+        }
+        if constexpr (STEREON_CHECKED_HANDLES) {
+            if (old.GetStore() != SourceStore) {
+                return {};
+            }
+        }
+        const std::uint32_t index = Remap.template NewIndex<K>(old.GetIndex());
+        return index == Id<K>::Invalid ? Id<K>{} : Shape.GetSnapshot()->template MakeId<K>(index);
+    }
+};
+
+/// The explicit renumbering of ADR-0004: the shape's live entities with
+/// consecutive indices in their old order, dead slots and unreferenced
+/// geometry dropped, frozen and certified again, with the remap table. The
+/// source shape is left as it is. InvalidInput for an empty Shape.
+[[nodiscard]] Result<Compacted> Compact(const Shape& shape);
 
 /// Seals the builder into a Shape: runs the structural validator over every
 /// table (ADR-0038's Freeze invariants) and, if it finds nothing, moves the
@@ -206,6 +364,9 @@ public:
     static void SetFaceShell(ShapeBuilder& b, BuilderFaceId f, BuilderShellId shell);
     static void SetLoopFace(ShapeBuilder& b, BuilderLoopId l, BuilderFaceId face);
     static void SetShellSolid(ShapeBuilder& b, BuilderShellId s, BuilderSolidId solid);
+    static void SetFirstEdge(ShapeBuilder& b, BuilderVertexId v, BuilderEdgeId first);
+    static void SetNextAtStart(ShapeBuilder& b, BuilderEdgeId e, BuilderEdgeId next);
+    static void SetNextAtEnd(ShapeBuilder& b, BuilderEdgeId e, BuilderEdgeId next);
     /// Marks the slot dead without unlinking it.
     static void KillCoedge(ShapeBuilder& b, BuilderCoedgeId c);
     /// Points a link at a slot past the end of its table.

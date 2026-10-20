@@ -59,11 +59,25 @@ template <typename Wrapper>
     return index == Id<EntityKind::Vertex>::Invalid ? std::string("-") : std::to_string(index);
 }
 
+/// The edges in the vertex's incidence list, bounded and checked, so that
+/// a corrupt list still describes.
+[[nodiscard]] std::size_t DegreeOf(const TopologyTables& t, const std::uint32_t v)
+{
+    std::size_t degree = 0;
+    std::uint32_t e = t.Vertices[v].FirstEdge.GetIndex();
+    while (t.IsLive<EntityKind::Edge>(e) && degree < t.Edges.GetSize()) {
+        ++degree;
+        const Detail::EdgeRecord& edge = t.Edges[e];
+        e = (edge.Start.GetIndex() == v ? edge.NextAtStart : edge.NextAtEnd).GetIndex();
+    }
+    return degree;
+}
+
 [[nodiscard]] std::string DescribeVertex(const TopologyTables& t, const std::uint32_t i)
 {
     const Detail::VertexRecord& v = t.Vertices[i];
-    return std::format("Vertex#{} [({}, {}, {}), tol {}]", i, v.Position.X, v.Position.Y,
-                       v.Position.Z, v.Tolerance);
+    return std::format("Vertex#{} [({}, {}, {}), tol {}, {} edges]", i, v.Position.X, v.Position.Y,
+                       v.Position.Z, v.Tolerance, DegreeOf(t, i));
 }
 
 [[nodiscard]] std::string DescribeEdge(const TopologyTables& t, const std::uint32_t i)
