@@ -33,6 +33,7 @@
 #include <iterator>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #if defined(__cpp_contracts) || __has_include(<contracts>)
@@ -70,59 +71,95 @@ private:
 
 constexpr std::array<std::uint8_t, 8> Boundaries{0x00, 0x01, 0x7F, 0x80, 0xFE, 0xFF, 0x20, 0x40};
 
+// The mutations, each a no-op where the input is too short or too long.
+
+void FlipBit(Bytes& input, Generator& g)
+{
+    if (!input.empty()) {
+        const std::size_t at = g.Below(input.size());
+        input[at] = static_cast<std::uint8_t>(input[at] ^ (1U << g.Below(8)));
+    }
+}
+
+void BoundaryByte(Bytes& input, Generator& g)
+{
+    if (!input.empty()) {
+        input[g.Below(input.size())] = Boundaries[g.Below(Boundaries.size())];
+    }
+}
+
+/// A slice [at, at + count) of at most 64 bytes inside the input.
+std::pair<std::size_t, std::size_t> SliceOf(const Bytes& input, Generator& g)
+{
+    const std::size_t at = g.Below(input.size());
+    return {at, 1 + g.Below(std::min<std::size_t>(input.size() - at, 64))};
+}
+
+void DropSlice(Bytes& input, Generator& g)
+{
+    if (!input.empty()) {
+        const auto [at, count] = SliceOf(input, g);
+        input.erase(input.begin() + static_cast<std::ptrdiff_t>(at),
+                    input.begin() + static_cast<std::ptrdiff_t>(at + count));
+    }
+}
+
+void DuplicateSlice(Bytes& input, Generator& g, const std::size_t maxSize)
+{
+    if (!input.empty() && input.size() < maxSize) {
+        const auto [at, count] = SliceOf(input, g);
+        const Bytes slice(input.begin() + static_cast<std::ptrdiff_t>(at),
+                          input.begin() + static_cast<std::ptrdiff_t>(at + count));
+        input.insert(input.begin() + static_cast<std::ptrdiff_t>(g.Below(input.size() + 1)),
+                     slice.begin(), slice.end());
+    }
+}
+
+void InsertBytes(Bytes& input, Generator& g, const std::size_t maxSize)
+{
+    if (input.size() < maxSize) {
+        const std::size_t count = 1 + g.Below(16);
+        for (std::size_t k = 0; k < count; ++k) {
+            input.insert(input.begin() + static_cast<std::ptrdiff_t>(g.Below(input.size() + 1)),
+                         static_cast<std::uint8_t>(g.Next()));
+        }
+    }
+}
+
+/// Eight bytes overwritten, as a double or a count would be.
+void OverwriteWord(Bytes& input, Generator& g)
+{
+    if (input.size() >= 8) {
+        const std::size_t at = g.Below(input.size() - 7);
+        const std::uint64_t value = g.Next();
+        for (std::size_t k = 0; k < 8; ++k) {
+            input[at + k] = static_cast<std::uint8_t>(value >> (8 * k));
+        }
+    }
+}
+
 void Mutate(Bytes& input, Generator& g, const std::size_t maxSize)
 {
     const std::size_t steps = 1 + g.Below(4);
     for (std::size_t step = 0; step < steps; ++step) {
-        const std::size_t size = input.size();
         switch (g.Below(6)) {
-        case 0: // flip one bit
-            if (size > 0) {
-                const std::size_t at = g.Below(size);
-                input[at] = static_cast<std::uint8_t>(input[at] ^ (1U << g.Below(8)));
-            }
+        case 0:
+            FlipBit(input, g);
             break;
-        case 1: // a boundary byte
-            if (size > 0) {
-                input[g.Below(size)] = Boundaries[g.Below(Boundaries.size())];
-            }
+        case 1:
+            BoundaryByte(input, g);
             break;
-        case 2: // drop a slice
-            if (size > 0) {
-                const std::size_t at = g.Below(size);
-                const std::size_t count = 1 + g.Below(std::min<std::size_t>(size - at, 64));
-                input.erase(input.begin() + static_cast<std::ptrdiff_t>(at),
-                            input.begin() + static_cast<std::ptrdiff_t>(at + count));
-            }
+        case 2:
+            DropSlice(input, g);
             break;
-        case 3: // duplicate a slice
-            if (size > 0 && size < maxSize) {
-                const std::size_t at = g.Below(size);
-                const std::size_t count = 1 + g.Below(std::min<std::size_t>(size - at, 64));
-                const Bytes slice(input.begin() + static_cast<std::ptrdiff_t>(at),
-                                  input.begin() + static_cast<std::ptrdiff_t>(at + count));
-                input.insert(input.begin() + static_cast<std::ptrdiff_t>(g.Below(size + 1)),
-                             slice.begin(), slice.end());
-            }
+        case 3:
+            DuplicateSlice(input, g, maxSize);
             break;
-        case 4: // insert random bytes
-            if (size < maxSize) {
-                const std::size_t count = 1 + g.Below(16);
-                for (std::size_t k = 0; k < count; ++k) {
-                    input.insert(input.begin() +
-                                     static_cast<std::ptrdiff_t>(g.Below(input.size() + 1)),
-                                 static_cast<std::uint8_t>(g.Next()));
-                }
-            }
+        case 4:
+            InsertBytes(input, g, maxSize);
             break;
-        default: // overwrite eight bytes, as a double or a count would be
-            if (size >= 8) {
-                const std::size_t at = g.Below(size - 7);
-                const std::uint64_t value = g.Next();
-                for (std::size_t k = 0; k < 8; ++k) {
-                    input[at + k] = static_cast<std::uint8_t>(value >> (8 * k));
-                }
-            }
+        default:
+            OverwriteWord(input, g);
             break;
         }
     }
@@ -130,7 +167,6 @@ void Mutate(Bytes& input, Generator& g, const std::size_t maxSize)
         input.resize(maxSize);
     }
 }
-
 Bytes ReadFile(const std::filesystem::path& path)
 {
     std::ifstream file(path, std::ios::binary);

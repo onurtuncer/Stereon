@@ -17,6 +17,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+// Wrapping a B-spline shares its payload through std::make_shared; on MinGW
+// a unit that instantiates it through a module includes <memory> itself
+// (docs/toolchain/gcc16-feature-probe.md).
+#include <memory>
 #include <vector>
 
 import Stereon.Curve;
@@ -73,29 +77,35 @@ void Exercise(const Stereon::BSplineCurve& bspline)
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, const std::size_t size)
 {
     Reader in(data, size);
+    // The third byte picks the encoding: raw doubles for the knots, poles
+    // and weights (anything at all, to probe the factory's checks), or
+    // small steps and integers (mostly valid curves, to reach the
+    // evaluators with knots that repeat, poles that coincide and weights
+    // near zero).
     const int degree = in.Byte() % 8;
     const auto poles = static_cast<std::size_t>(1 + in.Byte() % 24);
-    const bool rational = (in.Byte() & 1U) != 0;
+    const std::uint8_t mode = in.Byte();
+    const bool raw = (mode & 0x80U) != 0;
+    const bool rational = (mode & 1U) != 0;
+    const auto next = [&](const double scale) {
+        return raw ? in.Double() : static_cast<double>(static_cast<std::int8_t>(in.Byte())) * scale;
+    };
     std::vector<double> knots(poles + static_cast<std::size_t>(degree) + 1);
+    double knot = 0.0;
     for (double& k : knots) {
-        k = in.Double();
-    }
-    // Sorting often turns noise into a valid knot vector, so the evaluators
-    // are reached; unsorted input stays possible through the first byte.
-    if ((data != nullptr && size > 0 && (data[0] & 0x80U) == 0)) {
-        std::ranges::sort(knots, [](const double a, const double b) {
-            return std::isnan(b) ? !std::isnan(a) : a < b;
-        });
+        // Non-negative steps from 0 make a sorted vector, with repeats.
+        knot += raw ? 0.0 : static_cast<double>(in.Byte() % 3) * 0.5;
+        k = raw ? in.Double() : knot;
     }
     std::vector<Stereon::Point3> points(poles);
     for (Stereon::Point3& p : points) {
-        p = Stereon::Point3{in.Double(), in.Double(), in.Double()};
+        p = Stereon::Point3{next(0.25), next(0.25), next(0.25)};
     }
     std::vector<double> weights;
     if (rational) {
         weights.resize(poles);
         for (double& w : weights) {
-            w = in.Double();
+            w = raw ? in.Double() : 0.05 + static_cast<double>(in.Byte()) / 64.0;
         }
     }
     const auto curve = Stereon::MakeBSplineCurve(degree, knots, points, weights);
