@@ -588,7 +588,7 @@ process.
      - Live heap per face
      - 1255 B
      - 1601 B
-     - < 50%: **78%, not met**
+     - < 50%: **38%, met** (78% at first; see below)
    * - B0.5
      - Pages copied by one surface replacement
      - 0.003 %
@@ -650,10 +650,25 @@ bytes per face by table. A run of only these rows on the reference image
    * - Live heap, all of it
      - 887, against OCCT's 1601: **55%, not met**
 
-The geometry pools are still 60% of the total, and their wrappers are most
-of it: a ``Line2d`` is 32 bytes, its ``Curve2d`` 80. Storing the built-in
-types in typed pools, with the erased wrapper kept for user types, is the
-next step towards the target.
+The geometry pools were still 60% of the total, and their wrappers most of
+it: a ``Line2d`` is 32 bytes, its ``Curve2d`` 80. The pools now keep the
+built-in types by value, each in its own arena, with the erased wrapper kept
+for B-splines, composite and user geometry (``GeometryPool``,
+``src/topo/Records.cppm``). Run 39437110770 measured, at 10⁶ faces:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Table
+     - Bytes per face
+   * - Records (vertices, edges, coedges, loops and faces)
+     - 356
+   * - Curve pool (2 lines and their slots)
+     - 104
+   * - Pcurve pool (4 plane lines and their slots)
+     - 144
+   * - Live heap, all of it
+     - 608, against OCCT's 1601: **38%, met**
 Splitting a face or an edge is part of ADR-0005's edit sequence and is not
 measured. It needs the Euler operators of ADR-0027, which do not exist yet.
 

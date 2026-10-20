@@ -5,7 +5,7 @@
 - **Revised:** 2026-10-17 (topology traversal contract cross-reference)
 - **Revised:** 2026-10-10 (`Freeze()` keeps indices, `Compact()` is explicit; edge record follows revised ADR-0009; page size is a tuning constant)
 - **Revised:** 2026-10-20 (the handle design is decided: index handles throughout; liveness is kept in each record, not a bitset; the seeded-fault criterion is stated for what a handle check can detect; the memory target's status)
-- **Accepted:** 2026-10-20 by Onur Tuncer: adjacency is 20× and 60× faster than OCCT, an edit copies 0.003–0.014% of pages, release handles are 4 bytes, and the seeded faults a handle check can detect are caught. Memory per face is not yet met (see *Results*) and stays an open Phase 0 exit-gate item; the storage decision does not depend on it
+- **Accepted:** 2026-10-20 by Onur Tuncer: adjacency is 20× and 60× faster than OCCT, an edit copies 0.003–0.014% of pages, release handles are 4 bytes, and the seeded faults a handle check can detect are caught. Memory per face was not met at acceptance (78%) and is met since the typed geometry pools (38%, see *Results*)
 - **Owner:** Onur Tuncer
 - **Phase:** 0
 
@@ -107,7 +107,7 @@ The 10⁶-face sheet of `bench/TopoBench.cpp` against `bench/occt/OcctTopoBench.
 | Pages copied by splitting a face or an edge | — | needs the Euler operators of ADR-0027 |
 | Release handles | 4 bytes, `static_assert` in `src/core/Handle.cppm` and `tests/topo/RecordLayoutTests.cpp` | met |
 | Seeded faults a handle check can detect | caught, `tests/topo/FaultTests.cpp`; at the accessors, the contract probes `shape-foreign`, `shape-range` and `shape-dead` | met |
-| Memory per face | 1255 B against OCCT's 1601 B (78%); 887 B (55%) after smaller records and per-kind geometry wrappers (run 39433824401) | not met; the geometry pools are 60% of it, and typed pools for the built-in types are the next step |
+| Memory per face | 1255 B against OCCT's 1601 B (78%) at first; 887 B (55%) after smaller records and per-kind geometry wrappers (run 39433824401); 608 B (38%) with typed geometry pools (run 39437110770) | met |
 | Pretty-printers | every handle type, in CI; in checked builds a handle of a live shape shows its entity (safeguard 4) through `stereon_describe_handle()` | met |
 
 ## Related traversal contracts
