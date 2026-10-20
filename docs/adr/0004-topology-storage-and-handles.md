@@ -107,7 +107,7 @@ The 10⁶-face sheet of `bench/TopoBench.cpp` against `bench/occt/OcctTopoBench.
 | Pages copied by splitting a face or an edge | — | needs the Euler operators of ADR-0027 |
 | Release handles | 4 bytes, `static_assert` in `src/core/Handle.cppm` and `tests/topo/RecordLayoutTests.cpp` | met |
 | Seeded faults a handle check can detect | caught, `tests/topo/FaultTests.cpp` | met, except the accessors' contract violation, which has no test yet |
-| Memory per face | 1255 B against OCCT's 1601 B (78%) | not met; smaller records and per-kind geometry wrappers are expected to bring it to about 55%, to be confirmed by the next reference run |
+| Memory per face | 1255 B against OCCT's 1601 B (78%); 887 B (55%) after smaller records and per-kind geometry wrappers (run 39433824401) | not met; the geometry pools are 60% of it, and typed pools for the built-in types are the next step |
 | Pretty-printers | every handle type, in CI | met; showing the entity behind a handle (safeguard 4) is open |
 
 ## Related traversal contracts
