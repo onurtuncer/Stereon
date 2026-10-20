@@ -23,6 +23,7 @@ stereon_add_library(core
         Log.cppm
         Matrix.cppm
         Scalar.cppm
+        Sensitivity.cppm
         Serialize.cppm
         Simd.cppm
         SmallBuffer.cppm
@@ -34,6 +35,7 @@ stereon_add_library(core
         EvaluatorChecks.cpp
         GeometryChecks.cpp
         Handle.cpp
+        Sensitivity.cpp
         Serialize.cpp
         Trigonometry.cpp
         Log.cpp

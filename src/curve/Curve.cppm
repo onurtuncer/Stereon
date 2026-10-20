@@ -15,6 +15,7 @@ export import Stereon.Robust;
 
 export import :BSplineBasis;
 export import :BSplineCurve;
+export import :Capabilities;
 export import :Circle;
 export import :Concepts;
 export import :Conversion;

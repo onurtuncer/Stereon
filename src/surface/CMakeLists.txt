@@ -8,6 +8,7 @@
 stereon_add_library(surface
     MODULES
         BSplineSurface.cppm
+        Capabilities.cppm
         Concepts.cppm
         Cone.cppm
         Conversion.cppm

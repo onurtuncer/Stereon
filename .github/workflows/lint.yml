@@ -79,3 +79,5 @@ jobs:
         run: |
           python tools/check_adrs.py --self-test
           python tools/check_adrs.py
+          python tools/check_capabilities.py --self-test
+          python tools/check_capabilities.py

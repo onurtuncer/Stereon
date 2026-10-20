@@ -212,6 +212,14 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME "tools: literal lint"
         COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/check_literals.py"
                 --root "${PROJECT_SOURCE_DIR}")
+    # ADR-0021: every public geometric operation declares its derivative
+    # capability, or is listed as no operation.
+    add_test(NAME "tools: capability declarations self-test"
+        COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/check_capabilities.py"
+                --self-test)
+    add_test(NAME "tools: capability declarations"
+        COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/check_capabilities.py"
+                --root "${PROJECT_SOURCE_DIR}")
     # The complexity check needs the lizard package; without it the script
     # exits 77, which CTest reports as skipped rather than failed.
     add_test(NAME "tools: complexity self-test"

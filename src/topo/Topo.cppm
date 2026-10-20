@@ -12,6 +12,7 @@ export module Stereon.Topo;
 
 export import Stereon.Intersect;
 export import :Builder;
+export import :Capabilities;
 export import :Operation;
 export import :Records;
 export import :Report;

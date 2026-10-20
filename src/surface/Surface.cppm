@@ -13,6 +13,7 @@ export module Stereon.Surface;
 export import Stereon.Curve;
 
 export import :BSplineSurface;
+export import :Capabilities;
 export import :Concepts;
 export import :Cone;
 export import :Conversion;
