@@ -1,7 +1,9 @@
 # ADR-0029: Define Intersection and Classification Outcomes Explicitly
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-14
+- **Revised:** 2026-10-20 (the decisions on acceptance below: the prototype's scope, analytic tangency evidence, declared tolerant coincidence, `ErrorCode::Unresolved`)
+- **Accepted:** 2026-10-20 by Onur Tuncer, before the Boolean prototype that builds on it (`docs/planning/boolean-prototype-plan.md`, decision D7)
 - **Owner:** Onur Tuncer
 - **Phase:** 2 (v0.2 intersection contract); classification integrated in v0.3–v0.6
 - **Extends:** ADR-0006, ADR-0010, ADR-0013, ADR-0026
@@ -75,6 +77,13 @@ Record the failed stage, input-qualified entities, remaining parameter domains, 
 
 A failure publishes no partial shape, history or metadata. Input shapes remain unchanged under ADR-0026/0027. Bindings preserve the same distinctions rather than mapping all failures to an empty list.
 
+### 6. Decisions on acceptance (2026-10-20)
+
+- **The full model, the prototype's cases.** The outcome type carries every kind of §1 (isolated points and full coincidence included), so that later surfaces need no redesign. The Boolean prototype produces what planes and cylinders give: proved empty, crossing lines and conics, tangential lines, coplanar and coaxial overlaps.
+- **Tangency between quadrics is proved, not assumed.** For a plane tangent to a cylinder and for two parallel cylinders in contact (externally or internally), the side relation follows from the closed form: the surfaces touch without crossing, so the relation is SameSide, decided with exact predicates and recorded as proved evidence. Any tangential contact without such a proof is Unresolved. The x³ case of §3, a tangential crossing, does not arise between quadrics.
+- **Tolerant coincidence is declared, and moves nothing.** Under nominal geometry (the prototype's decision D1), two supports that are exactly parallel (decided exactly on the input) and within the pair tolerance of each other are an Overlap, with evidence that says it is tolerant and gives the distance. No surface is moved: the result keeps the representative's surface (the lower input index, as in ADR-0001's merge policy), and the edge tolerances on the other side grow to cover the distance, logged and reported. Supports that are not exactly parallel are never coincident; they give a nominal crossing.
+- **`ErrorCode::Unresolved`.** An unresolved classification, or any other established-state question that a public operation needs answered and cannot settle, fails with a new code, appended when first used (the next value, nothing renumbered), and a message naming the stage and the input-qualified entities.
+
 ## Consequences
 
 Algorithms need result containers for points and regions as well as curves, and evidence for side transitions. Uncertain cases may fail more often initially; those failures become explicit corpus work rather than silent topology errors. The SSI construction strategy and exact-predicate boundary remain unchanged.
@@ -95,3 +104,15 @@ Algorithms need result containers for points and regions as well as curves, and 
 - [ADR-0006](0006-error-handling.md), [ADR-0009](0009-parameter-space-representation.md), [ADR-0010](0010-ssi-strategy.md), [ADR-0013](0013-boolean-classification.md), [ADR-0026](0026-modelling-operations-by-contracts.md), [ADR-0028](0028-purpose-specific-numerical-tolerances.md).
 
 This proposal supplements the listed decisions and reconciles their proposed contact/output rules; it supersedes none and accepts no research result. The verification cases become implementation gates as the corresponding domains are supported.
+
+### Status of the verification
+
+| Case | Gate |
+| --- | --- |
+| 1: disjoint planes, a transverse line, tangent cylinders, coincident supports with disjoint trims, partial overlap, full coincidence | The Boolean prototype's analytic handlers (M2, M3) |
+| 1: the sphere–plane tangent point | The first handler for spheres |
+| 2: x² against x³ | Generic SSI (ADR-0010), where non-quadric contact arises |
+| 3, 4: mixed components; forced exhaustion and failed certificates | M3 and M4 |
+| 5: an ambiguous near-boundary point stays unresolved | M7, classification |
+| 6: empty and boundary-only regularized results; same and opposite overlaps | M8, assembly |
+| 7: independent analytic values, adversarial corpus, G1 repeats | M3 (corpus), M10 (G1) |
