@@ -66,6 +66,13 @@ class FreezeKey {
 void ShapeHandleViolation(EntityKind kind, std::uint32_t index, std::uint32_t generation,
                           StoreId store, StoreId expectedStore, std::uint32_t size, bool alive);
 
+/// The live snapshots of checked builds by store, so that a debugger can
+/// show the entity behind a handle (ADR-0004, safeguard 4) through
+/// stereon_describe_handle(). A diagnostic registry, like the store counter
+/// (ADR-0007): it never decides anything, and release builds have none.
+void RegisterSnapshot(StoreId store, const TopologyTables* tables) noexcept;
+void UnregisterSnapshot(StoreId store) noexcept;
+
 /// The version recorded in every ValidationCertificate: incremented
 /// whenever the structural rules change.
 inline constexpr std::uint32_t StructuralValidatorVersion = 3;
@@ -105,7 +112,20 @@ public:
         : m_Tables(std::move(tables))
         , m_Store(store)
         , m_SourceBuilder(sourceBuilder)
-    {}
+    {
+        if constexpr (STEREON_CHECKED_HANDLES) {
+            Detail::RegisterSnapshot(m_Store, &m_Tables);
+        }
+    }
+    // Registered by address while alive, so never copied or moved.
+    TopologySnapshot(const TopologySnapshot&) = delete;
+    TopologySnapshot& operator=(const TopologySnapshot&) = delete;
+    ~TopologySnapshot()
+    {
+        if constexpr (STEREON_CHECKED_HANDLES) {
+            Detail::UnregisterSnapshot(m_Store);
+        }
+    }
 
     [[nodiscard]] const Detail::TopologyTables& GetTables() const noexcept { return m_Tables; }
     [[nodiscard]] ValidationCertificate GetCertificate() const noexcept

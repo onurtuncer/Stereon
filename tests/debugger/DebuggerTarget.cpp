@@ -15,9 +15,10 @@
 // GenerationTable keeps a std::vector<bool>. MSVC emits the helper behind its
 // push_back (std::_Fill_vbool) only in a unit that includes <vector> itself;
 // through the import alone the link fails.
+#include <utility>
 #include <vector>
 
-import Stereon.Surface;
+import Stereon.Topo;
 
 namespace {
 
@@ -119,6 +120,23 @@ int main()
     const JournalId journal{7};
     const Sign sign = Sign::Negative;
 
+    // A frozen wire of one edge: in a checked build the printers show the
+    // entity behind each handle, as Describe() does (ADR-0004, safeguard 4).
+    ShapeBuilder wireBuilder;
+    const auto wireStart = *wireBuilder.AddVertex(Point3{0.0, 0.0, 0.0}, 1e-7);
+    const auto wireEnd = *wireBuilder.AddVertex(Point3{1.0, 0.0, 0.0}, 1e-7);
+    const auto wireLine =
+        *wireBuilder.AddCurve(Curve(Line{Point3{0.0, 0.0, 0.0}, Vec3{1.0, 0.0, 0.0}}));
+    const auto wireBuilderEdge = *wireBuilder.AddEdge({.Kind = EdgeCurveKind::Spatial,
+                                                       .Start = wireStart,
+                                                       .End = wireEnd,
+                                                       .Curve = wireLine,
+                                                       .Range = Interval(0.0, 1.0),
+                                                       .Tolerance = 1e-7});
+    const Shape wire = *Freeze(std::move(wireBuilder));
+    const VertexId wireVertex = wire.Resolve(wireEnd);
+    const EdgeId wireEdge = wire.Resolve(wireBuilderEdge);
+
     StereonDebuggerStop(&sign);
     // Keep every value alive across the stop.
     StereonDebuggerStop(&vector);
@@ -143,5 +161,8 @@ int main()
     StereonDebuggerStop(&arena);
     StereonDebuggerStop(&snapshot);
     StereonDebuggerStop(&journal);
+    StereonDebuggerStop(&wire);
+    StereonDebuggerStop(&wireVertex);
+    StereonDebuggerStop(&wireEdge);
     return 0;
 }

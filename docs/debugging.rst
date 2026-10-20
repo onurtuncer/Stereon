@@ -61,9 +61,19 @@ large geometry             ``Curve(BSplineCurve, shared) {...}``, held behind th
 ``Sign``, ``Expansion``    ``Negative``, ``Expansion [1, 2]``
 =========================  =======================================================================
 
-A handle printed on its own shows its index. Resolving it against its store
-to show the entity, as in ``Edge#4711 [Line, tol 1e-5, faces 12|37]``,
-arrives with the topology stores.
+In a build with checked handles (the debug and sanitizer presets), a handle
+of a live shape shows the entity it names, as ``Describe()`` does:
+
+.. code-block:: text
+
+   (gdb) print edge
+   $1 = Edge#0 [Spatial Line, tol 1e-07, faces none]
+
+Each frozen snapshot registers its store while it is alive, and the
+printers call ``stereon_describe_handle(kind, index, store)`` in the
+process. With no live process (a core file), a handle of a release build,
+which carries no store, or a snapshot that is gone, the handle shows its
+index, ``Edge#0``.
 
 How they work
 -------------
