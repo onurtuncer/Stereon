@@ -43,6 +43,11 @@
 #define STEREON_EXEC_SYNC_NS stdexec
 #endif
 
+// A pool of a chosen number of threads, which Context::GetThreadCount()
+// names. The standard has no such context (P2079's parallel scheduler takes
+// no count), so this one stays stdexec's when the rest moves to std.
+#include <exec/static_thread_pool.hpp>
+
 namespace Stereon::Exec {
 
 /// True when std::execution is used; false while the stdexec polyfill is.
@@ -94,6 +99,9 @@ using STEREON_EXEC_NS::start;
 using STEREON_EXEC_NS::get_parallel_scheduler;
 using STEREON_EXEC_NS::parallel_scheduler;
 using STEREON_EXEC_NS::run_loop;
+// A fixed number of worker threads: the context of an operation run at the
+// thread count its Context sets (Stereon/Core/Parallel.hpp).
+using ::exec::static_thread_pool;
 
 // Consumers
 using STEREON_EXEC_SYNC_NS::sync_wait;

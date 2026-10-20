@@ -48,6 +48,19 @@ target_link_libraries(stereon_serialize_tests
 target_include_directories(stereon_serialize_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/support")
 catch_discover_tests(stereon_serialize_tests TEST_PREFIX "serialize: " DISCOVERY_MODE PRE_TEST)
 
+# The determinism check of ADR-0007 for the operations that run in parallel:
+# serial and 1, 2, 8 and 32 threads must give the same bytes. CTest compares
+# them in one process; the nightly workflow runs each configuration in its
+# own process and compares the files.
+add_executable(stereon_determinism determinism/DeterminismRun.cpp)
+target_link_libraries(stereon_determinism PRIVATE stereon::surface stereon_options)
+target_include_directories(stereon_determinism PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/support")
+stereon_anchor_contracts(stereon_determinism)
+add_test(NAME "determinism: serial and 1, 2, 8 and 32 threads give the same bytes"
+    COMMAND stereon_determinism --check 2000)
+set_tests_properties("determinism: serial and 1, 2, 8 and 32 threads give the same bytes"
+    PROPERTIES PASS_REGULAR_EXPRESSION "every configuration identical")
+
 # The data behind the manual's fitting figures (docs/figures/): built and
 # run with the tests so that it keeps compiling and the figures can always be
 # regenerated with docs/figures/make_fitting_figures.py.
