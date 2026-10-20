@@ -49,7 +49,7 @@ namespace {
 /// True when the basis's NURBS form keeps its parametrisation: a plane or a
 /// B-spline surface (src/surface/Conversion.cppm); the rational arcs of the
 /// other analytic surfaces agree with it only at their knots.
-bool KeepsParameter(const Surface& basis)
+bool PatchKeepsParameter(const Surface& basis)
 {
     return VisitBuiltin(basis, []<typename G>(const G&) {
         return std::is_same_v<G, Plane> || std::is_same_v<G, BSplineSurface>;
@@ -144,7 +144,7 @@ std::shared_ptr<const TrimmedPatch> MakePatch(const Surface& basis, const Box2 r
     }
     SurfaceProjector projector(*patch);
     return std::make_shared<const TrimmedPatch>(
-        TrimmedPatch{*std::move(patch), std::move(projector), KeepsParameter(basis)});
+        TrimmedPatch{*std::move(patch), std::move(projector), PatchKeepsParameter(basis)});
 }
 
 } // namespace Detail
