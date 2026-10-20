@@ -6,9 +6,12 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 /// Stereon.Io: STEP, STL, OBJ, glTF and the native format (ADR-0012). So
-/// far the geometry subset of the native format (:GeometryArchive).
+/// far the geometry subset of the native format (:GeometryArchive), its
+/// debug chunk (:Debug) and dumps for the debug viewer (:Dump, ADR-0035).
 export module Stereon.Io;
 
 export import Stereon.Mesh;
+export import :Debug;
+export import :Dump;
 export import :GeometryArchive;
 export import :Records;

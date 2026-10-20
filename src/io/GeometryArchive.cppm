@@ -12,6 +12,7 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <ostream>
 #include <span>
 #include <string>
@@ -20,6 +21,7 @@ module;
 export module Stereon.Io:GeometryArchive;
 
 import Stereon.Surface;
+import :Debug;
 
 /// The geometry subset of the native .stn format (ADR-0012): curves, plane
 /// curves and surfaces of the built-in types, with the model's numerical
@@ -61,6 +63,11 @@ import Stereon.Surface;
 /// most MaxTrimmedNesting deep together. Each earlier version is the next
 /// without its new records, so a version-1 or version-2 file reads
 /// unchanged.
+///
+/// One optional chunk, "DBUG", carries a dump's name, source location and
+/// debug primitives (ADR-0035; Stereon.Io:Debug has its layout). It is
+/// written only when the archive has one, at most once, and adding it did
+/// not change the format version.
 ///
 /// A reader refuses a newer format version, a damaged chunk, a missing or
 /// repeated "POLI", "CRVS", "PCRV" or "SRFS" chunk (each appears exactly
@@ -107,6 +114,8 @@ struct GeometryArchive {
     std::vector<Curve> Curves;
     std::vector<Curve2d> Curves2d;
     std::vector<Surface> Surfaces;
+    /// A dump's `DBUG` chunk, when the archive has one.
+    std::optional<DebugChunk> Debug;
 };
 
 /// An archive read back, with what the reader skipped.

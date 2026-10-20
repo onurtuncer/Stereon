@@ -39,6 +39,10 @@ include(StereonDependencies)
 
 add_subdirectory(src)
 
+if(STEREON_BUILD_TOOLS)
+    add_subdirectory(tools/stn-dump)
+endif()
+
 if(STEREON_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)

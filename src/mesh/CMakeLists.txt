@@ -8,5 +8,8 @@
 stereon_add_library(mesh
     MODULES
         Mesh.cppm
+        Sampling.cppm
+    SOURCES
+        Sampling.cpp
     DEPENDS
         blend)
