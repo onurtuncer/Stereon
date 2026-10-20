@@ -121,8 +121,9 @@ void CopyLive(const PagedArena<T>& from, PagedArena<T>& to, Rewrite rewrite)
     }
 }
 
-template <typename T>
-void CopyUsed(const PagedArena<T>& from, PagedArena<T>& to, const std::vector<bool>& used)
+/// The used entries of a table or a geometry pool, in order.
+template <typename Table>
+void CopyUsed(const Table& from, Table& to, const std::vector<bool>& used)
 {
     for (std::size_t i = 0; i < from.GetSize(); ++i) {
         if (used[i]) {

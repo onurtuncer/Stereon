@@ -42,7 +42,7 @@ namespace {
 /// the primary coedge's pcurve on its face's surface otherwise (ADR-0009).
 Point3 EdgePoint(const Shape& shape, const EdgeId e, const double t)
 {
-    if (const Stereon::Curve* curve = Stereon::CurveOf(shape, e)) {
+    if (const std::optional<Stereon::Curve> curve = Stereon::CurveOf(shape, e)) {
         return Eval(*curve, t);
     }
     const CoedgeId primary = Stereon::PrimaryCoedgeOf(shape, e);
@@ -230,7 +230,7 @@ TEST_CASE("the hand-built cylinder, seam included", "[topo][bodies][cylinder]")
         REQUIRE(Stereon::KindOf(shape, top) == EdgeCurveKind::Exact);
         REQUIRE(Stereon::KindOf(shape, seam) == EdgeCurveKind::Boundary);
         REQUIRE(Stereon::StartOf(shape, bottom) == Stereon::EndOf(shape, bottom));
-        REQUIRE(Stereon::CurveOf(shape, seam) == nullptr);
+        REQUIRE_FALSE(Stereon::CurveOf(shape, seam).has_value());
         REQUIRE(Stereon::PrimaryCoedgeOf(shape, seam).IsValid());
         for (const EdgeId e : {bottom, top}) {
             const auto ring = Collect(Must(Stereon::RadialCoedgesOf(shape, e)));
@@ -334,8 +334,9 @@ TEST_CASE("two edges may share one curve over their own ranges", "[topo][bodies]
     // And two vertices at one point stay two vertices (item 4).
     const BuilderVertexId twin = body.AddVertex({1, 0, 0});
     const Shape shape = std::move(body).Freeze();
-    REQUIRE(Stereon::CurveOf(shape, shape.Resolve(first)) ==
-            Stereon::CurveOf(shape, shape.Resolve(second)));
+    // One curve in the pool, referenced by both edges.
+    REQUIRE(Stereon::Detail::RecordOf(shape, shape.Resolve(first)).Curve ==
+            Stereon::Detail::RecordOf(shape, shape.Resolve(second)).Curve);
     REQUIRE(Stereon::RangeOf(shape, shape.Resolve(first)).GetUpper() == 1.0);
     REQUIRE(Stereon::RangeOf(shape, shape.Resolve(second)).GetUpper() == 3.0);
     REQUIRE(shape.Resolve(twin) != shape.Resolve(b));

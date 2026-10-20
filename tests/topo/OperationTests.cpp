@@ -111,7 +111,7 @@ TEST_CASE("an Intersection edge's cache follows its primary side and is not cert
     const EdgeId e = shape.Resolve(hinge.Edges[0]);
     REQUIRE(Stereon::CacheCertificateOf(shape, e) == CacheCertificate::Uncertified);
     REQUIRE(std::isinf(Stereon::CacheBoundOf(shape, e)));
-    REQUIRE(Stereon::CurveOf(shape, e) == nullptr); // a cache is not the edge's own curve
+    REQUIRE_FALSE(Stereon::CurveOf(shape, e).has_value()); // a cache is not the edge's own curve
     const Stereon::Curve& curve = Deref(Stereon::CachedCurveOf(shape, e));
     REQUIRE(Domain(curve) == Interval(0.0, 1.0));
     // The primary side is the line (0, t, 0) on face 0's plane.
@@ -120,7 +120,7 @@ TEST_CASE("an Intersection edge's cache follows its primary side and is not cert
     REQUIRE(Stereon::Describe(shape, e).find("cached, uncertified") != std::string::npos);
     // The other kinds keep no cache.
     const EdgeId side = shape.Resolve(hinge.Edges[1]);
-    REQUIRE(Stereon::CachedCurveOf(shape, side) == nullptr);
+    REQUIRE_FALSE(Stereon::CachedCurveOf(shape, side).has_value());
     REQUIRE(Stereon::CacheCertificateOf(shape, side) == CacheCertificate::None);
 }
 
@@ -188,7 +188,7 @@ TEST_CASE("a cache is dropped whenever a pcurve, the primary or a surface of its
         Body hinge = MakeHinge(XyPlane(), Segment2({0, 0}, {0, 1}), cached);
         const Shape shape = std::move(hinge).Freeze();
         const EdgeId e = shape.Resolve(hinge.Edges[0]);
-        REQUIRE(Stereon::CachedCurveOf(shape, e) == nullptr);
+        REQUIRE_FALSE(Stereon::CachedCurveOf(shape, e).has_value());
         REQUIRE(Stereon::CacheCertificateOf(shape, e) == CacheCertificate::None);
     }
 
@@ -196,16 +196,16 @@ TEST_CASE("a cache is dropped whenever a pcurve, the primary or a surface of its
     cached(hinge);
     const Shape base = std::move(hinge).Freeze();
     const EdgeId e = base.Resolve(hinge.Edges[0]);
-    REQUIRE(Stereon::CachedCurveOf(base, e) != nullptr);
+    REQUIRE(Stereon::CachedCurveOf(base, e).has_value());
     const auto requireDropped = [&](ShapeBuilder&& edit) {
         const OperationResult result = MustCommit(std::move(edit));
-        REQUIRE(Stereon::CachedCurveOf(result.Shape, At<EntityKind::Edge>(result.Shape, 0)) ==
-                nullptr);
+        REQUIRE_FALSE(Stereon::CachedCurveOf(result.Shape, At<EntityKind::Edge>(result.Shape, 0))
+                          .has_value());
         REQUIRE(result.Warnings.size() == 1);
         REQUIRE(result.Warnings[0].Code == DiagnosticCode::CacheDropped);
         REQUIRE(result.Warnings[0].Entities.at(0).find("Edge#0") != std::string::npos);
         // The source keeps its cache: snapshots are immutable.
-        REQUIRE(Stereon::CachedCurveOf(base, e) != nullptr);
+        REQUIRE(Stereon::CachedCurveOf(base, e).has_value());
     };
     SECTION("the primary passes to the other side")
     {
@@ -240,8 +240,8 @@ TEST_CASE("a cache is dropped whenever a pcurve, the primary or a surface of its
         ShapeBuilder edit = Must(ShapeBuilder::Open(base));
         Must(edit.SetTolerance(edit.Handle(e), 1e-6, "a looser hinge"));
         const OperationResult result = MustCommit(std::move(edit));
-        REQUIRE(Stereon::CachedCurveOf(result.Shape, At<EntityKind::Edge>(result.Shape, 0)) !=
-                nullptr);
+        REQUIRE(Stereon::CachedCurveOf(result.Shape, At<EntityKind::Edge>(result.Shape, 0))
+                    .has_value());
     }
 }
 

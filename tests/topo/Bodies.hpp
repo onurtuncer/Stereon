@@ -500,10 +500,10 @@ inline Stereon::VertexId EndOfUse(const Stereon::Shape& shape, const Stereon::Co
 
 /// The pcurve of a coedge, which every body here gives its uses; the test
 /// fails on one without.
-inline const Stereon::Curve2d& PCurveOfUse(const Stereon::Shape& shape, const Stereon::CoedgeId c)
+inline Stereon::Curve2d PCurveOfUse(const Stereon::Shape& shape, const Stereon::CoedgeId c)
 {
-    const Stereon::Curve2d* pcurve = Stereon::PCurveOf(shape, c);
-    if (pcurve == nullptr) {
+    const std::optional<Stereon::Curve2d> pcurve = Stereon::PCurveOf(shape, c);
+    if (!pcurve) {
         FAIL(Stereon::Describe(shape, c) << " has no pcurve");
         std::abort(); // FAIL throws; this keeps the compiler from seeing a null path
     }
@@ -521,6 +521,18 @@ const T& Deref(const T* pointer)
         std::abort(); // FAIL throws; this keeps the compiler from seeing a null path
     }
     return *pointer;
+}
+
+/// The value of an optional the test expects to be set; the test fails on
+/// an empty one. The geometry accessors return their geometry this way.
+template <typename T>
+T Deref(const std::optional<T>& value)
+{
+    if (!value.has_value()) {
+        FAIL("unexpected empty value");
+        std::abort(); // FAIL throws
+    }
+    return *value;
 }
 
 /// Collects a range into a vector.
