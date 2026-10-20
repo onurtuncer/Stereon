@@ -59,4 +59,4 @@ Every corpus failure case must return a `KernelError` naming at least one involv
 | A shape that fails validation is never published | Met: `Freeze` and `Commit` validate and return `InvalidResult` with the report's text (`src/topo/Builder.cpp`) |
 | Tolerance changes appear in the `OperationResult` | Met: `Commit` reports every `SetTolerance` with its reason and warns `ToleranceGrown` (`tests/topo/OperationTests.cpp`) |
 | Corpus failures name an entity | Pending: `KernelError` has no entity list or attached `ValidityReport` yet; the report's text is in the message. Both fields are added with the first operation that fails on a corpus case |
-| Fuzzing yields only `KernelError`s | Pending: needs the fuzzing harness (TODO.md, section 9) |
+| Fuzzing yields only `KernelError`s | Running: the `.stn` reader and the checked B-spline factory (`tests/fuzz/`), a short pass on every pull request and 200 000 mutations each nightly under the sanitizers; further entry points join as they are added |

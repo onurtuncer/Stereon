@@ -122,7 +122,7 @@ Per [ADR-0035](docs/adr/0035-debug-viewer.md): objects reach the viewer as `.stn
 ## 9. Testing infrastructure (weeks 2–10)
 
 - [x] Catch2 + RapidCheck wiring; test naming and tagging conventions. One executable per library, cases tagged `[<library>]` plus topic tags and `[property]` for `rc::prop` tests ([`tests/CMakeLists.txt`](tests/CMakeLists.txt))
-- [ ] libFuzzer harness skeleton (for later STEP and primitive-placement fuzzing)
+- [x] libFuzzer harness skeleton (for later STEP and primitive-placement fuzzing). `tests/fuzz/`: the `.stn` reader and the checked B-spline factory, behind libFuzzer's entry point; a standalone driver for GCC (seed corpus and seeded mutations, contract violations counted), a CTest smoke pass, 200 000 mutations nightly under the sanitizers; the nightly suite also runs `gcc16-observe`
 - [ ] OCCT differential-testing harness: build OCCT in CI, compare volumes/areas/face counts on shared cases. OCCT 8.0.1 is built and cached in CI (`tools/occt/build_occt.sh`, `.github/workflows/occt.yml`) and `stereon_occt_tests` compares the built-in curves and surfaces with OCCT's; volumes, areas and face counts follow the topology prototype
 - [x] `corpus/` layout, metadata format and `corpus/LICENSES.md` ([`corpus/README.md`](corpus/README.md)); cases validated by `tools/check_corpus.py` in CI
 - [ ] Regression-case workflow: failing case → minimal file + journal → never deleted
