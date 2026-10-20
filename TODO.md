@@ -161,7 +161,7 @@ All of the following must pass in CI before Phase 1 starts:
 
 - [x] Predicates pass the adversarial suite with zero inconsistent results. 20 000 cases per predicate in every CI run; the 10⁶ run is `stereon_robust_tests "[exhaustive]"` (§5)
 - [x] Type-erased `Curve` with `VisitBuiltin` within 10% of direct calls; pure virtual fallback within 5 ns per call of a direct call (ADR-0003, revised 2026-10-20 from 2×, a ratio that measures a line's evaluator rather than the dispatch). `VisitBuiltin` 2.0 against 2.2 ns for a line; the fallback adds 3.4 ns for a line and about 1 ns for a circle
-- [ ] ADR-0004 prototype: adjacency ≥ 5× faster than OCCT, memory per face < 50% of OCCT. Adjacency is met (20× and 60×); memory is not, at 78% of OCCT, mostly the geometry pools by estimate (`docs/performance.rst`, *Topology*)
+- [x] ADR-0004 prototype: adjacency ≥ 5× faster than OCCT, memory per face < 50% of OCCT. Adjacency 20× and 60×; memory per face 608 B against OCCT's 1601 B (38%) with smaller records, per-kind wrappers and typed geometry pools (`docs/performance.rst`, *Topology*)
 - [x] Release-build handles are 4 bytes; seeded-fault suite caught 100% in debug builds. `static_assert` in `src/core/Handle.cppm` and `tests/topo/RecordLayoutTests.cpp`; the faults a handle check can detect are caught by `tests/topo/FaultTests.cpp` and, at the accessors, by the contract probes
 - [x] Pretty-printers pass their scripted GDB and LLDB tests. Linux Debug CI (`tests/debugger/check_printers.py`); skipped on macOS and MSVC, whose debug information the debuggers cannot read. Rerun when handles resolve to entities (§8)
 - [x] Handle design decided (index throughout, or hybrid) and recorded in ADR-0004. Index throughout (2026-10-20)
