@@ -417,6 +417,73 @@ inline Body MakeDegenerateFace()
     return body;
 }
 
+/// A plane-curve segment from `from` to `to` on t in [0, 1].
+inline Stereon::Curve2d Segment2(const Point2& from, const Point2& to)
+{
+    return Stereon::Curve2d(Stereon::Line2d{from, to - from});
+}
+
+/// Two unit squares meeting along the y axis, an open book: face 0 in the
+/// plane z = 0 (x >= 0) and face 1 in the plane x = 0 (z >= 0), one open
+/// shell. Edge 0 is the hinge, an Intersection edge from (0, 0, 0) to
+/// (0, 1, 0) on t in [0, 1]; edges 1-3 and 4-6 are Boundary sides of faces 0
+/// and 1. The hinge's first use, so its primary coedge, is face 0's, with
+/// pcurve `hingeOnA` on `surfaceA`; by default face 0's plane, on which the
+/// pcurve (0, t) gives (0, t, 0). `between` runs after face 0 is built and
+/// before face 1's use of the hinge is appended.
+template <typename Between>
+Body MakeHinge(const Stereon::Surface& surfaceA, const Stereon::Curve2d& hingeOnA, Between between)
+{
+    Body body;
+    const BuilderVertexId v0 = body.AddVertex({0, 0, 0});
+    const BuilderVertexId v1 = body.AddVertex({0, 1, 0});
+    const BuilderEdgeId hinge = body.AddEdge({.Kind = EdgeCurveKind::Intersection,
+                                              .Start = v0,
+                                              .End = v1,
+                                              .Range = Interval(0.0, 1.0),
+                                              .Tolerance = 1e-7});
+    const BuilderShellId shell = body.Shells.emplace_back(Must(body.Builder.AddShell()));
+    const auto side = [&](const BuilderVertexId a, const BuilderVertexId b) {
+        return body.AddEdge({.Kind = EdgeCurveKind::Boundary,
+                             .Start = a,
+                             .End = b,
+                             .Range = Interval(0.0, 1.0),
+                             .Tolerance = 1e-7});
+    };
+    // Face 0, in its plane's (x, y): v0 -> a1 -> a2 -> v1, then the hinge back.
+    {
+        const BuilderVertexId a1 = body.AddVertex({1, 0, 0});
+        const BuilderVertexId a2 = body.AddVertex({1, 1, 0});
+        const BuilderFaceId face = body.AddFace(surfaceA);
+        Must(body.Builder.AddFaceToShell(shell, face));
+        const BuilderLoopId loop = body.AddLoop(face);
+        body.AddCoedge(loop, hinge, EdgeUseSense::Opposite, hingeOnA);
+        body.AddCoedge(loop, side(v0, a1), EdgeUseSense::Same, Segment2({0, 0}, {1, 0}));
+        body.AddCoedge(loop, side(a1, a2), EdgeUseSense::Same, Segment2({1, 0}, {1, 1}));
+        body.AddCoedge(loop, side(a2, v1), EdgeUseSense::Same, Segment2({1, 1}, {0, 1}));
+    }
+    between(body);
+    // Face 1, in its plane's (z, y): the hinge, then v1 -> b2 -> b1 -> v0.
+    {
+        const BuilderVertexId b2 = body.AddVertex({0, 1, 1});
+        const BuilderVertexId b1 = body.AddVertex({0, 0, 1});
+        const BuilderFaceId face =
+            body.AddFace(Stereon::Surface(Stereon::Plane{{0, 0, 0}, Vec3{0, 0, 1}, Vec3{0, 1, 0}}));
+        Must(body.Builder.AddFaceToShell(shell, face));
+        const BuilderLoopId loop = body.AddLoop(face);
+        body.AddCoedge(loop, hinge, EdgeUseSense::Same, Segment2({0, 0}, {0, 1}));
+        body.AddCoedge(loop, side(v1, b2), EdgeUseSense::Same, Segment2({0, 1}, {1, 1}));
+        body.AddCoedge(loop, side(b2, b1), EdgeUseSense::Same, Segment2({1, 1}, {1, 0}));
+        body.AddCoedge(loop, side(b1, v0), EdgeUseSense::Same, Segment2({1, 0}, {0, 0}));
+    }
+    return body;
+}
+
+inline Body MakeHinge()
+{
+    return MakeHinge(XyPlane(), Segment2({0, 0}, {0, 1}), [](Body&) {});
+}
+
 /// The vertex a coedge starts from, along its loop: the edge's start for a
 /// use in the same sense, its end otherwise.
 inline Stereon::VertexId StartOfUse(const Stereon::Shape& shape, const Stereon::CoedgeId c)

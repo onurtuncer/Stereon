@@ -10,6 +10,7 @@ module;
 #include <compare>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <string_view>
 #include <utility>
 
@@ -66,6 +67,43 @@ enum class EdgeCurveKind : std::uint8_t {
         return "Degenerate";
     }
     return "EdgeCurveKind";
+}
+
+/// True for the kinds that keep a cached 3D curve of their primary side
+/// (ADR-0009, sections 1 and 5): their 3D curve is S(c(t)), derived from a
+/// pcurve and a surface rather than stored as the truth.
+[[nodiscard]] constexpr bool HasCachedCurve(const EdgeCurveKind kind) noexcept
+{
+    return kind == EdgeCurveKind::Intersection || kind == EdgeCurveKind::Trim;
+}
+
+/// What is known of a cached edge curve's deviation from the curve it
+/// approximates (ADR-0009, section 4).
+enum class CacheCertificate : std::uint8_t {
+    /// The edge keeps no cached curve: none was built, or a change to a
+    /// pcurve, the primary coedge or a surface of the edge dropped it.
+    None,
+    /// A cached curve, built from the current pcurves and surfaces, whose
+    /// deviation is not certified: certificates need the interval evaluation
+    /// of S(c(t)) that ADR-0009 names, which the kernel does not have yet.
+    /// Sampling the deviation is a regression check, never a certificate.
+    Uncertified,
+    /// A cached curve with a proven bound on its deviation over the whole
+    /// range. Reserved: nothing issues one until interval evaluation exists.
+    Certified,
+};
+
+[[nodiscard]] constexpr std::string_view ToString(const CacheCertificate certificate) noexcept
+{
+    switch (certificate) {
+    case CacheCertificate::None:
+        return "no cache";
+    case CacheCertificate::Uncertified:
+        return "cached, uncertified";
+    case CacheCertificate::Certified:
+        return "cached, certified";
+    }
+    return "CacheCertificate";
 }
 
 /// How a coedge uses its edge: along the edge's parameter or against it.
@@ -159,9 +197,23 @@ struct EdgeRecord {
     EdgeId NextAtStart;
     EdgeId NextAtEnd;
     CurveRef Curve;
+    /// The cached 3D curve of an Intersection or Trim edge (ADR-0009,
+    /// section 5), in the curve pool: an approximation of the primary side
+    /// S(c(t)) on the edge's parameter. A cache, never the truth: dropped
+    /// whenever a pcurve, the primary coedge or a surface of the edge
+    /// changes (ADR-0004), and rebuilt from them deterministically.
+    CurveRef Cached;
     Interval Range;
     double Tolerance = 0.0;
+    /// The proven bound on the cache's deviation, for a Certified cache;
+    /// infinite otherwise.
+    double CacheBound = std::numeric_limits<double>::infinity();
     EdgeCurveKind Kind = EdgeCurveKind::Spatial;
+    /// What is known of the cache's deviation; None exactly when there is no
+    /// cache. Plain scalars, as the snapshot's certificate is kept. The
+    /// fields are ordered so that the cache adds as little as it can to
+    /// every edge record (B0.4).
+    CacheCertificate CacheStatus = CacheCertificate::None;
 };
 
 /// A use of an edge in a loop: the loop cycle (Next, Prev), the radial ring

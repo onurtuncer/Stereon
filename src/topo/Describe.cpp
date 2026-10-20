@@ -92,6 +92,10 @@ template <typename Wrapper>
         text += ' ';
         text += TypeNameOf(t.Curves[e.Curve.GetIndex()]);
     }
+    if (e.Cached.IsValid()) {
+        text += ", ";
+        text += ToString(e.CacheStatus);
+    }
     text += std::format(", tol {}, faces ", e.Tolerance);
     const std::uint32_t anchor = e.RadialAnchor.GetIndex();
     if (anchor == CoedgeId::Invalid) {

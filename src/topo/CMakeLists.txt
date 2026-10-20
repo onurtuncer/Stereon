@@ -8,6 +8,7 @@
 stereon_add_library(topo
     MODULES
         Builder.cppm
+        Operation.cppm
         Records.cppm
         Report.cppm
         Shape.cppm
@@ -16,6 +17,7 @@ stereon_add_library(topo
         Builder.cpp
         Compact.cpp
         Describe.cpp
+        Operation.cpp
         Shape.cpp
         Validate.cpp
     DEPENDS
