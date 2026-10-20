@@ -1,9 +1,11 @@
 # ADR-0013: Boolean classification
 
-- **Status:** Proposed (to be accepted before Phase 4)
+- **Status:** Accepted
 - **Date:** 2026-09-28
 - **Revised:** 2026-10-10 (contact-type-aware cross-check; deterministic ray directions)
 - **Revised:** 2026-10-14 (separate contact type from side transition; unresolved/fallback contract in ADR-0029)
+- **Revised:** 2026-10-20 (the decisions on acceptance below: the seeding budget and the bounded winding-number fallback)
+- **Accepted:** 2026-10-20 by Onur Tuncer, before the Boolean prototype that builds it for solids of planes and cylinders (`docs/planning/boolean-prototype-plan.md`, decision D7). The Phase 4 verification below is unchanged and remains the gate for the full domain.
 - **Owner:** Onur Tuncer
 - **Phase:** 4
 
@@ -39,6 +41,12 @@ Adopt option 3.
   | Unresolved contact or transition | refine/classify with adequate evidence, or fail; no forced relation |
 
   A violated established relation means intersection, splitting or seeding went wrong, and the operation fails with `KernelError::DegenerateResult` naming the edge and both fragments. Lack of evidence is a distinct unresolved-classification diagnostic, not a contradicted relation or a successful boundary classification.
+
+### Decisions on acceptance (2026-10-20)
+
+- **Seeding has a fixed budget.** Each region's seed point is classified by up to 16 rays, their directions from the counter-based generator above. A hit is decided with exact predicates: a ray meets a plane or a cylinder at the roots of a linear or quadratic equation, and whether the hit lies inside a trimmed face is a point-in-loop test against the face's line and circle pcurves. A ray that passes within tolerance of an edge or a vertex, or touches a surface tangentially, is discarded and the next direction tried.
+- **Then the bounded winding number.** When no ray gives a clean answer, the seed point's generalised winding number decides, with an error bound: planar faces contribute their exact solid angles, and curved faces are tessellated with a known deviation bound that gives a bound on their contribution. The side is accepted only when the winding number lies further from ½ than its bound, so no error within the bound could change it (ADR-0029 §4). Otherwise the tessellation is refined, up to a budget.
+- **Then `ErrorCode::Unresolved`**, naming the region, the rays tried and the last winding-number interval (ADR-0029 §6). The operation publishes nothing.
 
 ## Consequences
 
