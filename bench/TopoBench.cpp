@@ -12,7 +12,8 @@
 // - building the sheet through ShapeBuilder and freezing it;
 // - the adjacency queries over the whole body: the faces of every edge
 //   and the edges of every vertex (B0.3);
-// - bytes per face of the frozen tables (B0.4);
+// - bytes per face of the frozen tables, and the live heap the sheet holds
+//   per face, the measure the OCCT twin takes the same way (B0.4);
 // - one local edit on the frozen body, opened in a builder and frozen
 //   again: replacing one face's surface, deleting one face, each reporting
 //   the pages copied as a fraction of the body (B0.5, ADR-0004 asks < 1%);
@@ -24,7 +25,11 @@
 // for n^2 faces; every interior edge is shared by two faces. The size is
 // the benchmark argument: 10^4 faces for a quick run, 10^6 for the body
 // of the ADRs (about 1 GB of tables), which the reference run uses.
+//
+// The OCCT reference run compiles this file into stereon_occt_bench beside
+// bench/occt/OcctTopoBench.cpp, so the twins run interleaved in one process.
 
+#include "Memory.hpp"
 #include <benchmark/benchmark.h>
 
 #include <cstddef>
@@ -255,18 +260,43 @@ void BytesPerFace(benchmark::State& state)
                                        static_cast<double>(shape.Count<EntityKind::Edge>());
 }
 
+/// The live heap the sheet holds, per face and per edge, with the shape
+/// alive: the twin of OcctTopoBench.cpp's HeapPerFace, measured the same
+/// way. The builder's working state is gone by then, as the OCCT side's
+/// vertex and edge lists are. The timed loop is the build.
+void HeapPerFace(benchmark::State& state)
+{
+    const std::size_t n = SideFor(static_cast<std::size_t>(state.range(0)));
+    double bytes = 0.0;
+    std::size_t edges = 0;
+    for (auto _ : state) {
+        const std::size_t before = StereonBench::HeapBytes();
+        const Shape shape = MakeSheet(n);
+        bytes = static_cast<double>(StereonBench::HeapBytes() - before);
+        edges = shape.Count<EntityKind::Edge>();
+        benchmark::DoNotOptimize(edges);
+    }
+    state.counters["faces"] = static_cast<double>(n * n);
+    state.counters["heap_bytes_per_face"] = bytes / static_cast<double>(n * n);
+    state.counters["heap_bytes_per_edge"] = bytes / static_cast<double>(edges);
+}
+
 /// One edit of the frozen body: opened, edited, frozen again. The pages
-/// copied are the pages of the result not shared with the body.
+/// copied are the pages of the result not shared with the body; the heap
+/// delta is what the edited snapshot adds, the measure the OCCT twin gives.
 template <typename Edit>
 void OneEdit(benchmark::State& state, Edit edit)
 {
     const std::size_t n = SideFor(static_cast<std::size_t>(state.range(0)));
     const Shape shape = MakeSheet(n);
     std::size_t copied = 0;
+    double heapDelta = 0.0;
     for (auto _ : state) {
+        const std::size_t before = StereonBench::HeapBytes();
         ShapeBuilder b = *ShapeBuilder::Open(shape);
         edit(b, shape, n);
         const Shape edited = *Stereon::Freeze(std::move(b));
+        heapDelta = static_cast<double>(StereonBench::HeapBytes() - before);
         copied = PageCount(edited) - SharedPages(shape, edited);
         benchmark::DoNotOptimize(copied);
     }
@@ -275,6 +305,7 @@ void OneEdit(benchmark::State& state, Edit edit)
     state.counters["pages_copied"] = static_cast<double>(copied);
     state.counters["copied_fraction"] =
         static_cast<double>(copied) / static_cast<double>(PageCount(shape));
+    state.counters["heap_delta_bytes"] = heapDelta;
 }
 
 void ReplaceSurface(ShapeBuilder& b, const Shape& shape, const std::size_t n)
@@ -379,6 +410,11 @@ BENCHMARK(EdgesOfVertices)
     ->Arg(Body)
     ->Unit(benchmark::kMillisecond);
 BENCHMARK(BytesPerFace)->Name("B0.4/BytesPerFace/Stereon")->Arg(Quick)->Arg(Body);
+BENCHMARK(HeapPerFace)
+    ->Name("B0.4/HeapPerFace/Stereon")
+    ->Arg(Quick)
+    ->Arg(Body)
+    ->Unit(benchmark::kMillisecond);
 BENCHMARK(EditReplaceSurface)
     ->Name("B0.5/ReplaceSurface/Stereon")
     ->Arg(Quick)

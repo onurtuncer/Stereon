@@ -11,12 +11,15 @@
 // queries through TopExp::MapShapesAndAncestors (the map must be built
 // before the first query, so a query session pays for it: the rows report
 // the build and the queries together, and the build alone); memory per
-// face as the resident set the build adds, measured for OCCT and for
-// Stereon in the same process; and one face replaced through
-// BRepTools_ReShape, OCCT's way of editing a shape without rebuilding it.
+// face as the live heap the sheet holds (bench/Memory.hpp); and one face
+// replaced or removed through BRepTools_ReShape, OCCT's way of editing a
+// shape without rebuilding it. The Stereon twins are bench/TopoBench.cpp,
+// compiled into this executable too, so that both libraries' rows run
+// interleaved in one process.
 //
 // OCCT is LGPL-2.1 and is used here as a reference only (ADR-0008).
 
+#include "../Memory.hpp"
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepBuilderAPI_MakeVertex.hxx>
@@ -44,17 +47,13 @@
 #include <utility>
 #include <vector>
 
-import Stereon.Topo;
-
-#include "ResidentMemory.hpp"
-
 namespace {
 
 /// The ancestor map of TopExp, under OCCT 8's name for it.
 using AncestorMap = NCollection_IndexedDataMap<TopoDS_Shape, NCollection_List<TopoDS_Shape>,
                                                TopTools_ShapeMapHasher>;
 
-using StereonBench::ResidentBytes;
+using StereonBench::HeapBytes;
 
 std::size_t SideFor(const std::size_t faces)
 {
@@ -181,112 +180,35 @@ void OcctAncestorMap(benchmark::State& state)
     state.counters["faces"] = static_cast<double>(n * n);
 }
 
-/// Resident bytes per face the sheet adds: the measure both kernels can
-/// give in one process. The counters carry the result; the timed loop is
-/// the build.
-void OcctResidentPerFace(benchmark::State& state)
+/// The live heap the sheet holds, per face and per edge, with the shell
+/// alive: the B0.4 measure, taken the same way for both kernels
+/// (TopoBench.cpp's HeapPerFace). The counters carry the result; the timed
+/// loop is the build.
+void OcctHeapPerFace(benchmark::State& state)
 {
     const std::size_t n = SideFor(static_cast<std::size_t>(state.range(0)));
-    double perFace = 0.0;
+    double bytes = 0.0;
     for (auto _ : state) {
-        const std::size_t before = ResidentBytes();
+        const std::size_t before = HeapBytes();
         const TopoDS_Shell shell = MakeOcctSheet(n);
-        const std::size_t after = ResidentBytes();
+        bytes = static_cast<double>(HeapBytes() - before);
         benchmark::DoNotOptimize(shell.NbChildren());
-        perFace = static_cast<double>(after - before) / static_cast<double>(n * n);
     }
     state.counters["faces"] = static_cast<double>(n * n);
-    state.counters["resident_bytes_per_face"] = perFace;
+    state.counters["heap_bytes_per_face"] = bytes / static_cast<double>(n * n);
+    state.counters["heap_bytes_per_edge"] = bytes / static_cast<double>(2 * n * (n + 1));
 }
 
-/// The Stereon sheet of bench/TopoBench.cpp, here for the resident-set
-/// comparison in the same process.
-Stereon::Shape MakeStereonSheet(const std::size_t n)
+/// The face in the middle of the sheet, as TopoBench.cpp's MiddleFace.
+TopoDS_Face MiddleFace(const TopoDS_Shell& shell, const std::size_t n)
 {
-    using Stereon::EdgeCurveKind;
-    using Stereon::EdgeUseSense;
-    using Stereon::Point2;
-    using Stereon::Point3;
-    using Stereon::Vec2;
-    using Stereon::Vec3;
-    Stereon::ShapeBuilder b;
-    const Stereon::SurfaceRef plane = *b.AddSurface(
-        Stereon::Surface(Stereon::Plane{Point3{0, 0, 0}, Vec3{1, 0, 0}, Vec3{0, 1, 0}}));
-    const std::size_t side = n + 1;
-    std::vector<Stereon::BuilderVertexId> vertices;
-    vertices.reserve(side * side);
-    for (std::size_t j = 0; j < side; ++j) {
-        for (std::size_t i = 0; i < side; ++i) {
-            vertices.push_back(
-                *b.AddVertex(Point3{static_cast<double>(i), static_cast<double>(j), 0.0}, 1e-7));
+    std::size_t k = 0;
+    for (TopExp_Explorer faces(shell, TopAbs_FACE); faces.More(); faces.Next(), ++k) {
+        if (k == (n / 2) * n + n / 2) {
+            return TopoDS::Face(faces.Current());
         }
     }
-    const auto at = [&](const std::size_t i, const std::size_t j) {
-        return vertices[j * side + i];
-    };
-    std::vector<Stereon::BuilderEdgeId> horizontal;
-    std::vector<Stereon::BuilderEdgeId> vertical;
-    const auto edge = [&](const Stereon::BuilderVertexId from, const Stereon::BuilderVertexId to,
-                          const Point3& origin, const Vec3& direction) {
-        return *b.AddEdge({.Kind = EdgeCurveKind::Exact,
-                           .Start = from,
-                           .End = to,
-                           .Curve = *b.AddCurve(Stereon::Curve(Stereon::Line{origin, direction})),
-                           .Range = Stereon::Interval(0.0, 1.0),
-                           .Tolerance = 1e-7});
-    };
-    for (std::size_t j = 0; j < side; ++j) {
-        for (std::size_t i = 0; i < n; ++i) {
-            horizontal.push_back(edge(at(i, j), at(i + 1, j),
-                                      Point3{static_cast<double>(i), static_cast<double>(j), 0.0},
-                                      Vec3{1, 0, 0}));
-        }
-    }
-    for (std::size_t j = 0; j < n; ++j) {
-        for (std::size_t i = 0; i < side; ++i) {
-            vertical.push_back(edge(at(i, j), at(i, j + 1),
-                                    Point3{static_cast<double>(i), static_cast<double>(j), 0.0},
-                                    Vec3{0, 1, 0}));
-        }
-    }
-    const Stereon::BuilderShellId shell = *b.AddShell();
-    const auto pcurve = [&](const Point2& from, const Vec2& direction) {
-        return *b.AddPCurve(Stereon::Curve2d(Stereon::Line2d{from, direction}));
-    };
-    for (std::size_t j = 0; j < n; ++j) {
-        for (std::size_t i = 0; i < n; ++i) {
-            const Stereon::BuilderFaceId face = *b.AddFace(plane);
-            const Stereon::BuilderLoopId loop = *b.AddLoop(face);
-            const auto x = static_cast<double>(i);
-            const auto y = static_cast<double>(j);
-            static_cast<void>(*b.AppendCoedge(loop, horizontal[j * n + i], EdgeUseSense::Same,
-                                              pcurve(Point2{x, y}, Vec2{1, 0})));
-            static_cast<void>(*b.AppendCoedge(loop, vertical[j * side + i + 1], EdgeUseSense::Same,
-                                              pcurve(Point2{x + 1, y}, Vec2{0, 1})));
-            static_cast<void>(*b.AppendCoedge(loop, horizontal[(j + 1) * n + i],
-                                              EdgeUseSense::Opposite,
-                                              pcurve(Point2{x, y + 1}, Vec2{1, 0})));
-            static_cast<void>(*b.AppendCoedge(loop, vertical[j * side + i], EdgeUseSense::Opposite,
-                                              pcurve(Point2{x, y}, Vec2{0, 1})));
-            static_cast<void>(*b.AddFaceToShell(shell, face));
-        }
-    }
-    return *Stereon::Freeze(std::move(b));
-}
-
-void StereonResidentPerFace(benchmark::State& state)
-{
-    const std::size_t n = SideFor(static_cast<std::size_t>(state.range(0)));
-    double perFace = 0.0;
-    for (auto _ : state) {
-        const std::size_t before = ResidentBytes();
-        const Stereon::Shape shape = MakeStereonSheet(n);
-        const std::size_t after = ResidentBytes();
-        benchmark::DoNotOptimize(shape.Count<Stereon::EntityKind::Face>());
-        perFace = static_cast<double>(after - before) / static_cast<double>(n * n);
-    }
-    state.counters["faces"] = static_cast<double>(n * n);
-    state.counters["resident_bytes_per_face"] = perFace;
+    return {};
 }
 
 /// One face replaced by a copy on another plane, through BRepTools_ReShape:
@@ -295,21 +217,11 @@ void OcctReplaceFace(benchmark::State& state)
 {
     const std::size_t n = SideFor(static_cast<std::size_t>(state.range(0)));
     const TopoDS_Shell shell = MakeOcctSheet(n);
-    // The face in the middle of the sheet.
-    TopoDS_Face middle;
-    {
-        std::size_t k = 0;
-        for (TopExp_Explorer faces(shell, TopAbs_FACE); faces.More(); faces.Next(), ++k) {
-            if (k == (n / 2) * n + n / 2) {
-                middle = TopoDS::Face(faces.Current());
-                break;
-            }
-        }
-    }
+    const TopoDS_Face middle = MiddleFace(shell, n);
     const gp_Pln lifted(gp_Pnt(0, 0, 1), gp_Dir(0, 0, 1));
-    double residentDelta = 0.0;
+    double heapDelta = 0.0;
     for (auto _ : state) {
-        const std::size_t before = ResidentBytes();
+        const std::size_t before = HeapBytes();
         TopoDS_Wire wire;
         for (TopExp_Explorer wires(middle, TopAbs_WIRE); wires.More(); wires.Next()) {
             wire = TopoDS::Wire(wires.Current());
@@ -318,11 +230,31 @@ void OcctReplaceFace(benchmark::State& state)
         BRepTools_ReShape reshape;
         reshape.Replace(middle, replacement);
         const TopoDS_Shape edited = reshape.Apply(shell);
+        heapDelta = static_cast<double>(HeapBytes() - before);
         benchmark::DoNotOptimize(edited.NbChildren());
-        residentDelta = static_cast<double>(ResidentBytes() - before);
     }
     state.counters["faces"] = static_cast<double>(n * n);
-    state.counters["resident_delta_bytes"] = residentDelta;
+    state.counters["heap_delta_bytes"] = heapDelta;
+}
+
+/// One face removed through BRepTools_ReShape: the twin of TopoBench.cpp's
+/// DeleteFace.
+void OcctDeleteFace(benchmark::State& state)
+{
+    const std::size_t n = SideFor(static_cast<std::size_t>(state.range(0)));
+    const TopoDS_Shell shell = MakeOcctSheet(n);
+    const TopoDS_Face middle = MiddleFace(shell, n);
+    double heapDelta = 0.0;
+    for (auto _ : state) {
+        const std::size_t before = HeapBytes();
+        BRepTools_ReShape reshape;
+        reshape.Remove(middle);
+        const TopoDS_Shape edited = reshape.Apply(shell);
+        heapDelta = static_cast<double>(HeapBytes() - before);
+        benchmark::DoNotOptimize(edited.NbChildren());
+    }
+    state.counters["faces"] = static_cast<double>(n * n);
+    state.counters["heap_delta_bytes"] = heapDelta;
 }
 
 constexpr std::int64_t Quick = 10'000;
@@ -350,18 +282,18 @@ BENCHMARK(OcctAncestorMap)
     ->Arg(Quick)
     ->Arg(Body)
     ->Unit(benchmark::kMillisecond);
-BENCHMARK(OcctResidentPerFace)
-    ->Name("B0.4/ResidentPerFace/OCCT")
-    ->Arg(Quick)
-    ->Arg(Body)
-    ->Unit(benchmark::kMillisecond);
-BENCHMARK(StereonResidentPerFace)
-    ->Name("B0.4/ResidentPerFace/Stereon")
+BENCHMARK(OcctHeapPerFace)
+    ->Name("B0.4/HeapPerFace/OCCT")
     ->Arg(Quick)
     ->Arg(Body)
     ->Unit(benchmark::kMillisecond);
 BENCHMARK(OcctReplaceFace)
     ->Name("B0.5/ReplaceSurface/OCCT")
+    ->Arg(Quick)
+    ->Arg(Body)
+    ->Unit(benchmark::kMillisecond);
+BENCHMARK(OcctDeleteFace)
+    ->Name("B0.5/DeleteFace/OCCT")
     ->Arg(Quick)
     ->Arg(Body)
     ->Unit(benchmark::kMillisecond);
