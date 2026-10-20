@@ -45,7 +45,7 @@ Open questions that have to be researched before they can be decided live in [`d
 | [0027](0027-controlled-topology-mutation-and-euler-operators.md) | Controlled topology mutation and Euler operators | 0 | Accepted |
 | [0028](0028-purpose-specific-numerical-tolerances.md) | Separate numerical tolerances by purpose | 0 | Proposed |
 | [0029](0029-intersection-and-classification-outcomes.md) | Define intersection and classification outcomes explicitly | 2 | Accepted |
-| [0030](0030-entity-lineage-in-operation-results.md) | Make entity lineage part of operation results | 3 | Proposed |
+| [0030](0030-entity-lineage-in-operation-results.md) | Make entity lineage part of operation results | 3 | Accepted |
 | [0031](0031-attribute-propagation-and-conflicts.md) | Specify attribute propagation and conflict policies | 3 | Proposed |
 | [0032](0032-mutation-based-kernel-verification.md) | Mutation-based verification of kernel contracts | 0 | Accepted |
 | [0033](0033-modular-sdk-product-scope.md) | Modular CAD SDK with an independent kernel | 0 | Proposed |
