@@ -8,6 +8,7 @@
 - [Roadmap, modelling milestones and versioning](roadmap-and-versioning.md)
 - [Capability matrix and repository audit](stereon-capability-matrix.md)
 - [v0.1 acceptance ledger](v0.1-acceptance-ledger.md): gates, evidence and the OCCT operations still to add
+- [Boolean prototype plan](boolean-prototype-plan.md): the last Phase 0 gate (ADR-0001, ADR-0007), its milestones and the decisions of 2026-10-20
 - [Placement and follow-up checklist](capability-matrix-checklist.md)
 - [Existing benchmark specification](../benchmarks.md)
 - [Architecture decision records](../adr/README.md)
