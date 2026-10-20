@@ -139,11 +139,15 @@ struct ViewState {
 void AddObject(const V::Primitives& content, const ViewState& state,
                const std::optional<V::Rgba> highlight, Batches& out)
 {
-    for (const V::Segment& s : content.Segments) {
-        if (Shown(state, s.Kind)) {
-            const V::Rgba c = highlight.value_or(s.Colour);
-            out.Lines.push_back(ToVertex(s.A, c));
-            out.Lines.push_back(ToVertex(s.B, c));
+    // Debug primitives first: they often trace geometry (a shape's edges in
+    // their kind's colour), and at equal depth the first line drawn wins.
+    for (const bool debug : {true, false}) {
+        for (const V::Segment& s : content.Segments) {
+            if ((s.Kind == V::Layer::Debug) == debug && Shown(state, s.Kind)) {
+                const V::Rgba c = highlight.value_or(s.Colour);
+                out.Lines.push_back(ToVertex(s.A, c));
+                out.Lines.push_back(ToVertex(s.B, c));
+            }
         }
     }
     for (const V::Marker& m : content.Markers) {
@@ -222,9 +226,13 @@ void ObjectRow(V::Scene& scene, ViewState& state, const std::size_t i)
                           object.Line, object.Error.empty() ? "" : "\n", object.Error.c_str());
     }
     if (!object.File.empty()) {
+        const std::string file = std::filesystem::path(object.File).filename().string();
         ImGui::SameLine();
-        ImGui::TextDisabled("%s:%u", std::filesystem::path(object.File).filename().string().c_str(),
-                            object.Line);
+        if (object.Line > 0) {
+            ImGui::TextDisabled("%s:%u", file.c_str(), object.Line);
+        } else {
+            ImGui::TextDisabled("%s", file.c_str());
+        }
     }
     if (!object.Error.empty()) {
         ImGui::SameLine();

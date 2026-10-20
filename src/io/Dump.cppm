@@ -71,7 +71,8 @@ DumpAt(std::string_view name, DebugChunk primitives,
        SourceLocation where = SourceLocation::Current());
 
 /// What a dump of the shape stores, until the native format has topology
-/// chunks (ADR-0012): the surface of every face, the curve of every edge
+/// chunks (ADR-0012): the surface of every face, trimmed to the parameter
+/// box its boundary's pcurves cover, the curve of every edge
 /// trimmed to the edge's range, the pcurve of every coedge, and as debug
 /// primitives the topology overlays of ADR-0035 section 4: each vertex as a
 /// point with its tolerance as a box, each edge as a polyline coloured by

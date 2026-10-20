@@ -12,10 +12,12 @@ module;
 #include <Stereon/Core/Contracts.hpp>
 #include <Stereon/Core/Try.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -151,11 +153,69 @@ using DumpResult = Result<std::optional<std::filesystem::path>>;
     return {};
 }
 
+/// Widens [lower, upper] to hold the points.
+void Extend(Point2& lower, Point2& upper, const std::vector<Point2>& points)
+{
+    for (const Point2& p : points) {
+        lower = Point2{std::min(lower.X, p.X), std::min(lower.Y, p.Y)};
+        upper = Point2{std::max(upper.X, p.X), std::max(upper.Y, p.Y)};
+    }
+}
+
+/// The parameter box the face's boundary covers: every pcurve of its loops,
+/// sampled over its edge's range. Nothing for a face without pcurves or one
+/// whose box is flat.
+[[nodiscard]] std::optional<Box2> FaceBox(const Shape& shape, const FaceId face)
+{
+    const auto loops = LoopsOf(shape, face);
+    if (!loops) {
+        return std::nullopt;
+    }
+    constexpr double inf = std::numeric_limits<double>::infinity();
+    Point2 lower{inf, inf};
+    Point2 upper{-inf, -inf};
+    for (const LoopId loop : *loops) {
+        const auto coedges = CoedgesOf(shape, loop);
+        if (!coedges) {
+            continue;
+        }
+        for (const CoedgeId c : *coedges) {
+            const Curve2d* pcurve = PCurveOf(shape, c);
+            if (pcurve == nullptr) {
+                continue;
+            }
+            const Result<Polyline2d> line =
+                SampleCurve(*pcurve, DisplayTolerance{}, RangeOf(shape, EdgeOf(shape, c)));
+            if (line) {
+                Extend(lower, upper, line->Points);
+            }
+        }
+    }
+    if (!(lower.X < upper.X && lower.Y < upper.Y)) {
+        return std::nullopt;
+    }
+    return Box2{Interval{lower.X, upper.X}, Interval{lower.Y, upper.Y}};
+}
+
+/// The face's surface trimmed to the box its boundary covers, so that a
+/// plane or a cylinder is drawn where the face is; the surface itself when
+/// there is no such box or the trim is refused.
+[[nodiscard]] Surface FaceGeometry(const Shape& shape, const FaceId face)
+{
+    const Surface& surface = SurfaceOf(shape, face);
+    const std::optional<Box2> box = FaceBox(shape, face);
+    if (!box) {
+        return surface;
+    }
+    Result<TrimmedSurface> trimmed = MakeTrimmedSurface(surface, *box);
+    return trimmed ? Surface(*std::move(trimmed)) : surface;
+}
+
 [[nodiscard]] Result<void> AddFacesAndCoedges(const Shape& shape, GeometryArchive& archive)
 {
     STEREON_TRY(const auto faces, AllEntities<EntityKind::Face>(shape));
     for (const FaceId f : faces) {
-        archive.Surfaces.push_back(SurfaceOf(shape, f));
+        archive.Surfaces.push_back(FaceGeometry(shape, f));
     }
     STEREON_TRY(const auto coedges, AllEntities<EntityKind::Coedge>(shape));
     for (const CoedgeId c : coedges) {

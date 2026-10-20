@@ -383,6 +383,15 @@ TEST_CASE("a shape is dumped with its geometry and topology overlays", "[io][dum
     REQUIRE(std::ranges::count(colours, Stereon::EdgeCurveColour(EdgeCurveKind::Exact)) == 2);
     REQUIRE(std::ranges::count(colours, Stereon::EdgeCurveColour(EdgeCurveKind::Boundary)) == 1);
 
+    // Faces are drawn where they are: each surface trimmed to the box its
+    // boundary covers, so the cylinder's lateral face ends at its two circles.
+    for (const Stereon::Surface& face : cylinder->Surfaces) {
+        REQUIRE(face.Target<Stereon::TrimmedSurface>() != nullptr);
+    }
+    const Stereon::Box2 lateral = Stereon::Domain(cylinder->Surfaces.front());
+    REQUIRE(lateral.Y.GetLower() == 0.0);
+    REQUIRE(lateral.Y.GetUpper() == 4.0);
+
     REQUIRE_FALSE(Stereon::ShapeArchive(Stereon::Shape{}));
 
     const DumpDirectoryGuard guard;
