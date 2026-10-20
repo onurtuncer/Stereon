@@ -14,8 +14,12 @@
 //   ADR-0003 asks for this within 10% of direct.
 // - VisitPerCall: VisitBuiltin around every single evaluation, the worst way
 //   to use it.
+// - DirectScalar: Eval(line, t) one evaluation at a time, kept from being
+//   vectorised: the baseline a virtual call per evaluation is compared with.
 // - Erased: Eval(curve, t), one virtual call per evaluation. ADR-0003 asks
-//   for this within 2x of direct.
+//   for this to add at most 5 ns per call over a direct call.
+//
+// The "/1e8" runs make ADR-0003's 10^8 evaluations in one measurement.
 //
 // The cubic B-spline of the ADR's verification is included; the OCCT side
 // (Geom_Curve::D0 through occ::handle) joins with the OCCT benchmark harness. The copy benchmarks
@@ -45,6 +49,10 @@ using Stereon::Torus;
 using Stereon::Vec3;
 
 constexpr std::size_t SampleCount = 1 << 16;
+
+/// Iterations of SampleCount evaluations that make at least 10^8.
+constexpr auto HundredMillion =
+    static_cast<benchmark::IterationCount>((100'000'000 + SampleCount - 1) / SampleCount);
 
 std::vector<double> Parameters()
 {
@@ -119,6 +127,19 @@ void Direct(benchmark::State& state, const G geometry)
     const std::vector<double> params = Parameters();
     for (auto _ : state) {
         benchmark::DoNotOptimize(SumX(geometry, params));
+    }
+    SetItems(state);
+}
+
+template <typename G>
+void DirectScalar(benchmark::State& state, const G geometry)
+{
+    const std::vector<double> params = Parameters();
+    for (auto _ : state) {
+        for (const double t : params) {
+            auto p = Eval(geometry, t);
+            benchmark::DoNotOptimize(p);
+        }
     }
     SetItems(state);
 }
@@ -214,6 +235,19 @@ BENCHMARK_CAPTURE(Erased, BSpline, Curve(SomeBSpline()));
 BENCHMARK_CAPTURE(Direct, Ellipse, SomeEllipse());
 BENCHMARK_CAPTURE(Visit, Ellipse, Curve(SomeEllipse()));
 BENCHMARK_CAPTURE(Erased, Ellipse, Curve(SomeEllipse()));
+BENCHMARK_CAPTURE(DirectScalar, Line, SomeLine());
+BENCHMARK_CAPTURE(DirectScalar, Circle, SomeCircle());
+BENCHMARK_CAPTURE(DirectScalar, BSpline, SomeBSpline());
+
+BENCHMARK_CAPTURE(Direct, Line / 1e8, SomeLine())->Iterations(HundredMillion);
+BENCHMARK_CAPTURE(Visit, Line / 1e8, Curve(SomeLine()))->Iterations(HundredMillion);
+BENCHMARK_CAPTURE(Erased, Line / 1e8, Curve(SomeLine()))->Iterations(HundredMillion);
+BENCHMARK_CAPTURE(Direct, Circle / 1e8, SomeCircle())->Iterations(HundredMillion);
+BENCHMARK_CAPTURE(Visit, Circle / 1e8, Curve(SomeCircle()))->Iterations(HundredMillion);
+BENCHMARK_CAPTURE(Erased, Circle / 1e8, Curve(SomeCircle()))->Iterations(HundredMillion);
+BENCHMARK_CAPTURE(Direct, BSpline / 1e8, SomeBSpline())->Iterations(HundredMillion);
+BENCHMARK_CAPTURE(Visit, BSpline / 1e8, Curve(SomeBSpline()))->Iterations(HundredMillion);
+BENCHMARK_CAPTURE(Erased, BSpline / 1e8, Curve(SomeBSpline()))->Iterations(HundredMillion);
 
 BENCHMARK(CopyWrapper<Line, 64>);
 BENCHMARK(CopyWrapper<Line, 96>);

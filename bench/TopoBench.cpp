@@ -395,11 +395,18 @@ void CompactAfterEdits(benchmark::State& state)
             static_cast<std::uint32_t>(j * n + i)))));
         current = *Stereon::Freeze(std::move(b));
     }
+    std::size_t compactedBytes = 0;
     for (auto _ : state) {
         const Stereon::Compacted compacted = *Stereon::Compact(current);
+        compactedBytes = TableBytes(compacted.Shape);
         benchmark::DoNotOptimize(compacted.Shape.Count<EntityKind::Face>());
     }
     state.counters["faces"] = static_cast<double>(n * n);
+    // ADR-0005: Compact() returns the edited body to within 1.05x of a fresh
+    // build. The fresh body has the 50 faces the edits removed, so it bounds
+    // a fresh build of the result from above.
+    state.counters["compacted_over_body"] =
+        static_cast<double>(compactedBytes) / static_cast<double>(TableBytes(MakeSheet(n)));
 }
 
 constexpr std::int64_t Quick = 10'000;

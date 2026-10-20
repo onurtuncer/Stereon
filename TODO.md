@@ -133,16 +133,16 @@ Per [ADR-0035](docs/adr/0035-debug-viewer.md): objects reach the viewer as `.stn
 
 - [ ] **ADR-0001:** union/cut/common on boxes and cylinders, including loosened-tolerance variants (1e-4 to 1e-2 mm); confirm tolerance growth is logged
 - [ ] **RS-0001:** build the ADR-0001 prototype's intersections to the contract in [RS-0001](docs/research/RS-0001-tolerant-analytic-intersection.md) and run it on `corpus/analytic-ssi/`. Before that, as a side track that needs no kernel code: the literature survey, the sweep generator, the exact reference oracle and the go/no-go decision (due week 12)
-- [ ] **ADR-0003:** dispatch benchmark, 10⁸ evaluations on line, circle, cubic B-spline
+- [ ] **ADR-0003:** dispatch benchmark, 10⁸ evaluations on line, circle, cubic B-spline. The `/1e8` runs and the scalar direct baseline are in `bench/GeometryBench.cpp`; their first reference results are next
 - [x] **ADR-0004:** ~10⁶-face body: adjacency speed and memory vs OCCT. Reference run of 2026-10-20 (`bench/reports/phase0-topology-reference-2026-10-20.md`): faces of every edge 20× and edges of every vertex 60× faster than OCCT; live heap per face 1255 B against OCCT's 1601 B, 78% (`docs/performance.rst`, *Topology*)
 - [ ] **ADR-0004:** debuggability check: seeded-fault suite caught 100% in debug builds; pretty-printers working in GDB and LLDB. The suite is in place (§9); the pretty-printers still resolve no handle to its entity
-- [ ] **ADR-0004 decision point:** keep index handles throughout, or switch to the hybrid (pointers in `ShapeBuilder`, indices in `Shape`). Decide before Phase 1 algorithms start
+- [x] **ADR-0004 decision point:** keep index handles throughout, or switch to the hybrid (pointers in `ShapeBuilder`, indices in `Shape`). Index handles throughout, recorded in ADR-0004 (2026-10-20)
 - [ ] **ADR-0005:** 100 local edits on a 10⁶-face body (surface replacement, face deletion, face and edge splitting; no `Compact()`): memory and copy cost; page-size sweep 128/256/1 024. `bench/TopoBench.cpp` runs the sequence with replacement and deletion: 0.003% and 0.014% of the pages copied by one edit, the body and its copy after 100 edits 1.008× the body (reference run of 2026-10-20). Splitting waits for the Euler operators, and the page-size sweep is in `bench/ArenaBench.cpp`
 - [ ] **ADR-0001:** merge-policy test with vertex chains at 0.8× tolerance; result deterministic and radius-bounded
 - [ ] **ADR-0018:** seeded-fault corpus for the checker; zero false positives on valid bodies
 - [x] **ADR-0007:** determinism check across thread counts on the prototype operations. The operations that run in parallel so far, `ProjectAll` onto B-spline curves and surfaces through `Detail::ParallelFor`, give the same bits serially and at 1, 2, 8 and 32 threads (`[determinism]`, CTest and the nightly run); booleans, tessellation and import join as they are parallelised
 - [ ] **ADR-0009:** early review of the edge representation, since ADR-0004's edge record depends on it (full acceptance is due before Phase 1 topology work)
-- [ ] Review ADRs 0001–0008, 0015–0018 and 0021 and move each to **Accepted** or revise
+- [ ] Review ADRs 0001–0008, 0015–0018 and 0021 and move each to **Accepted** or revise. 0003, 0004, 0005, 0006 and 0016 accepted on 2026-10-20 with revisions; 0001 and 0007 stay Proposed until the Boolean prototype can test them; 0018 and 0021 are open
 
 ## 11. Documentation (ongoing)
 
@@ -160,12 +160,12 @@ Per [ADR-0035](docs/adr/0035-debug-viewer.md): objects reach the viewer as `.stn
 All of the following must pass in CI before Phase 1 starts:
 
 - [x] Predicates pass the adversarial suite with zero inconsistent results. 20 000 cases per predicate in every CI run; the 10⁶ run is `stereon_robust_tests "[exhaustive]"` (§5)
-- [ ] Type-erased `Curve` with `VisitBuiltin` within 10% of direct calls; pure virtual fallback within 2×. `VisitBuiltin` meets it; the fallback does not for a line (2.6×, 1.03× for a circle; `bench/GeometryBench.cpp`, §6)
+- [x] Type-erased `Curve` with `VisitBuiltin` within 10% of direct calls; pure virtual fallback within 5 ns per call of a direct call (ADR-0003, revised 2026-10-20 from 2×, a ratio that measures a line's evaluator rather than the dispatch). `VisitBuiltin` 2.0 against 2.2 ns for a line; the fallback adds 3.4 ns for a line and about 1 ns for a circle
 - [ ] ADR-0004 prototype: adjacency ≥ 5× faster than OCCT, memory per face < 50% of OCCT. Adjacency is met (20× and 60×); memory is not, at 78% of OCCT, mostly the geometry pools by estimate (`docs/performance.rst`, *Topology*)
 - [ ] Release-build handles are 4 bytes; seeded-fault suite caught 100% in debug builds
 - [x] Pretty-printers pass their scripted GDB and LLDB tests. Linux Debug CI (`tests/debugger/check_printers.py`); skipped on macOS and MSVC, whose debug information the debuggers cannot read. Rerun when handles resolve to entities (§8)
-- [ ] Handle design decided (index throughout, or hybrid) and recorded in ADR-0004
+- [x] Handle design decided (index throughout, or hybrid) and recorded in ADR-0004. Index throughout (2026-10-20)
 - [x] Output identical for 1, 2, 8 and 32 threads. For every operation that runs in parallel today (batch projection), on every pull request and nightly across processes (§3, §10); each new parallel operation adds its case
 - [x] ADR-0021 foundation types in place; no geometric operation can be added without a capability declaration
 - [ ] All blocking CI jobs green on Linux, Windows and macOS
-- [ ] ADRs 0001–0008, 0015–0017 accepted
+- [ ] ADRs 0001–0008, 0015–0017 accepted. All but 0001 and 0007, which wait for the Boolean prototype (ADR-0001's loosened-tolerance booleans and merge policy; ADR-0007's speed-up and cross-platform check)
