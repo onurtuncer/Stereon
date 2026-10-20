@@ -136,7 +136,7 @@ TEST_CASE("the compacted shape is the same shape under new indices", "[topo][com
         REQUIRE(RangeOf(b, y) == RangeOf(a, x));
         REQUIRE(StartOf(b, y) == c.Translate(StartOf(a, x)));
         REQUIRE(EndOf(b, y) == c.Translate(EndOf(a, x)));
-        REQUIRE(Eval(*CurveOf(b, y), 0.5) == Eval(*CurveOf(a, x), 0.5));
+        REQUIRE(Eval(Deref(CurveOf(b, y)), 0.5) == Eval(Deref(CurveOf(a, x)), 0.5));
         std::vector<FaceId> faces;
         for (const FaceId f : Must(Stereon::FacesOf(a, x))) {
             faces.push_back(c.Translate(f));
@@ -152,14 +152,15 @@ TEST_CASE("the compacted shape is the same shape under new indices", "[topo][com
         const FaceId g = c.Translate(f);
         REQUIRE(IsReversed(b, g) == IsReversed(a, f));
         REQUIRE(ShellOf(b, g) == c.Translate(ShellOf(a, f)));
-        REQUIRE(SurfaceOf(b, g).Target<Stereon::Plane>()->Origin ==
-                SurfaceOf(a, f).Target<Stereon::Plane>()->Origin);
+        REQUIRE(Deref(SurfaceOf(b, g).Target<Stereon::Plane>()).Origin ==
+                Deref(SurfaceOf(a, f).Target<Stereon::Plane>()).Origin);
         for (const LoopId l : Must(Stereon::LoopsOf(a, f))) {
             std::vector<CoedgeId> cycle;
             for (const CoedgeId u : Must(Stereon::CoedgesOf(a, l))) {
                 cycle.push_back(c.Translate(u));
                 REQUIRE(StoredEdgeUseSense(b, c.Translate(u)) == StoredEdgeUseSense(a, u));
-                REQUIRE(Eval(*PCurveOf(b, c.Translate(u)), 0.5) == Eval(*PCurveOf(a, u), 0.5));
+                REQUIRE(Eval(Deref(PCurveOf(b, c.Translate(u))), 0.5) ==
+                        Eval(Deref(PCurveOf(a, u)), 0.5));
             }
             REQUIRE(Collect(Must(Stereon::CoedgesOf(b, c.Translate(l)))) == cycle);
         }

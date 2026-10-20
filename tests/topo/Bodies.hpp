@@ -443,6 +443,19 @@ inline const Stereon::Curve2d& PCurveOfUse(const Stereon::Shape& shape, const St
     return *pcurve;
 }
 
+/// The object a pointer the test expects to be set points to; the test fails
+/// on null. Dereferencing the call directly lets GCC 16.2 at -O3 see a null
+/// path and warn (-Wnull-dereference).
+template <typename T>
+const T& Deref(const T* pointer)
+{
+    if (pointer == nullptr) {
+        FAIL("unexpected null pointer");
+        std::abort(); // FAIL throws; this keeps the compiler from seeing a null path
+    }
+    return *pointer;
+}
+
 /// Collects a range into a vector.
 template <typename Range>
 auto Collect(const Range& range)
