@@ -138,6 +138,17 @@ void OverwriteWord(Bytes& input, Generator& g)
     }
 }
 
+/// A base input for a target with no seed corpus: random bytes, not zeros,
+/// which decode to inputs that reach past the target's first checks.
+Bytes RandomBytes(Generator& g)
+{
+    Bytes input(g.Below(512));
+    for (std::uint8_t& b : input) {
+        b = static_cast<std::uint8_t>(g.Next());
+    }
+    return input;
+}
+
 void Mutate(Bytes& input, Generator& g, const std::size_t maxSize)
 {
     const std::size_t steps = 1 + g.Below(4);
@@ -270,7 +281,7 @@ int main(const int argc, char** argv)
     }
     Generator g(options.Seed);
     for (std::size_t run = 0; run < options.Runs; ++run) {
-        Bytes input = corpus.empty() ? Bytes(g.Below(256)) : corpus[g.Below(corpus.size())];
+        Bytes input = corpus.empty() ? RandomBytes(g) : corpus[g.Below(corpus.size())];
         Mutate(input, g, options.MaxSize);
         findings += static_cast<std::size_t>(Run(input));
     }
