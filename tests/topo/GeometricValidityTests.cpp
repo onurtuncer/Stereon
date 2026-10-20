@@ -79,6 +79,8 @@ TEST_CASE("every test body holds its geometry within its tolerances", "[topo][va
     bodies.emplace_back("wire", MakeWire(3).Freeze());
     // Not MakeDegenerateFace: a structural fixture whose pcurves are
     // placeholders (Bodies.hpp), so its geometry is not meant to hold.
+    // MakePoleCap is the pole whose geometry does.
+    bodies.emplace_back("pole cap", MakePoleCap().Freeze());
     bodies.emplace_back("hinge", MakeHinge().Freeze());
     for (const auto& [name, shape] : bodies) {
         INFO(name);
@@ -101,18 +103,18 @@ TEST_CASE("G01: a vertex off the end of its edge", "[topo][validity]")
                       .End = b,
                       .Curve = line,
                       .Range = Interval(0.0, 1.0),
-                      .Tolerance = 1e-7});
+                      .Tolerance = Tight});
         return std::move(body).Freeze();
     };
     // Structurally sound, so Freeze accepts it; the Geometric level does not.
-    const ValidityReport report = Geometric(wire(1e-7));
+    const ValidityReport report = Geometric(wire(Tight));
     REQUIRE(RulesOf(report) == std::vector<TopologyRule>{TopologyRule::VertexContainment});
     REQUIRE(report.GetFindings()[0].Entities.at(0).starts_with("Vertex#1"));
     REQUIRE(report.GetFindings()[0].Message.find("end") != std::string::npos);
     // A vertex tolerance that holds the gap.
     REQUIRE(Geometric(wire(2e-3)).IsValid());
     // The Structural level alone does not look.
-    REQUIRE(Stereon::ValidateTopology(wire(1e-7), ValidityLevel::Structural).IsValid());
+    REQUIRE(Stereon::ValidateTopology(wire(Tight), ValidityLevel::Structural).IsValid());
 }
 
 TEST_CASE("G02: a face surface moved away from its edges", "[topo][validity]")
@@ -161,6 +163,114 @@ TEST_CASE("Commit checks the Geometric level when asked, and always when handles
     const auto checked = Stereon::Commit(std::move(MakeBox().Builder), Context::Default());
     REQUIRE(checked);
     REQUIRE(checked->Checked == ValidityLevel::Geometric);
+}
+
+TEST_CASE("an empty Shape is valid at every level", "[topo][validity]")
+{
+    const Shape empty;
+    Shape moved = MakeBox().Freeze();
+    const Shape taken(std::move(moved));
+    for (const Shape* shape : {&empty, static_cast<const Shape*>(&moved)}) {
+        REQUIRE(shape->IsEmpty()); // NOLINT(bugprone-use-after-move)
+        for (const ValidityLevel level :
+             {ValidityLevel::Structural, ValidityLevel::Geometric, ValidityLevel::Solid}) {
+            REQUIRE(Stereon::ValidateTopology(*shape, level).IsValid());
+        }
+    }
+    REQUIRE_FALSE(taken.IsEmpty());
+    REQUIRE(Geometric(taken).IsValid());
+}
+
+TEST_CASE("an edge's range is bounded", "[topo][validity]")
+{
+    const Interval infinite = Interval::Everything();
+    const double inf = infinite.GetUpper();
+    for (const Interval range : {infinite, Interval(0.0, inf), Interval(-inf, 1.0)}) {
+        INFO(range.GetLower() << ", " << range.GetUpper());
+        Body body;
+        const auto a = body.AddVertex({0, 0, 0});
+        const auto b = body.AddVertex({1, 0, 0});
+        const auto line = Must(
+            body.Builder.AddCurve(Stereon::Curve(Stereon::Line{Point3{0, 0, 0}, Vec3{1, 0, 0}})));
+        const auto refused = body.Builder.AddEdge({.Kind = Stereon::EdgeCurveKind::Spatial,
+                                                   .Start = a,
+                                                   .End = b,
+                                                   .Curve = line,
+                                                   .Range = range,
+                                                   .Tolerance = Tight});
+        REQUIRE_FALSE(refused);
+        REQUIRE(refused.error().GetCode() == ErrorCode::InvalidInput);
+        REQUIRE(std::string(refused.error().GetMessage()).find("not bounded") !=
+                std::string::npos);
+    }
+    // Bounded ranges inside and outside the curve's domain: the first holds,
+    // the second is a finding, never skipped.
+    const auto arc = [](const Interval range) {
+        Body body;
+        const Stereon::Circle circle{{0, 0, 0}, 1.0, Vec3{1, 0, 0}, Vec3{0, 1, 0}};
+        const auto a = body.AddVertex(Eval(circle, range.GetLower()));
+        const auto b = body.AddVertex(Eval(circle, range.GetUpper()));
+        const auto curve = Must(
+            body.Builder.AddCurve(Stereon::Curve(*Stereon::MakeTrimmedCurve(
+                Stereon::Curve(circle), Interval(0.0, 1.0)))));
+        body.AddEdge({.Kind = Stereon::EdgeCurveKind::Spatial,
+                      .Start = a,
+                      .End = b,
+                      .Curve = curve,
+                      .Range = range,
+                      .Tolerance = Tight});
+        return std::move(body).Freeze();
+    };
+    REQUIRE(Geometric(arc(Interval(0.25, 0.75))).IsValid());
+    const ValidityReport outside = Geometric(arc(Interval(0.5, 2.0)));
+    REQUIRE(RulesOf(outside) == std::vector<TopologyRule>{TopologyRule::EdgeContainment});
+    REQUIRE(outside.GetFindings()[0].Message.find("does not cover") != std::string::npos);
+}
+
+TEST_CASE("G02: a degenerate edge's trace stays at its vertex", "[topo][validity]")
+{
+    // A pole of a sphere passes.
+    REQUIRE(Geometric(MakePoleCap().Freeze()).IsValid());
+
+    // A circle closed at its vertex, alleged a pole: its ends coincide with
+    // the vertex, but its middle is 2 mm away. `uses` faces use it, on the
+    // same plane with the same circle, so the uses agree with each other.
+    const auto circle = [](const std::size_t uses) {
+        Body body;
+        const auto v = body.AddVertex({1, 0, 0});
+        const auto pole = body.AddEdge({.Kind = Stereon::EdgeCurveKind::Degenerate,
+                                        .Start = v,
+                                        .End = v,
+                                        .Range = Interval(0.0, Stereon::CirclePeriod),
+                                        .Tolerance = Tight});
+        for (std::size_t k = 0; k < uses; ++k) {
+            const auto loop = body.AddLoop(body.AddFace(XyPlane()));
+            body.AddCoedge(loop, pole, Stereon::EdgeUseSense::Same,
+                           Stereon::Curve2d(Stereon::Circle2d{{0, 0}, 1.0, Vec2{1, 0}, Vec2{0, 1}}));
+        }
+        return std::move(body).Freeze();
+    };
+    for (const std::size_t uses : {std::size_t{1}, std::size_t{2}}) {
+        INFO(uses << " uses");
+        const ValidityReport report = Geometric(circle(uses));
+        REQUIRE(report.GetCount() == uses);
+        for (const Stereon::ValidityFinding& finding : report.GetFindings()) {
+            REQUIRE(finding.Rule == TopologyRule::EdgeContainment);
+            REQUIRE(finding.Message.find("degenerate edge's trace") != std::string::npos);
+        }
+    }
+    // Commit refuses it.
+    Body body;
+    const auto v = body.AddVertex({1, 0, 0});
+    const auto pole = body.AddEdge({.Kind = Stereon::EdgeCurveKind::Degenerate,
+                                    .Start = v,
+                                    .End = v,
+                                    .Range = Interval(0.0, Stereon::CirclePeriod),
+                                    .Tolerance = Tight});
+    body.AddCoedge(body.AddLoop(body.AddFace(XyPlane())), pole, Stereon::EdgeUseSense::Same,
+                   Stereon::Curve2d(Stereon::Circle2d{{0, 0}, 1.0, Vec2{1, 0}, Vec2{0, 1}}));
+    REQUIRE(Stereon::Commit(std::move(body.Builder), Context::Default()).error().GetCode() ==
+            ErrorCode::InvalidResult);
 }
 
 TEST_CASE("the Geometric rules have stable IDs", "[topo][validity]")

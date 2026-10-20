@@ -25,6 +25,14 @@ scale in that unit. Seeds and derivatives are per reference, so a step of 1
 moves a parameter by its reference and millimetre and radian parameters stay
 comparable.
 
+A ``ParameterId`` is bound to the set that made it, not just to an index.
+Two sets whose first parameters are both lengths give different ids, and
+neither set accepts the other's. For a foreign id, ``GetName`` and
+``GetUnit`` return an empty string and ``GetReference`` returns NaN, never
+another parameter's values. A set can be moved but not copied, so two sets
+that grew apart never share an id. A moved-from set is empty and has an
+identity of its own.
+
 .. code-block:: cpp
 
    Stereon::ParameterSet parameters;
