@@ -1,6 +1,7 @@
 # ADR-0026: Specify Modelling Operations by Contracts
 
 - **Status:** Proposed
+- **Revised:** 2026-10-20 (cross-reference executable contracts and validation evidence)
 - **Date:** 2026-10-13
 - **Owner:** Onur Tuncer
 - **Phase:** 0
@@ -209,3 +210,10 @@ This proposal supplements these decisions and supersedes none. Specific operatio
 1. Ian Stroud, *Boundary Representation Modelling Techniques*, Springer, 2006. DOI: [10.1007/978-1-84628-616-2](https://doi.org/10.1007/978-1-84628-616-2). Relevant reading: “Stepwise modelling algorithms” and “Modelling operator definition.” The publisher's contents and scope have been verified; detailed chapter-level verification remains pending. This ADR does not attribute its failure guarantees or API design to a specific passage.
 2. Companion proposal: [ADR-0025: Separate Topology from Geometry](0025-separate-topology-from-geometry.md).
 
+
+## Related executable contract proposals
+
+- [ADR-0039: Make topology-operator contracts executable and auditable](0039-executable-topology-contracts.md)
+- [ADR-0040: Stage topology edits and publish complete results atomically](0040-atomic-topology-edit-publication.md)
+- [ADR-0041: Use layered validation with revision-bound evidence](0041-layered-validation-evidence.md)
+- [ADR-0042: Assign C++26 contracts and kernel validation distinct responsibilities](0042-cpp26-contract-validation-responsibilities.md)

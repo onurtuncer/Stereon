@@ -54,3 +54,7 @@ Open questions that have to be researched before they can be decided live in [`d
 | [0036](0036-typed-topology-ranges.md) | Typed read-only topology ranges | 0 | Proposed |
 | [0037](0037-topology-traversal-semantics.md) | Entity, use and orientation semantics for topology traversal | 0 | Proposed |
 | [0038](0038-topology-traversal-lifetime-and-validation.md) | Topology traversal lifetime, invalidation and validation | 0 | Proposed |
+| [0039](0039-executable-topology-contracts.md) | Make topology-operator contracts executable and auditable | 0 | Proposed |
+| [0040](0040-atomic-topology-edit-publication.md) | Stage topology edits and publish complete results atomically | 0 | Proposed |
+| [0041](0041-layered-validation-evidence.md) | Use layered validation with revision-bound evidence | 0 | Proposed |
+| [0042](0042-cpp26-contract-validation-responsibilities.md) | Assign C++26 contracts and kernel validation distinct responsibilities | 0 | Proposed |
