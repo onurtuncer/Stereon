@@ -158,9 +158,58 @@ line, so two versions of a file diff line by line:
 
 It is built with the kernel unless ``STEREON_BUILD_TOOLS=OFF``.
 
-.. todo::
+The debug viewer
+----------------
 
-   Describe the debug viewer (``stn-view``) when it exists.
+``stn-view`` shows the dumps of a directory and reloads them when they
+change, so a dump made in a running test or a debugger session appears
+within a second. Configure with ``-DSTEREON_BUILD_VIEWER=ON``. It needs
+GLFW, OpenGL 3.3 and Dear ImGui, which only the viewer may link
+(ADR-0035):
+
+.. code-block:: sh
+
+   STEREON_DUMP_DIR=/tmp/dumps ctest -R my-test
+   stn-view /tmp/dumps        # or no argument: $STEREON_DUMP_DIR
+
+- Left drag orbits, right or middle drag pans, the wheel zooms, and ``F``
+  fits everything in view.
+- The **Objects** window lists every dump with its visibility, colour, name
+  and source location. Selecting a row highlights the object. A file that
+  does not load is listed with its error.
+- The **Layers** window shows or hides geometry, control polygons and nets,
+  knots, parameter ticks, direction arrows, debug primitives and labels.
+- The **Parameter space** window draws plane curves and pcurves.
+
+Curves and surfaces are sampled for display (``Stereon.Mesh:Sampling``).
+Unbounded geometry, such as a line, a plane or a cylinder, is drawn around
+the bounded content of the scene. The scene behind the window,
+``viewer/scene``, is headless and tested without a window, so other
+frontends can reuse it.
+
+.. figure:: figures/viewer-geometry.png
+   :width: 100%
+   :alt: stn-view with a B-spline curve, a B-spline patch and a circle in 3D, and two plane curves in the Parameter space window.
+
+   Geometry dumps. The cubic has a knot of multiplicity three at its
+   middle, and the polyline keeps the kink. The control polygon is grey
+   and the knots are yellow. The patch is drawn as iso-lines over its
+   control net. Arrows show the direction of each curve's parameter. The
+   two plane curves are in the Parameter space window.
+
+.. figure:: figures/viewer-topology.png
+   :width: 100%
+   :alt: stn-view with the closed cylinder of the topology tests, its edges coloured by kind and labelled with Describe().
+
+   A ``Shape`` dump: the closed cylinder of the topology tests. Each face
+   is drawn over the parameter box of its boundary. The edges are
+   coloured by kind: the seam in orange (``Boundary``) and the circles in
+   blue (``Exact``). Vertices and edges carry their ``Describe()`` labels.
+
+``stn-view --screenshot file.png`` renders the window once, writes it as a
+PNG and exits. The figures above come from the Linux viewer CI job: it
+writes the dumps of ``docs/figures/ViewerDumps.cpp`` and renders them under
+Xvfb with Mesa's software OpenGL.
 
 Related design decisions
 ------------------------

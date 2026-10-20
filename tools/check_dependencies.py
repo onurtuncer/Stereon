@@ -21,6 +21,10 @@ libraries. This script checks three things:
 3. OpenCASCADE (LGPL-2.1 with the OCCT exception) is found only by the test
    and benchmark CMake files, never by a library (ADR-0008: it is linked
    into those executables only).
+4. The debug viewer's dependencies, GLFW and Dear ImGui, are linked only
+   under viewer/ (ADR-0035), and nothing under src/ includes their headers,
+   an OpenGL header or anything of viewer/ (ADR-0034: the kernel stays
+   headless).
 
 Usage: check_dependencies.py [--root <repo>] [--deps-dir <build>/_deps] | --self-test
 """
@@ -55,6 +59,16 @@ LICENCE_FILES = ("LICENSE", "LICENSE.txt", "LICENSE.md", "LICENCE", "COPYING", "
 
 # Where OpenCASCADE may be found: test and benchmark executables only.
 OCCT_ALLOWED = ("tests/", "bench/")
+
+# The viewer's dependency targets, and where they may be named: the viewer
+# and the file that declares them.
+VIEWER_TARGETS = re.compile(r"(?<![\w-])(glfw|stereon_imgui)(?![\w-])")
+VIEWER_ALLOWED = ("viewer/", DEPENDENCY_FILE.as_posix())
+# What no kernel source may include: a window system, a GUI toolkit, OpenGL,
+# or the viewer.
+VIEWER_INCLUDE = re.compile(
+    r'^\s*#\s*include\s*[<"](?:GLFW/|imgui|GL/|OpenGL/|GLES\d*/|glad/|viewer/)', re.MULTILINE)
+SOURCE_SUFFIXES = (".cppm", ".cpp", ".hpp", ".h", ".ixx")
 
 
 def declarations(text: str) -> list[tuple[str, str | None, int]]:
@@ -126,7 +140,56 @@ def check_occt(root: Path) -> list[str]:
     return problems
 
 
+def cmake_files(root: Path) -> list[Path]:
+    files = sorted(root.rglob("CMakeLists.txt")) + sorted(root.rglob("*.cmake"))
+    return [p for p in files if not p.relative_to(root).as_posix().startswith(("build", "_deps"))
+            and "/_deps/" not in p.relative_to(root).as_posix()]
+
+
+def check_viewer_boundary(root: Path) -> list[str]:
+    """The viewer's dependencies stay in viewer/, and src/ stays headless."""
+    problems = []
+    for path in cmake_files(root):
+        relative = path.relative_to(root).as_posix()
+        if relative.startswith(VIEWER_ALLOWED):
+            continue
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            code = line.split("#", 1)[0]
+            if VIEWER_TARGETS.search(code):
+                problems.append(f"{relative}:{number}: names a debug viewer dependency outside "
+                                "viewer/ (ADR-0035)")
+    for path in sorted((root / "src").rglob("*")):
+        if path.suffix in SOURCE_SUFFIXES and path.is_file():
+            for match in VIEWER_INCLUDE.finditer(path.read_text(encoding="utf-8")):
+                number = path.read_text(encoding="utf-8").count("\n", 0, match.start()) + 1
+                problems.append(f"{path.relative_to(root).as_posix()}:{number}: includes a window "
+                                "system, GUI or OpenGL header or the viewer (ADR-0034)")
+    return problems
+
+
+def self_test_viewer_boundary() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / "viewer/app").mkdir(parents=True)
+        (root / "src/core").mkdir(parents=True)
+        (root / "viewer/app/CMakeLists.txt").write_text(
+            "target_link_libraries(stn-view PRIVATE stereon_imgui glfw)\n", encoding="utf-8")
+        (root / "src/core/CMakeLists.txt").write_text(
+            "# glfw in a comment is fine\nadd_library(stereon_core)\n", encoding="utf-8")
+        (root / "src/core/Core.cpp").write_text("#include <vector>\n", encoding="utf-8")
+        assert check_viewer_boundary(root) == [], check_viewer_boundary(root)
+        (root / "src/core/CMakeLists.txt").write_text(
+            "target_link_libraries(stereon_core PRIVATE glfw)\n", encoding="utf-8")
+        (root / "src/core/Core.cpp").write_text("#include <vector>\n#include <GLFW/glfw3.h>\n",
+                                                encoding="utf-8")
+        problems = check_viewer_boundary(root)
+        assert len(problems) == 2, problems
+        assert problems[0].startswith("src/core/CMakeLists.txt:1:"), problems
+        assert problems[1].startswith("src/core/Core.cpp:2:"), problems
+
+
 def self_test() -> int:
+    self_test_viewer_boundary()
     good = ("# Dependency licence: MIT\nFetchContent_Declare(alpha\n    GIT_TAG v1)\n"
             "# Something else\n# Dependency licence: Apache-2.0 WITH LLVM-exception\n"
             "set(X ON)\nFetchContent_Declare(beta\n    GIT_TAG v2)\n")
@@ -164,7 +227,7 @@ def main() -> int:
     if args.self_test:
         return self_test()
     text = (args.root / DEPENDENCY_FILE).read_text(encoding="utf-8")
-    problems = check_declarations(text) + check_occt(args.root)
+    problems = check_declarations(text) + check_occt(args.root) + check_viewer_boundary(args.root)
     if args.deps_dir:
         problems += check_fetched(text, args.deps_dir)
     for problem in problems:
