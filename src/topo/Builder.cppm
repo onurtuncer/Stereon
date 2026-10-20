@@ -10,13 +10,16 @@ module;
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 export module Stereon.Topo:Builder;
 
 import Stereon.Intersect;
+import :Operation;
 import :Records;
 import :Report;
 import :Shape;
@@ -87,6 +90,7 @@ class TopologyFaults;
 
 class Compacted;
 [[nodiscard]] Result<Compacted> Compact(const Shape& shape);
+[[nodiscard]] Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context);
 
 class ShapeBuilder {
 public:
@@ -154,8 +158,36 @@ public:
     // in and tombstones the slot; nothing else changes.
 
     /// Replaces the face's surface by another of the pool. The pcurves of its
-    /// coedges are the caller's to keep consistent.
+    /// coedges are the caller's to keep consistent. Drops the cached curve of
+    /// every edge the face uses, which was S(c(t)) on the old surface.
     [[nodiscard]] Result<void> SetSurface(BuilderFaceId face, SurfaceRef surface);
+
+    /// Sets an entity's tolerance, the explicit operation through which
+    /// ADR-0001 lets a local tolerance change, and logs the change with its
+    /// reason. Commit() reports it in the OperationResult, warns when it grew,
+    /// and fails with ToleranceExceeded for a tolerance above the Context's
+    /// ceiling or, when the Context forbids growth, for any that grew.
+    /// InvalidInput unless the tolerance is finite and not negative.
+    [[nodiscard]] Result<void> SetTolerance(BuilderVertexId vertex, double tolerance,
+                                            std::string_view reason);
+    [[nodiscard]] Result<void> SetTolerance(BuilderEdgeId edge, double tolerance,
+                                            std::string_view reason);
+
+    /// Builds the cached 3D curve of an Intersection or Trim edge (ADR-0009,
+    /// section 5) from its primary coedge: S(c(t)) sampled at CacheSamples
+    /// parameters spread evenly over the edge's range and interpolated by a
+    /// cubic B-spline on the edge's own parameter, so the cache passes
+    /// through the primary side at every sample. Deterministic: the same
+    /// pcurve and surface give the same cache. The cache's deviation is not
+    /// certified (CacheCertificate::Uncertified): certificates need interval
+    /// evaluation of S(c(t)), which the kernel does not have yet. Any later
+    /// change to a pcurve, the primary coedge or a surface of the edge drops
+    /// it. InvalidInput for an edge of another kind, one without a primary
+    /// coedge, or a range the pcurve or surface does not cover.
+    [[nodiscard]] Result<CurveRef> CacheEdgeCurve(BuilderEdgeId edge);
+
+    /// The samples CacheEdgeCurve() interpolates.
+    static constexpr std::size_t CacheSamples = 33;
 
     /// Removes one use of an edge from its loop and its edge's radial ring.
     /// Refused when the coedge is its edge's primary and the edge has other
@@ -220,6 +252,7 @@ public:
 
 private:
     friend Result<Shape> Freeze(ShapeBuilder&& builder);
+    friend Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context);
     friend class Testing::TopologyFaults;
 
     template <EntityKind K>
@@ -235,6 +268,12 @@ private:
 
     void LinkAtVertex(std::uint32_t edge, std::uint32_t vertex, bool atStart);
     void UnlinkAtVertex(std::uint32_t edge, std::uint32_t vertex);
+    /// Drops the edge's cached curve, if it has one: a pcurve, the primary
+    /// coedge or a surface it was built from has changed (ADR-0004).
+    void DropCache(std::uint32_t edge);
+    template <EntityKind K>
+    [[nodiscard]] Result<void> SetToleranceOf(BuilderId<K> h, double tolerance,
+                                              std::string_view reason, const char* operation);
     void DetachCoedge(std::uint32_t coedge, bool passPrimaryOn);
     void RemoveLoopAt(std::uint32_t loop);
     template <EntityKind P, EntityKind C>
@@ -246,6 +285,11 @@ private:
     BuilderToken m_Token;
     std::uint64_t m_Epoch = 0;
     StoreId m_SourceStore = 0;
+    /// The snapshot Open() started from, which Commit()'s History compares
+    /// the result with; null for a new builder.
+    std::shared_ptr<const TopologySnapshot> m_Source;
+    /// Every SetTolerance() call, in order, for Commit() to report.
+    std::vector<ToleranceChange> m_ToleranceChanges;
 };
 
 /// The old-to-new slot map of one Compact() (ADR-0004), which feeds the
@@ -332,6 +376,27 @@ public:
 /// validator: what Freeze() certified, re-derived (ADR-0036).
 [[nodiscard]] ValidityReport ValidateTopology(const Shape& shape);
 
+/// Publishes the builder's tables as a shape-producing operation does
+/// (ADR-0006, ADR-0026): Freeze() and its structural certification, then the
+/// OperationResult. Its History compares the result with the shape the
+/// builder was opened on (all Generated for a new builder); its tolerance
+/// changes are the builder's SetTolerance() calls, one per entity (the first
+/// old value, the last new one, the reasons in order); its warnings are the
+/// tolerances that grew and the cached edge curves the edit dropped. Fails,
+/// publishing nothing, with InvalidInput when the tables are not
+/// structurally valid or, in checked builds, when the shape the builder was
+/// opened on no longer is; ToleranceExceeded when a tolerance passes the
+/// Context's ceiling or grew under ToleranceGrowth::Fail; and InvalidResult,
+/// a kernel bug, when the History does not account for every entity. The
+/// builder is consumed either way.
+[[nodiscard]] Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context);
+
+/// Compact() as a shape-producing operation: the compacted shape with a
+/// History in which every live entity continues Unchanged at its new index
+/// (ADR-0011: the remap is composed into the History). In checked builds the
+/// input is validated again first, InvalidInput if it fails.
+[[nodiscard]] Result<OperationResult> CompactShape(const Shape& shape, const Context& context);
+
 } // namespace Stereon
 
 export namespace Stereon::Detail {
@@ -378,6 +443,9 @@ public:
     static void EmptyCurve(ShapeBuilder& b, CurveRef curve);
     static void EmptyPCurve(ShapeBuilder& b, PCurveRef pcurve);
     static void EmptySurface(ShapeBuilder& b, SurfaceRef surface);
+    /// Sets an edge's cache fields as they are, consistent or not.
+    static void SetCache(ShapeBuilder& b, BuilderEdgeId e, CurveRef cached, CacheCertificate status,
+                         double bound);
 };
 
 } // namespace Stereon::Testing

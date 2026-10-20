@@ -112,11 +112,12 @@ std::string RuleId(const TopologyRule rule)
 std::string_view RuleName(const TopologyRule rule) noexcept
 {
     // In rule order: S01 first.
-    static constexpr std::array<std::string_view, 16> Names{
+    static constexpr std::array<std::string_view, 17> Names{
         "DanglingLink",    "LoopLinksBroken",   "LoopOpen",          "CoedgeOutsideLoop",
         "RadialRingOpen",  "CoedgeOutsideRing", "EdgeUseCount",      "PrimaryCoedge",
         "LoopOutsideFace", "FaceOutsideShell",  "ShellOutsideSolid", "MissingGeometry",
         "EdgeEndpoints",   "EmptyLoop",         "ShellDisconnected", "VertexIncidence",
+        "EdgeCache",
     };
     const auto index = static_cast<std::size_t>(rule) - 1;
     return index < Names.size() ? Names[index] : std::string_view{"UnknownRule"};

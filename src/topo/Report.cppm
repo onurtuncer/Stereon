@@ -67,6 +67,11 @@ enum class TopologyRule : std::uint8_t {
     /// The vertex-incidence index does not match the edges: a vertex's list
     /// names an edge not at it, twice or out of order, or misses one.
     VertexIncidence,
+    /// An edge's cached curve and its certificate disagree with each other
+    /// or with the edge (ADR-0009): a cache on a kind that keeps none, a
+    /// cache that names no non-empty pool entry, a status without a cache,
+    /// or a bound that the status does not allow.
+    EdgeCache,
 };
 
 /// "S01", "S02", ...

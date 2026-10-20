@@ -14,6 +14,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -70,6 +71,7 @@ TEST_CASE("no finding on any valid body", "[topo][validator]")
     bodies.push_back(MakeFan(5));
     bodies.push_back(MakeWire(4));
     bodies.push_back(MakeDegenerateFace());
+    bodies.push_back(MakeHinge());
     bodies.emplace_back();
     for (Body& body : bodies) {
         const ValidityReport report = body.Builder.Validate();
@@ -300,6 +302,54 @@ TEST_CASE("S12 MissingGeometry: an empty curve, pcurve or surface in the pool",
         Faults::EmptyPCurve(body.Builder, PCurveRef::FromIndex(5));
         requireEmptyFound(body, "Coedge#5");
     }
+}
+
+TEST_CASE("S17 EdgeCache: a cached curve and its certificate that disagree",
+          "[topo][validator][S17][cache]")
+{
+    constexpr double Infinite = std::numeric_limits<double>::infinity();
+    using Stereon::CacheCertificate;
+    using Stereon::CurveRef;
+    SECTION("a cache on an Exact edge, whose curve is its own")
+    {
+        Body body = MakeBox();
+        Faults::SetCache(body.Builder, body.Edges[0], CurveRef::FromIndex(0),
+                         CacheCertificate::Uncertified, Infinite);
+        RequireFinds(body, TopologyRule::EdgeCache);
+    }
+    SECTION("a cache past the curve pool")
+    {
+        Body body = MakeHinge();
+        Faults::SetCache(body.Builder, body.Edges[0], CurveRef::FromIndex(4000),
+                         CacheCertificate::Uncertified, Infinite);
+        RequireFinds(body, TopologyRule::EdgeCache);
+    }
+    SECTION("a status that claims a cache the edge does not have")
+    {
+        Body body = MakeHinge();
+        Faults::SetCache(body.Builder, body.Edges[0], CurveRef{}, CacheCertificate::Uncertified,
+                         Infinite);
+        RequireFinds(body, TopologyRule::EdgeCache);
+    }
+    SECTION("an uncertified cache with a bound, a certified one without")
+    {
+        for (const auto& [status, bound] : {std::pair{CacheCertificate::Uncertified, 1e-6},
+                                            std::pair{CacheCertificate::Certified, Infinite},
+                                            std::pair{CacheCertificate::Certified, -1.0}}) {
+            Body body = MakeHinge();
+            const CurveRef cache = Must(body.Builder.CacheEdgeCurve(body.Edges[0]));
+            Faults::SetCache(body.Builder, body.Edges[0], cache, status, bound);
+            RequireFinds(body, TopologyRule::EdgeCache);
+        }
+    }
+    SECTION("a cache as CacheEdgeCurve leaves it is valid")
+    {
+        Body body = MakeHinge();
+        static_cast<void>(Must(body.Builder.CacheEdgeCurve(body.Edges[0])));
+        REQUIRE(body.Builder.Validate().IsValid());
+    }
+    REQUIRE(Stereon::RuleId(TopologyRule::EdgeCache) == "S17");
+    REQUIRE(Stereon::RuleName(TopologyRule::EdgeCache) == "EdgeCache");
 }
 
 TEST_CASE("S13 EdgeEndpoints: a degenerate edge with two vertices", "[topo][validator][S13]")

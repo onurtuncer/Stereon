@@ -67,9 +67,9 @@ void ShapeHandleViolation(EntityKind kind, std::uint32_t index, std::uint32_t ge
 
 /// The version recorded in every ValidationCertificate: incremented
 /// whenever the structural rules change.
-inline constexpr std::uint32_t StructuralValidatorVersion = 2;
+inline constexpr std::uint32_t StructuralValidatorVersion = 3;
 /// The rule set the structural validator runs.
-inline constexpr std::string_view StructuralInvariants = "Structural S01-S16";
+inline constexpr std::string_view StructuralInvariants = "Structural S01-S17";
 
 } // namespace Stereon::Detail
 
@@ -575,6 +575,25 @@ template <EntityKind K>
 {
     const CurveRef curve = Detail::RecordOf(shape, e).Curve;
     return curve.IsValid() ? &shape.GetSnapshot()->GetTables().Curves[curve.GetIndex()] : nullptr;
+}
+/// The cached 3D curve of an Intersection or Trim edge (ADR-0009, section
+/// 5): S(c(t)) of its primary side, approximated on the edge's parameter; a
+/// cache, never the truth. Null when the edge keeps none.
+[[nodiscard]] inline const Curve* CachedCurveOf(const Shape& shape, const EdgeId e)
+{
+    const CurveRef curve = Detail::RecordOf(shape, e).Cached;
+    return curve.IsValid() ? &shape.GetSnapshot()->GetTables().Curves[curve.GetIndex()] : nullptr;
+}
+/// What is known of the cached curve's deviation (CacheCertificate).
+[[nodiscard]] inline CacheCertificate CacheCertificateOf(const Shape& shape, const EdgeId e)
+{
+    return Detail::RecordOf(shape, e).CacheStatus;
+}
+/// The proven bound on the cached curve's deviation from S(c(t)) over the
+/// whole range, for a Certified cache; infinite otherwise.
+[[nodiscard]] inline double CacheBoundOf(const Shape& shape, const EdgeId e)
+{
+    return Detail::RecordOf(shape, e).CacheBound;
 }
 
 [[nodiscard]] inline EdgeId EdgeOf(const Shape& shape, const CoedgeId c)

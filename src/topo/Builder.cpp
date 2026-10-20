@@ -11,13 +11,17 @@ module;
 #include <Stereon/Core/Contracts.hpp>
 #include <Stereon/Core/Try.hpp>
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <format>
 #include <limits>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -65,7 +69,19 @@ Result<ShapeBuilder> ShapeBuilder::Open(const Shape& shape)
         return Fail(ErrorCode::InvalidInput, "ShapeBuilder::Open: the Shape is empty");
     }
     const TopologySnapshot& snapshot = *shape.GetSnapshot();
-    return ShapeBuilder(snapshot.GetTables(), snapshot.GetStore(), Detail::FreezeKey{});
+    // ADR-0004, safeguard 5: checked builds validate a public operation's
+    // input again rather than trust the certificate it carries.
+    if constexpr (STEREON_CHECKED_HANDLES) {
+        const ValidityReport report = Detail::ValidateStructure(snapshot.GetTables());
+        if (!report.IsValid()) {
+            return Fail(ErrorCode::InvalidInput,
+                        "ShapeBuilder::Open: the Shape is not structurally valid:\n" +
+                            report.ToText());
+        }
+    }
+    ShapeBuilder builder(snapshot.GetTables(), snapshot.GetStore(), Detail::FreezeKey{});
+    builder.m_Source = shape.GetSnapshot();
+    return builder;
 }
 
 ShapeBuilder::ShapeBuilder(ShapeBuilder&& other) noexcept
@@ -73,10 +89,13 @@ ShapeBuilder::ShapeBuilder(ShapeBuilder&& other) noexcept
     , m_Token(std::exchange(other.m_Token, BuilderToken{}))
     , m_Epoch(other.m_Epoch)
     , m_SourceStore(other.m_SourceStore)
+    , m_Source(std::move(other.m_Source))
+    , m_ToleranceChanges(std::move(other.m_ToleranceChanges))
 {
     // Cursors on the source are invalid from now on (ADR-0038).
     other.Advance();
     other.m_Tables = {};
+    other.m_ToleranceChanges.clear();
 }
 
 ShapeBuilder& ShapeBuilder::operator=(ShapeBuilder&& other) noexcept
@@ -86,8 +105,11 @@ ShapeBuilder& ShapeBuilder::operator=(ShapeBuilder&& other) noexcept
         m_Token = std::exchange(other.m_Token, BuilderToken{});
         m_Epoch = other.m_Epoch + 1;
         m_SourceStore = other.m_SourceStore;
+        m_Source = std::move(other.m_Source);
+        m_ToleranceChanges = std::move(other.m_ToleranceChanges);
         other.Advance();
         other.m_Tables = {};
+        other.m_ToleranceChanges.clear();
     }
     return *this;
 }
@@ -401,6 +423,8 @@ Result<BuilderCoedgeId> ShapeBuilder::AppendCoedge(const BuilderLoopId loop,
         m_Tables.Coedges.Modify(radialAnchor.GetIndex(),
                                 [&](Detail::CoedgeRecord& c) { c.Radial = self; });
     }
+    // A new use brings a new pcurve of the edge (ADR-0004).
+    DropCache(edge.GetIndex());
     return coedge;
 }
 
@@ -414,6 +438,8 @@ Result<void> ShapeBuilder::SetPrimaryCoedge(const BuilderEdgeId edge, const Buil
     }
     m_Tables.Edges.Modify(edge.GetIndex(),
                           [&](Detail::EdgeRecord& e) { e.Primary = Link(coedge); });
+    // The cache was the old primary side's S(c(t)).
+    DropCache(edge.GetIndex());
     Advance();
     return {};
 }
@@ -483,8 +509,145 @@ Result<void> ShapeBuilder::SetSurface(const BuilderFaceId face, const SurfaceRef
                     "SetSurface: the surface is not in this builder's pool");
     }
     m_Tables.Faces.Modify(face.GetIndex(), [&](Detail::FaceRecord& f) { f.Surface = surface; });
+    // Every edge the face uses evaluated through the old surface on this
+    // side; its cache was S(c(t)) on it.
+    for (std::uint32_t l = m_Tables.Faces[face.GetIndex()].FirstLoop.GetIndex(), loops = 0;
+         l != LoopId::Invalid && loops < m_Tables.Loops.GetSize();
+         l = m_Tables.Loops[l].NextInFace.GetIndex(), ++loops) {
+        const std::uint32_t anchor = m_Tables.Loops[l].Anchor.GetIndex();
+        for (std::uint32_t c = anchor, steps = 0;
+             c != CoedgeId::Invalid && steps < m_Tables.Coedges.GetSize(); ++steps) {
+            DropCache(m_Tables.Coedges[c].Edge.GetIndex());
+            c = m_Tables.Coedges[c].Next.GetIndex();
+            if (c == anchor) {
+                break;
+            }
+        }
+    }
     Advance();
     return {};
+}
+
+void ShapeBuilder::DropCache(const std::uint32_t edge)
+{
+    const Detail::EdgeRecord& e = m_Tables.Edges[edge];
+    if (!e.Cached.IsValid() && e.CacheStatus == CacheCertificate::None) {
+        return; // nothing to drop: no page is copied
+    }
+    m_Tables.Edges.Modify(edge, [](Detail::EdgeRecord& r) {
+        r.Cached = {};
+        r.CacheStatus = CacheCertificate::None;
+        r.CacheBound = std::numeric_limits<double>::infinity();
+    });
+}
+
+template <EntityKind K>
+Result<void> ShapeBuilder::SetToleranceOf(const BuilderId<K> h, const double tolerance,
+                                          const std::string_view reason, const char* operation)
+{
+    STEREON_TRY_VOID(Require(h, operation));
+    STEREON_TRY_VOID(Detail::CheckNonNegative(tolerance, "the tolerance", operation));
+    const double old = m_Tables.template Table<K>()[h.GetIndex()].Tolerance;
+    m_Tables.template Table<K>().Modify(h.GetIndex(),
+                                        [&](Detail::Record<K>& r) { r.Tolerance = tolerance; });
+    ToleranceChange change;
+    change.Kind = K;
+    change.Index = h.GetIndex();
+    change.Old = old;
+    change.New = tolerance;
+    change.Reason = std::string(reason);
+    m_ToleranceChanges.push_back(std::move(change));
+    Advance();
+    return {};
+}
+
+Result<void> ShapeBuilder::SetTolerance(const BuilderVertexId vertex, const double tolerance,
+                                        const std::string_view reason)
+{
+    return SetToleranceOf(vertex, tolerance, reason, "SetTolerance");
+}
+
+Result<void> ShapeBuilder::SetTolerance(const BuilderEdgeId edge, const double tolerance,
+                                        const std::string_view reason)
+{
+    return SetToleranceOf(edge, tolerance, reason, "SetTolerance");
+}
+
+namespace {
+
+/// True for a periodic direction: Period() and Periods() give exactly 0 for
+/// one that is not, a marker rather than a tolerance.
+[[nodiscard]] bool IsPeriodic(const double period)
+{
+    return period > 0.0; // STEREON-LINT-ALLOW(epsilon): 0 marks no period
+}
+
+/// True when the parameter lies in the domain in every direction that is
+/// not periodic: where a pcurve may evaluate a surface.
+[[nodiscard]] bool OnSurface(const Surface& surface, const Point2& uv)
+{
+    const Box2 domain = Domain(surface);
+    const Vec2 periods = Periods(surface);
+    return (IsPeriodic(periods.X) || Contains(domain.X, uv.X)) &&
+           (IsPeriodic(periods.Y) || Contains(domain.Y, uv.Y));
+}
+
+} // namespace
+
+Result<CurveRef> ShapeBuilder::CacheEdgeCurve(const BuilderEdgeId edge)
+{
+    STEREON_TRY_VOID(Require(edge, "CacheEdgeCurve"));
+    const Detail::EdgeRecord& e = m_Tables.Edges[edge.GetIndex()];
+    if (!HasCachedCurve(e.Kind)) {
+        return Fail(ErrorCode::InvalidInput,
+                    std::string("CacheEdgeCurve: a ") + std::string(ToString(e.Kind)) +
+                        " edge keeps no cached curve; only Intersection and Trim edges do");
+    }
+    if (!e.Primary.IsValid()) {
+        return Fail(ErrorCode::InvalidInput,
+                    "CacheEdgeCurve: the edge has no primary coedge to evaluate through");
+    }
+    const Detail::CoedgeRecord& use = m_Tables.Coedges[e.Primary.GetIndex()];
+    const double low = e.Range.GetLower();
+    const double high = e.Range.GetUpper();
+    if (!use.PCurve.IsValid() || !std::isfinite(low) || !std::isfinite(high) || !(low < high)) {
+        return Fail(
+            ErrorCode::InvalidInput,
+            "CacheEdgeCurve: the primary coedge needs a pcurve and the edge a finite range");
+    }
+    const Curve2d& pcurve = m_Tables.PCurves[use.PCurve.GetIndex()];
+    const Surface& surface =
+        m_Tables.Surfaces[m_Tables.Faces[m_Tables.Loops[use.Loop.GetIndex()].Face.GetIndex()]
+                              .Surface.GetIndex()];
+    if (!IsPeriodic(Period(pcurve)) && !Contains(Domain(pcurve), e.Range)) {
+        return Fail(ErrorCode::InvalidInput,
+                    "CacheEdgeCurve: the edge's range is not in the primary pcurve's domain");
+    }
+    // S(c(t)) at evenly spread parameters; the last one exactly the end.
+    std::vector<Point3> points;
+    points.reserve(CacheSamples);
+    const double step = (high - low) / static_cast<double>(CacheSamples - 1);
+    for (std::size_t k = 0; k < CacheSamples; ++k) {
+        const double t = k + 1 == CacheSamples ? high : low + step * static_cast<double>(k);
+        const Point2 uv = Eval(pcurve, t);
+        if (!OnSurface(surface, uv)) {
+            return Fail(ErrorCode::InvalidInput,
+                        "CacheEdgeCurve: the primary pcurve leaves its surface's domain");
+        }
+        points.push_back(Eval(surface, uv));
+    }
+    // Uniform parametrisation puts sample k at k / (n - 1) of [0, 1], which
+    // the reparametrisation maps to the edge's own parameter.
+    STEREON_TRY(const CurveFit fit, Interpolate(points, 3, Parametrization::Uniform));
+    STEREON_TRY(BSplineCurve cache, Reparametrized(fit.Curve, e.Range));
+    const CurveRef ref = CurveRef::FromIndex(
+        static_cast<std::uint32_t>(m_Tables.Curves.PushBack(Curve(std::move(cache)))));
+    m_Tables.Edges.Modify(edge.GetIndex(), [&](Detail::EdgeRecord& r) {
+        r.Cached = ref;
+        r.CacheStatus = CacheCertificate::Uncertified;
+        r.CacheBound = std::numeric_limits<double>::infinity();
+    });
+    return ref;
 }
 
 /// Takes the coedge out of its loop's cycle and its edge's radial ring and
@@ -527,6 +690,8 @@ void ShapeBuilder::DetachCoedge(const std::uint32_t coedge, const bool passPrima
             e.Primary = !alone && passPrimaryOn ? r.Radial : CoedgeId{};
         }
     });
+    // The use's pcurve leaves the edge, and its primary may have passed on.
+    DropCache(r.Edge.GetIndex());
     Release<EntityKind::Coedge>(coedge);
 }
 
@@ -735,6 +900,210 @@ ValidityReport ValidateTopology(const Shape& shape)
     return Detail::ValidateStructure(shape.GetSnapshot()->GetTables());
 }
 
+// --- Shape-producing operations (ADR-0006) ------------------------------------
+
+namespace {
+
+[[nodiscard]] bool IsLiveOf(const Detail::TopologyTables& t, const EntityKind kind,
+                            const std::uint32_t index)
+{
+    return kind == EntityKind::Vertex ? t.IsLive<EntityKind::Vertex>(index)
+                                      : t.IsLive<EntityKind::Edge>(index);
+}
+
+/// The builder's SetTolerance() calls as one change per entity still live in
+/// the result, ordered by kind and index: the first old value, the last new
+/// one and every reason in order; none where the value came back to where it
+/// started.
+[[nodiscard]] std::vector<ToleranceChange> Coalesced(std::vector<ToleranceChange> calls,
+                                                     const Detail::TopologyTables& result)
+{
+    std::vector<ToleranceChange> changes;
+    for (ToleranceChange& call : calls) {
+        const auto same = std::ranges::find_if(changes, [&](const ToleranceChange& c) {
+            return c.Kind == call.Kind && c.Index == call.Index;
+        });
+        if (same == changes.end()) {
+            changes.push_back(std::move(call));
+        } else {
+            same->New = call.New;
+            same->Reason += "; " + call.Reason;
+        }
+    }
+    std::erase_if(changes, [&](const ToleranceChange& c) {
+        return c.New == c.Old || !IsLiveOf(result, c.Kind, c.Index);
+    });
+    std::ranges::sort(changes, [](const ToleranceChange& a, const ToleranceChange& b) {
+        return std::pair(static_cast<int>(a.Kind), a.Index) <
+               std::pair(static_cast<int>(b.Kind), b.Index);
+    });
+    return changes;
+}
+
+[[nodiscard]] std::string Named(const Shape& shape, const EntityKind kind,
+                                const std::uint32_t index)
+{
+    return Detail::DescribeEntity(shape.GetSnapshot()->GetTables(), kind, index);
+}
+
+[[nodiscard]] Diagnostic MakeWarning(const DiagnosticCode code, std::string message,
+                                     std::string entity)
+{
+    Diagnostic warning;
+    warning.Code = code;
+    warning.Message = std::move(message);
+    warning.Entities.push_back(std::move(entity));
+    return warning;
+}
+
+/// ToleranceExceeded for a change the Context does not allow (ADR-0001,
+/// ADR-0006): above the ceiling, or any growth when growth fails.
+[[nodiscard]] Result<void> CheckTolerances(const std::vector<ToleranceChange>& changes,
+                                           const Context& context, const Shape& shape)
+{
+    for (const ToleranceChange& c : changes) {
+        if (c.New > context.GetToleranceCeiling()) {
+            return Fail(ErrorCode::ToleranceExceeded,
+                        std::format("Commit: the tolerance of {} would be {}, above the "
+                                    "Context's ceiling of {}",
+                                    Named(shape, c.Kind, c.Index), c.New,
+                                    context.GetToleranceCeiling()));
+        }
+        if (c.New > c.Old && context.GetToleranceGrowthPolicy() == ToleranceGrowth::Fail) {
+            return Fail(ErrorCode::ToleranceExceeded,
+                        std::format("Commit: the tolerance of {} grew from {} to {} ({}), and the "
+                                    "Context fails any tolerance growth",
+                                    Named(shape, c.Kind, c.Index), c.Old, c.New, c.Reason));
+        }
+    }
+    return {};
+}
+
+/// The warnings of a commit: tolerances that grew, cached edge curves the
+/// edit dropped.
+[[nodiscard]] std::vector<Diagnostic> WarningsOf(const std::vector<ToleranceChange>& changes,
+                                                 const Detail::TopologyTables* before,
+                                                 const Shape& shape)
+{
+    std::vector<Diagnostic> warnings;
+    for (const ToleranceChange& c : changes) {
+        if (c.New > c.Old) {
+            warnings.push_back(
+                MakeWarning(DiagnosticCode::ToleranceGrown,
+                            std::format("tolerance grew from {} to {}: {}", c.Old, c.New, c.Reason),
+                            Named(shape, c.Kind, c.Index)));
+        }
+    }
+    if (before != nullptr) {
+        const Detail::TopologyTables& after = shape.GetSnapshot()->GetTables();
+        for (std::uint32_t e = 0; e < before->Edges.GetSize(); ++e) {
+            if (before->IsLive<EntityKind::Edge>(e) && after.IsLive<EntityKind::Edge>(e) &&
+                before->Edges[e].Cached.IsValid() && !after.Edges[e].Cached.IsValid()) {
+                warnings.push_back(
+                    MakeWarning(DiagnosticCode::CacheDropped,
+                                "the cached 3D curve was dropped: a pcurve, the primary "
+                                "coedge or a surface of the edge changed",
+                                Named(shape, EntityKind::Edge, e)));
+            }
+        }
+    }
+    return warnings;
+}
+
+} // namespace
+
+Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context)
+{
+    STEREON_TRY_VOID(builder.RequireToken("Commit"));
+    // Consumed whatever happens, as Freeze() consumes it (ADR-0027).
+    ShapeBuilder consumed(std::move(builder));
+    const std::shared_ptr<const TopologySnapshot> source = consumed.m_Source;
+    std::vector<ToleranceChange> calls = std::move(consumed.m_ToleranceChanges);
+    if constexpr (STEREON_CHECKED_HANDLES) {
+        if (source != nullptr) {
+            const ValidityReport report = Detail::ValidateStructure(source->GetTables());
+            if (!report.IsValid()) {
+                return Fail(ErrorCode::InvalidInput,
+                            "Commit: the shape the builder was opened on is not structurally "
+                            "valid:\n" +
+                                report.ToText());
+            }
+        }
+    }
+    Result<Shape> frozen = Freeze(std::move(consumed));
+    if (!frozen) {
+        return Fail(frozen.error().GetCode(),
+                    "Commit: " + std::string(frozen.error().GetMessage()));
+    }
+    const Detail::TopologyTables& result = frozen->GetSnapshot()->GetTables();
+    const Detail::TopologyTables* before = source != nullptr ? &source->GetTables() : nullptr;
+    std::vector<ToleranceChange> changes = Coalesced(std::move(calls), result);
+    STEREON_TRY_VOID(CheckTolerances(changes, context, *frozen));
+    History history = Detail::HistoryBetween(before, result);
+    // ADR-0030: missing history fails the operation before publication.
+    if (!Detail::HistoryIsComplete(history, before, result)) {
+        return Fail(ErrorCode::InvalidResult,
+                    "Commit: the History does not account for every entity (a kernel bug)");
+    }
+    OperationResult published;
+    published.Warnings = WarningsOf(changes, before, *frozen);
+    published.ToleranceChanges = std::move(changes);
+    published.History = std::move(history);
+    published.Shape = *std::move(frozen);
+    published.Checked = ValidityLevel::Structural;
+    return published;
+}
+
+Result<OperationResult> CompactShape(const Shape& shape, const Context& context)
+{
+    // Compaction renumbers; no setting of the Context changes what it does.
+    static_cast<void>(context);
+    if (shape.IsEmpty()) {
+        return Fail(ErrorCode::InvalidInput, "CompactShape: the Shape is empty");
+    }
+    if constexpr (STEREON_CHECKED_HANDLES) {
+        const ValidityReport report = ValidateTopology(shape);
+        if (!report.IsValid()) {
+            return Fail(ErrorCode::InvalidInput,
+                        "CompactShape: the Shape is not structurally valid:\n" + report.ToText());
+        }
+    }
+    STEREON_TRY(Compacted compacted, Compact(shape));
+    std::vector<HistoryEntry> entries;
+    const auto continuations = [&]<EntityKind K>() {
+        for (std::uint32_t old = 0; old < compacted.Remap.template OldCount<K>(); ++old) {
+            const std::uint32_t index = compacted.Remap.template NewIndex<K>(old);
+            if (index != Id<K>::Invalid) {
+                HistoryEntry entry;
+                entry.Kind = K;
+                entry.Relation = HistoryRelation::Unchanged;
+                entry.Source = old;
+                entry.Target = index;
+                entries.push_back(entry);
+            }
+        }
+    };
+    continuations.template operator()<EntityKind::Vertex>();
+    continuations.template operator()<EntityKind::Edge>();
+    continuations.template operator()<EntityKind::Coedge>();
+    continuations.template operator()<EntityKind::Loop>();
+    continuations.template operator()<EntityKind::Face>();
+    continuations.template operator()<EntityKind::Shell>();
+    continuations.template operator()<EntityKind::Solid>();
+    History history(std::move(entries));
+    const Detail::TopologyTables& source = shape.GetSnapshot()->GetTables();
+    const Detail::TopologyTables& result = compacted.Shape.GetSnapshot()->GetTables();
+    if (!Detail::HistoryIsComplete(history, &source, result)) {
+        return Fail(ErrorCode::InvalidResult,
+                    "CompactShape: the History does not account for every entity (a kernel bug)");
+    }
+    OperationResult published;
+    published.History = std::move(history);
+    published.Shape = std::move(compacted.Shape);
+    published.Checked = ValidityLevel::Structural;
+    return published;
+}
+
 } // namespace Stereon
 
 namespace Stereon::Testing {
@@ -827,6 +1196,16 @@ void TopologyFaults::KillCoedge(ShapeBuilder& b, const BuilderCoedgeId c)
         ++r.Slot.Generation;
     });
     --b.m_Tables.LiveCounts[static_cast<std::size_t>(EntityKind::Coedge)];
+}
+
+void TopologyFaults::SetCache(ShapeBuilder& b, const BuilderEdgeId e, const CurveRef cached,
+                              const CacheCertificate status, const double bound)
+{
+    b.m_Tables.Edges.Modify(e.GetIndex(), [&](Detail::EdgeRecord& r) {
+        r.Cached = cached;
+        r.CacheStatus = status;
+        r.CacheBound = bound;
+    });
 }
 
 void TopologyFaults::SetNextOutOfRange(ShapeBuilder& b, const BuilderCoedgeId c)
