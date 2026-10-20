@@ -43,8 +43,9 @@
 build/
 Build/
 build-*/
-# ...but src/build/ is the Build library, not build output.
+# ...but src/build/ is the Build library and tests/build/ its tests, not build output.
 !src/build/
+!tests/build/
 
 # CMake generated files
 CMakeFiles/
