@@ -43,6 +43,12 @@ if(STEREON_BUILD_TOOLS)
     add_subdirectory(tools/stn-dump)
 endif()
 
+# The debug viewer's headless scene is built with the tests; stn-view only on
+# request (STEREON_BUILD_VIEWER).
+if(STEREON_BUILD_TESTS OR STEREON_BUILD_VIEWER)
+    add_subdirectory(viewer)
+endif()
+
 if(STEREON_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)

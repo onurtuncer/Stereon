@@ -113,3 +113,46 @@ if(STEREON_BUILD_PYTHON)
         SYSTEM)
     FetchContent_MakeAvailable(nanobind)
 endif()
+
+# --- Debug viewer --------------------------------------------------------------
+# Only stn-view (viewer/app) may link these (ADR-0035, ADR-0034):
+# tools/check_dependencies.py rejects a reference to them anywhere else.
+
+if(STEREON_BUILD_VIEWER)
+    # GLFW, for the window, input and the OpenGL context. X11 only on Linux,
+    # so that the build needs the X11 development packages and not Wayland's.
+    set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+    set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
+    # Dependency licence: Zlib
+    FetchContent_Declare(glfw
+        GIT_REPOSITORY https://github.com/glfw/glfw.git
+        GIT_TAG        3.4
+        GIT_SHALLOW    TRUE
+        SYSTEM)
+    FetchContent_MakeAvailable(glfw)
+
+    # Dear ImGui, for the panels, with its GLFW and OpenGL 3 backends. It has
+    # no CMake build of its own, so the sources are fetched only and the
+    # library defined here; its OpenGL 3 backend brings its own loader.
+    # Dependency licence: MIT
+    FetchContent_Declare(imgui
+        GIT_REPOSITORY https://github.com/ocornut/imgui.git
+        GIT_TAG        v1.91.8
+        GIT_SHALLOW    TRUE
+        SOURCE_SUBDIR  stereon-sources-only)
+    FetchContent_MakeAvailable(imgui)
+    add_library(stereon_imgui STATIC
+        "${imgui_SOURCE_DIR}/imgui.cpp"
+        "${imgui_SOURCE_DIR}/imgui_draw.cpp"
+        "${imgui_SOURCE_DIR}/imgui_tables.cpp"
+        "${imgui_SOURCE_DIR}/imgui_widgets.cpp"
+        "${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp"
+        "${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp")
+    set_target_properties(stereon_imgui PROPERTIES CXX_SCAN_FOR_MODULES OFF)
+    target_include_directories(stereon_imgui SYSTEM PUBLIC
+        "${imgui_SOURCE_DIR}" "${imgui_SOURCE_DIR}/backends")
+    target_link_libraries(stereon_imgui PUBLIC glfw ${CMAKE_DL_LIBS})
+endif()

@@ -51,6 +51,44 @@ jobs:
       - name: Test
         run: ctest --preset ${{ matrix.preset }}
 
+  viewer:
+    # The debug viewer (ADR-0035): builds stn-view with GLFW and Dear ImGui,
+    # runs the headless scene tests, and renders the manual's screenshots
+    # (docs/figures/ViewerDumps.cpp) under Xvfb with Mesa's software OpenGL.
+    name: Linux GCC 16 (viewer)
+    runs-on: ubuntu-24.04
+    container:
+      image: gcc:16.2
+    steps:
+      - name: Install CMake, Ninja, X11 and Mesa
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends cmake ninja-build python3 \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl-dev \
+            xvfb xauth libgl1-mesa-dri libglx-mesa0
+      - uses: actions/checkout@v7
+      - name: Configure
+        run: cmake --preset gcc16-debug -DSTEREON_WARNINGS_AS_ERRORS=ON -DSTEREON_BUILD_VIEWER=ON
+      - name: Build
+        run: cmake --build --preset gcc16-debug --target stn-view stereon_viewer_tests stereon_viewer_dumps
+      - name: Test the scene
+        run: ctest --preset gcc16-debug -R viewer
+      - name: Render the manual's screenshots
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          build/gcc16-debug/tests/stereon_viewer_dumps dumps
+          mkdir -p screenshots
+          xvfb-run -a -s "-screen 0 1600x1000x24" build/gcc16-debug/viewer/app/stn-view dumps/geometry \
+            --screenshot screenshots/viewer-geometry.png --size 1280x800
+          xvfb-run -a -s "-screen 0 1600x1000x24" build/gcc16-debug/viewer/app/stn-view dumps/topology \
+            --screenshot screenshots/viewer-topology.png --size 1280x800 --no-panel
+          ls -l screenshots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: viewer-screenshots
+          path: screenshots/
+
   linux-tsan:
     name: Linux GCC 16 (gcc16-tsan)
     runs-on: ubuntu-24.04

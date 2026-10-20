@@ -62,6 +62,26 @@ add_test(NAME "determinism: serial and 1, 2, 8 and 32 threads give the same byte
 set_tests_properties("determinism: serial and 1, 2, 8 and 32 threads give the same bytes"
     PROPERTIES PASS_REGULAR_EXPRESSION "every configuration identical")
 
+# The debug viewer's headless scene (ADR-0035): dump files to display
+# primitives, tested without a window.
+if(TARGET stereon_viewer_scene)
+    file(GLOB viewer_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/viewer/*.cpp")
+    add_executable(stereon_viewer_tests ${viewer_sources})
+    target_link_libraries(stereon_viewer_tests
+        PRIVATE stereon::viewer_scene stereon_options Catch2::Catch2WithMain)
+    stereon_anchor_contracts(stereon_viewer_tests)
+    catch_discover_tests(stereon_viewer_tests TEST_PREFIX "viewer: " DISCOVERY_MODE PRE_TEST)
+endif()
+
+# The dumps behind the manual's stn-view screenshots (docs/figures/): built
+# and run with the tests so that they keep compiling; the viewer CI job
+# renders them.
+add_executable(stereon_viewer_dumps ${PROJECT_SOURCE_DIR}/docs/figures/ViewerDumps.cpp)
+target_link_libraries(stereon_viewer_dumps PRIVATE stereon::io stereon_options Catch2::Catch2)
+stereon_anchor_contracts(stereon_viewer_dumps)
+add_test(NAME "docs: the viewer example dumps are written"
+    COMMAND stereon_viewer_dumps "${CMAKE_CURRENT_BINARY_DIR}/viewer-dumps")
+
 # stn-dump (ADR-0012, ADR-0035) on a committed archive: the JSON view, its
 # pretty form for diffs, and the exit statuses for a missing file and for
 # bad arguments.
