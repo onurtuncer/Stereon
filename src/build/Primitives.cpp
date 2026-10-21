@@ -7,6 +7,8 @@
 
 module;
 
+#include "Profiling.hpp"
+
 // The contract anchor (docs/toolchain/gcc16-feature-probe.md).
 #include <Stereon/Core/Contracts.hpp>
 #include <Stereon/Core/Try.hpp>
@@ -229,6 +231,7 @@ struct CylinderParts {
 Result<OperationResult> MakeBoxSolid(const Point3& origin, const Vec3& xAxis, const Vec3& yAxis,
                                      const Vec3& size, const Context& context)
 {
+    STEREON_PROFILE_SCOPE("build.MakeBoxSolid");
     STEREON_TRY_VOID(CheckFrame(origin, xAxis, yAxis, "MakeBoxSolid"));
     if (!IsDimension(size.X, context) || !IsDimension(size.Y, context) ||
         !IsDimension(size.Z, context)) {
@@ -258,6 +261,7 @@ Result<OperationResult> MakeCylinderSolid(const Point3& baseCentre, const Vec3& 
                                           const Vec3& yAxis, const double radius,
                                           const double height, const Context& context)
 {
+    STEREON_PROFILE_SCOPE("build.MakeCylinderSolid");
     STEREON_TRY_VOID(CheckFrame(baseCentre, xAxis, yAxis, "MakeCylinderSolid"));
     if (!IsDimension(radius, context) || !IsDimension(height, context)) {
         return Fail(ErrorCode::InvalidInput,
