@@ -27,7 +27,7 @@ therefore a **proved** separation, never "no seeds found". Anything less is a
    // Over the whole domains.
    const auto whole = Stereon::Intersect(surfaceA, surfaceB, ctx);
 
-A ``SurfaceSurfaceIntersection`` holds three kinds of component, which may
+A ``SurfaceSurfaceIntersection`` holds points and branches, which may
 coexist:
 
 - ``IntersectionPoint``: an isolated contact, with its parameters on both
@@ -38,9 +38,12 @@ coexist:
   ``Tangential``, or ``Overlap`` for an overlap's boundary), the
   ``SideTransition`` across it, and a certified deviation bound. An infinite
   bound means uncertified.
-- ``OverlapRegion``: where the surfaces coincide. It carries its domain on
-  each surface, the ``ParameterMap`` from one surface's parameters to the
-  other's, whether the normals agree, and its boundary branches.
+
+An ``OverlapRegion`` describes where the surfaces coincide: its domain on
+each surface, the ``ParameterMap`` from one surface's parameters to the
+other's, whether the normals agree, and its boundary branches. Results
+carry overlaps from the first handler that finds one; GCC 16.2 cannot yet
+hold them in the result type inside the module (a compiler bug).
 
 Contact and side transition are separate facts. A transverse crossing implies
 ``OppositeSide``, while a tangency alone implies neither side relation. For

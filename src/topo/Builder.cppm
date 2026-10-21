@@ -396,6 +396,11 @@ private:
     [[nodiscard]] Result<void> CheckEdgeGeometry(const EdgeGeometry& geometry,
                                                  const char* operation) const;
     [[nodiscard]] std::uint32_t EndVertexOf(std::uint32_t coedge) const noexcept;
+    [[nodiscard]] std::uint32_t SecondOfTwoUses(std::uint32_t edge) const noexcept;
+    [[nodiscard]] bool IsFreeEnd(std::uint32_t edge, std::uint32_t vertex) const noexcept;
+    [[nodiscard]] std::uint32_t FaceOfUse(std::uint32_t coedge) const noexcept;
+    [[nodiscard]] Result<void> CheckJoinable(std::uint32_t dead, std::uint32_t alive,
+                                             const char* operation) const;
     [[nodiscard]] std::vector<std::uint32_t> CycleFrom(std::uint32_t coedge) const;
     void RelinkCycle(std::uint32_t loop, const std::vector<std::uint32_t>& cycle);
     [[nodiscard]] BuilderCoedgeId NewUse(std::uint32_t edge, std::uint32_t loop, EdgeUseSense sense,

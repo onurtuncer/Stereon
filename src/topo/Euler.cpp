@@ -14,6 +14,7 @@ module;
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -262,6 +263,57 @@ void ShapeBuilder::CheckNeighbourhood(const std::vector<std::uint32_t>& loops,
     }
 }
 
+/// The edge's second use when it has exactly two, None otherwise.
+std::uint32_t ShapeBuilder::SecondOfTwoUses(const std::uint32_t edge) const noexcept
+{
+    const std::uint32_t first = m_Tables.Edges[edge].RadialAnchor.GetIndex();
+    if (first == None) {
+        return None;
+    }
+    const std::uint32_t second = m_Tables.Coedges[first].Radial.GetIndex();
+    const bool two = second != first && m_Tables.Coedges[second].Radial.GetIndex() == first;
+    return two ? second : None;
+}
+
+/// True when `vertex` is an end of an edge that is not closed, and no other
+/// edge starts or ends at it: the far end of a strut.
+bool ShapeBuilder::IsFreeEnd(const std::uint32_t edge, const std::uint32_t vertex) const noexcept
+{
+    const Detail::EdgeRecord& e = m_Tables.Edges[edge];
+    if (e.Start == e.End) {
+        return false;
+    }
+    const bool atStart = e.Start.GetIndex() == vertex;
+    if (!atStart && e.End.GetIndex() != vertex) {
+        return false;
+    }
+    const EdgeId another = atStart ? e.NextAtStart : e.NextAtEnd;
+    return m_Tables.Vertices[vertex].FirstEdge.GetIndex() == edge && !another.IsValid();
+}
+
+/// The face of a coedge's loop.
+std::uint32_t ShapeBuilder::FaceOfUse(const std::uint32_t coedge) const noexcept
+{
+    return m_Tables.Loops[m_Tables.Coedges[coedge].Loop.GetIndex()].Face.GetIndex();
+}
+
+/// KEF's conditions on the face it removes and the face it keeps: one loop,
+/// and the same surface, sense and shell.
+Result<void> ShapeBuilder::CheckJoinable(const std::uint32_t dead, const std::uint32_t alive,
+                                         const char* operation) const
+{
+    const Detail::FaceRecord& d = m_Tables.Faces[dead];
+    const Detail::FaceRecord& a = m_Tables.Faces[alive];
+    if (d.FirstLoop != d.LastLoop) {
+        return Refuse(operation, "the face to remove must have one loop");
+    }
+    if (d.Surface != a.Surface || d.Reversed != a.Reversed || d.Shell != a.Shell) {
+        return Refuse(operation,
+                      "the two faces must lie on one surface, the same way round, in one shell");
+    }
+    return {};
+}
+
 // --- MVFS / KVFS --------------------------------------------------------------
 
 Result<VertexFaceShell> ShapeBuilder::MakeVertexFaceShell(const Point3& position,
@@ -404,19 +456,14 @@ Result<void> ShapeBuilder::KillEdgeVertex(const BuilderEdgeId edge, const Builde
     constexpr const char* op = "KillEdgeVertex";
     STEREON_TRY_VOID(Require(edge, op));
     STEREON_TRY_VOID(Require(vertex, op));
-    const Detail::EdgeRecord& e = m_Tables.Edges[edge.GetIndex()];
     const std::uint32_t v = vertex.GetIndex();
-    if (e.Start == e.End || (e.Start.GetIndex() != v && e.End.GetIndex() != v)) {
-        return Refuse(op, "the vertex must be one end of an edge that is not closed");
+    if (!IsFreeEnd(edge.GetIndex(), v)) {
+        return Refuse(op, "the vertex must be an end of an edge that is not closed, with no "
+                          "other edge at it");
     }
-    const EdgeId another = e.Start.GetIndex() == v ? e.NextAtStart : e.NextAtEnd;
-    if (m_Tables.Vertices[v].FirstEdge.GetIndex() != edge.GetIndex() || another.IsValid()) {
-        return Refuse(op, "other edges start or end at the vertex");
-    }
-    const std::uint32_t first = e.RadialAnchor.GetIndex();
-    const std::uint32_t second = first == None ? None : m_Tables.Coedges[first].Radial.GetIndex();
-    if (first == None || second == first || m_Tables.Coedges[second].Radial.GetIndex() != first ||
-        m_Tables.Coedges[first].Loop != m_Tables.Coedges[second].Loop) {
+    const std::uint32_t first = m_Tables.Edges[edge.GetIndex()].RadialAnchor.GetIndex();
+    const std::uint32_t second = SecondOfTwoUses(edge.GetIndex());
+    if (second == None || m_Tables.Coedges[first].Loop != m_Tables.Coedges[second].Loop) {
         return Refuse(op, "the edge must have exactly two uses, in one loop");
     }
     // The use arriving at the vertex turns back along the other.
@@ -498,29 +545,18 @@ Result<void> ShapeBuilder::KillEdgeFace(const BuilderEdgeId edge, const BuilderF
     STEREON_TRY_VOID(Require(edge, op));
     STEREON_TRY_VOID(Require(face, op));
     const std::uint32_t first = m_Tables.Edges[edge.GetIndex()].RadialAnchor.GetIndex();
-    const std::uint32_t second = first == None ? None : m_Tables.Coedges[first].Radial.GetIndex();
-    if (first == None || second == first || m_Tables.Coedges[second].Radial.GetIndex() != first) {
+    const std::uint32_t second = SecondOfTwoUses(edge.GetIndex());
+    if (second == None) {
         return Refuse(op, "the edge must have exactly two uses");
     }
-    const auto faceOf = [&](const std::uint32_t c) {
-        return m_Tables.Loops[m_Tables.Coedges[c].Loop.GetIndex()].Face.GetIndex();
-    };
-    const std::uint32_t gone = faceOf(first) == face.GetIndex() ? first : second;
+    const std::uint32_t gone = FaceOfUse(first) == face.GetIndex() ? first : second;
     const std::uint32_t kept = gone == first ? second : first;
-    if (faceOf(gone) != face.GetIndex() || faceOf(kept) == face.GetIndex()) {
+    if (FaceOfUse(gone) != face.GetIndex() || FaceOfUse(kept) == face.GetIndex()) {
         return Refuse(op, "the edge must join the face to another face");
     }
-    // Copies: the writes below may move the pages these records are on.
+    // A copy: the writes below may move the page this record is on.
     const Detail::FaceRecord dead = m_Tables.Faces[face.GetIndex()];
-    const Detail::FaceRecord alive = m_Tables.Faces[faceOf(kept)];
-    if (dead.FirstLoop != dead.LastLoop) {
-        return Refuse(op, "the face to remove must have one loop");
-    }
-    if (dead.Surface != alive.Surface || dead.Reversed != alive.Reversed ||
-        dead.Shell != alive.Shell) {
-        return Refuse(op,
-                      "the two faces must lie on one surface, the same way round, in one shell");
-    }
+    STEREON_TRY_VOID(CheckJoinable(face.GetIndex(), FaceOfUse(kept), op));
     const std::uint32_t keptLoop = m_Tables.Coedges[kept].Loop.GetIndex();
     const std::uint32_t goneLoop = m_Tables.Coedges[gone].Loop.GetIndex();
     std::vector<std::uint32_t> joined = CycleFrom(kept);
