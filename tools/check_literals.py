@@ -145,7 +145,7 @@ def tracked_sources(root: Path) -> list[Path]:
     """
     try:
         result = subprocess.run(
-            ["git", "-C", str(root), "ls-files", "-z", "--", *[f"{d}/" for d in CHECKED_DIRECTORIES]],
+            ["git", "-C", str(root), "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", *[f"{d}/" for d in CHECKED_DIRECTORIES]],
             check=True,
             capture_output=True,
         )

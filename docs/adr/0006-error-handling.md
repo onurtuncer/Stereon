@@ -5,6 +5,7 @@
 - **Revised:** 2026-10-10 (`OperationResult`; boundary between errors and contract violations)
 - **Revised:** 2026-10-14 (outcome, lineage and metadata extension references)
 - **Revised:** 2026-10-20 (two tiers for a handle from another shape; `Context` modifiers; the entity and report fields of `KernelError` are pending)
+- **Revised:** 2026-10-21 (the verification row on publication: a structural failure is reported as `InvalidInput`, not `InvalidResult`)
 - **Accepted:** 2026-10-20 by Onur Tuncer: `Result` and `OperationResult` are built and used by every fallible operation, the kernel does not throw, and publication refuses an invalid shape with `InvalidResult` (see *Status of the verification*)
 - **Owner:** Onur Tuncer
 - **Phase:** 0
@@ -56,7 +57,7 @@ Every corpus failure case must return a `KernelError` naming at least one involv
 
 | Criterion | Status |
 | --- | --- |
-| A shape that fails validation is never published | Met: `Freeze` and `Commit` validate and return `InvalidResult` with the report's text (`src/topo/Builder.cpp`) |
+| A shape that fails validation is never published | Met: `Freeze` and `Commit` validate and refuse with the report's text (`src/topo/Builder.cpp`). `Commit` returns `InvalidResult` for a result that fails the Geometric level or whose History is incomplete; a structural failure, from `Freeze` or from `Commit`'s freeze, returns `InvalidInput`, since the builder's tables are the caller's input |
 | Tolerance changes appear in the `OperationResult` | Met: `Commit` reports every `SetTolerance` with its reason and warns `ToleranceGrown` (`tests/topo/OperationTests.cpp`) |
 | Corpus failures name an entity | Pending: `KernelError` has no entity list or attached `ValidityReport` yet; the report's text is in the message. Both fields are added with the first operation that fails on a corpus case |
 | Fuzzing yields only `KernelError`s | Running: the `.stn` reader and the checked B-spline factory (`tests/fuzz/`), a short pass on every pull request and 200 000 mutations each nightly under the sanitizers; further entry points join as they are added |
