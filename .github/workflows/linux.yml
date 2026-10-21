@@ -35,7 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        preset: [gcc16-debug, gcc16-release, gcc16-asan]
+        preset: [gcc16-debug, gcc16-release, gcc16-asan, gcc16-profile]
     steps:
       - name: Install CMake and Ninja
         run: |

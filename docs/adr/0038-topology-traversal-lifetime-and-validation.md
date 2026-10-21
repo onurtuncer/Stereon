@@ -1,6 +1,7 @@
 # ADR-0038: Topology traversal lifetime, invalidation and validation
 
 - **Status:** Proposed
+- **Revised:** 2026-10-20 (cross-reference executable contracts and validation evidence)
 - **Date:** 2026-10-17
 - **Owner:** Onur Tuncer
 - **Phase:** Topology foundation
@@ -182,3 +183,10 @@ Frozen queries remain valid while later edits produce new snapshots. Retaining o
 
 This policy extends existing ownership and contract decisions without changing the four-byte release ID representation. It does not make IDs globally unique or introduce stable iterators across builder edits.
 
+
+## Related executable contract proposals
+
+- [ADR-0039: Make topology-operator contracts executable and auditable](0039-executable-topology-contracts.md)
+- [ADR-0040: Stage topology edits and publish complete results atomically](0040-atomic-topology-edit-publication.md)
+- [ADR-0041: Use layered validation with revision-bound evidence](0041-layered-validation-evidence.md)
+- [ADR-0042: Assign C++26 contracts and kernel validation distinct responsibilities](0042-cpp26-contract-validation-responsibilities.md)

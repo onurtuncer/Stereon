@@ -1,6 +1,7 @@
 # ADR-0018: Validity checking
 
 - **Status:** Proposed
+- **Revised:** 2026-10-20 (cross-reference executable contracts and validation evidence)
 - **Date:** 2026-10-10
 - **Revised:** 2026-10-17 (topology traversal contract cross-reference)
 - **Owner:** Onur Tuncer
@@ -56,3 +57,10 @@ Adopt option 3.
 ## Related traversal contracts
 
 [ADR-0038](0038-topology-traversal-lifetime-and-validation.md) specifies mandatory structural certification at Freeze and independent bounded diagnostic walks. Certification for ordinary traversal does not replace the Geometric and Solid checks required by this ADR's policy.
+
+## Related executable contract proposals
+
+- [ADR-0039: Make topology-operator contracts executable and auditable](0039-executable-topology-contracts.md)
+- [ADR-0040: Stage topology edits and publish complete results atomically](0040-atomic-topology-edit-publication.md)
+- [ADR-0041: Use layered validation with revision-bound evidence](0041-layered-validation-evidence.md)
+- [ADR-0042: Assign C++26 contracts and kernel validation distinct responsibilities](0042-cpp26-contract-validation-responsibilities.md)
