@@ -246,13 +246,29 @@ TEST_CASE("a transaction keeps its candidate only on success", "[topo][euler]")
     const std::vector<std::uint32_t> loop = Cycle(b, t.Base.Loop);
 
     // An edit that fails late, after an MEV and an MEF.
+    Stereon::EdgeVertex aborted;
     const auto failed = b.Transaction([&](ShapeBuilder& candidate) -> Stereon::Result<void> {
-        const auto strut = Must(candidate.MakeEdgeVertex(t.E1.Out, Point3{2, 0, 0}, 0.0, t.Edge));
-        Must(candidate.MakeEdgeFace(strut.Out, t.E2.Out, t.Edge));
+        aborted = Must(candidate.MakeEdgeVertex(t.E1.Out, Point3{2, 0, 0}, 0.0, t.Edge));
+        Must(candidate.MakeEdgeFace(aborted.Out, t.E2.Out, t.Edge));
         return Stereon::Fail(ErrorCode::DegenerateResult, "a late failure");
     });
     REQUIRE(failed.error().GetCode() == ErrorCode::DegenerateResult);
-    REQUIRE(CountsOf(b) == before);
+    Counts after = CountsOf(b);
+    // Nothing changed but the epoch, which advanced: cursors made before
+    // the failed edit are stale (ADR-0038).
+    REQUIRE(after.Epoch > before.Epoch);
+    after.Epoch = before.Epoch;
+    REQUIRE(after == before);
+    REQUIRE(Cycle(b, t.Base.Loop) == loop);
+
+    // The aborted edit's handles stay invalid, even once this builder
+    // allocates again where the candidate had (ADR-0040).
+    const auto fresh = Must(b.MakeEdgeVertex(t.E1.Out, Point3{3, 0, 0}, 0.0, t.Edge));
+    REQUIRE(fresh.Edge != aborted.Edge);
+    REQUIRE(fresh.Vertex != aborted.Vertex);
+    REQUIRE(b.KillEdgeVertex(aborted.Edge, aborted.Vertex).error().GetCode() ==
+            ErrorCode::InvalidInput);
+    Must(b.KillEdgeVertex(fresh.Edge, fresh.Vertex));
     REQUIRE(Cycle(b, t.Base.Loop) == loop);
 
     // An edit that succeeds: its handles are this builder's.
