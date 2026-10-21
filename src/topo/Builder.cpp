@@ -53,6 +53,30 @@ template <EntityKind K>
     return Id<K>::FromIndex(h.GetIndex());
 }
 
+/// Materialise reserved, dead indices before issuing another handle. A
+/// failure here issues no handle and cannot release the reservation.
+template <EntityKind K, typename Table>
+void Tombstone(Table& table, const std::size_t size)
+{
+    while (table.GetSize() < size) {
+        Detail::Record<K> record{};
+        record.Slot.Kill();
+        table.PushBack(std::move(record));
+    }
+}
+
+/// Geometry references have no generation: reserve indices with empty
+/// wrappers. This runs on allocation, never on failure cleanup.
+template <typename Pool, typename Wrapper>
+std::size_t AppendGeometry(Pool& pool, std::size_t& reserved, Wrapper value)
+{
+    while (pool.GetSize() < reserved) {
+        static_cast<void>(pool.PushBack(Wrapper{}));
+    }
+    reserved = pool.GetSize() + 1;
+    return pool.PushBack(std::move(value));
+}
+
 } // namespace
 
 ShapeBuilder::ShapeBuilder()
@@ -89,6 +113,8 @@ Result<ShapeBuilder> ShapeBuilder::Open(const Shape& shape)
 ShapeBuilder::ShapeBuilder(ShapeBuilder&& other) noexcept
     : m_Tables(std::move(other.m_Tables))
     , m_Token(std::exchange(other.m_Token, BuilderToken{}))
+    , m_ReservedEntities(other.m_ReservedEntities)
+    , m_ReservedGeometry(other.m_ReservedGeometry)
     , m_Epoch(other.m_Epoch)
     , m_SourceStore(other.m_SourceStore)
     , m_Source(std::move(other.m_Source))
@@ -105,6 +131,8 @@ ShapeBuilder& ShapeBuilder::operator=(ShapeBuilder&& other) noexcept
     if (this != &other) {
         m_Tables = std::move(other.m_Tables);
         m_Token = std::exchange(other.m_Token, BuilderToken{});
+        m_ReservedEntities = other.m_ReservedEntities;
+        m_ReservedGeometry = other.m_ReservedGeometry;
         m_Epoch = other.m_Epoch + 1;
         m_SourceStore = other.m_SourceStore;
         m_Source = std::move(other.m_Source);
@@ -167,8 +195,12 @@ Result<void> ShapeBuilder::Require(const BuilderId<K> h, const char* operation) 
 template <EntityKind K>
 BuilderId<K> ShapeBuilder::Allocate(Detail::Record<K> record)
 {
+    auto& table = m_Tables.template Table<K>();
+    std::size_t& reserved = m_ReservedEntities[static_cast<std::size_t>(K)];
+    Tombstone<K>(table, reserved);
+    reserved = table.GetSize() + 1;
     record.Slot = Detail::SlotState::Live();
-    const std::size_t index = m_Tables.template Table<K>().PushBack(std::move(record));
+    const std::size_t index = table.PushBack(std::move(record));
     ++m_Tables.LiveCounts[static_cast<std::size_t>(K)];
     Advance();
     return BuilderId<K>::Make(static_cast<std::uint32_t>(index), 0, m_Token.GetValue());
@@ -258,8 +290,8 @@ Result<CurveRef> ShapeBuilder::AddCurve(Curve curve)
     if (curve.IsEmpty()) {
         return Fail(ErrorCode::InvalidInput, "AddCurve: the curve is empty");
     }
-    return CurveRef::FromIndex(
-        static_cast<std::uint32_t>(m_Tables.Curves.PushBack(std::move(curve))));
+    return CurveRef::FromIndex(static_cast<std::uint32_t>(
+        AppendGeometry(m_Tables.Curves, m_ReservedGeometry[0], std::move(curve))));
 }
 
 Result<PCurveRef> ShapeBuilder::AddPCurve(Curve2d pcurve)
@@ -268,8 +300,8 @@ Result<PCurveRef> ShapeBuilder::AddPCurve(Curve2d pcurve)
     if (pcurve.IsEmpty()) {
         return Fail(ErrorCode::InvalidInput, "AddPCurve: the pcurve is empty");
     }
-    return PCurveRef::FromIndex(
-        static_cast<std::uint32_t>(m_Tables.PCurves.PushBack(std::move(pcurve))));
+    return PCurveRef::FromIndex(static_cast<std::uint32_t>(
+        AppendGeometry(m_Tables.PCurves, m_ReservedGeometry[1], std::move(pcurve))));
 }
 
 Result<SurfaceRef> ShapeBuilder::AddSurface(Surface surface)
@@ -278,8 +310,8 @@ Result<SurfaceRef> ShapeBuilder::AddSurface(Surface surface)
     if (surface.IsEmpty()) {
         return Fail(ErrorCode::InvalidInput, "AddSurface: the surface is empty");
     }
-    return SurfaceRef::FromIndex(
-        static_cast<std::uint32_t>(m_Tables.Surfaces.PushBack(std::move(surface))));
+    return SurfaceRef::FromIndex(static_cast<std::uint32_t>(
+        AppendGeometry(m_Tables.Surfaces, m_ReservedGeometry[2], std::move(surface))));
 }
 
 Result<BuilderVertexId> ShapeBuilder::AddVertex(const Point3& position, const double tolerance)
@@ -901,54 +933,22 @@ template void ShapeBuilder::UnlinkChild<EntityKind::Solid, EntityKind::Shell>(
 ShapeBuilder::ShapeBuilder(const ShapeBuilder& other, CandidateKey)
     : m_Tables(other.m_Tables)
     , m_Token(other.m_Token)
+    , m_ReservedEntities(other.m_ReservedEntities)
+    , m_ReservedGeometry(other.m_ReservedGeometry)
     , m_Epoch(other.m_Epoch)
     , m_SourceStore(other.m_SourceStore)
     , m_Source(other.m_Source)
     , m_ToleranceChanges(other.m_ToleranceChanges)
 {}
 
-namespace {
-
-/// Pads `table` with dead slots up to `size`. A tombstone is dead at
-/// generation 1, so no handle made at generation 0 for that slot, in a
-/// discarded candidate, matches it.
-template <EntityKind K, typename Table>
-void Tombstone(Table& table, const std::size_t size)
+void ShapeBuilder::Abandon(const ShapeBuilder& candidate) noexcept
 {
-    while (table.GetSize() < size) {
-        Detail::Record<K> record{};
-        record.Slot.Kill();
-        table.PushBack(std::move(record));
+    for (std::size_t i = 0; i < m_ReservedEntities.size(); ++i) {
+        m_ReservedEntities[i] = std::max(m_ReservedEntities[i], candidate.m_ReservedEntities[i]);
     }
-}
-
-/// Pads a geometry pool with empty entries up to `size`.
-template <typename Pool>
-void Pad(Pool& pool, const std::size_t size)
-{
-    using Wrapper = decltype(pool[0]);
-    while (pool.GetSize() < size) {
-        static_cast<void>(pool.PushBack(Wrapper{}));
+    for (std::size_t i = 0; i < m_ReservedGeometry.size(); ++i) {
+        m_ReservedGeometry[i] = std::max(m_ReservedGeometry[i], candidate.m_ReservedGeometry[i]);
     }
-}
-
-} // namespace
-
-void ShapeBuilder::Abandon(const ShapeBuilder& candidate)
-{
-    const Detail::TopologyTables& used = candidate.m_Tables;
-    Tombstone<EntityKind::Vertex>(m_Tables.Vertices, used.Vertices.GetSize());
-    Tombstone<EntityKind::Edge>(m_Tables.Edges, used.Edges.GetSize());
-    Tombstone<EntityKind::Coedge>(m_Tables.Coedges, used.Coedges.GetSize());
-    Tombstone<EntityKind::Loop>(m_Tables.Loops, used.Loops.GetSize());
-    Tombstone<EntityKind::Face>(m_Tables.Faces, used.Faces.GetSize());
-    Tombstone<EntityKind::Shell>(m_Tables.Shells, used.Shells.GetSize());
-    Tombstone<EntityKind::Solid>(m_Tables.Solids, used.Solids.GetSize());
-    // Geometry references carry no generation: an empty entry in each place
-    // the candidate filled makes its references refused (Detail::InPool).
-    Pad(m_Tables.Curves, used.Curves.GetSize());
-    Pad(m_Tables.PCurves, used.PCurves.GetSize());
-    Pad(m_Tables.Surfaces, used.Surfaces.GetSize());
     Advance();
 }
 

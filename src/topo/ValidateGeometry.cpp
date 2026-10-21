@@ -64,6 +64,9 @@ constexpr int SampleIntervals = 16;
 
 [[nodiscard]] bool OnSurface(const Surface& surface, const Point2& uv)
 {
+    if (!std::isfinite(uv.X) || !std::isfinite(uv.Y)) {
+        return false;
+    }
     const Box2 domain = Domain(surface);
     const Vec2 periods = Periods(surface);
     return (IsPeriodic(periods.X) || Contains(domain.X, uv.X)) &&
@@ -159,6 +162,23 @@ private:
         return trace;
     }
 
+    /// Every evaluated point must be finite, even on a lone Spatial trace.
+    [[nodiscard]] bool AddPoint(std::vector<Point3>& points, const Point3& point,
+                                const Trace& trace, const std::uint32_t e, const double t)
+    {
+        if (!std::isfinite(point.X) || !std::isfinite(point.Y) || !std::isfinite(point.Z)) {
+            std::vector<std::string> entities{Name(EntityKind::Edge, e)};
+            if (!trace.Curve3d) {
+                entities.push_back(Name(EntityKind::Coedge, trace.Coedge));
+            }
+            Report(TopologyRule::EdgeContainment, std::move(entities),
+                   std::format("the edge's trace is not finite at t = {}", t));
+            return false;
+        }
+        points.push_back(point);
+        return true;
+    }
+
     /// The trace's points at every sample of the range, or nothing, after
     /// reporting why, when it cannot be evaluated there.
     [[nodiscard]] std::optional<std::vector<Point3>>
@@ -172,7 +192,10 @@ private:
                 return std::nullopt;
             }
             for (int k = 0; k <= SampleIntervals; ++k) {
-                points.push_back(Eval(*trace.Curve3d, SampleAt(range, k)));
+                const double t = SampleAt(range, k);
+                if (!AddPoint(points, Eval(*trace.Curve3d, t), trace, e, t)) {
+                    return std::nullopt;
+                }
             }
             return points;
         }
@@ -190,7 +213,9 @@ private:
                        "the pcurve leaves its surface's domain");
                 return std::nullopt;
             }
-            points.push_back(Eval(*trace.On, uv));
+            if (!AddPoint(points, Eval(*trace.On, uv), trace, e, SampleAt(range, k))) {
+                return std::nullopt;
+            }
         }
         return points;
     }
@@ -251,6 +276,9 @@ private:
                 worst = d;
                 at = k;
             }
+            if (!std::isfinite(d)) {
+                break; // a later finite sample must never erase this failure
+            }
         }
         if (!(worst <= tolerance)) {
             Report(TopologyRule::EdgeContainment,
@@ -282,6 +310,9 @@ private:
             if (!(d <= worst)) {
                 worst = d;
                 at = k;
+            }
+            if (!std::isfinite(d)) {
+                break; // a later finite sample must never erase this failure
             }
         }
         if (!(worst <= tolerance)) {

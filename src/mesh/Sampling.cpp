@@ -113,21 +113,35 @@ struct Segment {
     int Depth = 0;
 };
 
+template <std::size_t D>
+[[nodiscard]] bool FinitePoint(const BasicPointN<double, D>& point)
+{
+    for (std::size_t i = 0; i < D; ++i) {
+        if (!std::isfinite(point[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// True when the curve between the segment's ends is drawn well enough by
 /// the chord from `p0` to `p1`.
 template <std::size_t D, typename Eval>
 [[nodiscard]] bool IsFlat(const Eval& eval, const Segment& s, const BasicPointN<double, D>& p0,
                           const BasicPointN<double, D>& p1, const DisplayTolerance& tolerance)
 {
+    if (!FinitePoint<D>(p0) || !FinitePoint<D>(p1)) {
+        return false;
+    }
     const double width = s.End - s.Start;
     for (int k = 1; k < ChordChecks; ++k) {
         const BasicPointN<double, D> q = eval(s.Start + width * k / ChordChecks);
-        if (!(DistanceToSegment<D>(q, p0, p1) <= tolerance.Chord)) {
+        if (!FinitePoint<D>(q) || !(DistanceToSegment<D>(q, p0, p1) <= tolerance.Chord)) {
             return false;
         }
     }
     const BasicPointN<double, D> middle = eval(s.Start + width / 2);
-    return Turn<D>(middle - p0, p1 - middle) <= tolerance.Angle;
+    return FinitePoint<D>(middle) && Turn<D>(middle - p0, p1 - middle) <= tolerance.Angle;
 }
 
 /// Appends the refined polyline of one segment, its start already in `out`.
@@ -143,7 +157,10 @@ template <std::size_t D, typename Eval>
         const BasicPointN<double, D> p1 = eval(s.End);
         const double middle = s.Start + (s.End - s.Start) / 2;
         const bool splittable = s.Depth < MaxDepth && s.Start < middle && middle < s.End;
-        if (splittable && !IsFlat<D>(eval, s, p0, p1, tolerance)) {
+        if (!IsFlat<D>(eval, s, p0, p1, tolerance)) {
+            if (!splittable) {
+                return false;
+            }
             stack.push_back({middle, s.End, s.Depth + 1});
             stack.push_back({s.Start, middle, s.Depth + 1});
             continue;
@@ -176,8 +193,9 @@ SampleBetween(const Eval& eval, const std::vector<double>& breaks,
                                    : breaks[i] + width * (k + 1) / InitialSegments;
             if (!Refine<D>(eval, Segment{start, end, 0}, tolerance, out)) {
                 return Fail(ErrorCode::NotSupported,
-                            std::string(function) + ": the display tolerance needs more than " +
-                                std::to_string(tolerance.MaxPoints) + " points");
+                            std::string(function) +
+                                ": the display tolerance could not be met within "
+                                "the point budget or subdivision limit");
             }
         }
     }

@@ -326,18 +326,19 @@ public:
     /// a ShapeBuilder&, and returns a Result; handles it obtains are valid in
     /// this builder after a successful transaction, and handles of this
     /// builder are valid in the candidate. After a failed transaction the
-    /// handles the edit obtained stay invalid: the slots it used are
-    /// tombstoned here, never reused (ADR-0040), and the epoch advances, so
-    /// cursors made before it are stale (ADR-0038).
+    /// handles the edit obtained stay invalid: its slot indices are reserved,
+    /// never reused (ADR-0040), and the epoch advances (ADR-0038). This also
+    /// holds when the edit throws. Failure cleanup does not allocate; any
+    /// missing tombstones are materialised before the next allocation.
     template <typename Edit>
     [[nodiscard]] auto Transaction(Edit&& edit) -> std::invoke_result_t<Edit&, ShapeBuilder&>
     {
         ShapeBuilder candidate(*this, CandidateKey{});
+        TransactionScope scope{*this, candidate};
         auto result = edit(candidate);
         if (result.has_value()) {
             *this = std::move(candidate);
-        } else {
-            Abandon(candidate);
+            scope.Committed = true;
         }
         return result;
     }
@@ -396,10 +397,20 @@ private:
     /// makes and only one of which survives it.
     struct CandidateKey {};
     ShapeBuilder(const ShapeBuilder& other, CandidateKey);
-    /// After a failed transaction: tombstones every slot the discarded
-    /// candidate allocated beyond this builder's tables, and advances the
-    /// epoch.
-    void Abandon(const ShapeBuilder& candidate);
+    /// Reserves the discarded candidate's indices and advances the epoch,
+    /// without allocating, including during exception unwinding.
+    void Abandon(const ShapeBuilder& candidate) noexcept;
+    struct TransactionScope {
+        ShapeBuilder& Original;
+        const ShapeBuilder& Candidate;
+        bool Committed = false;
+        ~TransactionScope() noexcept
+        {
+            if (!Committed) {
+                Original.Abandon(Candidate);
+            }
+        }
+    };
 
     // The Euler operators' shared steps (Euler.cpp).
     [[nodiscard]] Result<void> CheckEdgeGeometry(const EdgeGeometry& geometry,
@@ -449,6 +460,10 @@ private:
 
     Detail::TopologyTables m_Tables;
     BuilderToken m_Token;
+    // Exclusive high-water marks, including indices issued by aborted
+    // nested edits. Moves leave the source's marks intact for its edit scope.
+    std::array<std::size_t, EntityKindCount> m_ReservedEntities{};
+    std::array<std::size_t, 3> m_ReservedGeometry{};
     std::uint64_t m_Epoch = 0;
     StoreId m_SourceStore = 0;
     /// The snapshot Open() started from, which Commit()'s History compares

@@ -83,7 +83,8 @@ struct IsoLine {
 /// clipped to a non-periodic domain). InvalidInput for a tolerance that is
 /// not finite and positive, fewer than two points allowed, or a range that
 /// is not finite and non-empty; NotSupported when the tolerance needs more
-/// than MaxPoints points.
+/// than MaxPoints points or cannot be met before subdivision stops (depth
+/// limit, parameter precision, or non-finite evaluations).
 [[nodiscard]] Result<Polyline> SampleCurve(const Curve& curve, const DisplayTolerance& tolerance,
                                            std::optional<Interval> range = std::nullopt);
 [[nodiscard]] Result<Polyline2d> SampleCurve(const Curve2d& curve,

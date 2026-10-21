@@ -24,6 +24,8 @@
 
 import Stereon.Mesh;
 
+#include "FaultGeometry.hpp"
+
 using Stereon::BSplineCurve;
 using Stereon::BSplineSurface;
 using Stereon::Circle;
@@ -122,6 +124,40 @@ BSplineCurve Kinked()
                          Point3{3.0, 1.0, 2.0}, Point3{4.0, 3.0, 0.0}, Point3{5.0, 0.0, 0.0},
                          Point3{6.0, 2.0, 1.0}, Point3{7.0, 0.0, 0.0}},
                         {1.0, 0.5, 2.0, 0.75, 1.0, 1.0, 1.5, 1.0}};
+}
+
+/// A discontinuity at the start of a finite domain. Each leftmost segment
+/// still turns through nearly pi/2, however often it is subdivided.
+struct StepCurve {
+    double Height = 1.0;
+};
+Point3 Eval(const StepCurve& c, const double t)
+{
+    return {t, t == 0.0 ? 0.0 : c.Height, 0.0};
+}
+Vec3 Deriv(const StepCurve&, const double, const int n)
+{
+    return n == 1 ? X : Vec3{};
+}
+Interval Domain(const StepCurve&)
+{
+    return {0.0, 1.0};
+}
+Stereon::Box3 BoundingBox(const StepCurve& c)
+{
+    return {{0, 1}, {0, c.Height}, {0, 0}};
+}
+double Project(const StepCurve&, const Point3& p)
+{
+    return std::clamp(p.X, 0.0, 1.0);
+}
+StepCurve Reversed(const StepCurve& c)
+{
+    return c;
+}
+StepCurve Transformed(const StepCurve& c, const Stereon::Transform&)
+{
+    return c;
 }
 
 } // namespace
@@ -311,4 +347,29 @@ TEST_CASE("an unbounded surface needs a range", "[mesh][sampling]")
     REQUIRE(lines->size() == 6);
     REQUIRE_FALSE(Stereon::SampleSurface(
         plane, DisplayTolerance{}, Stereon::Box2{Interval{0.0, 2.0}, Interval{-1.0, 1.0}}, 1));
+}
+
+TEST_CASE("sampling refuses unresolved segments at the subdivision limit",
+          "[mesh][sampling][property]")
+{
+    for (const double height : {0.5, 1.0, 2.0, 4.0}) {
+        const Curve step(StepCurve{height});
+        const auto sampled = Stereon::SampleCurve(step, Tolerance(1e-6, 0.1));
+        REQUIRE_FALSE(sampled);
+        REQUIRE(sampled.error().GetCode() == ErrorCode::NotSupported);
+        REQUIRE(std::string(sampled.error().GetMessage()).find("subdivision") != std::string::npos);
+    }
+}
+
+TEST_CASE("sampling refuses non-finite evaluations instead of publishing a polyline",
+          "[mesh][sampling]")
+{
+    for (const double bad :
+         {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity()}) {
+        FaultGeometry::Curve faulty;
+        faulty.Value = bad;
+        const auto sampled = Stereon::SampleCurve(Curve(faulty), Tolerance(1e-3, 0.2));
+        REQUIRE_FALSE(sampled);
+        REQUIRE(sampled.error().GetCode() == ErrorCode::NotSupported);
+    }
 }

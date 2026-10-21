@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <new>
 #include <random>
 #include <utility>
 #include <vector>
@@ -325,4 +326,78 @@ TEST_CASE("random operator and inverse pairs leave the body as it was", "[topo][
     REQUIRE(b.Count<EntityKind::Face>() == 4);
     REQUIRE(b.Count<EntityKind::Edge>() == 6);
     REQUIRE(b.Validate().IsValid());
+}
+
+TEST_CASE("throwing transactions reserve aborted identities without publishing edits",
+          "[topo][euler]")
+{
+    Tetrahedron t;
+    MakePillow(t);
+    ShapeBuilder& b = t.B;
+    const auto before = CountsOf(b);
+    const auto loop = Cycle(b, t.Base.Loop);
+    Stereon::EdgeVertex aborted;
+    Stereon::CurveRef curve;
+    Stereon::PCurveRef pcurve;
+    Stereon::SurfaceRef surface;
+    const auto edit = [&](ShapeBuilder& candidate) -> Stereon::Result<void> {
+        curve = SpatialEdge(candidate).Curve;
+        pcurve = Must(candidate.AddPCurve(Stereon::Curve2d(Stereon::Line2d{})));
+        surface = Must(candidate.AddSurface(Stereon::Surface(Stereon::Plane{})));
+        aborted = Must(candidate.MakeEdgeVertex(t.E1.Out, Point3{2, 0, 0}, 0.0, t.Edge));
+        throw std::bad_alloc{};
+    };
+    REQUIRE_THROWS_AS(b.Transaction(edit), std::bad_alloc);
+    auto after = CountsOf(b);
+    REQUIRE(after.Epoch > before.Epoch);
+    after.Epoch = before.Epoch;
+    REQUIRE(after == before);
+    REQUIRE(Cycle(b, t.Base.Loop) == loop);
+
+    // Reservations survive a move, and both entity and geometry indices
+    // remain unavailable after a thrown failure.
+    ShapeBuilder moved(std::move(b));
+    const auto fresh = Must(moved.MakeEdgeVertex(t.E1.Out, Point3{3, 0, 0}, 0.0, t.Edge));
+    REQUIRE(fresh.Vertex.GetIndex() > aborted.Vertex.GetIndex());
+    REQUIRE(fresh.Edge.GetIndex() > aborted.Edge.GetIndex());
+    REQUIRE(fresh.Out.GetIndex() > aborted.Back.GetIndex());
+    REQUIRE(SpatialEdge(moved).Curve.GetIndex() > curve.GetIndex());
+    REQUIRE(Must(moved.AddPCurve(Stereon::Curve2d(Stereon::Line2d{}))).GetIndex() >
+            pcurve.GetIndex());
+    REQUIRE(Must(moved.AddSurface(Stereon::Surface(Stereon::Plane{}))).GetIndex() >
+            surface.GetIndex());
+    REQUIRE_FALSE(moved.KillEdgeVertex(aborted.Edge, aborted.Vertex));
+    REQUIRE_FALSE(moved.AddFace(surface));
+    REQUIRE(moved.Validate().IsValid());
+}
+
+TEST_CASE("nested failed transactions never reissue an aborted slot", "[topo][euler][property]")
+{
+    ShapeBuilder b;
+    std::vector<BuilderVertexId> aborted;
+    std::mt19937 random(20261021);
+    for (int trial = 0; trial < 32; ++trial) {
+        const auto epoch = b.GetEpoch();
+        const auto failed = b.Transaction([&](ShapeBuilder& outer) -> Stereon::Result<void> {
+            const auto inner = [&](ShapeBuilder& candidate) -> Stereon::Result<void> {
+                const auto count = 1 + random() % 8;
+                for (unsigned i = 0; i < count; ++i) {
+                    aborted.push_back(Must(candidate.AddVertex(Point3{}, 0.0)));
+                }
+                throw std::bad_alloc{};
+            };
+            REQUIRE_THROWS_AS(outer.Transaction(inner), std::bad_alloc);
+            return Stereon::Fail(ErrorCode::InvalidInput, "discard outer too");
+        });
+        REQUIRE_FALSE(failed);
+        REQUIRE(b.GetEpoch() > epoch);
+        const auto fresh = Must(b.AddVertex(Point3{}, 0.0));
+        for (const auto old : aborted) {
+            REQUIRE(fresh.GetIndex() > old.GetIndex());
+            REQUIRE_FALSE(b.RemoveVertex(old));
+        }
+        Must(b.RemoveVertex(fresh));
+        REQUIRE(b.Count<EntityKind::Vertex>() == 0);
+        REQUIRE(b.Validate().IsValid());
+    }
 }
