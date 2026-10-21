@@ -59,6 +59,11 @@ inline void Must(const Stereon::Result<void>& result)
     }
 }
 
+/// The tolerance of every entity the bodies here make: the default Context's
+/// resolution, since native construction is resolution-tight and no local
+/// tolerance is below the resolution (ADR-0001), which Commit() checks.
+inline constexpr double Tight = 1e-5;
+
 /// A builder and the handles of everything it made, in creation order.
 struct Body {
     Stereon::ShapeBuilder Builder;
@@ -395,7 +400,8 @@ inline Body MakeWire(const std::size_t n)
 
 /// One face whose loop runs v0 -> v1 -> v0 along two Boundary edges, then
 /// through a Degenerate edge at v0 (a pole), structurally: the pcurves are
-/// placeholders.
+/// placeholders, so the Geometric level refuses it. MakePoleCap is the
+/// geometrically valid pole.
 inline Body MakeDegenerateFace()
 {
     Body body;
@@ -414,6 +420,43 @@ inline Body MakeDegenerateFace()
     body.AddCoedge(loop, out, EdgeUseSense::Same, AnyPCurve());
     body.AddCoedge(loop, back, EdgeUseSense::Same, AnyPCurve());
     body.AddCoedge(loop, pole, EdgeUseSense::Same, AnyPCurve());
+    return body;
+}
+
+/// The northern hemisphere of the unit sphere about the origin, one face
+/// whose loop runs in (u, v) as the cylinder's lateral loop does, with the
+/// top side collapsed into the pole: (0, 0) -> (2 pi, 0) along the equator,
+/// a Boundary edge closed at vertex 0 = (1, 0, 0); up the seam at u = 2 pi
+/// to vertex 1 = (0, 0, 1); along the pole, a Degenerate edge at vertex 1,
+/// from u = 2 pi back to u = 0; and down the seam at u = 0. Edges: 0 the
+/// equator, 1 the seam (t in [0, pi/2]), 2 the pole (t in [0, 2 pi]).
+inline Body MakePoleCap()
+{
+    using Stereon::Curve2d;
+    using Stereon::Line2d;
+    constexpr double tau = Stereon::CirclePeriod;
+    constexpr double pole = Stereon::SpherePoleLatitude;
+    Body body;
+    const BuilderVertexId v0 = body.AddVertex({1, 0, 0});
+    const BuilderVertexId v1 = body.AddVertex({0, 0, 1});
+    const auto edge = [&](const EdgeCurveKind kind, const BuilderVertexId a,
+                          const BuilderVertexId b, const double upper) {
+        return body.AddEdge({.Kind = kind,
+                             .Start = a,
+                             .End = b,
+                             .Range = Interval(0.0, upper),
+                             .Tolerance = Tight});
+    };
+    const BuilderEdgeId equator = edge(EdgeCurveKind::Boundary, v0, v0, tau);
+    const BuilderEdgeId seam = edge(EdgeCurveKind::Boundary, v0, v1, pole);
+    const BuilderEdgeId apex = edge(EdgeCurveKind::Degenerate, v1, v1, tau);
+    const BuilderFaceId face = body.AddFace(
+        Stereon::Surface(Stereon::Sphere{{0, 0, 0}, 1.0, Vec3{1, 0, 0}, Vec3{0, 1, 0}}));
+    const BuilderLoopId loop = body.AddLoop(face);
+    body.AddCoedge(loop, equator, EdgeUseSense::Same, Curve2d(Line2d{{0, 0}, Vec2{1, 0}}));
+    body.AddCoedge(loop, seam, EdgeUseSense::Same, Curve2d(Line2d{{tau, 0}, Vec2{0, 1}}));
+    body.AddCoedge(loop, apex, EdgeUseSense::Same, Curve2d(Line2d{{tau, pole}, Vec2{-1, 0}}));
+    body.AddCoedge(loop, seam, EdgeUseSense::Opposite, Curve2d(Line2d{{0, 0}, Vec2{0, 1}}));
     return body;
 }
 

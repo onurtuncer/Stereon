@@ -128,7 +128,7 @@ TEST_CASE("the hand-built box", "[topo][bodies][box]")
     {
         for (const EdgeId e : Must(Stereon::AllEntities<EntityKind::Edge>(shape))) {
             REQUIRE(Stereon::KindOf(shape, e) == EdgeCurveKind::Exact);
-            REQUIRE(Stereon::ToleranceOf(shape, e) == 1e-7);
+            REQUIRE(Stereon::ToleranceOf(shape, e) == Tight);
             const auto ring = Collect(Must(Stereon::RadialCoedgesOf(shape, e)));
             REQUIRE(ring.size() == 2);
             REQUIRE(Stereon::StoredEdgeUseSense(shape, ring[0]) !=
@@ -178,16 +178,16 @@ TEST_CASE("the hand-built box", "[topo][bodies][box]")
     SECTION("accessors read the vertices back")
     {
         REQUIRE(Stereon::PositionOf(shape, shape.Resolve(body.Vertices[6])) == Point3{2, 3, 5});
-        REQUIRE(Stereon::ToleranceOf(shape, shape.Resolve(body.Vertices[0])) == 1e-7);
+        REQUIRE(Stereon::ToleranceOf(shape, shape.Resolve(body.Vertices[0])) == Tight);
     }
     SECTION("Describe names the entity and its neighbourhood")
     {
         const EdgeId e = shape.Resolve(body.Edges[0]);
         const std::string edge = Stereon::Describe(shape, e);
-        REQUIRE(edge.starts_with("Edge#0 [Exact Line, tol 1e-07, faces "));
+        REQUIRE(edge.starts_with("Edge#0 [Exact Line, tol 1e-05, faces "));
         REQUIRE(edge.find('|') != std::string::npos);
         REQUIRE(Stereon::Describe(shape, shape.Resolve(body.Vertices[1])) ==
-                "Vertex#1 [(2, 0, 0), tol 1e-07, 3 edges]");
+                "Vertex#1 [(2, 0, 0), tol 1e-05, 3 edges]");
         REQUIRE(Stereon::Describe(shape, shape.Resolve(body.Faces[0])) ==
                 "Face#0 [Plane, Shell#0, 1 loop]");
         REQUIRE(Stereon::Describe(shape, shape.Resolve(body.Loops[2])) ==
@@ -239,7 +239,7 @@ TEST_CASE("the hand-built cylinder, seam included", "[topo][bodies][cylinder]")
                     Stereon::FaceOf(shape, Stereon::LoopOf(shape, ring[1])));
         }
         REQUIRE(
-            Stereon::Describe(shape, seam).starts_with("Edge#2 [Boundary, tol 1e-07, faces 0|0]"));
+            Stereon::Describe(shape, seam).starts_with("Edge#2 [Boundary, tol 1e-05, faces 0|0]"));
         REQUIRE(Stereon::Describe(shape, bottom).starts_with("Edge#0 [Exact Circle"));
         REQUIRE(Stereon::Describe(shape, shape.Resolve(body.Faces[0])) ==
                 "Face#0 [Cylinder, Shell#0, 1 loop]");
@@ -298,7 +298,7 @@ TEST_CASE("sheets, holes, fans, wires and poles are valid topology", "[topo][bod
         REQUIRE(shape.Count<EntityKind::Coedge>() == 0);
         RequireAssociationsAgree(shape, 1e-12);
         REQUIRE(Stereon::Describe(shape, shape.Resolve(body.Edges[0])) ==
-                "Edge#0 [Spatial Line, tol 1e-07, faces none]");
+                "Edge#0 [Spatial Line, tol 1e-05, faces none]");
     }
     SECTION("a loop through a pole")
     {

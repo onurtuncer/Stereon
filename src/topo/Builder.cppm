@@ -379,9 +379,10 @@ public:
 /// The checks of a level and of every level below it (ADR-0018). Geometric
 /// adds ADR-0001's containment invariant, sampled: each vertex's tolerance
 /// sphere holds its edges' ends (G01), and each edge's tolerance tube holds
-/// its 3D curve and its pcurves mapped through their surfaces (G02). It runs
-/// only on a structurally valid shape. Solid has no rules yet and checks as
-/// Geometric.
+/// its 3D curve and its pcurves mapped through their surfaces (G02), and a
+/// Degenerate edge's traces stay at its vertex (G02). It runs only on a
+/// structurally valid shape. Solid has no rules yet and checks as Geometric.
+/// An empty Shape is valid at every level.
 [[nodiscard]] ValidityReport ValidateTopology(const Shape& shape, ValidityLevel level);
 
 /// Publishes the builder's tables as a shape-producing operation does
@@ -393,8 +394,10 @@ public:
 /// tolerances that grew and the cached edge curves the edit dropped. Fails,
 /// publishing nothing, with InvalidInput when the tables are not
 /// structurally valid or, in checked builds, when the shape the builder was
-/// opened on no longer is; ToleranceExceeded when a tolerance passes the
-/// Context's ceiling or grew under ToleranceGrowth::Fail; and InvalidResult
+/// opened on no longer is, or when a live tolerance of the result is below
+/// the Context's resolution; ToleranceExceeded when a live tolerance of the
+/// result, logged or not, passes the Context's ceiling, or one grew under
+/// ToleranceGrowth::Fail; and InvalidResult
 /// when the History does not account for every entity (a kernel bug) or the
 /// result fails the Geometric checks (ADR-0001's containment invariant),
 /// which run when the Context's validity level asks for them and always in
@@ -403,8 +406,13 @@ public:
 
 /// Compact() as a shape-producing operation: the compacted shape with a
 /// History in which every live entity continues Unchanged at its new index
-/// (ADR-0011: the remap is composed into the History). In checked builds the
-/// input is validated again first, InvalidInput if it fails.
+/// (ADR-0011: the remap is composed into the History). It publishes under the
+/// Context's policy as Commit() does: ToleranceExceeded for a tolerance above
+/// the ceiling, InvalidInput for one below the resolution, and InvalidInput
+/// when the Geometric level runs (the Context asks for it, or a checked
+/// build) and the shape fails it; Checked says which level ran. In checked
+/// builds the input's structure is validated again first, InvalidInput if
+/// it fails.
 [[nodiscard]] Result<OperationResult> CompactShape(const Shape& shape, const Context& context);
 
 } // namespace Stereon
