@@ -49,6 +49,31 @@ FetchContent_Declare(xsimd
     SYSTEM)
 FetchContent_MakeAvailable(xsimd)
 
+# --- Optional profiling (ADR-0043) -------------------------------------------
+
+if(STEREON_ENABLE_PROFILING)
+    set(TRACY_ENABLE ON CACHE BOOL "" FORCE)
+    set(TRACY_ON_DEMAND ON CACHE BOOL "" FORCE)
+    set(TRACY_NO_EXIT OFF CACHE BOOL "" FORCE)
+    set(TRACY_NO_CRASH_HANDLER ON CACHE BOOL "" FORCE)
+    # The first slice records explicit scopes and plots; system tracing is
+    # separate and must not require privileges to run the kernel tests.
+    set(TRACY_NO_SYSTEM_TRACING ON CACHE BOOL "" FORCE)
+    set(TRACY_ONLY_LOCALHOST ON CACHE BOOL "" FORCE)
+    set(TRACY_NO_BROADCAST ON CACHE BOOL "" FORCE)
+    # Dependency licence: BSD-3-Clause
+    FetchContent_Declare(tracy
+        GIT_REPOSITORY https://github.com/wolfpld/tracy.git
+        GIT_TAG        c556831ddc6fe26d2fce01c14c97205a9dad46d5 # v0.12.2
+        GIT_SUBMODULES ""
+        SYSTEM)
+    FetchContent_MakeAvailable(tracy)
+    # Keep the backend outside the kernel's C++26 module/contract flags.
+    set_target_properties(TracyClient PROPERTIES
+        CXX_STANDARD 17 CXX_SCAN_FOR_MODULES OFF POSITION_INDEPENDENT_CODE ON)
+endif()
+include(StereonProfiling)
+
 # --- Tests -------------------------------------------------------------------
 
 if(STEREON_BUILD_TESTS)

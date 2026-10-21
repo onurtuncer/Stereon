@@ -7,6 +7,8 @@
 
 module;
 
+#include "Profiling.hpp"
+
 // The contract anchor (docs/toolchain/gcc16-feature-probe.md).
 #include <Stereon/Core/Contracts.hpp>
 
@@ -756,6 +758,9 @@ private:
 
 ValidityReport ValidateStructure(const TopologyTables& tables)
 {
+    STEREON_PROFILE_SCOPE("topo.ValidateStructure");
+    STEREON_PROFILE_COUNTER("topo.structural.face_slots", tables.Faces.GetSize());
+    STEREON_PROFILE_COUNTER("topo.structural.edge_slots", tables.Edges.GetSize());
     return StructureValidator(tables).Run();
 }
 

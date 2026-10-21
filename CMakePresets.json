@@ -39,6 +39,16 @@
       }
     },
     {
+      "name": "gcc16-profile",
+      "displayName": "GCC 16 profiling",
+      "description": "Optimised build with symbols and private on-demand Tracy scopes; diagnostic timings only",
+      "inherits": "gcc16-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "STEREON_ENABLE_PROFILING": "ON"
+      }
+    },
+    {
       "name": "gcc16-observe",
       "displayName": "GCC 16 corpus (observe)",
       "description": "CI corpus run: contract violations are logged and the run fails afterwards (ADR-0016). Unoptimised until GCC 16.2's module contracts link under optimisation (docs/toolchain/gcc16-feature-probe.md)",
@@ -122,13 +132,15 @@
         "STEREON_CONTRACT_SEMANTIC": "ignore",
         "STEREON_HOT_CONTRACTS": "OFF",
         "STEREON_BUILD_TESTS": "OFF",
-        "STEREON_BUILD_BENCH": "ON"
+        "STEREON_BUILD_BENCH": "ON",
+        "STEREON_ENABLE_PROFILING": "OFF"
       }
     }
   ],
   "buildPresets": [
     { "name": "gcc16-debug",   "configurePreset": "gcc16-debug" },
     { "name": "gcc16-release", "configurePreset": "gcc16-release" },
+    { "name": "gcc16-profile", "configurePreset": "gcc16-profile" },
     { "name": "gcc16-observe", "configurePreset": "gcc16-observe" },
     { "name": "gcc16-coverage", "configurePreset": "gcc16-coverage" },
     { "name": "gcc16-asan",    "configurePreset": "gcc16-asan" },
@@ -147,6 +159,7 @@
     },
     { "name": "gcc16-debug",   "inherits": "test-base", "configurePreset": "gcc16-debug" },
     { "name": "gcc16-release", "inherits": "test-base", "configurePreset": "gcc16-release" },
+    { "name": "gcc16-profile", "inherits": "test-base", "configurePreset": "gcc16-profile" },
     { "name": "gcc16-observe", "inherits": "test-base", "configurePreset": "gcc16-observe" },
     { "name": "gcc16-coverage", "inherits": "test-base", "configurePreset": "gcc16-coverage" },
     {
