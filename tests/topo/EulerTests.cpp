@@ -247,7 +247,9 @@ TEST_CASE("a transaction keeps its candidate only on success", "[topo][euler]")
 
     // An edit that fails late, after an MEV and an MEF.
     Stereon::EdgeVertex aborted;
+    Stereon::CurveRef abortedCurve;
     const auto failed = b.Transaction([&](ShapeBuilder& candidate) -> Stereon::Result<void> {
+        abortedCurve = SpatialEdge(candidate).Curve;
         aborted = Must(candidate.MakeEdgeVertex(t.E1.Out, Point3{2, 0, 0}, 0.0, t.Edge));
         Must(candidate.MakeEdgeFace(aborted.Out, t.E2.Out, t.Edge));
         return Stereon::Fail(ErrorCode::DegenerateResult, "a late failure");
@@ -270,6 +272,15 @@ TEST_CASE("a transaction keeps its candidate only on success", "[topo][euler]")
             ErrorCode::InvalidInput);
     Must(b.KillEdgeVertex(fresh.Edge, fresh.Vertex));
     REQUIRE(Cycle(b, t.Base.Loop) == loop);
+
+    // So does its geometry: a curve added later takes another index, and
+    // the aborted reference is refused.
+    const EdgeGeometry later = SpatialEdge(b);
+    REQUIRE(later.Curve.GetIndex() != abortedCurve.GetIndex());
+    EdgeGeometry stale = t.Edge;
+    stale.Curve = abortedCurve;
+    REQUIRE(b.MakeEdgeVertex(t.E1.Out, Point3{4, 0, 0}, 0.0, stale).error().GetCode() ==
+            ErrorCode::InvalidInput);
 
     // An edit that succeeds: its handles are this builder's.
     const auto kept = b.Transaction([&](ShapeBuilder& candidate) {
