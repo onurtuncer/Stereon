@@ -13,7 +13,6 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
-#include <limits>
 
 import Stereon.Intersect;
 
@@ -86,12 +85,9 @@ TEST_CASE("an overlap maps parameters from one surface to the other", "[intersec
 
 TEST_CASE("intersections are asked over valid requested domains", "[intersect][outcome]")
 {
-    const double nan = std::numeric_limits<double>::quiet_NaN();
     const Interval unit{0.0, 1.0};
-    // A NaN-bounded or empty domain is refused before any handler runs.
-    REQUIRE(Stereon::Intersect(SomeLine(), Interval{nan, 1.0}, SomeLine(), unit, ctx)
-                .error()
-                .GetCode() == ErrorCode::InvalidInput);
+    // An empty domain is refused before any handler runs. (A NaN-bounded
+    // Interval cannot be made: its constructor's contract refuses it.)
     REQUIRE(Stereon::Intersect(SomeLine(), unit, SomeLine(), Interval{}, ctx).error().GetCode() ==
             ErrorCode::InvalidInput);
     const Box2 box{unit, unit};
