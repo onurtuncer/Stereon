@@ -175,11 +175,12 @@ def analyze(relative_path: str, code: str) -> FileResult:
 
 
 def tracked_sources(root: Path) -> list[Path]:
-    """The tracked C++ sources, from git; every file under src/, tests/, bench/ and python/
+    """The C++ sources git knows of, tracked or new and not ignored, so that a file
+    not yet committed is checked too; every file under src/, tests/, bench/ and python/
     when the tree is not a repository."""
     try:
         listing = subprocess.run(
-            ["git", "-C", str(root), "ls-files", "-z", "--", *[f"*{suffix}" for suffix in SOURCE_SUFFIXES]],
+            ["git", "-C", str(root), "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", *[f"*{suffix}" for suffix in SOURCE_SUFFIXES]],
             check=True, capture_output=True, text=True, encoding="utf-8",
         ).stdout
         return [root / name for name in listing.split("\0") if name]
