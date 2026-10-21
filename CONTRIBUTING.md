@@ -31,6 +31,10 @@ Use `gcc16-debug` while developing. It enforces contracts, enables checked handl
 
 On Windows, build in an MSYS2 UCRT64 shell with `mingw-w64-ucrt-x86_64-gcc`.
 
+For optional Tracy instrumentation, use the `gcc16-profile` preset and follow
+[Profiling Stereon](docs/profiling.md). Keep profiler traces separate from
+uninstrumented benchmark measurements.
+
 CI also runs these source checks. `ctest` runs the last two whenever Python is installed:
 
 ```bash

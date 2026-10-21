@@ -7,6 +7,8 @@
 
 module;
 
+#include "Profiling.hpp"
+
 // The contract anchor (docs/toolchain/gcc16-feature-probe.md).
 #include <Stereon/Core/Contracts.hpp>
 #include <Stereon/Core/Try.hpp>
@@ -877,6 +879,7 @@ ValidityReport ShapeBuilder::Validate() const
 
 Result<Shape> Freeze(ShapeBuilder&& builder)
 {
+    STEREON_PROFILE_SCOPE("topo.Freeze");
     STEREON_TRY_VOID(builder.RequireToken("Freeze"));
     // The builder is consumed whatever happens (ADR-0027: a failed private
     // candidate is discarded, not reused).
@@ -1073,6 +1076,7 @@ namespace {
 
 Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context)
 {
+    STEREON_PROFILE_SCOPE("topo.Commit");
     STEREON_TRY_VOID(builder.RequireToken("Commit"));
     // Consumed whatever happens, as Freeze() consumes it (ADR-0027).
     ShapeBuilder consumed(std::move(builder));

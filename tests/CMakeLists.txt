@@ -7,6 +7,21 @@
 
 include(Catch)
 
+# This adapter probe needs neither module imports nor the contract anchor.
+# Both the default and profiling CI builds run it, including its static_assert.
+add_executable(stereon_profiling_tests profiling/ProfilingTests.cpp)
+target_link_libraries(stereon_profiling_tests PRIVATE stereon_profiling Threads::Threads)
+set_target_properties(stereon_profiling_tests PROPERTIES CXX_SCAN_FOR_MODULES OFF)
+add_test(NAME "core: profiling adapter" COMMAND stereon_profiling_tests)
+set_tests_properties("core: profiling adapter" PROPERTIES TIMEOUT 30)
+
+# Public-consumer link probe and repeatable workload for attaching a collector.
+add_executable(stereon_profiling_workload profiling/PrimitiveWorkload.cpp)
+target_link_libraries(stereon_profiling_workload PRIVATE stereon::build stereon_options)
+stereon_anchor_contracts(stereon_profiling_workload)
+add_test(NAME "build: profiling workload" COMMAND stereon_profiling_workload)
+set_tests_properties("build: profiling workload" PROPERTIES TIMEOUT 30)
+
 # One test executable per library: tests/<library>/*.cpp -> stereon_<library>_tests.
 # Test cases are tagged with their library, e.g. [core], plus topic tags.
 # Property tests use RapidCheck through rc::prop: include "RapidCheck.hpp"
