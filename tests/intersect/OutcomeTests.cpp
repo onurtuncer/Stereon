@@ -47,7 +47,7 @@ TEST_CASE("an intersection with no component is a proved separation", "[intersec
 {
     Stereon::SurfaceSurfaceIntersection result;
     REQUIRE(result.IsEmpty());
-    result.Overlaps.emplace_back();
+    result.Points.emplace_back();
     REQUIRE_FALSE(result.IsEmpty());
 
     Stereon::CurveCurveIntersection curves;

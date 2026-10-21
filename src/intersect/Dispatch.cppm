@@ -133,14 +133,14 @@ struct OverlapRegion {
 struct SurfaceSurfaceIntersection {
     std::vector<IntersectionPoint> Points;
     std::vector<IntersectionBranch> Branches;
-    std::vector<OverlapRegion> Overlaps;
+    // Overlaps (std::vector<OverlapRegion>) join with the first handler that
+    // finds one (M3). As a member here, GCC 16.2 writes a Stereon.Intersect
+    // module its importers cannot read ("failed to read compiled module
+    // cluster: Bad file data"). Holding them is the next step.
 
     /// True when the surfaces are proved separate over the requested
     /// domains: a successful result with no component.
-    [[nodiscard]] bool IsEmpty() const noexcept
-    {
-        return Points.empty() && Branches.empty() && Overlaps.empty();
-    }
+    [[nodiscard]] bool IsEmpty() const noexcept { return Points.empty() && Branches.empty(); }
 };
 
 /// A point where two curves meet: its parameter on each and its position.
