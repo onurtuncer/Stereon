@@ -905,6 +905,36 @@ ShapeBuilder::ShapeBuilder(const ShapeBuilder& other, CandidateKey)
     , m_ToleranceChanges(other.m_ToleranceChanges)
 {}
 
+namespace {
+
+/// Pads `table` with dead slots up to `size`. A tombstone is dead at
+/// generation 1, so no handle made at generation 0 for that slot, in a
+/// discarded candidate, matches it.
+template <EntityKind K, typename Table>
+void Tombstone(Table& table, const std::size_t size)
+{
+    while (table.GetSize() < size) {
+        Detail::Record<K> record{};
+        record.Slot.Kill();
+        table.PushBack(std::move(record));
+    }
+}
+
+} // namespace
+
+void ShapeBuilder::Abandon(const ShapeBuilder& candidate)
+{
+    const Detail::TopologyTables& used = candidate.m_Tables;
+    Tombstone<EntityKind::Vertex>(m_Tables.Vertices, used.Vertices.GetSize());
+    Tombstone<EntityKind::Edge>(m_Tables.Edges, used.Edges.GetSize());
+    Tombstone<EntityKind::Coedge>(m_Tables.Coedges, used.Coedges.GetSize());
+    Tombstone<EntityKind::Loop>(m_Tables.Loops, used.Loops.GetSize());
+    Tombstone<EntityKind::Face>(m_Tables.Faces, used.Faces.GetSize());
+    Tombstone<EntityKind::Shell>(m_Tables.Shells, used.Shells.GetSize());
+    Tombstone<EntityKind::Solid>(m_Tables.Solids, used.Solids.GetSize());
+    Advance();
+}
+
 std::vector<BuilderCoedgeId> ShapeBuilder::CoedgesOf(const BuilderLoopId loop) const
 {
     std::vector<BuilderCoedgeId> coedges;

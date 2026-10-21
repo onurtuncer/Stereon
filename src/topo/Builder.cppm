@@ -325,7 +325,10 @@ public:
     /// and this builder is exactly as it was. The edit takes the candidate,
     /// a ShapeBuilder&, and returns a Result; handles it obtains are valid in
     /// this builder after a successful transaction, and handles of this
-    /// builder are valid in the candidate.
+    /// builder are valid in the candidate. After a failed transaction the
+    /// handles the edit obtained stay invalid: the slots it used are
+    /// tombstoned here, never reused (ADR-0040), and the epoch advances, so
+    /// cursors made before it are stale (ADR-0038).
     template <typename Edit>
     [[nodiscard]] auto Transaction(Edit&& edit) -> std::invoke_result_t<Edit&, ShapeBuilder&>
     {
@@ -333,6 +336,8 @@ public:
         auto result = edit(candidate);
         if (result.has_value()) {
             *this = std::move(candidate);
+        } else {
+            Abandon(candidate);
         }
         return result;
     }
@@ -391,6 +396,10 @@ private:
     /// makes and only one of which survives it.
     struct CandidateKey {};
     ShapeBuilder(const ShapeBuilder& other, CandidateKey);
+    /// After a failed transaction: tombstones every slot the discarded
+    /// candidate allocated beyond this builder's tables, and advances the
+    /// epoch.
+    void Abandon(const ShapeBuilder& candidate);
 
     // The Euler operators' shared steps (Euler.cpp).
     [[nodiscard]] Result<void> CheckEdgeGeometry(const EdgeGeometry& geometry,
