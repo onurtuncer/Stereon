@@ -13,6 +13,7 @@ module;
 #include <memory>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -66,6 +67,49 @@ struct EdgeSpec {
     CurveRef Curve{};
     Interval Range{};
     double Tolerance = 0.0;
+};
+
+/// The geometry of an edge an Euler operator makes: an EdgeSpec without its
+/// vertices, which the operator decides, and the pcurve of both new uses.
+/// MEV and MEF make the edge's two uses on one surface (a strut in one
+/// loop, or the two sides of a face split), so one pcurve serves both; it
+/// may be empty only for a Spatial edge.
+struct EdgeGeometry {
+    EdgeCurveKind Kind = EdgeCurveKind::Spatial;
+    CurveRef Curve{};
+    Interval Range{};
+    double Tolerance = 0.0;
+    PCurveRef PCurve{};
+};
+
+/// What MVFS makes: an isolated vertex, and a face with one empty loop in a
+/// new shell. The loop is the vertex's loop: MEV grows its first edge from
+/// that vertex.
+struct VertexFaceShell {
+    BuilderVertexId Vertex{};
+    BuilderFaceId Face{};
+    BuilderLoopId Loop{};
+    BuilderShellId Shell{};
+};
+
+/// What MEV makes: an edge from an existing vertex to a new one, and its
+/// two uses in one loop, out along the edge and back against it.
+struct EdgeVertex {
+    BuilderEdgeId Edge{};
+    BuilderVertexId Vertex{};
+    BuilderCoedgeId Out{};
+    BuilderCoedgeId Back{};
+};
+
+/// What MEF makes: an edge splitting a loop, and the new face and loop on
+/// its other side. `Kept` is the edge's use in the original loop, `New` its
+/// use in the new one.
+struct EdgeFace {
+    BuilderEdgeId Edge{};
+    BuilderFaceId Face{};
+    BuilderLoopId Loop{};
+    BuilderCoedgeId Kept{};
+    BuilderCoedgeId New{};
 };
 
 /// The stable identity of one builder (ADR-0038): it moves with the
@@ -210,6 +254,89 @@ public:
     /// Removes a vertex no edge starts or ends at; refused otherwise.
     [[nodiscard]] Result<void> RemoveVertex(BuilderVertexId vertex);
 
+    // --- Euler operators (ADR-0027) -----------------------------------------
+    // The classical set, under Stereon's contracts. Each operator checks all
+    // of its preconditions before it writes anything, so a refusal
+    // (InvalidInput) leaves the builder exactly as it was. Each states its
+    // inverse, which restores the connectivity up to the correspondence of
+    // the entities that survive: deleted slots are tombstones and never
+    // reused, so the restored entities have new handles. Faces keep their
+    // shells, and a new face joins the shell of the face it came from. In
+    // checked builds each operator then checks the loops, radial rings and
+    // vertex lists it touched (ADR-0027, section 9), a contract.
+
+    /// MVFS: an isolated vertex at `position`, and a face on `surface` with
+    /// one empty loop, the vertex's, in a new shell bounding `solid` or, if
+    /// `solid` is invalid, of no solid. Inverse: KillVertexFaceShell.
+    [[nodiscard]] Result<VertexFaceShell> MakeVertexFaceShell(const Point3& position,
+                                                              double tolerance, SurfaceRef surface,
+                                                              bool reversed = false,
+                                                              BuilderSolidId solid = {});
+
+    /// KVFS: removes an isolated vertex, and a face whose only loop is empty
+    /// and which is the only face of its shell, with the loop and the shell.
+    /// The solid, if any, stays. Inverse of MakeVertexFaceShell.
+    [[nodiscard]] Result<void> KillVertexFaceShell(BuilderVertexId vertex, BuilderFaceId face);
+
+    /// MEV: a new vertex at `position` and an edge to it from the vertex at
+    /// which `at` ends, as a strut of `at`'s loop: the edge's use along it
+    /// (Out) and its use against it (Back) follow `at` in the cycle. The
+    /// edge runs from the existing vertex to the new one. Refused for a
+    /// Degenerate edge, whose ends are one vertex. Inverse: KillEdgeVertex.
+    [[nodiscard]] Result<EdgeVertex> MakeEdgeVertex(BuilderCoedgeId at, const Point3& position,
+                                                    double tolerance, const EdgeGeometry& geometry);
+
+    /// MEV on an empty loop: the first edge, from `from`, which must be an
+    /// isolated vertex (the loop's vertex, as MVFS made it), to a new one.
+    [[nodiscard]] Result<EdgeVertex> MakeEdgeVertex(BuilderLoopId loop, BuilderVertexId from,
+                                                    const Point3& position, double tolerance,
+                                                    const EdgeGeometry& geometry);
+
+    /// KEV: removes a strut edge and its far vertex: the edge's only uses
+    /// are adjacent in one loop and meet at `vertex`, which no other edge
+    /// starts or ends at. A loop left with no coedge stays, empty, the loop
+    /// of the edge's other vertex. Inverse of MakeEdgeVertex.
+    [[nodiscard]] Result<void> KillEdgeVertex(BuilderEdgeId edge, BuilderVertexId vertex);
+
+    /// MEF: an edge from the vertex at which `a` ends to the vertex at which
+    /// `b` ends, both coedges of one loop, splitting the loop in two. The
+    /// original loop keeps `a`, followed by the edge's use along it (Kept),
+    /// and the coedges after `b`; a new loop of a new face, on the same
+    /// surface and in the same shell, takes the edge's use against it (New)
+    /// and the coedges after `a` up to `b`. With `a` equal to `b` the edge
+    /// is closed and its own new loop. The face's other loops stay with it:
+    /// moving a hole to the new face is a separate operation. Inverse:
+    /// KillEdgeFace.
+    [[nodiscard]] Result<EdgeFace> MakeEdgeFace(BuilderCoedgeId a, BuilderCoedgeId b,
+                                                const EdgeGeometry& geometry);
+
+    /// KEF: removes an edge whose only two uses lie in two faces on the same
+    /// surface, the same way round and in the same shell, and removes
+    /// `face`, one of them, joining its loop into the other face's: the
+    /// coedges of `face`'s loop follow those of the kept loop in the cycle.
+    /// `face` must have that one loop. Inverse of MakeEdgeFace.
+    [[nodiscard]] Result<void> KillEdgeFace(BuilderEdgeId edge, BuilderFaceId face);
+
+    // --- Transactions (ADR-0027, section 9) ---------------------------------
+
+    /// Runs a compound edit on a candidate copy of this builder, which shares
+    /// every page with it until it writes to one (ADR-0005), and keeps the
+    /// copy only if the edit succeeds: on failure the candidate is discarded
+    /// and this builder is exactly as it was. The edit takes the candidate,
+    /// a ShapeBuilder&, and returns a Result; handles it obtains are valid in
+    /// this builder after a successful transaction, and handles of this
+    /// builder are valid in the candidate.
+    template <typename Edit>
+    [[nodiscard]] auto Transaction(Edit&& edit) -> std::invoke_result_t<Edit&, ShapeBuilder&>
+    {
+        ShapeBuilder candidate(*this, CandidateKey{});
+        auto result = edit(candidate);
+        if (result.has_value()) {
+            *this = std::move(candidate);
+        }
+        return result;
+    }
+
     // --- Inspection --------------------------------------------------------
 
     /// The builder's handle to an entity of the shape it was opened on: the
@@ -231,6 +358,10 @@ public:
                                   m_Tables.template Table<K>()[h.GetIndex()].Slot.GetGeneration(),
                                   m_Token.GetValue());
     }
+
+    /// The loop's coedges in cycle order from its anchor; none for an empty
+    /// loop or a handle that is not a live loop of this builder.
+    [[nodiscard]] std::vector<BuilderCoedgeId> CoedgesOf(BuilderLoopId loop) const;
 
     /// The structural check Freeze() will run, without freezing.
     [[nodiscard]] ValidityReport Validate() const;
@@ -254,6 +385,32 @@ private:
     friend Result<Shape> Freeze(ShapeBuilder&& builder);
     friend Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context);
     friend class Testing::TopologyFaults;
+
+    /// A transaction's candidate: a copy with the same token, so that the
+    /// handles of either are valid in the other, which only Transaction()
+    /// makes and only one of which survives it.
+    struct CandidateKey {};
+    ShapeBuilder(const ShapeBuilder& other, CandidateKey);
+
+    // The Euler operators' shared steps (Euler.cpp).
+    [[nodiscard]] Result<void> CheckEdgeGeometry(const EdgeGeometry& geometry,
+                                                 const char* operation) const;
+    [[nodiscard]] std::uint32_t EndVertexOf(std::uint32_t coedge) const noexcept;
+    [[nodiscard]] std::uint32_t SecondOfTwoUses(std::uint32_t edge) const noexcept;
+    [[nodiscard]] bool IsFreeEnd(std::uint32_t edge, std::uint32_t vertex) const noexcept;
+    [[nodiscard]] std::uint32_t FaceOfUse(std::uint32_t coedge) const noexcept;
+    [[nodiscard]] Result<void> CheckJoinable(std::uint32_t dead, std::uint32_t alive,
+                                             const char* operation) const;
+    [[nodiscard]] std::vector<std::uint32_t> CycleFrom(std::uint32_t coedge) const;
+    void RelinkCycle(std::uint32_t loop, const std::vector<std::uint32_t>& cycle);
+    [[nodiscard]] BuilderCoedgeId NewUse(std::uint32_t edge, std::uint32_t loop, EdgeUseSense sense,
+                                         PCurveRef pcurve);
+    [[nodiscard]] Result<EdgeVertex> GrowStrut(std::uint32_t loop, std::uint32_t after,
+                                               std::uint32_t from, const Point3& position,
+                                               double tolerance, const EdgeGeometry& geometry);
+    void KillEdgeAndUses(std::uint32_t edge);
+    void CheckNeighbourhood(const std::vector<std::uint32_t>& loops,
+                            const std::vector<std::uint32_t>& edges) const;
 
     template <EntityKind K>
     [[nodiscard]] bool IsLive(BuilderId<K> h) const noexcept;
@@ -379,9 +536,10 @@ public:
 /// The checks of a level and of every level below it (ADR-0018). Geometric
 /// adds ADR-0001's containment invariant, sampled: each vertex's tolerance
 /// sphere holds its edges' ends (G01), and each edge's tolerance tube holds
-/// its 3D curve and its pcurves mapped through their surfaces (G02). It runs
-/// only on a structurally valid shape. Solid has no rules yet and checks as
-/// Geometric.
+/// its 3D curve and its pcurves mapped through their surfaces (G02), and a
+/// Degenerate edge's traces stay at its vertex (G02). It runs only on a
+/// structurally valid shape. Solid has no rules yet and checks as Geometric.
+/// An empty Shape is valid at every level.
 [[nodiscard]] ValidityReport ValidateTopology(const Shape& shape, ValidityLevel level);
 
 /// Publishes the builder's tables as a shape-producing operation does
@@ -393,8 +551,10 @@ public:
 /// tolerances that grew and the cached edge curves the edit dropped. Fails,
 /// publishing nothing, with InvalidInput when the tables are not
 /// structurally valid or, in checked builds, when the shape the builder was
-/// opened on no longer is; ToleranceExceeded when a tolerance passes the
-/// Context's ceiling or grew under ToleranceGrowth::Fail; and InvalidResult
+/// opened on no longer is, or when a live tolerance of the result is below
+/// the Context's resolution; ToleranceExceeded when a live tolerance of the
+/// result, logged or not, passes the Context's ceiling, or one grew under
+/// ToleranceGrowth::Fail; and InvalidResult
 /// when the History does not account for every entity (a kernel bug) or the
 /// result fails the Geometric checks (ADR-0001's containment invariant),
 /// which run when the Context's validity level asks for them and always in
@@ -403,8 +563,13 @@ public:
 
 /// Compact() as a shape-producing operation: the compacted shape with a
 /// History in which every live entity continues Unchanged at its new index
-/// (ADR-0011: the remap is composed into the History). In checked builds the
-/// input is validated again first, InvalidInput if it fails.
+/// (ADR-0011: the remap is composed into the History). It publishes under the
+/// Context's policy as Commit() does: ToleranceExceeded for a tolerance above
+/// the ceiling, InvalidInput for one below the resolution, and InvalidInput
+/// when the Geometric level runs (the Context asks for it, or a checked
+/// build) and the shape fails it; Checked says which level ran. In checked
+/// builds the input's structure is validated again first, InvalidInput if
+/// it fails.
 [[nodiscard]] Result<OperationResult> CompactShape(const Shape& shape, const Context& context);
 
 } // namespace Stereon

@@ -198,6 +198,48 @@ refuses it.
    *b.RemoveFace(b.Handle(face));
    Result<Shape> edited = Freeze(std::move(b));   // shares every untouched page
 
+Euler operators
+---------------
+
+The controlled edits of ADR-0027 are the classical Euler operators,
+written for this store: radial rings with any number of uses, explicit
+primary coedges, and pcurves on the edge's shared parameter. Each checks
+all of its preconditions before it writes anything, so a refusal
+(``InvalidInput``) leaves the builder as it was. Each has an inverse that
+restores the connectivity up to the entities that survive: removed slots
+are tombstones, so what an inverse brings back has new handles.
+
+- ``MakeVertexFaceShell`` (MVFS) makes an isolated vertex, and a face with
+  one empty loop in a new shell. ``KillVertexFaceShell`` (KVFS) removes
+  them again.
+- ``MakeEdgeVertex`` (MEV) grows a new vertex and an edge to it from the
+  vertex where a coedge ends, as a strut of that coedge's loop: the edge's
+  use along it and its use against it follow the coedge. On an empty loop
+  it grows from the loop's isolated vertex. ``KillEdgeVertex`` (KEV)
+  removes a strut and its far vertex.
+- ``MakeEdgeFace`` (MEF) joins the vertices where two coedges of one loop
+  end, splitting the loop: a new face on the same surface and in the same
+  shell takes one side. ``KillEdgeFace`` (KEF) removes an edge between two
+  such faces and one of the faces, joining its loop into the other.
+
+The pairs that remain, KEMR/MEKR, KFMRH/MFKRH and SEMV/JEKV, follow, with
+``MergeVertices``.
+
+.. code-block:: cpp
+
+   ShapeBuilder b;
+   auto [v0, face, loop, shell] = *b.MakeVertexFaceShell(origin, 0.0, plane);
+   auto e1 = *b.MakeEdgeVertex(loop, v0, p1, 0.0, edge);    // v0 -> v1
+   auto e2 = *b.MakeEdgeVertex(e1.Out, p2, 0.0, edge);      // v1 -> v2
+   auto e3 = *b.MakeEdgeFace(e2.Out, e1.Back, edge);        // v2 -> v0: two faces
+
+``Transaction(edit)`` runs a compound edit on a candidate copy of the
+builder, which shares every page with it until it writes to one. The copy
+replaces the builder only if the edit succeeds; on failure it is discarded,
+and the builder is exactly as it was. Handles are valid in both. In
+checked builds every operator also checks the loops, radial rings and
+vertex lists it touched, a contract, while ``Freeze`` and ``Commit`` run
+the independent validator in every build.
 Freeze and certification
 ------------------------
 
@@ -354,6 +396,14 @@ grew. It fails with ``ToleranceExceeded`` for a tolerance above the
 ``Context``'s ceiling, and for any growth when the ``Context`` sets
 ``ToleranceGrowth::Fail``.
 
+The log is not the only check. ``Commit`` and ``CompactShape`` hold every
+live vertex and edge of what they publish to ADR-0001's bounds under their
+``Context``, including entities made with their tolerance and entities kept
+unchanged from a shape published under another ``Context``. A tolerance
+above the ceiling is ``ToleranceExceeded``, and one below the resolution is
+``InvalidInput``. A model built at a finer resolution says so with
+``Context::WithResolution``.
+
 Validation happens where a shape is published: ``Freeze``, ``Commit``,
 ``Compact`` and ``CompactShape``. A builder's single steps are not
 validated, because a valid edit passes through states that are not valid;
@@ -366,9 +416,11 @@ publishes, it checks that its History accounts for every live entity of
 both sides and names only live ones; a gap is ``InvalidResult``, a kernel
 bug.
 
-``Commit`` also runs the Geometric level (below) when the ``Context``'s
-validity level asks for it, which is the default, and always in checked
-builds. A result that fails it is ``InvalidResult``, and ``Checked`` says
+``Commit`` and ``CompactShape`` also run the Geometric level (below) when
+the ``Context``'s validity level asks for it, which is the default, and
+always in checked builds. A ``Commit`` result that fails it is
+``InvalidResult``. A shape ``CompactShape`` is given that fails it is
+``InvalidInput``, because compaction changes no geometry. ``Checked`` says
 which level ran. ``Freeze`` certifies structure only, so a builder can
 publish geometry that is still being repaired. The Solid level does not
 exist yet; asking for it checks the Geometric level.
@@ -399,7 +451,7 @@ S09   ``LoopOutsideFace``     a loop is not in its face's list exactly once
 S10   ``FaceOutsideShell``    a face is not in its shell's list exactly once
 S11   ``ShellOutsideSolid``   a shell is not in its solid's list exactly once
 S12   ``MissingGeometry``     a face without a surface, an edge without the curve its kind needs,
-                              a use without its pcurve, an empty parameter range
+                              a use without its pcurve, an empty or unbounded parameter range
 S13   ``EdgeEndpoints``       a degenerate edge with two different vertices
 S14   ``EmptyLoop``           a loop without coedges
 S15   ``ShellDisconnected``   the faces of a shell are not connected through shared edges
@@ -421,9 +473,16 @@ ID    Rule                    Finding
 ====  ======================  ===================================================================
 G01   ``VertexContainment``   an end of an edge lies outside its vertex's tolerance sphere
 G02   ``EdgeContainment``     a pcurve on its surface, or the edge's 3D curve, leaves the edge's
-                              tolerance tube; or a trace does not cover the edge's range or a
-                              pcurve leaves its surface's domain
+                              tolerance tube; a trace does not cover the edge's range or a
+                              pcurve leaves its surface's domain; or a ``Degenerate`` edge's
+                              trace moves away from its vertex
 ====  ======================  ===================================================================
+
+A ``Degenerate`` edge is a pole or an apex with no 3D extent. Each of its
+traces must stay at its vertex over the whole range, within the larger of
+the edge's and the vertex's tolerances. Ends that coincide with the vertex
+are not enough, because a closed circle has them too. An empty ``Shape``,
+default-constructed or moved from, is valid at every level.
 
 Each edge has a reference trace: its own 3D curve, or for a kind without
 one, its primary coedge's pcurve on that coedge's surface (ADR-0009). Every
@@ -448,7 +507,7 @@ contract violation in checked builds.
 
 .. todo::
 
-   Document the Euler operators as they land (ADR-0027).
+   Document KEMR/MEKR, KFMRH/MFKRH, SEMV/JEKV and MergeVertices as they land (ADR-0027).
 
 Related design decisions
 ------------------------

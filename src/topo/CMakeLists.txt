@@ -18,6 +18,7 @@ stereon_add_library(topo
         Builder.cpp
         Compact.cpp
         Describe.cpp
+        Euler.cpp
         Operation.cpp
         Shape.cpp
         Validate.cpp
