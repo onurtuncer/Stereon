@@ -34,7 +34,9 @@ module Stereon.Topo;
 /// distance bounds will close when interval evaluation exists. It runs on
 /// structurally valid tables only, and it never evaluates outside a
 /// domain: a trace that does not cover the edge's range, or a pcurve that
-/// leaves its surface's domain, is itself a finding.
+/// leaves its surface's domain, is itself a finding. A Degenerate edge's
+/// traces must also stay at its vertex over the whole range (G02): a pole
+/// has no 3D extent.
 
 namespace Stereon::Detail {
 
@@ -207,9 +209,14 @@ private:
     {
         const EdgeRecord& edge = m_T.Edges[e];
         const Interval range = edge.Range;
-        if (!std::isfinite(range.GetLower()) || !std::isfinite(range.GetUpper()) ||
-            range.GetLower() > range.GetUpper()) {
-            return; // nothing to sample; the structural check owns the range
+        if (range.IsEmpty() || !range.IsBounded()) {
+            // The structural check refuses such a range; on tables that
+            // skipped it the containment cannot be sampled, which is a
+            // finding, never a pass.
+            Report(TopologyRule::EdgeContainment, {Name(EntityKind::Edge, e)},
+                   "the edge's range is empty or not bounded, so its containment cannot be "
+                   "checked");
+            return;
         }
         const std::vector<Trace> traces = TracesOf(e);
         std::optional<std::vector<Point3>> reference;
@@ -217,6 +224,9 @@ private:
             std::optional<std::vector<Point3>> points = PointsOf(trace, e, range);
             if (!points) {
                 continue;
+            }
+            if (edge.Kind == EdgeCurveKind::Degenerate) {
+                CheckCollapse(e, trace, *points);
             }
             if (!reference) {
                 reference = std::move(points);
@@ -247,6 +257,40 @@ private:
                                "its tolerance {}",
                                worst, SampleAt(m_T.Edges[e].Range, static_cast<int>(at)),
                                tolerance));
+        }
+    }
+
+    /// A Degenerate edge has no 3D extent (ADR-0009): each of its traces
+    /// stays at its one vertex over the whole range, within the larger of the
+    /// edge's and the vertex's tolerances. Coincident ends alone do not make
+    /// a pole: a closed circle has them too.
+    void CheckCollapse(const std::uint32_t e, const Trace& trace, const std::vector<Point3>& points)
+    {
+        const EdgeRecord& edge = m_T.Edges[e];
+        const std::uint32_t v = edge.Start.GetIndex();
+        if (!m_T.IsLive<EntityKind::Vertex>(v)) {
+            return; // a dangling link; the structural check owns it
+        }
+        const VertexRecord& vertex = m_T.Vertices[v];
+        const double tolerance = std::max(edge.Tolerance, vertex.Tolerance);
+        double worst = 0.0;
+        std::size_t at = 0;
+        for (std::size_t k = 0; k < points.size(); ++k) {
+            const double d = Distance(points[k], vertex.Position);
+            if (!(d <= worst)) {
+                worst = d;
+                at = k;
+            }
+        }
+        if (!(worst <= tolerance)) {
+            std::vector<std::string> entities{Name(EntityKind::Edge, e)};
+            if (!trace.Curve3d) {
+                entities.push_back(Name(EntityKind::Coedge, trace.Coedge));
+            }
+            Report(TopologyRule::EdgeContainment, std::move(entities),
+                   std::format("the degenerate edge's trace is {} from its vertex at t = {}, "
+                               "outside its tolerance {}",
+                               worst, SampleAt(edge.Range, static_cast<int>(at)), tolerance));
         }
     }
 

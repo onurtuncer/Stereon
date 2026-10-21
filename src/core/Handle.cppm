@@ -333,9 +333,9 @@ struct HandleReport {
 /// (GCC 16.2; see Contracts.hpp).
 void HandleCheckFailed(const HandleReport& report);
 
-/// A fresh store identity for checked builds. The counter is the only global
-/// state in the kernel; it is diagnostic and never influences a result
-/// (ADR-0007).
+/// A fresh identity: of a store in checked builds, of a builder, of a
+/// ParameterSet. The counter is the only global state in the kernel; it
+/// tells identities apart and never influences a result's value (ADR-0007).
 [[nodiscard]] StoreId NextStoreId() noexcept;
 
 } // namespace Stereon::Detail

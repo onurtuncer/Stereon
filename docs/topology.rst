@@ -396,6 +396,14 @@ grew. It fails with ``ToleranceExceeded`` for a tolerance above the
 ``Context``'s ceiling, and for any growth when the ``Context`` sets
 ``ToleranceGrowth::Fail``.
 
+The log is not the only check. ``Commit`` and ``CompactShape`` hold every
+live vertex and edge of what they publish to ADR-0001's bounds under their
+``Context``, including entities made with their tolerance and entities kept
+unchanged from a shape published under another ``Context``. A tolerance
+above the ceiling is ``ToleranceExceeded``, and one below the resolution is
+``InvalidInput``. A model built at a finer resolution says so with
+``Context::WithResolution``.
+
 Validation happens where a shape is published: ``Freeze``, ``Commit``,
 ``Compact`` and ``CompactShape``. A builder's single steps are not
 validated, because a valid edit passes through states that are not valid;
@@ -408,9 +416,11 @@ publishes, it checks that its History accounts for every live entity of
 both sides and names only live ones; a gap is ``InvalidResult``, a kernel
 bug.
 
-``Commit`` also runs the Geometric level (below) when the ``Context``'s
-validity level asks for it, which is the default, and always in checked
-builds. A result that fails it is ``InvalidResult``, and ``Checked`` says
+``Commit`` and ``CompactShape`` also run the Geometric level (below) when
+the ``Context``'s validity level asks for it, which is the default, and
+always in checked builds. A ``Commit`` result that fails it is
+``InvalidResult``. A shape ``CompactShape`` is given that fails it is
+``InvalidInput``, because compaction changes no geometry. ``Checked`` says
 which level ran. ``Freeze`` certifies structure only, so a builder can
 publish geometry that is still being repaired. The Solid level does not
 exist yet; asking for it checks the Geometric level.
@@ -441,7 +451,7 @@ S09   ``LoopOutsideFace``     a loop is not in its face's list exactly once
 S10   ``FaceOutsideShell``    a face is not in its shell's list exactly once
 S11   ``ShellOutsideSolid``   a shell is not in its solid's list exactly once
 S12   ``MissingGeometry``     a face without a surface, an edge without the curve its kind needs,
-                              a use without its pcurve, an empty parameter range
+                              a use without its pcurve, an empty or unbounded parameter range
 S13   ``EdgeEndpoints``       a degenerate edge with two different vertices
 S14   ``EmptyLoop``           a loop without coedges
 S15   ``ShellDisconnected``   the faces of a shell are not connected through shared edges
@@ -463,9 +473,16 @@ ID    Rule                    Finding
 ====  ======================  ===================================================================
 G01   ``VertexContainment``   an end of an edge lies outside its vertex's tolerance sphere
 G02   ``EdgeContainment``     a pcurve on its surface, or the edge's 3D curve, leaves the edge's
-                              tolerance tube; or a trace does not cover the edge's range or a
-                              pcurve leaves its surface's domain
+                              tolerance tube; a trace does not cover the edge's range or a
+                              pcurve leaves its surface's domain; or a ``Degenerate`` edge's
+                              trace moves away from its vertex
 ====  ======================  ===================================================================
+
+A ``Degenerate`` edge is a pole or an apex with no 3D extent. Each of its
+traces must stay at its vertex over the whole range, within the larger of
+the edge's and the vertex's tolerances. Ends that coincide with the vertex
+are not enough, because a closed circle has them too. An empty ``Shape``,
+default-constructed or moved from, is valid at every level.
 
 Each edge has a reference trace: its own 3D curve, or for a kind without
 one, its primary coedge's pcurve on that coedge's surface (ADR-0009). Every

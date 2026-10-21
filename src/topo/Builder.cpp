@@ -299,6 +299,10 @@ Result<BuilderEdgeId> ShapeBuilder::AddEdge(const EdgeSpec& spec)
     if (spec.Range.IsEmpty()) {
         return Fail(ErrorCode::InvalidInput, "AddEdge: an empty parameter range");
     }
+    // An edge runs between vertices at its range's ends, so both are finite.
+    if (!spec.Range.IsBounded()) {
+        return Fail(ErrorCode::InvalidInput, "AddEdge: a parameter range that is not bounded");
+    }
     if (HasOwnCurve(spec.Kind) != spec.Curve.IsValid()) {
         return Fail(
             ErrorCode::InvalidInput,
@@ -953,8 +957,10 @@ ValidityReport ValidateTopology(const Shape& shape)
 
 ValidityReport ValidateTopology(const Shape& shape, const ValidityLevel level)
 {
+    // An empty Shape, default-constructed or moved from, has no tables: it is
+    // trivially valid at every level, as it is at the Structural one.
     ValidityReport report = ValidateTopology(shape);
-    if (level == ValidityLevel::Structural || !report.IsValid()) {
+    if (level == ValidityLevel::Structural || shape.IsEmpty() || !report.IsValid()) {
         return report;
     }
     return Detail::ValidateGeometry(shape.GetSnapshot()->GetTables());
@@ -1039,6 +1045,53 @@ namespace {
     return {};
 }
 
+/// ADR-0001's bounds on every live vertex and edge of a result, whatever its
+/// change log says: an entity made with its tolerance, or kept from a shape
+/// published under another Context, has no SetTolerance() entry to check.
+/// ToleranceExceeded above the Context's ceiling; InvalidInput below its
+/// resolution, which every local tolerance is at least.
+[[nodiscard]] Result<void> CheckToleranceBounds(const Detail::TopologyTables& t,
+                                                const Context& context, const Shape& shape,
+                                                const char* operation)
+{
+    const auto check = [&](const EntityKind kind, const std::uint32_t index,
+                           const double tolerance) -> Result<void> {
+        if (tolerance > context.GetToleranceCeiling()) {
+            return Fail(ErrorCode::ToleranceExceeded,
+                        std::format("{}: the tolerance of {} is {}, above the Context's ceiling "
+                                    "of {}",
+                                    operation, Named(shape, kind, index), tolerance,
+                                    context.GetToleranceCeiling()));
+        }
+        if (tolerance < context.GetResolution()) {
+            return Fail(ErrorCode::InvalidInput,
+                        std::format("{}: the tolerance of {} is {}, below the Context's "
+                                    "resolution of {}",
+                                    operation, Named(shape, kind, index), tolerance,
+                                    context.GetResolution()));
+        }
+        return {};
+    };
+    for (std::uint32_t v = 0; v < t.Vertices.GetSize(); ++v) {
+        if (t.IsLive<EntityKind::Vertex>(v)) {
+            STEREON_TRY_VOID(check(EntityKind::Vertex, v, t.Vertices[v].Tolerance));
+        }
+    }
+    for (std::uint32_t e = 0; e < t.Edges.GetSize(); ++e) {
+        if (t.IsLive<EntityKind::Edge>(e)) {
+            STEREON_TRY_VOID(check(EntityKind::Edge, e, t.Edges[e].Tolerance));
+        }
+    }
+    return {};
+}
+
+/// Whether a publication checks the Geometric level: when the Context asks
+/// for it, and always in checked builds, which check every level (ADR-0018).
+[[nodiscard]] bool ChecksGeometry(const Context& context) noexcept
+{
+    return STEREON_CHECKED_HANDLES || context.GetValidityLevel() != ValidityLevel::Structural;
+}
+
 /// The warnings of a commit: tolerances that grew, cached edge curves the
 /// edit dropped.
 [[nodiscard]] std::vector<Diagnostic> WarningsOf(const std::vector<ToleranceChange>& changes,
@@ -1099,12 +1152,10 @@ Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context)
     const Detail::TopologyTables* before = source != nullptr ? &source->GetTables() : nullptr;
     std::vector<ToleranceChange> changes = Coalesced(std::move(calls), result);
     STEREON_TRY_VOID(CheckTolerances(changes, context, *frozen));
-    // The Geometric level when the Context asks for it, and always in
-    // checked builds, which check every level (ADR-0018). A result that
-    // fails it is a kernel bug or a caller's inconsistent geometry; either
-    // way it is not published (ADR-0006).
-    const bool geometric =
-        STEREON_CHECKED_HANDLES || context.GetValidityLevel() != ValidityLevel::Structural;
+    STEREON_TRY_VOID(CheckToleranceBounds(result, context, *frozen, "Commit"));
+    // A result that fails the Geometric level is a kernel bug or a caller's
+    // inconsistent geometry; either way it is not published (ADR-0006).
+    const bool geometric = ChecksGeometry(context);
     if (geometric) {
         const ValidityReport report = Detail::ValidateGeometry(result);
         if (!report.IsValid()) {
@@ -1129,8 +1180,10 @@ Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context)
 
 Result<OperationResult> CompactShape(const Shape& shape, const Context& context)
 {
-    // Compaction renumbers; no setting of the Context changes what it does.
-    static_cast<void>(context);
+    // Compaction renumbers and changes no geometry or tolerance, but it
+    // publishes under the Context's policy as Commit() does (ADR-0018): the
+    // input carries no evidence of a Geometric check, since Freeze()
+    // certifies structure only.
     if (shape.IsEmpty()) {
         return Fail(ErrorCode::InvalidInput, "CompactShape: the Shape is empty");
     }
@@ -1139,6 +1192,16 @@ Result<OperationResult> CompactShape(const Shape& shape, const Context& context)
         if (!report.IsValid()) {
             return Fail(ErrorCode::InvalidInput,
                         "CompactShape: the Shape is not structurally valid:\n" + report.ToText());
+        }
+    }
+    const Detail::TopologyTables& source = shape.GetSnapshot()->GetTables();
+    STEREON_TRY_VOID(CheckToleranceBounds(source, context, shape, "CompactShape"));
+    const bool geometric = ChecksGeometry(context);
+    if (geometric) {
+        const ValidityReport report = Detail::ValidateGeometry(source);
+        if (!report.IsValid()) {
+            return Fail(ErrorCode::InvalidInput,
+                        "CompactShape: the Shape is not geometrically valid:\n" + report.ToText());
         }
     }
     STEREON_TRY(Compacted compacted, Compact(shape));
@@ -1164,7 +1227,6 @@ Result<OperationResult> CompactShape(const Shape& shape, const Context& context)
     continuations.template operator()<EntityKind::Shell>();
     continuations.template operator()<EntityKind::Solid>();
     History history(std::move(entries));
-    const Detail::TopologyTables& source = shape.GetSnapshot()->GetTables();
     const Detail::TopologyTables& result = compacted.Shape.GetSnapshot()->GetTables();
     if (!Detail::HistoryIsComplete(history, &source, result)) {
         return Fail(ErrorCode::InvalidResult,
@@ -1173,7 +1235,7 @@ Result<OperationResult> CompactShape(const Shape& shape, const Context& context)
     OperationResult published;
     published.History = std::move(history);
     published.Shape = std::move(compacted.Shape);
-    published.Checked = ValidityLevel::Structural;
+    published.Checked = geometric ? ValidityLevel::Geometric : ValidityLevel::Structural;
     return published;
 }
 

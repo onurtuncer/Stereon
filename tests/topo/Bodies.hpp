@@ -59,6 +59,11 @@ inline void Must(const Stereon::Result<void>& result)
     }
 }
 
+/// The tolerance of every entity the bodies here make: the default Context's
+/// resolution, since native construction is resolution-tight and no local
+/// tolerance is below the resolution (ADR-0001), which Commit() checks.
+inline constexpr double Tight = 1e-5;
+
 /// A builder and the handles of everything it made, in creation order.
 struct Body {
     Stereon::ShapeBuilder Builder;
@@ -70,7 +75,7 @@ struct Body {
     std::vector<BuilderShellId> Shells;
     std::vector<BuilderSolidId> Solids;
 
-    BuilderVertexId AddVertex(const Point3& p, const double tolerance = 1e-7)
+    BuilderVertexId AddVertex(const Point3& p, const double tolerance = Tight)
     {
         return Vertices.emplace_back(Must(Builder.AddVertex(p, tolerance)));
     }
@@ -143,7 +148,7 @@ inline Body MakePolyhedron(std::span<const Point3> points,
             .End = body.Vertices[key.second],
             .Curve = Must(body.Builder.AddCurve(Stereon::Curve(Stereon::Line{start, end - start}))),
             .Range = Interval(0.0, 1.0),
-            .Tolerance = 1e-7,
+            .Tolerance = Tight,
         });
         edges.emplace(key, e);
         return e;
@@ -228,18 +233,18 @@ inline Body MakeCylinder(const double r = 1.5, const double h = 4.0)
                                                .End = v0,
                                                .Curve = circle(0.0),
                                                .Range = Interval(0.0, tau),
-                                               .Tolerance = 1e-7});
+                                               .Tolerance = Tight});
     const BuilderEdgeId top = body.AddEdge({.Kind = EdgeCurveKind::Exact,
                                             .Start = v1,
                                             .End = v1,
                                             .Curve = circle(h),
                                             .Range = Interval(0.0, tau),
-                                            .Tolerance = 1e-7});
+                                            .Tolerance = Tight});
     const BuilderEdgeId seam = body.AddEdge({.Kind = EdgeCurveKind::Boundary,
                                              .Start = v0,
                                              .End = v1,
                                              .Range = Interval(0.0, h),
-                                             .Tolerance = 1e-7});
+                                             .Tolerance = Tight});
 
     const BuilderSolidId solid = body.Solids.emplace_back(Must(body.Builder.AddSolid()));
     const BuilderShellId shell = body.Shells.emplace_back(Must(body.Builder.AddShell(solid)));
@@ -286,7 +291,7 @@ inline void AddBoundaryPolygon(Body& body, const BuilderFaceId face,
                                               .Start = vertices[i],
                                               .End = vertices[j],
                                               .Range = Interval(0.0, 1.0),
-                                              .Tolerance = 1e-7});
+                                              .Tolerance = Tight});
         const Point2 from{corners[i].X, corners[i].Y};
         const Point2 to{corners[j].X, corners[j].Y};
         body.AddCoedge(loop, e, EdgeUseSense::Same,
@@ -342,7 +347,7 @@ inline Body MakeFan(const std::size_t k)
          .Curve =
              Must(body.Builder.AddCurve(Stereon::Curve(Stereon::Line{{0, 0, 0}, Vec3{0, 0, 1}}))),
          .Range = Interval(0.0, 1.0),
-         .Tolerance = 1e-7});
+         .Tolerance = Tight});
     const BuilderShellId shell = body.Shells.emplace_back(Must(body.Builder.AddShell()));
     for (std::size_t i = 0; i < k; ++i) {
         const double angle =
@@ -359,7 +364,7 @@ inline Body MakeFan(const std::size_t k)
                                                   .Start = a,
                                                   .End = b,
                                                   .Range = Interval(0.0, 1.0),
-                                                  .Tolerance = 1e-7});
+                                                  .Tolerance = Tight});
             const Point2 from = UvOn(plane, pa);
             body.AddCoedge(loop, e, EdgeUseSense::Same,
                            Stereon::Curve2d(Stereon::Line2d{from, UvOn(plane, pb) - from}));
@@ -388,14 +393,15 @@ inline Body MakeWire(const std::size_t n)
                       .End = body.Vertices[i + 1],
                       .Curve = Must(body.Builder.AddCurve(Stereon::Curve(Stereon::Line{a, b - a}))),
                       .Range = Interval(0.0, 1.0),
-                      .Tolerance = 1e-7});
+                      .Tolerance = Tight});
     }
     return body;
 }
 
 /// One face whose loop runs v0 -> v1 -> v0 along two Boundary edges, then
 /// through a Degenerate edge at v0 (a pole), structurally: the pcurves are
-/// placeholders.
+/// placeholders, so the Geometric level refuses it. MakePoleCap is the
+/// geometrically valid pole.
 inline Body MakeDegenerateFace()
 {
     Body body;
@@ -406,7 +412,7 @@ inline Body MakeDegenerateFace()
     const auto edge = [&](const EdgeCurveKind kind, const BuilderVertexId a,
                           const BuilderVertexId b) {
         return body.AddEdge(
-            {.Kind = kind, .Start = a, .End = b, .Range = Interval(0.0, 1.0), .Tolerance = 1e-7});
+            {.Kind = kind, .Start = a, .End = b, .Range = Interval(0.0, 1.0), .Tolerance = Tight});
     };
     const BuilderEdgeId out = edge(EdgeCurveKind::Boundary, v0, v1);
     const BuilderEdgeId back = edge(EdgeCurveKind::Boundary, v1, v0);
@@ -414,6 +420,43 @@ inline Body MakeDegenerateFace()
     body.AddCoedge(loop, out, EdgeUseSense::Same, AnyPCurve());
     body.AddCoedge(loop, back, EdgeUseSense::Same, AnyPCurve());
     body.AddCoedge(loop, pole, EdgeUseSense::Same, AnyPCurve());
+    return body;
+}
+
+/// The northern hemisphere of the unit sphere about the origin, one face
+/// whose loop runs in (u, v) as the cylinder's lateral loop does, with the
+/// top side collapsed into the pole: (0, 0) -> (2 pi, 0) along the equator,
+/// a Boundary edge closed at vertex 0 = (1, 0, 0); up the seam at u = 2 pi
+/// to vertex 1 = (0, 0, 1); along the pole, a Degenerate edge at vertex 1,
+/// from u = 2 pi back to u = 0; and down the seam at u = 0. Edges: 0 the
+/// equator, 1 the seam (t in [0, pi/2]), 2 the pole (t in [0, 2 pi]).
+inline Body MakePoleCap()
+{
+    using Stereon::Curve2d;
+    using Stereon::Line2d;
+    constexpr double tau = Stereon::CirclePeriod;
+    constexpr double pole = Stereon::SpherePoleLatitude;
+    Body body;
+    const BuilderVertexId v0 = body.AddVertex({1, 0, 0});
+    const BuilderVertexId v1 = body.AddVertex({0, 0, 1});
+    const auto edge = [&](const EdgeCurveKind kind, const BuilderVertexId a,
+                          const BuilderVertexId b, const double upper) {
+        return body.AddEdge({.Kind = kind,
+                             .Start = a,
+                             .End = b,
+                             .Range = Interval(0.0, upper),
+                             .Tolerance = Tight});
+    };
+    const BuilderEdgeId equator = edge(EdgeCurveKind::Boundary, v0, v0, tau);
+    const BuilderEdgeId seam = edge(EdgeCurveKind::Boundary, v0, v1, pole);
+    const BuilderEdgeId apex = edge(EdgeCurveKind::Degenerate, v1, v1, tau);
+    const BuilderFaceId face = body.AddFace(
+        Stereon::Surface(Stereon::Sphere{{0, 0, 0}, 1.0, Vec3{1, 0, 0}, Vec3{0, 1, 0}}));
+    const BuilderLoopId loop = body.AddLoop(face);
+    body.AddCoedge(loop, equator, EdgeUseSense::Same, Curve2d(Line2d{{0, 0}, Vec2{1, 0}}));
+    body.AddCoedge(loop, seam, EdgeUseSense::Same, Curve2d(Line2d{{tau, 0}, Vec2{0, 1}}));
+    body.AddCoedge(loop, apex, EdgeUseSense::Same, Curve2d(Line2d{{tau, pole}, Vec2{-1, 0}}));
+    body.AddCoedge(loop, seam, EdgeUseSense::Opposite, Curve2d(Line2d{{0, 0}, Vec2{0, 1}}));
     return body;
 }
 
@@ -441,14 +484,14 @@ Body MakeHinge(const Stereon::Surface& surfaceA, const Stereon::Curve2d& hingeOn
                                               .Start = v0,
                                               .End = v1,
                                               .Range = Interval(0.0, 1.0),
-                                              .Tolerance = 1e-7});
+                                              .Tolerance = Tight});
     const BuilderShellId shell = body.Shells.emplace_back(Must(body.Builder.AddShell()));
     const auto side = [&](const BuilderVertexId a, const BuilderVertexId b) {
         return body.AddEdge({.Kind = EdgeCurveKind::Boundary,
                              .Start = a,
                              .End = b,
                              .Range = Interval(0.0, 1.0),
-                             .Tolerance = 1e-7});
+                             .Tolerance = Tight});
     };
     // Face 0, in its plane's (x, y): v0 -> a1 -> a2 -> v1, then the hinge back.
     {

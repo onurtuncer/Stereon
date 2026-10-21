@@ -34,6 +34,7 @@ stereon_add_tests(curve)
 stereon_add_tests(surface)
 stereon_add_tests(intersect)
 stereon_add_tests(topo)
+stereon_add_tests(build)
 stereon_add_tests(mesh)
 stereon_add_tests(io)
 

@@ -11,6 +11,7 @@ module;
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string>
@@ -51,6 +52,28 @@ namespace {
 
 // --- ParameterSet -----------------------------------------------------------------------
 
+ParameterSet::ParameterSet()
+    : m_Identity(Detail::NextStoreId())
+{}
+
+ParameterSet::ParameterSet(ParameterSet&& other) noexcept
+    : m_Identity(std::exchange(other.m_Identity, Detail::NextStoreId()))
+    , m_Names(std::exchange(other.m_Names, {}))
+    , m_Quantities(std::exchange(other.m_Quantities, {}))
+    , m_References(std::exchange(other.m_References, {}))
+{}
+
+ParameterSet& ParameterSet::operator=(ParameterSet&& other) noexcept
+{
+    if (this != &other) {
+        m_Identity = std::exchange(other.m_Identity, Detail::NextStoreId());
+        m_Names = std::exchange(other.m_Names, {});
+        m_Quantities = std::exchange(other.m_Quantities, {});
+        m_References = std::exchange(other.m_References, {});
+    }
+    return *this;
+}
+
 Result<ParameterId> ParameterSet::Add(const std::string_view name, const ParameterQuantity quantity,
                                       const double reference)
 {
@@ -69,35 +92,35 @@ Result<ParameterId> ParameterSet::Add(const std::string_view name, const Paramet
     m_Names.emplace_back(name);
     m_Quantities.push_back(quantity);
     m_References.push_back(reference);
-    return ParameterId(index, quantity);
+    return ParameterId(m_Identity, index, quantity);
 }
 
 bool ParameterSet::Contains(const ParameterId id) const noexcept
 {
-    return id.IsValid() && id.GetIndex() < m_Names.size() &&
+    return id.IsValid() && id.m_Set == m_Identity && id.GetIndex() < m_Names.size() &&
            m_Quantities[id.GetIndex()] == id.GetQuantity();
 }
 
-std::string_view ParameterSet::GetName(const ParameterId id) const
+std::string_view ParameterSet::GetName(const ParameterId id) const noexcept
 {
-    return m_Names.at(id.GetIndex());
+    return Contains(id) ? std::string_view{m_Names[id.GetIndex()]} : std::string_view{};
 }
 
-std::string_view ParameterSet::GetUnit(const ParameterId id) const
+std::string_view ParameterSet::GetUnit(const ParameterId id) const noexcept
 {
-    return UnitOf(m_Quantities.at(id.GetIndex()));
+    return Contains(id) ? UnitOf(m_Quantities[id.GetIndex()]) : std::string_view{};
 }
 
-double ParameterSet::GetReference(const ParameterId id) const
+double ParameterSet::GetReference(const ParameterId id) const noexcept
 {
-    return m_References.at(id.GetIndex());
+    return Contains(id) ? m_References[id.GetIndex()] : std::numeric_limits<double>::quiet_NaN();
 }
 
 ParameterId ParameterSet::Find(const std::string_view name) const noexcept
 {
     for (std::size_t i = 0; i < m_Names.size(); ++i) {
         if (m_Names[i] == name) {
-            return ParameterId(static_cast<std::uint32_t>(i), m_Quantities[i]);
+            return ParameterId(m_Identity, static_cast<std::uint32_t>(i), m_Quantities[i]);
         }
     }
     return {};
