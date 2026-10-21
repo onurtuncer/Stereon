@@ -79,7 +79,8 @@ Merge-policy test: sew faces whose corner vertices form chains at 0.8× the pair
 | Criterion | Status |
 | --- | --- |
 | Local tolerances grow only explicitly, and are reported | Met: `ShapeBuilder::SetTolerance(entity, value, reason)`; `Commit` reports every change in its `OperationResult` and warns `ToleranceGrown` (`tests/topo/OperationTests.cpp`) |
-| The ceiling | Met: `Commit` fails with `ToleranceExceeded` above `Context::GetToleranceCeiling()` |
+| The ceiling | Met: `Commit` and `CompactShape` fail with `ToleranceExceeded` when any live tolerance of what they publish is above `Context::GetToleranceCeiling()`, logged or not (`tests/topo/OperationTests.cpp`) |
+| Local tolerances ≥ resolution | Met at publication: `Commit` and `CompactShape` fail with `InvalidInput` below `Context::GetResolution()`; `Freeze` takes no `Context` and certifies structure only |
 | No literal epsilons | Met: `tools/check_epsilon.py` on `topo/`, `boolean/` and `mesh/`, in lint and CTest |
 | The containment invariant | Met, sampled: rules G01 and G02 (`tests/topo/GeometricValidityTests.cpp`) |
 | Booleans on boxes and cylinders, with loosened edges | A condition of the Boolean prototype (the first Boolean milestone), not of Phase 0's other work: the prototype is accepted only when it passes, and a failure reopens this ADR |
