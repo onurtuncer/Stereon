@@ -16,6 +16,7 @@ module;
 #include <limits>
 #include <string_view>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
 export module Stereon.Topo:Records;
@@ -335,6 +336,20 @@ public:
         return VisitKind<0>(slot >> LocalBits, slot & LocalMask, f);
     }
 
+    /// True when the entry holds geometry: a built-in value, or a wrapper
+    /// that is not empty. A failed ShapeBuilder::Transaction pads the pools
+    /// with empty wrappers so that no reference the aborted edit made names
+    /// geometry added later.
+    [[nodiscard]] bool HoldsGeometry(const std::size_t index) const
+    {
+        return Visit(index, []<typename T>(const T& value) {
+            if constexpr (std::is_same_v<T, Wrapper>) {
+                return !value.IsEmpty();
+            } else {
+                return true;
+            }
+        });
+    }
     /// The entry, wrapped: a copy of the built-in value in a wrapper, or of
     /// the stored wrapper.
     [[nodiscard]] Wrapper operator[](const std::size_t index) const
@@ -424,6 +439,13 @@ private:
     PagedArena<Wrapper> m_Other;
 };
 
+/// True when `ref` names geometry in `pool`: valid, in range and not an
+/// empty entry.
+template <typename Pool, typename Ref>
+[[nodiscard]] bool InPool(const Pool& pool, const Ref ref)
+{
+    return ref.IsValid() && ref.GetIndex() < pool.GetSize() && pool.HoldsGeometry(ref.GetIndex());
+}
 /// The pools of a topology store. The built-in types stored by value are
 /// the ones bodies are made of in bulk: the conics and analytic surfaces.
 using CurvePool = GeometryPool<Curve, Line, Circle, Ellipse>;

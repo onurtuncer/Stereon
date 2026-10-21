@@ -309,7 +309,7 @@ Result<BuilderEdgeId> ShapeBuilder::AddEdge(const EdgeSpec& spec)
             std::string("AddEdge: a ") + std::string(ToString(spec.Kind)) + " edge " +
                 (HasOwnCurve(spec.Kind) ? "needs its 3D curve" : "has no 3D curve of its own"));
     }
-    if (spec.Curve.IsValid() && spec.Curve.GetIndex() >= m_Tables.Curves.GetSize()) {
+    if (spec.Curve.IsValid() && !Detail::InPool(m_Tables.Curves, spec.Curve)) {
         return Fail(ErrorCode::InvalidInput, "AddEdge: the curve is not in this builder's pool");
     }
     if (spec.Kind == EdgeCurveKind::Degenerate && spec.Start != spec.End) {
@@ -333,7 +333,7 @@ Result<BuilderEdgeId> ShapeBuilder::AddEdge(const EdgeSpec& spec)
 Result<BuilderFaceId> ShapeBuilder::AddFace(const SurfaceRef surface, const bool reversed)
 {
     STEREON_TRY_VOID(RequireToken("AddFace"));
-    if (!surface.IsValid() || surface.GetIndex() >= m_Tables.Surfaces.GetSize()) {
+    if (!Detail::InPool(m_Tables.Surfaces, surface)) {
         return Fail(ErrorCode::InvalidInput, "AddFace: the surface is not in this builder's pool");
     }
     Detail::FaceRecord record;
@@ -369,7 +369,7 @@ Result<BuilderCoedgeId> ShapeBuilder::AppendCoedge(const BuilderLoopId loop,
 {
     STEREON_TRY_VOID(Require(loop, "AppendCoedge"));
     STEREON_TRY_VOID(Require(edge, "AppendCoedge"));
-    if (pcurve.IsValid() && pcurve.GetIndex() >= m_Tables.PCurves.GetSize()) {
+    if (pcurve.IsValid() && !Detail::InPool(m_Tables.PCurves, pcurve)) {
         return Fail(ErrorCode::InvalidInput,
                     "AppendCoedge: the pcurve is not in this builder's pool");
     }
@@ -505,7 +505,7 @@ Result<void> ShapeBuilder::AddFaceToShell(const BuilderShellId shell, const Buil
 Result<void> ShapeBuilder::SetSurface(const BuilderFaceId face, const SurfaceRef surface)
 {
     STEREON_TRY_VOID(Require(face, "SetSurface"));
-    if (!surface.IsValid() || surface.GetIndex() >= m_Tables.Surfaces.GetSize()) {
+    if (!Detail::InPool(m_Tables.Surfaces, surface)) {
         return Fail(ErrorCode::InvalidInput,
                     "SetSurface: the surface is not in this builder's pool");
     }
@@ -920,6 +920,16 @@ void Tombstone(Table& table, const std::size_t size)
     }
 }
 
+/// Pads a geometry pool with empty entries up to `size`.
+template <typename Pool>
+void Pad(Pool& pool, const std::size_t size)
+{
+    using Wrapper = decltype(pool[0]);
+    while (pool.GetSize() < size) {
+        static_cast<void>(pool.PushBack(Wrapper{}));
+    }
+}
+
 } // namespace
 
 void ShapeBuilder::Abandon(const ShapeBuilder& candidate)
@@ -932,6 +942,11 @@ void ShapeBuilder::Abandon(const ShapeBuilder& candidate)
     Tombstone<EntityKind::Face>(m_Tables.Faces, used.Faces.GetSize());
     Tombstone<EntityKind::Shell>(m_Tables.Shells, used.Shells.GetSize());
     Tombstone<EntityKind::Solid>(m_Tables.Solids, used.Solids.GetSize());
+    // Geometry references carry no generation: an empty entry in each place
+    // the candidate filled makes its references refused (Detail::InPool).
+    Pad(m_Tables.Curves, used.Curves.GetSize());
+    Pad(m_Tables.PCurves, used.PCurves.GetSize());
+    Pad(m_Tables.Surfaces, used.Surfaces.GetSize());
     Advance();
 }
 

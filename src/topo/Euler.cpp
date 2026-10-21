@@ -68,7 +68,7 @@ Result<void> ShapeBuilder::CheckEdgeGeometry(const EdgeGeometry& geometry,
             std::string("a ") + std::string(ToString(geometry.Kind)) + " edge " +
                 (HasOwnCurve(geometry.Kind) ? "needs its 3D curve" : "has no 3D curve of its own"));
     }
-    if (geometry.Curve.IsValid() && geometry.Curve.GetIndex() >= m_Tables.Curves.GetSize()) {
+    if (geometry.Curve.IsValid() && !Detail::InPool(m_Tables.Curves, geometry.Curve)) {
         return Refuse(operation, "the curve is not in this builder's pool");
     }
     if (!geometry.PCurve.IsValid() && geometry.Kind != EdgeCurveKind::Spatial) {
@@ -76,7 +76,7 @@ Result<void> ShapeBuilder::CheckEdgeGeometry(const EdgeGeometry& geometry,
                                      std::string(ToString(geometry.Kind)) +
                                      " edge need their pcurve");
     }
-    if (geometry.PCurve.IsValid() && geometry.PCurve.GetIndex() >= m_Tables.PCurves.GetSize()) {
+    if (geometry.PCurve.IsValid() && !Detail::InPool(m_Tables.PCurves, geometry.PCurve)) {
         return Refuse(operation, "the pcurve is not in this builder's pool");
     }
     return {};
@@ -326,7 +326,7 @@ Result<VertexFaceShell> ShapeBuilder::MakeVertexFaceShell(const Point3& position
     STEREON_TRY_VOID(RequireToken(op));
     STEREON_TRY_VOID(Detail::CheckFinite(position, "the position", op));
     STEREON_TRY_VOID(Detail::CheckNonNegative(tolerance, "the tolerance", op));
-    if (!surface.IsValid() || surface.GetIndex() >= m_Tables.Surfaces.GetSize()) {
+    if (!Detail::InPool(m_Tables.Surfaces, surface)) {
         return Fail(ErrorCode::InvalidInput,
                     "MakeVertexFaceShell: the surface is not in this builder's pool");
     }
