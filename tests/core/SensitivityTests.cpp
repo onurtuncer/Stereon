@@ -89,10 +89,69 @@ TEST_CASE("a parameter id belongs to its set", "[core][sensitivity]")
     const ParameterSet parameters = TwoParameters();
     REQUIRE_FALSE(ParameterId{}.IsValid());
     REQUIRE_FALSE(parameters.Contains(ParameterId{}));
-    REQUIRE(parameters.Contains(ParameterId(1, ParameterQuantity::Angle)));
-    // Index past the end, or the right index with the wrong quantity.
-    REQUIRE_FALSE(parameters.Contains(ParameterId(2, ParameterQuantity::Angle)));
-    REQUIRE_FALSE(parameters.Contains(ParameterId(1, ParameterQuantity::Length)));
+    REQUIRE(parameters.Contains(parameters.Find("angle")));
+    REQUIRE(parameters.GetName(ParameterId{}).empty());
+    REQUIRE(std::isnan(parameters.GetReference(ParameterId{})));
+
+    // An id cannot be made from an index: only a set makes one.
+    STATIC_REQUIRE_FALSE(
+        std::is_constructible_v<ParameterId, std::uint32_t, ParameterQuantity>);
+}
+
+TEST_CASE("a parameter id of another set is foreign, whatever its index", "[core][sensitivity]")
+{
+    // The same position and quantity in two sets, with different names and
+    // reference scales.
+    ParameterSet a;
+    ParameterSet b;
+    const ParameterId radius = *a.Add("radius", ParameterQuantity::Length, 1.0);
+    const ParameterId thickness = *b.Add("thickness", ParameterQuantity::Length, 100.0);
+    REQUIRE(radius.GetIndex() == thickness.GetIndex());
+    REQUIRE(radius.GetQuantity() == thickness.GetQuantity());
+    REQUIRE(radius != thickness);
+    REQUIRE_FALSE(b.Contains(radius));
+    REQUIRE_FALSE(a.Contains(thickness));
+    // A foreign id never reads another parameter's name or scale.
+    REQUIRE(b.GetName(radius).empty());
+    REQUIRE(b.GetUnit(radius).empty());
+    REQUIRE(std::isnan(b.GetReference(radius)));
+    REQUIRE(a.GetName(radius) == "radius");
+    REQUIRE(b.GetReference(thickness) == 100.0);
+
+    // An index past a set's end is refused too.
+    const ParameterId angle = *b.Add("angle", ParameterQuantity::Angle);
+    REQUIRE(b.Contains(angle));
+    REQUIRE_FALSE(a.Contains(angle)); // index 1 is past a's end
+}
+
+TEST_CASE("a parameter set moves with its ids and is not copied", "[core][sensitivity]")
+{
+    STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<ParameterSet>);
+    STATIC_REQUIRE_FALSE(std::is_copy_assignable_v<ParameterSet>);
+    STATIC_REQUIRE(std::is_nothrow_move_constructible_v<ParameterSet>);
+    STATIC_REQUIRE(std::is_nothrow_move_assignable_v<ParameterSet>);
+
+    ParameterSet original;
+    const ParameterId radius = *original.Add("radius", ParameterQuantity::Length, 10.0);
+    ParameterSet moved(std::move(original));
+    REQUIRE(moved.Contains(radius));
+    REQUIRE(moved.GetReference(radius) == 10.0);
+    // The moved-from set is empty, with an identity of its own: its new
+    // first parameter is not the moved one.
+    REQUIRE(original.GetSize() == 0); // NOLINT(bugprone-use-after-move)
+    REQUIRE_FALSE(original.Contains(radius));
+    const ParameterId again = *original.Add("radius", ParameterQuantity::Length, 10.0);
+    REQUIRE(again != radius);
+    REQUIRE_FALSE(moved.Contains(again));
+
+    ParameterSet assigned;
+    assigned = std::move(moved);
+    REQUIRE(assigned.Contains(radius));
+    REQUIRE_FALSE(moved.Contains(radius)); // NOLINT(bugprone-use-after-move)
+
+    // A context keeps the ids of the set it was given.
+    const SensitivityContext context(std::move(assigned));
+    REQUIRE(context.GetParameters().Contains(radius));
 }
 
 TEST_CASE("only Valid and NearEvent carry a derivative", "[core][sensitivity]")

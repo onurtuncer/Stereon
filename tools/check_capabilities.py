@@ -14,7 +14,7 @@ correspondence and validity assumptions (enforced by a registration check in
 tests)". This is that check.
 
 It reads the public interface of the geometry and topology libraries
-(src/curve, src/surface, src/intersect, src/topo): every function declared
+(src/curve, src/surface, src/intersect, src/topo, src/build): every function declared
 at namespace scope in an `export namespace Stereon { ... }` block of a module
 interface unit. Each function name must be either
 
@@ -45,7 +45,7 @@ import re
 import sys
 from pathlib import Path
 
-LIBRARIES = ("curve", "surface", "intersect", "topo")
+LIBRARIES = ("curve", "surface", "intersect", "topo", "build")
 
 _EVALUATOR = "an evaluator of existing geometry: it makes nothing, and its derivative is the geometry's own"
 _QUERY = "a query of existing geometry or of its representation"
@@ -98,7 +98,7 @@ NOT_OPERATIONS: dict[str, str] = {
     "RuleName": "the name of a validation rule",
     **dict.fromkeys(
         ("CurveCapabilities", "SurfaceCapabilities", "IntersectCapabilities", "TopoCapabilities",
-         "KernelCapabilities"),
+         "KernelCapabilities", "BuildCapabilities"),
         _CATALOGUE,
     ),
 }

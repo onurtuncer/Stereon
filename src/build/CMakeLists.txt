@@ -8,5 +8,9 @@
 stereon_add_library(build
     MODULES
         Build.cppm
+        Capabilities.cppm
+        Primitives.cppm
+    SOURCES
+        Primitives.cpp
     DEPENDS
         topo)
