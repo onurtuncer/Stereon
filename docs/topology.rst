@@ -198,6 +198,48 @@ refuses it.
    *b.RemoveFace(b.Handle(face));
    Result<Shape> edited = Freeze(std::move(b));   // shares every untouched page
 
+Euler operators
+---------------
+
+The controlled edits of ADR-0027 are the classical Euler operators,
+written for this store: radial rings with any number of uses, explicit
+primary coedges, and pcurves on the edge's shared parameter. Each checks
+all of its preconditions before it writes anything, so a refusal
+(``InvalidInput``) leaves the builder as it was. Each has an inverse that
+restores the connectivity up to the entities that survive: removed slots
+are tombstones, so what an inverse brings back has new handles.
+
+- ``MakeVertexFaceShell`` (MVFS) makes an isolated vertex, and a face with
+  one empty loop in a new shell. ``KillVertexFaceShell`` (KVFS) removes
+  them again.
+- ``MakeEdgeVertex`` (MEV) grows a new vertex and an edge to it from the
+  vertex where a coedge ends, as a strut of that coedge's loop: the edge's
+  use along it and its use against it follow the coedge. On an empty loop
+  it grows from the loop's isolated vertex. ``KillEdgeVertex`` (KEV)
+  removes a strut and its far vertex.
+- ``MakeEdgeFace`` (MEF) joins the vertices where two coedges of one loop
+  end, splitting the loop: a new face on the same surface and in the same
+  shell takes one side. ``KillEdgeFace`` (KEF) removes an edge between two
+  such faces and one of the faces, joining its loop into the other.
+
+The pairs that remain, KEMR/MEKR, KFMRH/MFKRH and SEMV/JEKV, follow, with
+``MergeVertices``.
+
+.. code-block:: cpp
+
+   ShapeBuilder b;
+   auto [v0, face, loop, shell] = *b.MakeVertexFaceShell(origin, 0.0, plane);
+   auto e1 = *b.MakeEdgeVertex(loop, v0, p1, 0.0, edge);    // v0 -> v1
+   auto e2 = *b.MakeEdgeVertex(e1.Out, p2, 0.0, edge);      // v1 -> v2
+   auto e3 = *b.MakeEdgeFace(e2.Out, e1.Back, edge);        // v2 -> v0: two faces
+
+``Transaction(edit)`` runs a compound edit on a candidate copy of the
+builder, which shares every page with it until it writes to one. The copy
+replaces the builder only if the edit succeeds; on failure it is discarded,
+and the builder is exactly as it was. Handles are valid in both. In
+checked builds every operator also checks the loops, radial rings and
+vertex lists it touched, a contract, while ``Freeze`` and ``Commit`` run
+the independent validator in every build.
 Freeze and certification
 ------------------------
 
@@ -465,7 +507,7 @@ contract violation in checked builds.
 
 .. todo::
 
-   Document the Euler operators as they land (ADR-0027).
+   Document KEMR/MEKR, KFMRH/MFKRH, SEMV/JEKV and MergeVertices as they land (ADR-0027).
 
 Related design decisions
 ------------------------

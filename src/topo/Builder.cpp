@@ -870,6 +870,60 @@ void ShapeBuilder::UnlinkChild(const std::uint32_t child, Id<P> Detail::Record<C
     });
 }
 
+// The member templates the Euler operators (Euler.cpp) use, instantiated
+// here where they are defined.
+template Result<void> ShapeBuilder::Require<EntityKind::Vertex>(BuilderVertexId, const char*) const;
+template Result<void> ShapeBuilder::Require<EntityKind::Edge>(BuilderEdgeId, const char*) const;
+template Result<void> ShapeBuilder::Require<EntityKind::Coedge>(BuilderCoedgeId, const char*) const;
+template Result<void> ShapeBuilder::Require<EntityKind::Loop>(BuilderLoopId, const char*) const;
+template Result<void> ShapeBuilder::Require<EntityKind::Face>(BuilderFaceId, const char*) const;
+template Result<void> ShapeBuilder::Require<EntityKind::Solid>(BuilderSolidId, const char*) const;
+template BuilderCoedgeId
+    ShapeBuilder::Allocate<EntityKind::Coedge>(Detail::Record<EntityKind::Coedge>);
+template void ShapeBuilder::Release<EntityKind::Vertex>(std::uint32_t);
+template void ShapeBuilder::Release<EntityKind::Edge>(std::uint32_t);
+template void ShapeBuilder::Release<EntityKind::Coedge>(std::uint32_t);
+template void ShapeBuilder::Release<EntityKind::Face>(std::uint32_t);
+template void ShapeBuilder::Release<EntityKind::Shell>(std::uint32_t);
+template void ShapeBuilder::UnlinkChild<EntityKind::Shell, EntityKind::Face>(
+    std::uint32_t, Id<EntityKind::Shell> Detail::Record<EntityKind::Face>::*,
+    Id<EntityKind::Face> Detail::Record<EntityKind::Face>::*,
+    Id<EntityKind::Face> Detail::Record<EntityKind::Shell>::*,
+    Id<EntityKind::Face> Detail::Record<EntityKind::Shell>::*);
+template void ShapeBuilder::UnlinkChild<EntityKind::Solid, EntityKind::Shell>(
+    std::uint32_t, Id<EntityKind::Solid> Detail::Record<EntityKind::Shell>::*,
+    Id<EntityKind::Shell> Detail::Record<EntityKind::Shell>::*,
+    Id<EntityKind::Shell> Detail::Record<EntityKind::Solid>::*,
+    Id<EntityKind::Shell> Detail::Record<EntityKind::Solid>::*);
+
+ShapeBuilder::ShapeBuilder(const ShapeBuilder& other, CandidateKey)
+    : m_Tables(other.m_Tables)
+    , m_Token(other.m_Token)
+    , m_Epoch(other.m_Epoch)
+    , m_SourceStore(other.m_SourceStore)
+    , m_Source(other.m_Source)
+    , m_ToleranceChanges(other.m_ToleranceChanges)
+{}
+
+std::vector<BuilderCoedgeId> ShapeBuilder::CoedgesOf(const BuilderLoopId loop) const
+{
+    std::vector<BuilderCoedgeId> coedges;
+    if (!IsLive(loop)) {
+        return coedges;
+    }
+    const std::uint32_t anchor = m_Tables.Loops[loop.GetIndex()].Anchor.GetIndex();
+    for (std::uint32_t c = anchor;
+         c != CoedgeId::Invalid && coedges.size() < m_Tables.Coedges.GetSize();) {
+        coedges.push_back(
+            BuilderCoedgeId::Make(c, m_Tables.Coedges[c].Slot.GetGeneration(), m_Token.GetValue()));
+        c = m_Tables.Coedges[c].Next.GetIndex();
+        if (c == anchor) {
+            break;
+        }
+    }
+    return coedges;
+}
+
 ValidityReport ShapeBuilder::Validate() const
 {
     return Detail::ValidateStructure(m_Tables);
