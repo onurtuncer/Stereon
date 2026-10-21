@@ -1,0 +1,3 @@
+# Compiler bug testcases are kept exactly as reported upstream.
+DisableFormat: true
+SortIncludes: Never
