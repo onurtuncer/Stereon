@@ -96,8 +96,28 @@ The configurations:
   internal tangent ruling (``SameSide``), a proved separation apart or
   nested, or an overlap, exact or declared: the surfaces' Hausdorff
   distance, the axes' distance plus the radii's difference, within the
-  pair tolerance. Skew and intersecting axes, the quartic, report
-  ``NotImplemented`` until their handler (M3b).
+  pair tolerance.
+- **Cylinder–cylinder, skew or intersecting axes:** the quartic. On
+  cylinder A at angle u the other cylinder's equation is a quadratic in the
+  height, whose discriminant D(u) is a degree-2 trigonometric polynomial, a
+  quartic in tan(u/2). The axes' distance against the radii, degree-10
+  polynomials in the frames through ``DynamicExpansion``, decides exactly
+  between a proved separation, one contact point (the distance equals the
+  radii's sum: an ``IntersectionPoint`` with its gap certified), the
+  singular curve (the distance equals the radii's difference, the surfaces
+  tangent along the curve: ``NotSupported`` for now) and transverse
+  curves. With multiple roots thereby excluded, a ``SturmSequence`` counts
+  the branch points and bisection with exact signs finds them. Each loop
+  of the curve, over a branch interval or over A's whole turn on one of
+  the branches v±, is parametrised smoothly (u = m − h cos s, so the fold
+  points are regular) and sampled; its pcurves on both cylinders and a
+  cached 3D ``BSplineCurve`` on the shared parameter s in [0, 2π] are
+  periodic interpolants, or open ones where the loop winds around a
+  cylinder's seam, with the samples doubled until both pcurves are
+  certified within the resolution. Loops are ordered by their first
+  branch point in [0, 2π); a loop that straddles A's seam runs past 2π. A
+  loop that leaves the size box (nearly parallel axes, RS-0001 Tier B) is
+  ``NotSupported``.
 
 A branch's ``Range`` is clipped to the requested domains with outward
 rounding on the nominal curve: exactly for lines and for the angular

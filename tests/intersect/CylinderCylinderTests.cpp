@@ -185,15 +185,21 @@ TEST_CASE("cylinders apart or nested are proved separate", "[intersect][cylinder
     REQUIRE(Intersect(two, AboutZ(Point3{5.0005, 0.0, 0.0}, 3.0), ctx)->IsEmpty());
 }
 
-TEST_CASE("cylinders with skew axes are not implemented yet", "[intersect][cylinder]")
+TEST_CASE("cylinders with skew axes are handed to the skew handler", "[intersect][cylinder]")
 {
+    // Equal radii with meeting axes: the singular curve, decided exactly and
+    // reported as not supported yet (SkewCylinderTests covers the rest).
     const Surface aboutX{
         Cylinder{Point3{5.0, 0.0, 0.0}, 3.0, Vec3{0.0, 1.0, 0.0}, Vec3{0.0, 0.0, 1.0}, true}};
-    const auto result = Intersect(a, aboutX, ctx);
-    REQUIRE_FALSE(result.has_value());
-    REQUIRE(result.error().GetCode() == ErrorCode::NotImplemented);
+    const auto singular = Intersect(a, aboutX, ctx);
+    REQUIRE_FALSE(singular.has_value());
+    REQUIRE(singular.error().GetCode() == ErrorCode::NotSupported);
     // Nearly parallel is skew too: the decision is exact (RS-0001).
     const Surface nearly{
-        IntersectTest::CylinderAbout(Point3{5.0, 0.0, 0.0}, Vec3{1e-9, 0.0, 1.0}, 3.0)};
-    REQUIRE(Intersect(a, nearly, ctx).error().GetCode() == ErrorCode::NotImplemented);
+        IntersectTest::CylinderAbout(Point3{5.0, 0.5, 0.0}, Vec3{1e-9, 0.0, 1.0}, 2.0)};
+    REQUIRE(Intersect(a, nearly, ctx).error().GetCode() == ErrorCode::NotSupported);
+    // A plain skew pair: curves.
+    const Surface skew{
+        Cylinder{Point3{0.0, 4.0, 0.0}, 2.0, Vec3{0.0, 1.0, 0.0}, Vec3{0.0, 0.0, 1.0}, true}};
+    REQUIRE(Intersect(a, skew, ctx)->Branches.size() == 1);
 }

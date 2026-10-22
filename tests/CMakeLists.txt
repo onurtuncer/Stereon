@@ -174,6 +174,7 @@ if(STEREON_WITH_OCCT)
     endif()
     add_executable(stereon_occt_tests occt/GeometryDifferentialTests.cpp
                                       occt/IntersectionDifferentialTests.cpp
+                                      occt/SkewCylinderDifferentialTests.cpp
                                       occt/OcctRobustnessTests.cpp occt/RobustnessHunt.cpp)
     target_link_libraries(stereon_occt_tests
         PRIVATE stereon::intersect stereon_options Catch2::Catch2WithMain

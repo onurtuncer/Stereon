@@ -1,0 +1,72 @@
+{
+  "format": "stereon-corpus-case/1",
+  "id": "analytic-ssi/cylinder-cylinder/skew-through-two-loops",
+  "kind": "reference",
+  "summary": "A smaller cylinder through a larger one with meeting axes: two loops.",
+  "added": "2026-10-22",
+  "source": "Authored for the Boolean prototype's M3b (ADR-0010)",
+  "licence": "MPL-2.0",
+  "references": [
+    "ADR-0010",
+    "RS-0001"
+  ],
+  "tags": [
+    "skew",
+    "two-loops"
+  ],
+  "inputs": {
+    "surfaces": [
+      {
+        "name": "A",
+        "type": "cylinder",
+        "point": [
+          0,
+          0,
+          0
+        ],
+        "axis": [
+          0,
+          0,
+          1
+        ],
+        "radius": 3,
+        "tolerance": 0.001
+      },
+      {
+        "name": "B",
+        "type": "cylinder",
+        "point": [
+          0,
+          0,
+          0
+        ],
+        "axis": [
+          1,
+          0,
+          0
+        ],
+        "radius": 2,
+        "tolerance": 0.001
+      }
+    ]
+  },
+  "operation": {
+    "name": "intersect",
+    "operands": [
+      "A",
+      "B"
+    ]
+  },
+  "expected": {
+    "nominal": {
+      "tier": "B",
+      "configuration": "quartic",
+      "branches": 2
+    },
+    "tolerant": {
+      "status": "proposed",
+      "configuration": "quartic",
+      "snapped": false
+    }
+  }
+}
