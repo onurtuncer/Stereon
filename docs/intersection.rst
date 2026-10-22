@@ -41,9 +41,8 @@ coexist:
 
 An ``OverlapRegion`` describes where the surfaces coincide: its domain on
 each surface, the ``ParameterMap`` from one surface's parameters to the
-other's, whether the normals agree, and its boundary branches. Results
-carry overlaps from the first handler that finds one; GCC 16.2 cannot yet
-hold them in the result type inside the module (a compiler bug).
+other's (applied by ``Mapped``), whether the normals agree, and its
+boundary branches as indices into the result's branches.
 
 Contact and side transition are separate facts. A transverse crossing implies
 ``OppositeSide``, while a tangency alone implies neither side relation. For
@@ -56,9 +55,59 @@ tolerance: declared, with its distance, and with no surface moved. Coincident
 supports do not make overlapping faces, because the faces' trims decide that.
 
 Exact analytic geometry stays exact: a plane–plane branch is a ``Line``, not
-a B-spline. The analytic handlers (plane–plane, plane–cylinder,
-cylinder–cylinder) are the Boolean prototype's next milestone. Until they
-land, every pair reports ``NotImplemented``.
+a B-spline.
+
+Analytic handlers
+-----------------
+
+Plane–plane, plane–cylinder and cylinder–cylinder with parallel axes have
+closed-form handlers (ADR-0010's analytic table, RS-0001 Tier A). Every
+configuration decision is the sign of a polynomial in the input doubles
+and the pair tolerance, estimated in interval arithmetic and settled by
+expansion arithmetic from ``Stereon.Robust`` when the estimate straddles
+zero (RS-0001 G5): whether two normals or axes are exactly parallel, a
+height against a radius, the distance between parallel axes against the
+sum and difference of the radii. Nothing depends on round-off, evaluation
+order or thread count.
+
+.. code-block:: cpp
+
+   // With the pair's tolerance, the larger of the two faces' (ADR-0001).
+   const auto result = Stereon::Intersect(plane, boxA, cylinder, boxB, tolerance, ctx);
+
+The configurations:
+
+- **Plane–plane:** a ``Line`` parametrised by arc length, with a ``Line2d``
+  on each plane on the same parameter; exactly parallel planes are a proved
+  separation beyond the pair tolerance and an overlap within it, ``Exact``
+  when the height is exactly zero and ``Tolerant`` otherwise, with the map
+  between the frames.
+- **Plane–cylinder:** every branch is parametrised by the cylinder's angle.
+  A plane across the axis cuts a ``Circle`` (a ``Line2d`` on the cylinder,
+  a ``Circle2d`` on the plane); a plane along the axis cuts two rulings, one
+  tangent ruling (``Tangential``, proved ``SameSide``) or nothing, decided by
+  the axis's height over the plane against the radius; any other plane cuts
+  an ``Ellipse``, exact as an ``Ellipse2d`` on the plane. Its pcurve on the
+  cylinder is the sinusoid :math:`(u, v_c + B \cos t)`, which no exact 2D
+  type represents: it is a clamped cubic B-spline through samples dense
+  enough for the interpolation error bound to stay within half the
+  resolution. Certification of that bound is the next milestone (M4).
+- **Cylinder–cylinder, parallel axes:** two rulings, an external or
+  internal tangent ruling (``SameSide``), a proved separation apart or
+  nested, or an overlap, exact or declared: the surfaces' Hausdorff
+  distance, the axes' distance plus the radii's difference, within the
+  pair tolerance. Skew and intersecting axes, the quartic, report
+  ``NotImplemented`` until their handler (M3b).
+
+A branch's ``Range`` is clipped to the requested domains with outward
+rounding on the nominal curve: exactly for lines and for the angular
+parameter of a cylinder's circles and ellipses, and otherwise only where
+the branch's parameter box leaves the domain entirely. A face-level
+operation restricts a branch to its loops itself; a box should include the
+face's tolerance for the clip to keep every point within it. A declared
+coincidence is logged at ``Info`` with its distance and the tolerance.
+
+Every other pair reports ``NotImplemented`` until Phase 2.
 
 .. todo::
 

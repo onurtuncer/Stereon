@@ -45,7 +45,7 @@ Every surface has a `tolerance` of at least the resolution, 1e-5 mm (ADR-0001). 
 
 The seed cases assume these provisional rules until RS-0001 settles them:
 
-1. A pair's tolerance is the larger of the two (ADR-0001; open question O1). Cases where this choice changes the answer are marked `open`.
+1. A pair's tolerance is the larger of the two (ADR-0001). This answers RS-0001's O1, decided for the Boolean prototype on 2026-10-20 (decision D2 of `docs/planning/boolean-prototype-plan.md`); `plane-plane/unequal-tolerances` is the case where the choice changes the answer.
 2. In a snap, the surface with the higher operand index moves, by the smallest admissible displacement. A plane moves along its normal. A sphere or cylinder moves its centre or axis before changing its radius.
 3. Pairs are decided in operand order (`A-B`, `A-C`, `B-C`, …), and a snap is accepted only if every surface's total displacement stays within its tolerance (G4).
 

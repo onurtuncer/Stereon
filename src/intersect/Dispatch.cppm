@@ -8,6 +8,7 @@
 module;
 
 #include <array>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -98,24 +99,29 @@ struct IntersectionBranch {
 };
 
 /// An affine map of the parameter plane, uv' = Offset + u U + v V: how a
-/// point of an overlap on surface A corresponds to its point on B.
+/// point of an overlap on surface A corresponds to its point on B. On a
+/// periodic surface the image is taken modulo the period. Value-initialised
+/// it is the zero map, not the identity: default member initialisers of
+/// core's vector template here make GCC 16.2 write a module file its
+/// importers cannot read once a std::vector holds the struct
+/// (docs/toolchain/gcc16-feature-probe.md, "Bad file data").
 struct ParameterMap {
-    Vec2 U{1.0, 0.0};
-    Vec2 V{0.0, 1.0};
-    Vec2 Offset{0.0, 0.0};
-
-    [[nodiscard]] Point2 operator()(const Point2& uv) const noexcept
-    {
-        return Point2{Offset.X + uv.X * U.X + uv.Y * V.X, Offset.Y + uv.X * U.Y + uv.Y * V.Y};
-    }
+    Vec2 U;
+    Vec2 V;
+    Vec2 Offset;
 };
+
+/// The image of uv under map. A free function defined in Dispatch.cpp
+/// rather than a member: an importer of the module could not load the
+/// member function's out-of-line declaration (the same compiler bug).
+[[nodiscard]] Point2 Mapped(const ParameterMap& map, const Point2& uv) noexcept;
 
 /// A region where the surfaces coincide (ADR-0029 section 1): its domain on
 /// each surface, the correspondence of their parameters, whether their
 /// normals agree, how the coincidence was established, and its boundary
 /// branches inside the requested domains (none when the overlap fills
-/// them). Coincident supports do not make overlapping faces: the faces'
-/// trims decide that.
+/// them), as indices into the result's Branches. Coincident supports do
+/// not make overlapping faces: the faces' trims decide that.
 struct OverlapRegion {
     Box2 OnA;
     Box2 OnB;
@@ -126,21 +132,21 @@ struct OverlapRegion {
     double Distance = 0.0;
     /// True when the overlap fills both requested domains.
     bool FullDomain = false;
-    std::vector<IntersectionBranch> Boundary;
+    std::vector<std::size_t> Boundary;
 };
 
 /// A complete intersection of two surfaces over the requested domains.
 struct SurfaceSurfaceIntersection {
     std::vector<IntersectionPoint> Points;
     std::vector<IntersectionBranch> Branches;
-    // Overlaps (std::vector<OverlapRegion>) join with the first handler that
-    // finds one (M3). As a member here, GCC 16.2 writes a Stereon.Intersect
-    // module its importers cannot read ("failed to read compiled module
-    // cluster: Bad file data"). Holding them is the next step.
+    std::vector<OverlapRegion> Overlaps;
 
     /// True when the surfaces are proved separate over the requested
     /// domains: a successful result with no component.
-    [[nodiscard]] bool IsEmpty() const noexcept { return Points.empty() && Branches.empty(); }
+    [[nodiscard]] bool IsEmpty() const noexcept
+    {
+        return Points.empty() && Branches.empty() && Overlaps.empty();
+    }
 };
 
 /// A point where two curves meet: its parameter on each and its position.
@@ -171,26 +177,42 @@ struct CurveCurveIntersection {
 /// The type-pair dispatch of ADR-0003 for binary operations: one handler per
 /// ordered pair of built-in types, in a table generated at compile time from
 /// BuiltinCurveTypes and BuiltinSurfaceTypes. A pair with a closed-form
-/// method gets an analytic handler (ADR-0010); every pair has a stub until
-/// then, which reports NotImplemented naming both types. Types that are not
-/// built in report NotSupported: the generic subdivision path needs tier 2
-/// and 3 capabilities that no user type can declare yet.
+/// method gets an analytic handler (ADR-0010): plane–plane, plane–cylinder
+/// and cylinder–cylinder so far (the Boolean prototype's M3). Every other
+/// pair has a stub, which reports NotImplemented naming both types. Types
+/// that are not built in report NotSupported: the generic subdivision path
+/// needs tier 2 and 3 capabilities that no user type can declare yet.
 ///
 /// The table is constant data, not a registry: nothing is added at run time,
 /// so there is no global mutable state (ADR-0007).
 ///
-/// Tier C (ADR-0015): this is scaffolding for line-by-line review. It
-/// contains no intersection algorithm.
+/// Tier C (ADR-0015): the table is scaffolding for line-by-line review; the
+/// analytic handlers are in the implementation units named below.
 
 export namespace Stereon::Detail {
 
 /// A handler: the two geometries, each with the parameter domain the
-/// intersection is requested over (ADR-0029 section 1).
+/// intersection is requested over (ADR-0029 section 1), and for surfaces
+/// the pair tolerance within which exactly parallel supports count as
+/// coincident (ADR-0029 section 6).
 using CurveHandler = Result<CurveCurveIntersection> (*)(const Curve&, const Interval&, const Curve&,
                                                         const Interval&, const Context&);
 using SurfaceHandler = Result<SurfaceSurfaceIntersection> (*)(const Surface&, const Box2&,
-                                                              const Surface&, const Box2&,
+                                                              const Surface&, const Box2&, double,
                                                               const Context&);
+
+/// The analytic handlers (ADR-0010's table, RS-0001 Tier A): every
+/// configuration decision is the sign of a polynomial in the input doubles
+/// and the tolerance, settled by Stereon.Robust (RS-0001 G5). Defined in
+/// PlanePlane.cpp, PlaneCylinder.cpp and CylinderCylinder.cpp.
+Result<SurfaceSurfaceIntersection> PlanePlane(const Surface&, const Box2&, const Surface&,
+                                              const Box2&, double, const Context&);
+Result<SurfaceSurfaceIntersection> PlaneCylinder(const Surface&, const Box2&, const Surface&,
+                                                 const Box2&, double, const Context&);
+Result<SurfaceSurfaceIntersection> CylinderPlane(const Surface&, const Box2&, const Surface&,
+                                                 const Box2&, double, const Context&);
+Result<SurfaceSurfaceIntersection> CylinderCylinder(const Surface&, const Box2&, const Surface&,
+                                                    const Box2&, double, const Context&);
 
 template <typename A, typename B>
 Result<CurveCurveIntersection> CurveStub(const Curve&, const Interval&, const Curve&,
@@ -208,7 +230,7 @@ Result<CurveCurveIntersection> CurveStub(const Curve&, const Interval&, const Cu
 
 template <typename A, typename B>
 Result<SurfaceSurfaceIntersection> SurfaceStub(const Surface&, const Box2&, const Surface&,
-                                               const Box2&, const Context&)
+                                               const Box2&, double, const Context&)
 {
     // The names are read at compile time.
     constexpr std::string_view nameA = GeometryTypeName<A>;
@@ -236,21 +258,41 @@ consteval auto MakePairTable(TypeList<Ts...> types)
         MakePairRow<Handler, Stub, Ts>(types)...};
 }
 
-/// Class templates wrapping the stubs, so MakePairTable can take them as a
-/// template template parameter.
+/// The handler of the ordered surface pair (A, B): an analytic one where
+/// ADR-0010's table has it, the stub otherwise. A chain of if constexpr
+/// rather than specialisations: GCC 16.2 and MSVC mishandle explicit
+/// specialisations in module interfaces (docs/toolchain/gcc16-feature-probe.md).
+template <typename A, typename B>
+consteval SurfaceHandler SurfaceHandlerFor()
+{
+    if constexpr (std::same_as<A, Plane> && std::same_as<B, Plane>) {
+        return &PlanePlane;
+    } else if constexpr (std::same_as<A, Plane> && std::same_as<B, Cylinder>) {
+        return &PlaneCylinder;
+    } else if constexpr (std::same_as<A, Cylinder> && std::same_as<B, Plane>) {
+        return &CylinderPlane;
+    } else if constexpr (std::same_as<A, Cylinder> && std::same_as<B, Cylinder>) {
+        return &CylinderCylinder;
+    } else {
+        return &SurfaceStub<A, B>;
+    }
+}
+
+/// Class templates wrapping the handlers, so MakePairTable can take them as
+/// a template template parameter.
 template <typename A, typename B>
 struct CurveStubOf {
     static constexpr CurveHandler Call = &CurveStub<A, B>;
 };
 template <typename A, typename B>
-struct SurfaceStubOf {
-    static constexpr SurfaceHandler Call = &SurfaceStub<A, B>;
+struct SurfaceHandlerOf {
+    static constexpr SurfaceHandler Call = SurfaceHandlerFor<A, B>();
 };
 
 inline constexpr auto CurvePairTable =
     MakePairTable<CurveHandler, CurveStubOf>(BuiltinCurveTypes{});
 inline constexpr auto SurfacePairTable =
-    MakePairTable<SurfaceHandler, SurfaceStubOf>(BuiltinSurfaceTypes{});
+    MakePairTable<SurfaceHandler, SurfaceHandlerOf>(BuiltinSurfaceTypes{});
 
 } // namespace Stereon::Detail
 
@@ -271,12 +313,30 @@ export namespace Stereon {
 
 /// The intersection of two surfaces over the requested parameter domains
 /// (ADR-0029); see Intersect(Curve, Interval, Curve, Interval). A face's
-/// boxes bound what a face-level operation asks for.
+/// boxes bound what a face-level operation asks for, and `tolerance` is the
+/// pair's: the larger of the two faces' (ADR-0001). Exactly parallel
+/// supports within it are declared coincident, with nothing moved
+/// (ADR-0029 section 6); every other decision is made on the input doubles
+/// as they are. InvalidInput unless the tolerance is finite and not
+/// negative.
+///
+/// A branch's range is clipped to the requested domains with outward
+/// rounding on the nominal curve: exactly for lines and for the angular
+/// parameter of a cylinder's circles and ellipses, and otherwise only where
+/// the branch's parameter box leaves the domain entirely. A face-level
+/// operation restricts a branch to its loops itself. A box should include
+/// the face's tolerance for the clip to keep every point within it.
+[[nodiscard]] Result<SurfaceSurfaceIntersection> Intersect(const Surface& a, const Box2& domainA,
+                                                           const Surface& b, const Box2& domainB,
+                                                           double tolerance, const Context& ctx);
+
+/// With the Context's resolution as the pair tolerance: the smallest any
+/// entity has (ADR-0001).
 [[nodiscard]] Result<SurfaceSurfaceIntersection> Intersect(const Surface& a, const Box2& domainA,
                                                            const Surface& b, const Box2& domainB,
                                                            const Context& ctx);
 
-/// Over the surfaces' whole domains.
+/// Over the surfaces' whole domains, at the Context's resolution.
 [[nodiscard]] Result<SurfaceSurfaceIntersection> Intersect(const Surface& a, const Surface& b,
                                                            const Context& ctx);
 

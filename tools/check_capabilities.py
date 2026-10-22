@@ -62,7 +62,7 @@ NOT_OPERATIONS: dict[str, str] = {
         (
             "Eval", "Deriv", "Derivatives", "TotalDerivatives", "Curvature", "UnitTangent",
             "FundamentalForms", "GaussianCurvature", "MeanCurvature", "PrincipalCurvatures",
-            "UnitNormal", "ImplicitResidual", "RadialTurned",
+            "UnitNormal", "ImplicitResidual", "RadialTurned", "Mapped",
         ),
         _EVALUATOR,
     ),

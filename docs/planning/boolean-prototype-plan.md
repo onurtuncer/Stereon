@@ -2,7 +2,7 @@
 
 **Owner:** Onur Tuncer
 **Opened:** 2026-10-20
-**Status:** decided 2026-10-20 (section 4); the work starts with M0, the review of the ADRs it builds on.
+**Status:** decided 2026-10-20 (section 4). M0, M1, M2 and the first half of M5 are merged; M3 landed on 2026-10-22 (the three analytic handlers, run on the corpus and against OCCT); next are M3b and M4.
 
 The Phase 0 exit gate has one open line: ADR-0007 accepted, which waits for a Boolean prototype that can test its speed-up and cross-platform checks. ADR-0001 is accepted with its Boolean and merge tests as conditions of the same prototype. This plan sets out what the prototype is, what it must prove, and the order of the work.
 
@@ -40,7 +40,7 @@ Each milestone merges on its own, with tests. Estimates are working days.
 | M0 | ADR review | ADRs 0010 (SSI), 0013 (classification), 0027 (controlled operators), 0029 (outcomes) and 0030 (lineage) reviewed with the owner and accepted, each narrowed to the prototype's scope, before the milestones they govern. | 2 |
 | M1 | Primitives | `Stereon.Build`: `MakeBox` and `MakeCylinder` solids with `Exact` edges and exact pcurves, valid at the Geometric level; the test bodies' builders reused. | 2 |
 | M2 | Outcome types | `SurfaceSurfaceIntersection` grows into ADR-0029's outcome: kind, parameter domains on both surfaces, contact, side-transition evidence, a proved-empty flag, overlap correspondence, and the snaps applied. | 2 |
-| M3 | Analytic handlers | Plane–plane; plane–cylinder (disjoint, tangent line, two lines, circle, ellipse); parallel cylinder–cylinder (disjoint, tangent, two lines, coincident). Exact decisions, `Exact` curves and pcurves on one parameter. Runs on `corpus/analytic-ssi/` and against OCCT. | 6 |
+| M3 | Analytic handlers | Plane–plane; plane–cylinder (disjoint, tangent line, two lines, circle, ellipse); parallel cylinder–cylinder (disjoint, tangent, two lines, coincident). Exact decisions, `Exact` curves and pcurves on one parameter. Runs on `corpus/analytic-ssi/` and against OCCT. **Done 2026-10-22:** `src/intersect/{PlanePlane,PlaneCylinder,CylinderCylinder}.cpp`, decisions through `Exact.hpp` (interval filter, expansion fallback); the ellipse's cylinder pcurve is a clamped cubic B-spline within half the resolution, to be certified in M4; `tests/intersect/CorpusTests.cpp` and `tests/occt/IntersectionDifferentialTests.cpp`. Decision D2 answered RS-0001's O1, and `plane-plane/unequal-tolerances` is now a proposed coincidence. | 6 |
 | M3b | Cylinder–cylinder, skew and intersecting axes | The quartic as two branches v±(u) on one cylinder, branch points found exactly, pcurves on both cylinders as certified B-splines, `Intersection` edges with cached 3D curves; tangency decided exactly; corpus cases with OCCT agreement. | 9 |
 | M4 | Certificates | An interval bound of each branch's deviation from both surfaces, from the closed forms and core's outward-rounded `Interval`, stored as a `Certified` edge bound. | 3 |
 | M5 | Controlled operators | The classical Euler set under ADR-0027's contracts: MVFS/KVFS, MEV/KEV, MEF/KEF, KEMR/MEKR, KFMRH/MFKRH, SEMV/JEKV, with radial rings, pcurve restriction and certificates; `MergeVertices` (ADR-0001); transactions as discarded candidate copies; local checks in checked builds; inverse-pair property tests; history events. ADR-0005's splitting edits join its benchmark. | 10 |
