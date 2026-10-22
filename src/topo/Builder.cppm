@@ -529,6 +529,7 @@ private:
     [[nodiscard]] Result<void> CheckJoinUses(std::uint32_t lower, std::uint32_t upper) const;
     [[nodiscard]] Result<void> CheckMergeEndpoints(const std::vector<BuilderVertexId>& cluster,
                                                    const Point3& position, double tolerance) const;
+    void CheckVertexNeighbourhood(std::uint32_t vertex) const;
     void RecordEvent(EntityKind kind, TopologyEventKind event, std::uint32_t source,
                      std::uint32_t target);
 

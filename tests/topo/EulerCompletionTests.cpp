@@ -183,3 +183,60 @@ TEST_CASE("M5 merge checks attached endpoint traces and preserves incidence", "[
     REQUIRE(b.Count<EntityKind::Vertex>() == 2);
     REQUIRE(b.Validate().IsValid());
 }
+
+TEST_CASE("M5 restricted edge caches and primary sides survive splitting",
+          "[topo][euler][m5][cache]")
+{
+    auto body = TopoTest::MakeHinge();
+    Must(body.Builder.CacheEdgeCurve(body.Edges[0]));
+    const auto original = std::move(body).Freeze();
+    const auto edge = original.Resolve(body.Edges[0]);
+    const double bound = CacheBoundOf(original, edge);
+    auto b = Must(ShapeBuilder::Open(original));
+    const auto lower = b.Handle(edge);
+    const auto split = Must(b.SplitEdgeMakeVertex(lower, 0.375, {0, 0.375, 0}, TopoTest::Tight));
+    const auto divided = Must(Freeze(std::move(b)));
+    const auto low = divided.Resolve(lower);
+    const auto high = divided.Resolve(split.Upper);
+    REQUIRE(CacheBoundOf(divided, low) == bound);
+    REQUIRE(CacheBoundOf(divided, high) == bound);
+    REQUIRE(CacheCertificateOf(divided, high) == CacheCertificate::Certified);
+    REQUIRE(RangeOf(divided, low) == Interval(0, 0.375));
+    REQUIRE(RangeOf(divided, high) == Interval(0.375, 1));
+    REQUIRE(RangeOf(original, edge) == Interval(0, 1));
+    REQUIRE(ValidateTopology(original).IsValid());
+    auto join = Must(ShapeBuilder::Open(divided));
+    bool recached = false;
+    SECTION("a common certificate is retained") {}
+    SECTION("different cache representations are dropped")
+    {
+        Must(join.CacheEdgeCurve(join.Handle(high)));
+        recached = true;
+    }
+    const auto kept = join.Handle(low);
+    Must(join.JoinEdgeKillVertex(kept, join.Handle(high)));
+    const auto united = Must(Freeze(std::move(join)));
+    REQUIRE(RangeOf(united, united.Resolve(kept)) == Interval(0, 1));
+    REQUIRE(CacheCertificateOf(united, united.Resolve(kept)) ==
+            (recached ? CacheCertificate::None : CacheCertificate::Certified));
+}
+
+TEST_CASE("M5 join refuses a third edge at the join vertex", "[topo][euler][m5]")
+{
+    auto body = TopoTest::MakeWire(1);
+    auto& b = body.Builder;
+    const auto split =
+        Must(b.SplitEdgeMakeVertex(body.Edges[0], 0.5, {0.5, 0.5, 0}, TopoTest::Tight));
+    EdgeSpec branch;
+    branch.Kind = EdgeCurveKind::Spatial;
+    branch.Start = split.Vertex;
+    branch.End = Must(b.AddVertex({0.5, 0.5, 1}, TopoTest::Tight));
+    branch.Curve = Must(b.AddCurve(Curve(Line{{0.5, 0.5, 0}, {0, 0, 1}})));
+    branch.Range = Interval{0, 1};
+    branch.Tolerance = TopoTest::Tight;
+    Must(b.AddEdge(branch));
+    const auto epoch = b.GetEpoch();
+    REQUIRE_FALSE(b.JoinEdgeKillVertex(body.Edges[0], split.Upper));
+    REQUIRE(b.GetEpoch() == epoch);
+    REQUIRE(b.Validate().IsValid());
+}

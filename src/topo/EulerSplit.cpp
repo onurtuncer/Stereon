@@ -12,6 +12,7 @@ module;
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -358,6 +359,7 @@ Result<void> ShapeBuilder::MergeVertexCluster(const std::vector<BuilderVertexId>
         RecordEvent(EntityKind::Vertex, TopologyEventKind::Merged, vertex.GetIndex(),
                     kept.GetIndex());
     }
+    CheckVertexNeighbourhood(kept.GetIndex());
     return {};
 }
 
@@ -380,6 +382,24 @@ Result<void> ShapeBuilder::CheckMergeEndpoints(const std::vector<BuilderVertexId
         }
     }
     return {};
+}
+
+void ShapeBuilder::CheckVertexNeighbourhood(const std::uint32_t vertex) const
+{
+    if constexpr (STEREON_CHECKED_HANDLES) {
+        std::vector<std::uint32_t> edges;
+        std::vector<std::uint32_t> loops;
+        auto edge = m_Tables.Vertices[vertex].FirstEdge;
+        while (edge.IsValid()) {
+            edges.push_back(edge.GetIndex());
+            for (const auto use : UsesOf(edge.GetIndex())) {
+                loops.push_back(m_Tables.Coedges[use].Loop.GetIndex());
+            }
+            const auto& record = m_Tables.Edges[edge.GetIndex()];
+            edge = record.Start.GetIndex() == vertex ? record.NextAtStart : record.NextAtEnd;
+        }
+        CheckNeighbourhood(loops, edges);
+    }
 }
 
 } // namespace Stereon

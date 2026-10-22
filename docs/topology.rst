@@ -222,8 +222,8 @@ are tombstones, so what an inverse brings back has new handles.
   shell takes one side. ``KillEdgeFace`` (KEF) removes an edge between two
   such faces and one of the faces, joining its loop into the other.
 
-The pairs that remain, KEMR/MEKR, KFMRH/MFKRH and SEMV/JEKV, follow, with
-``MergeVertices``.
+The KEMR/MEKR, KFMRH/MFKRH and SEMV/JEKV pairs and ``MergeVertices``
+are described in `M5 ring, split and merge operators`_ below.
 
 .. code-block:: cpp
 
@@ -506,10 +506,6 @@ time, and corrupts loop links, rings, slots and the incidence index: each
 is refused through a ``Result`` naming the entity with ``Describe``, or by
 ``Freeze`` with the rule. The O(1) accessors report the same faults as a
 contract violation in checked builds.
-
-.. todo::
-
-   Document KEMR/MEKR, KFMRH/MFKRH, SEMV/JEKV and MergeVertices as they land (ADR-0027).
 
 Related design decisions
 ------------------------
