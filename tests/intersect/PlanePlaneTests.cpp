@@ -62,7 +62,7 @@ TEST_CASE("planes that are not parallel meet in a line on both pcurves", "[inter
     REQUIRE(line.Curve3d.Target<Stereon::Line>() != nullptr);
     REQUIRE(line.Contact == ContactType::Crossing);
     REQUIRE(line.Transition == SideTransition::OppositeSide);
-    REQUIRE_FALSE(line.IsCertified());
+    REQUIRE_FALSE(line.IsCertified()); // Unbounded: a face's loops bound it first.
     REQUIRE(line.Range == Interval::Everything());
     // Along the y axis, at unit speed, through the origin.
     const Stereon::Line& l = *line.Curve3d.Target<Stereon::Line>();
@@ -81,6 +81,10 @@ TEST_CASE("the line's range is clipped to the requested boxes", "[intersect][pla
     REQUIRE(result.has_value());
     REQUIRE(result->Branches.size() == 1);
     const Interval range = result->Branches.front().Range;
+    // Bounded, so certified within the resolution (ADR-0009 section 4).
+    REQUIRE(result->Branches.front().IsCertified());
+    REQUIRE(result->Branches.front().Bound <= ctx.GetResolution());
+    REQUIRE(result->Branches.front().Bound < 1e-12);
     const double sign = result->Branches.front().Curve3d.Target<Stereon::Line>()->Direction.Y;
     // Within y in [0, 2], either way along the line.
     // Outward-rounded, so within a few ulps.

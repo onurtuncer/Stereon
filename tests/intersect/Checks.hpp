@@ -71,6 +71,13 @@ inline const Stereon::Context ctx = Stereon::Context::Default();
     return worst;
 }
 
+/// The error's message when the result is one, for INFO before a REQUIRE.
+template <typename T>
+[[nodiscard]] std::string ErrorText(const Stereon::Result<T>& result)
+{
+    return result ? std::string() : std::string(result.error().GetMessage());
+}
+
 /// A context whose log lines are appended to `lines`.
 [[nodiscard]] inline Stereon::Context Logging(std::vector<std::string>& lines)
 {

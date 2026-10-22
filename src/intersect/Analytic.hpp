@@ -13,8 +13,8 @@
 // Included in the purview of the handlers' implementation units, after
 // `import :Dispatch;`, with <array>, <charconv>, <cmath>, <cstddef>,
 // <limits>, <string>, <string_view> and <utility> in their global module
-// fragment. Everything is in an anonymous namespace, so each unit gets its
-// own copy.
+// fragment, and <Stereon/Core/Try.hpp>. Everything is in an anonymous
+// namespace, so each unit gets its own copy.
 
 #pragma once
 
@@ -114,6 +114,36 @@ inline constexpr double Infinity = std::numeric_limits<double>::infinity();
     branch.Contact = ContactType::Tangential;
     branch.Transition = SideTransition::SameSide;
     return branch;
+}
+
+/// The branch certified against both surfaces (ADR-0009 section 4): its
+/// Bound is the larger of the two deviations, each proved within the
+/// Context's resolution over the whole range. A branch over an unbounded
+/// range stays uncertified: a face's loops bound it first (M6).
+[[nodiscard]] inline Result<void> Certify(IntersectionBranch& branch, const Surface& a,
+                                          const Surface& b, const Context& ctx)
+{
+    if (!branch.Range.IsBounded()) {
+        return {};
+    }
+    const double target = ctx.GetResolution();
+    STEREON_TRY(const DeviationCertificate onA,
+                CertifyDeviation(branch.Curve3d, a, branch.OnA, branch.Range, target));
+    STEREON_TRY(const DeviationCertificate onB,
+                CertifyDeviation(branch.Curve3d, b, branch.OnB, branch.Range, target));
+    branch.Bound = std::max(onA.Bound, onB.Bound);
+    return {};
+}
+
+/// Certify then keep: the branch joins the result, or the failure is the
+/// result's (ADR-0029: never a partial success).
+[[nodiscard]] inline Result<void> Keep(SurfaceSurfaceIntersection& result,
+                                       IntersectionBranch branch, const Surface& a,
+                                       const Surface& b, const Context& ctx)
+{
+    STEREON_TRY_VOID(Certify(branch, a, b, ctx));
+    result.Branches.push_back(std::move(branch));
+    return {};
 }
 
 /// The same result seen from the other side: A and B exchanged.

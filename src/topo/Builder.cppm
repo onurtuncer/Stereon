@@ -222,11 +222,13 @@ public:
     /// parameters spread evenly over the edge's range and interpolated by a
     /// cubic B-spline on the edge's own parameter, so the cache passes
     /// through the primary side at every sample. Deterministic: the same
-    /// pcurve and surface give the same cache. The cache's deviation is not
-    /// certified (CacheCertificate::Uncertified): certificates need interval
-    /// evaluation of S(c(t)), which the kernel does not have yet. Any later
-    /// change to a pcurve, the primary coedge or a surface of the edge drops
-    /// it. InvalidInput for an edge of another kind, one without a primary
+    /// pcurve and surface give the same cache. The cache's deviation from
+    /// S(c(t)) is then certified within the edge's tolerance by
+    /// CertifyDeviation (ADR-0009, section 4) where interval evaluation
+    /// covers the types, and the record holds the proven bound; otherwise
+    /// the cache is CacheCertificate::Uncertified. Any later change to a
+    /// pcurve, the primary coedge or a surface of the edge drops it.
+    /// InvalidInput for an edge of another kind, one without a primary
     /// coedge, or a range the pcurve or surface does not cover.
     [[nodiscard]] Result<CurveRef> CacheEdgeCurve(BuilderEdgeId edge);
 
@@ -391,6 +393,15 @@ private:
     friend Result<Shape> Freeze(ShapeBuilder&& builder);
     friend Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context);
     friend class Testing::TopologyFaults;
+
+    /// What CacheEdgeCurve proves about a cache (ADR-0009, section 4).
+    struct CacheBound {
+        CacheCertificate Status;
+        double Bound;
+    };
+    [[nodiscard]] static CacheBound CertifyCache(const Curve& cache, const Surface& surface,
+                                                 const Curve2d& pcurve, const Interval& range,
+                                                 double tolerance);
 
     /// A transaction's candidate: a copy with the same token, so that the
     /// handles of either are valid in the other, which only Transaction()
