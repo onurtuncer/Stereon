@@ -60,10 +60,8 @@ struct Sides {
     Vec3 Axis;
 };
 
-[[nodiscard]] Sides SidesOf(const Surface& plane, const Surface& cylinder)
+[[nodiscard]] Sides SidesOf(const Plane& p, const Cylinder& c)
 {
-    const Plane& p = *plane.Target<Plane>();
-    const Cylinder& c = *cylinder.Target<Cylinder>();
     return {p, Cross(p.XAxis, p.YAxis), c, Stereon::Axis(c)};
 }
 
@@ -215,7 +213,12 @@ Result<SurfaceSurfaceIntersection> PlaneCylinder(const Surface& a, const Box2& b
                                                  const Surface& b, const Box2& boxB,
                                                  const double /*tolerance*/, const Context& ctx)
 {
-    const Sides s = SidesOf(a, b);
+    const Plane* plane = a.Target<Plane>();
+    const Cylinder* cylinder = b.Target<Cylinder>();
+    if (plane == nullptr || cylinder == nullptr) {
+        return Fail(ErrorCode::InvalidInput, "PlaneCylinder: dispatched for other surface types");
+    }
+    const Sides s = SidesOf(*plane, *cylinder);
     const ExactVector<4> normal = ExactCross(Exactly(s.P.XAxis), Exactly(s.P.YAxis));
     const ExactVector<4> axis = ExactAxis(s.C);
     if (IsExactlyZero(ExactCross(normal, axis))) {

@@ -158,8 +158,14 @@ Result<SurfaceSurfaceIntersection> CylinderCylinder(const Surface& a, const Box2
                                                     const Surface& b, const Box2& boxB,
                                                     const double tolerance, const Context& ctx)
 {
-    const Frame fa = FrameOf(*a.Target<Cylinder>());
-    const Frame fb = FrameOf(*b.Target<Cylinder>());
+    const Cylinder* ca = a.Target<Cylinder>();
+    const Cylinder* cb = b.Target<Cylinder>();
+    if (ca == nullptr || cb == nullptr) {
+        return Fail(ErrorCode::InvalidInput,
+                    "CylinderCylinder: dispatched for other surface types");
+    }
+    const Frame fa = FrameOf(*ca);
+    const Frame fb = FrameOf(*cb);
     if (!IsExactlyZero(ExactCross(fa.ExactAxis, fb.ExactAxis))) {
         return Fail(ErrorCode::NotImplemented,
                     "Cylinder x Cylinder with skew or intersecting axes is not implemented yet "
