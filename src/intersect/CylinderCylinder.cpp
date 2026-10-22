@@ -119,6 +119,23 @@ void AddRuling(SurfaceSurfaceIntersection& result, const Frame& a, const Frame& 
     return result;
 }
 
+/// Whether the surfaces are within the pair tolerance as a whole: their
+/// Hausdorff distance, the axes' distance plus the radii's difference, is at
+/// most the tolerance, decided exactly as |w x a|² <= (tol - |rA - rB|)² |a|²
+/// with a non-negative margin.
+[[nodiscard]] bool WithinTolerance(const ExactScalar<6144>& squaredDistance,
+                                   const ExactScalar<2>& radiiDifference,
+                                   const ExactScalar<96>& scale, const double tolerance)
+{
+    const ExactScalar<3> margin{
+        Interval{tolerance} - Hull(radiiDifference.Hull, -radiiDifference.Hull),
+        Difference(Expansion<1>(tolerance), SignOf(radiiDifference) == Sign::Negative
+                                                ? Negated(radiiDifference.Value)
+                                                : radiiDifference.Value)};
+    return SignOf(margin) != Sign::Negative &&
+           Compare(squaredDistance, margin, scale) != Sign::Positive;
+}
+
 /// Coincident cylinders: an overlap whose map turns A's angle into B's and
 /// shifts the height; the angles run the same way when the frames turn the
 /// same way about the axis.
@@ -158,8 +175,14 @@ Result<SurfaceSurfaceIntersection> CylinderCylinder(const Surface& a, const Box2
                                                     const Surface& b, const Box2& boxB,
                                                     const double tolerance, const Context& ctx)
 {
-    const Frame fa = FrameOf(*a.Target<Cylinder>());
-    const Frame fb = FrameOf(*b.Target<Cylinder>());
+    const Cylinder* ca = a.Target<Cylinder>();
+    const Cylinder* cb = b.Target<Cylinder>();
+    if (ca == nullptr || cb == nullptr) {
+        return Fail(ErrorCode::InvalidInput,
+                    "CylinderCylinder: dispatched for other surface types");
+    }
+    const Frame fa = FrameOf(*ca);
+    const Frame fb = FrameOf(*cb);
     if (!IsExactlyZero(ExactCross(fa.ExactAxis, fb.ExactAxis))) {
         return Fail(ErrorCode::NotImplemented,
                     "Cylinder x Cylinder with skew or intersecting axes is not implemented yet "
@@ -177,15 +200,8 @@ Result<SurfaceSurfaceIntersection> CylinderCylinder(const Surface& a, const Box2
     const Vec3 w = fb.Geometry.Origin - fa.Geometry.Origin;
     const Vec3 acrossVector = w - Dot(w, fa.Axis) * fa.Axis;
     const double distance = Length(acrossVector);
-    // Within the pair tolerance as a whole: distance + |rA - rB| <= tolerance.
     const ExactScalar<2> radiiDifference = ExactDifference(rA, rB);
-    const ExactScalar<3> margin{
-        Interval{tolerance} - Hull(radiiDifference.Hull, -radiiDifference.Hull),
-        Difference(Expansion<1>(tolerance), SignOf(radiiDifference) == Sign::Negative
-                                                ? Negated(radiiDifference.Value)
-                                                : radiiDifference.Value)};
-    if (SignOf(margin) != Sign::Negative &&
-        Compare(squaredDistance, margin, scale) != Sign::Positive) {
+    if (WithinTolerance(squaredDistance, radiiDifference, scale, tolerance)) {
         const bool exact = SignOf(squaredDistance) == Sign::Zero && rA == rB;
         return Coincident(fa, boxA, fb, boxB, exact ? 0.0 : distance + std::abs(rA - rB), tolerance,
                           ctx);

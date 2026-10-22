@@ -16,9 +16,13 @@
 // tools/occt/build_occt.sh and configure with -DSTEREON_WITH_OCCT=ON.
 
 #include <GeomAPI_ProjectPointOnCurve.hxx>
+#include <Geom_BSplineCurve.hxx>
+#include <Geom_BSplineSurface.hxx>
 #include <Geom_Ellipse.hxx>
 #include <IntAna_QuadQuadGeo.hxx>
 #include <IntAna_ResultType.hxx>
+#include <NCollection_Array1.hxx>
+#include <NCollection_Array2.hxx>
 #include <Precision.hxx>
 #include <gp_Ax3.hxx>
 #include <gp_Circ.hxx>
@@ -48,6 +52,8 @@ using Stereon::Surface;
 using Stereon::Vec3;
 
 namespace {
+
+using StereonTest::ToOcct;
 
 const Stereon::Context ctx = Stereon::Context::Default();
 

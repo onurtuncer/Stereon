@@ -120,8 +120,13 @@ Result<SurfaceSurfaceIntersection> PlanePlane(const Surface& a, const Box2& boxA
                                               const Box2& boxB, const double tolerance,
                                               const Context& ctx)
 {
-    const PlaneFrame fa = FrameOf(*a.Target<Plane>());
-    const PlaneFrame fb = FrameOf(*b.Target<Plane>());
+    const Plane* pa = a.Target<Plane>();
+    const Plane* pb = b.Target<Plane>();
+    if (pa == nullptr || pb == nullptr) {
+        return Fail(ErrorCode::InvalidInput, "PlanePlane: dispatched for other surface types");
+    }
+    const PlaneFrame fa = FrameOf(*pa);
+    const PlaneFrame fb = FrameOf(*pb);
     if (!IsExactlyZero(ExactCross(fa.ExactNormal, fb.ExactNormal))) {
         return Crossing(fa, boxA, fb, boxB);
     }
