@@ -2,12 +2,12 @@
   "format": "stereon-corpus-case/1",
   "id": "analytic-ssi/plane-plane/unequal-tolerances",
   "kind": "hard",
-  "summary": "Planes 5e-3 apart with tolerances 1e-2 and 1e-5: the answer depends on how a pair tolerance is formed.",
+  "summary": "Planes 5e-3 apart with tolerances 1e-2 and 1e-5: coincident under the larger tolerance, the pair tolerance of ADR-0001 (decision D2).",
   "added": "2026-10-11",
   "source": "Authored for RS-0001",
   "licence": "MPL-2.0",
   "references": ["RS-0001", "ADR-0010"],
-  "tags": ["open-question", "unequal-tolerance"],
+  "tags": ["snap", "unequal-tolerance"],
   "inputs": {
     "surfaces": [
       {
@@ -36,8 +36,9 @@
       "configuration": "disjoint"
     },
     "tolerant": {
-      "status": "open",
-      "question": "O1"
+      "status": "proposed",
+      "configuration": "coincident",
+      "snapped": true
     }
   }
 }

@@ -46,6 +46,11 @@ Surface SomeCylinder()
     return Surface(Cylinder{Point3{}, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}});
 }
 
+Surface SomeSphere()
+{
+    return Surface(Stereon::Sphere{Point3{}, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}});
+}
+
 /// A curve type that is not built in.
 struct UserCurve {
     Line Base;
@@ -112,11 +117,16 @@ TEST_CASE("every built-in pair has a handler that names both types", "[intersect
     REQUIRE(MessageOf(Intersect(SomeCircle(), SomeCircle(), ctx).error())
                 .starts_with("Circle x Circle"));
 
-    const auto planeCylinder = Intersect(SomePlane(), SomeCylinder(), ctx);
-    REQUIRE(planeCylinder.error().GetCode() == ErrorCode::NotImplemented);
-    REQUIRE(MessageOf(planeCylinder.error()).starts_with("Plane x Cylinder"));
-    REQUIRE(MessageOf(Intersect(SomeCylinder(), SomeCylinder(), ctx).error())
-                .starts_with("Cylinder x Cylinder"));
+    // Planes and cylinders have their analytic handlers (M3); spheres wait.
+    const auto planeSphere = Intersect(SomePlane(), SomeSphere(), ctx);
+    REQUIRE(planeSphere.error().GetCode() == ErrorCode::NotImplemented);
+    REQUIRE(MessageOf(planeSphere.error()).starts_with("Plane x Sphere"));
+    REQUIRE(MessageOf(Intersect(SomeSphere(), SomeCylinder(), ctx).error())
+                .starts_with("Sphere x Cylinder"));
+    REQUIRE(Intersect(SomePlane(), SomeCylinder(), ctx).has_value());
+    REQUIRE(Intersect(SomeCylinder(), SomePlane(), ctx).has_value());
+    REQUIRE(Intersect(SomePlane(), SomePlane(), ctx).has_value());
+    REQUIRE(Intersect(SomeCylinder(), SomeCylinder(), ctx).has_value());
 }
 
 TEST_CASE("empty inputs are invalid input", "[intersect][dispatch]")

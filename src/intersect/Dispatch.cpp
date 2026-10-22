@@ -22,6 +22,12 @@ import :Dispatch;
 
 namespace Stereon {
 
+Point2 Mapped(const ParameterMap& map, const Point2& uv) noexcept
+{
+    return Point2{map.Offset.X + uv.X * map.U.X + uv.Y * map.V.X,
+                  map.Offset.Y + uv.X * map.U.Y + uv.Y * map.V.Y};
+}
+
 namespace {
 
 /// A requested domain: not empty and with no NaN bound. Unbounded is
@@ -37,6 +43,16 @@ namespace {
         return Fail(ErrorCode::InvalidInput,
                     std::string("Intersect: the requested ") + std::string(what) +
                         " domains must be non-empty and have no NaN bound");
+    }
+    return {};
+}
+
+/// The pair tolerance: finite and not negative.
+[[nodiscard]] Result<void> CheckTolerance(const double tolerance)
+{
+    if (!(std::isfinite(tolerance) && tolerance >= 0.0)) {
+        return Fail(ErrorCode::InvalidInput,
+                    "Intersect: the pair tolerance must be finite and not negative");
     }
     return {};
 }
@@ -73,7 +89,7 @@ Result<CurveCurveIntersection> Intersect(const Curve& a, const Curve& b, const C
 
 Result<SurfaceSurfaceIntersection> Intersect(const Surface& a, const Box2& domainA,
                                              const Surface& b, const Box2& domainB,
-                                             const Context& ctx)
+                                             const double tolerance, const Context& ctx)
 {
     if (a.IsEmpty() || b.IsEmpty()) {
         return Fail(ErrorCode::InvalidInput, "cannot intersect an empty surface");
@@ -83,6 +99,9 @@ Result<SurfaceSurfaceIntersection> Intersect(const Surface& a, const Box2& domai
     if (const Result<void> ok = CheckDomains(valid, "surface"); !ok) {
         return std::unexpected(ok.error());
     }
+    if (const Result<void> ok = CheckTolerance(tolerance); !ok) {
+        return std::unexpected(ok.error());
+    }
     const std::size_t i = BuiltinIndexOf(a);
     const std::size_t j = BuiltinIndexOf(b);
     if (i == BuiltinSurfaceTypes::Size || j == BuiltinSurfaceTypes::Size) {
@@ -90,7 +109,14 @@ Result<SurfaceSurfaceIntersection> Intersect(const Surface& a, const Box2& domai
                     "surface intersection needs built-in surface types until user types can "
                     "declare the capabilities of tiers 2 and 3 (ADR-0003)");
     }
-    return Detail::SurfacePairTable[i][j](a, domainA, b, domainB, ctx);
+    return Detail::SurfacePairTable[i][j](a, domainA, b, domainB, tolerance, ctx);
+}
+
+Result<SurfaceSurfaceIntersection> Intersect(const Surface& a, const Box2& domainA,
+                                             const Surface& b, const Box2& domainB,
+                                             const Context& ctx)
+{
+    return Intersect(a, domainA, b, domainB, ctx.GetResolution(), ctx);
 }
 
 Result<SurfaceSurfaceIntersection> Intersect(const Surface& a, const Surface& b, const Context& ctx)

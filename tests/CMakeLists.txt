@@ -48,6 +48,9 @@ stereon_add_tests(robust)
 stereon_add_tests(curve)
 stereon_add_tests(surface)
 stereon_add_tests(intersect)
+# The analytic SSI corpus (RS-0001) that the intersection handlers run on.
+target_compile_definitions(stereon_intersect_tests PRIVATE
+    STEREON_CORPUS_DIR="${PROJECT_SOURCE_DIR}/corpus")
 stereon_add_tests(topo)
 stereon_add_tests(build)
 stereon_add_tests(mesh)
@@ -170,9 +173,10 @@ if(STEREON_WITH_OCCT)
                             "${OpenCASCADE_VERSION}; see tools/occt/build_occt.sh")
     endif()
     add_executable(stereon_occt_tests occt/GeometryDifferentialTests.cpp
+                                      occt/IntersectionDifferentialTests.cpp
                                       occt/OcctRobustnessTests.cpp occt/RobustnessHunt.cpp)
     target_link_libraries(stereon_occt_tests
-        PRIVATE stereon::surface stereon_options Catch2::Catch2WithMain
+        PRIVATE stereon::intersect stereon_options Catch2::Catch2WithMain
                 TKernel TKMath TKG3d TKGeomBase TKGeomAlgo)
     target_include_directories(stereon_occt_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/support")
     stereon_anchor_contracts(stereon_occt_tests)

@@ -11,6 +11,9 @@ stereon_add_library(intersect
         Dispatch.cppm
         Intersect.cppm
     SOURCES
+        CylinderCylinder.cpp
         Dispatch.cpp
+        PlaneCylinder.cpp
+        PlanePlane.cpp
     DEPENDS
         surface)

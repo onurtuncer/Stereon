@@ -68,13 +68,13 @@ TEST_CASE("a branch is uncertified, and its side unresolved, until established",
 
 TEST_CASE("an overlap maps parameters from one surface to the other", "[intersect][outcome]")
 {
-    Stereon::ParameterMap identity;
-    REQUIRE(identity(Point2{2.0, -3.0}) == Point2{2.0, -3.0});
+    const Stereon::ParameterMap identity{Vec2{1.0, 0.0}, Vec2{0.0, 1.0}, Vec2{0.0, 0.0}};
+    REQUIRE(Mapped(identity, Point2{2.0, -3.0}) == Point2{2.0, -3.0});
     // A quarter turn and a shift, as two coplanar planes with turned frames
     // would have.
     const Stereon::ParameterMap turned{Vec2{0.0, 1.0}, Vec2{-1.0, 0.0}, Vec2{5.0, 1.0}};
-    REQUIRE(turned(Point2{2.0, 3.0}) == Point2{2.0, 3.0});
-    REQUIRE(turned(Point2{1.0, 0.0}) == Point2{5.0, 2.0});
+    REQUIRE(Mapped(turned, Point2{2.0, 3.0}) == Point2{2.0, 3.0});
+    REQUIRE(Mapped(turned, Point2{1.0, 0.0}) == Point2{5.0, 2.0});
 
     Stereon::OverlapRegion overlap;
     REQUIRE(overlap.SameOrientation);
@@ -93,8 +93,6 @@ TEST_CASE("intersections are asked over valid requested domains", "[intersect][o
     const Box2 box{unit, unit};
     REQUIRE(Stereon::Intersect(SomePlane(), Box2{}, SomePlane(), box, ctx).error().GetCode() ==
             ErrorCode::InvalidInput);
-    // Valid domains, including an unbounded one, reach the handler (a stub
-    // until the analytic handlers land, M3).
-    const auto stub = Stereon::Intersect(SomePlane(), Box2::Everything(), SomePlane(), box, ctx);
-    REQUIRE(stub.error().GetCode() == ErrorCode::NotImplemented);
+    // Valid domains, including an unbounded one, reach the handler.
+    REQUIRE(Stereon::Intersect(SomePlane(), Box2::Everything(), SomePlane(), box, ctx).has_value());
 }
