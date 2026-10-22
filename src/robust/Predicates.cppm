@@ -505,4 +505,29 @@ export namespace Stereon {
     return Detail::InSphereAdaptive(a, b, c, d, e, permanent);
 }
 
+/// Exact comparison of |a-b| with a nonnegative radius. Unsupported input
+/// domains are explicit, so modelling operations can return an error rather
+/// than trigger a predicate contract on external data.
+struct DistanceComparison {
+    bool Supported = false;
+    Sign Value = Sign::Zero;
+};
+[[nodiscard]] constexpr DistanceComparison CompareDistance(const Point3& a, const Point3& b,
+                                                           const double radius)
+{
+    const auto domain = Detail::CheckDomain({a, b, Point3{radius, 0.0, 0.0}}, 2);
+    if (radius < 0.0 || domain.Status == Detail::DomainStatus::NotFinite ||
+        domain.Status == Detail::DomainStatus::TooWide) {
+        return {};
+    }
+    const Point3 x = Detail::ScaledByPowerOfTwo(a, domain.Shift);
+    const Point3 y = Detail::ScaledByPowerOfTwo(b, domain.Shift);
+    const double r = Detail::ScaledByPowerOfTwo(radius, domain.Shift);
+    const auto dx = Difference(Expansion<1>(x.X), Expansion<1>(y.X));
+    const auto dy = Difference(Expansion<1>(x.Y), Expansion<1>(y.Y));
+    const auto dz = Difference(Expansion<1>(x.Z), Expansion<1>(y.Z));
+    const auto squares = Sum(Sum(Product(dx, dx), Product(dy, dy)), Product(dz, dz));
+    return {true, Difference(squares, Product(Expansion<1>(r), Expansion<1>(r))).GetSign()};
+}
+
 } // namespace Stereon

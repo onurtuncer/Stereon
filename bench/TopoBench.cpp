@@ -343,6 +343,41 @@ void EditDeleteFace(benchmark::State& state)
     OneEdit(state, DeleteFace);
 }
 
+void SplitEdge(ShapeBuilder& b, const Shape& shape, const std::size_t n)
+{
+    const auto loop = *Stereon::LoopsOf(shape, MiddleFace(shape, n))->begin();
+    const auto use = *Stereon::CoedgesOf(shape, loop)->begin();
+    const auto edge = Stereon::EdgeOf(shape, use);
+    const auto curve = *Stereon::CurveOf(shape, edge);
+    const auto range = Stereon::RangeOf(shape, edge);
+    const double t = (range.GetLower() + range.GetUpper()) / 2;
+    static_cast<void>(*b.SplitEdgeMakeVertex(b.Handle(edge), t, Stereon::Eval(curve, t),
+                                             Stereon::Context::DefaultResolution));
+}
+
+void SplitFace(ShapeBuilder& b, const Shape& shape, const std::size_t n)
+{
+    const auto loop = *Stereon::LoopsOf(shape, MiddleFace(shape, n))->begin();
+    const auto uses = b.CoedgesOf(b.Handle(loop));
+    const auto i = static_cast<double>(n / 2);
+    Stereon::EdgeGeometry geometry;
+    geometry.Kind = EdgeCurveKind::Exact;
+    geometry.Range = Interval{0, 1};
+    geometry.Tolerance = Stereon::Context::DefaultResolution;
+    geometry.Curve = *b.AddCurve(Stereon::Curve(Stereon::Line{{i + 1, i, 0}, {-1, 1, 0}}));
+    geometry.PCurve = *b.AddPCurve(Stereon::Curve2d(Stereon::Line2d{{i + 1, i}, {-1, 1}}));
+    static_cast<void>(*b.MakeEdgeFace(uses[0], uses[2], geometry));
+}
+
+void EditSplitEdge(benchmark::State& state)
+{
+    OneEdit(state, SplitEdge);
+}
+void EditSplitFace(benchmark::State& state)
+{
+    OneEdit(state, SplitFace);
+}
+
 /// 100 local edits in a row, half surface replacements and half face
 /// deletions spread over the sheet, each opened on the previous result
 /// and frozen, no Compact(): the memory of the body plus the final copy
@@ -452,6 +487,17 @@ BENCHMARK(EditSequence)
     ->Unit(benchmark::kMillisecond);
 BENCHMARK(CompactAfterEdits)
     ->Name("ADR-0004/Compact/Stereon")
+    ->Arg(Quick)
+    ->Arg(Body)
+    ->Unit(benchmark::kMillisecond);
+
+BENCHMARK(EditSplitEdge)
+    ->Name("B0.5/SplitEdge/Stereon")
+    ->Arg(Quick)
+    ->Arg(Body)
+    ->Unit(benchmark::kMillisecond);
+BENCHMARK(EditSplitFace)
+    ->Name("B0.5/SplitFace/Stereon")
     ->Arg(Quick)
     ->Arg(Body)
     ->Unit(benchmark::kMillisecond);

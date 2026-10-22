@@ -11,6 +11,7 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -110,6 +111,28 @@ struct EdgeFace {
     BuilderLoopId Loop{};
     BuilderCoedgeId Kept{};
     BuilderCoedgeId New{};
+};
+
+/// SEMV keeps the input edge on the lower range and creates Upper and Vertex.
+struct EdgeSplit {
+    BuilderEdgeId Upper{};
+    BuilderVertexId Vertex{};
+};
+
+/// MEKR joins two loops with two uses of a new bridge edge.
+struct EdgeRing {
+    BuilderEdgeId Edge{};
+    BuilderCoedgeId Out{};
+    BuilderCoedgeId Back{};
+};
+
+/// One input vertex and its deterministic representative after MergeVertices.
+struct VertexMergeEntry {
+    BuilderVertexId Source{};
+    BuilderVertexId Representative{};
+};
+struct VertexMergeResult {
+    std::vector<VertexMergeEntry> Entries;
 };
 
 /// The stable identity of one builder (ADR-0038): it moves with the
@@ -319,6 +342,52 @@ public:
     /// `face` must have that one loop. Inverse of MakeEdgeFace.
     [[nodiscard]] Result<void> KillEdgeFace(BuilderEdgeId edge, BuilderFaceId face);
 
+    /// KEMR: remove a bridge with exactly two opposite uses in one loop,
+    /// leaving two nonempty cycles on the same face. The anchor's side stays
+    /// in the original loop. Refuses adjacent uses (use KEV for a strut).
+    /// Returns the new loop; inverse: MakeEdgeKillRing.
+    [[nodiscard]] Result<BuilderLoopId> KillEdgeMakeRing(BuilderEdgeId edge);
+    /// MEKR: bridge the ends of a and b in distinct nonempty loops of one
+    /// face. Keeps a's loop, deletes b's loop. Inverse: KillEdgeMakeRing.
+    [[nodiscard]] Result<EdgeRing> MakeEdgeKillRing(BuilderCoedgeId a, BuilderCoedgeId b,
+                                                    const EdgeGeometry& geometry);
+    /// KFMRH: move dead's sole nonempty loop into kept and remove dead.
+    /// Faces must share surface, orientation and shell. No geometric nesting
+    /// is inferred. Inverse: MakeFaceKillRingHole on the moved loop.
+    [[nodiscard]] Result<void> KillFaceMakeRingHole(BuilderFaceId dead, BuilderFaceId kept);
+    /// MFKRH: move a nonempty loop of a multi-loop face into a new face on
+    /// the same surface and shell. Other loops stay. Inverse: KFMRH.
+    [[nodiscard]] Result<BuilderFaceId> MakeFaceKillRingHole(BuilderLoopId loop);
+    /// SEMV: split every radial use at t, strictly inside the bounded range.
+    /// The caller supplies the split position and vertex tolerance; every
+    /// incident trace at t must lie inside it. Shared curves/pcurves keep
+    /// their parameterisation and are restricted by the two edge ranges.
+    /// Cached certificates remain valid on each restricted range. Supports
+    /// wires, seams and arbitrary radial valence, but not Degenerate edges.
+    /// Inverse: JoinEdgeKillVertex(lower, upper).
+    [[nodiscard]] Result<EdgeSplit> SplitEdgeMakeVertex(BuilderEdgeId edge, double t,
+                                                        const Point3& position, double tolerance);
+    /// JEKV: join contiguous lower/upper ranges of the same geometry at
+    /// their sole degree-two vertex. Every use must be paired adjacently in
+    /// the same loop, sense and pcurve; primary uses must correspond.
+    /// Keeps lower, removes upper and the common vertex. Different cached
+    /// representations are dropped; identical certificates are preserved.
+    [[nodiscard]] Result<void> JoinEdgeKillVertex(BuilderEdgeId lower, BuilderEdgeId upper);
+    /// ADR-0001: sort unique candidates by index, cluster against each
+    /// representative's original position/tolerance (never another member),
+    /// and retain its position. Tolerance growth obeys ctx and is logged.
+    /// Redirect all incident edges, including closed and non-manifold ones;
+    /// reject a merge if the resulting tolerance cannot contain their ends.
+    /// Atomic: failure leaves connectivity, geometry and events unchanged.
+    [[nodiscard]] Result<VertexMergeResult> MergeVertices(std::span<const BuilderVertexId> vertices,
+                                                          const Context& ctx);
+    /// Transaction-local low-level events, not final snapshot references.
+    /// The enclosing operation supplies semantic history (ADR-0030).
+    [[nodiscard]] std::span<const TopologyEvent> GetTopologyEvents() const noexcept
+    {
+        return m_Events;
+    }
+
     // --- Transactions (ADR-0027, section 9) ---------------------------------
 
     /// Runs a compound edit on a candidate copy of this builder, which shares
@@ -443,6 +512,26 @@ private:
     void CheckNeighbourhood(const std::vector<std::uint32_t>& loops,
                             const std::vector<std::uint32_t>& edges) const;
 
+    [[nodiscard]] std::vector<std::uint32_t> UsesOf(std::uint32_t edge) const;
+    void MoveLoop(std::uint32_t loop, std::uint32_t face);
+    void RepointEdge(std::uint32_t edge, std::uint32_t start, std::uint32_t end);
+    [[nodiscard]] Result<void> CheckPointAt(std::uint32_t edge, double t, const Point3& position,
+                                            double tolerance) const;
+    [[nodiscard]] Result<void> CheckEdgeJoin(std::uint32_t lower, std::uint32_t upper) const;
+    void SplitUses(std::uint32_t lower, std::uint32_t upper);
+    [[nodiscard]] Result<VertexMergeResult>
+    MergeVerticesImpl(std::span<const BuilderVertexId> vertices, const Context& ctx);
+    [[nodiscard]] Result<void> MergeVertexCluster(const std::vector<BuilderVertexId>& cluster,
+                                                  const Context& ctx);
+    [[nodiscard]] Result<void> CheckUsePointAt(std::uint32_t c, double t, const Point3& position,
+                                               double tolerance) const;
+    [[nodiscard]] Result<void> CheckJoinVertex(std::uint32_t lower, std::uint32_t upper) const;
+    [[nodiscard]] Result<void> CheckJoinUses(std::uint32_t lower, std::uint32_t upper) const;
+    [[nodiscard]] Result<void> CheckMergeEndpoints(const std::vector<BuilderVertexId>& cluster,
+                                                   const Point3& position, double tolerance) const;
+    void RecordEvent(EntityKind kind, TopologyEventKind event, std::uint32_t source,
+                     std::uint32_t target);
+
     template <EntityKind K>
     [[nodiscard]] bool IsLive(BuilderId<K> h) const noexcept;
     template <EntityKind K>
@@ -482,6 +571,7 @@ private:
     std::shared_ptr<const TopologySnapshot> m_Source;
     /// Every SetTolerance() call, in order, for Commit() to report.
     std::vector<ToleranceChange> m_ToleranceChanges;
+    std::vector<TopologyEvent> m_Events;
 };
 
 /// The old-to-new slot map of one Compact() (ADR-0004), which feeds the
