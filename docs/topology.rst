@@ -335,12 +335,14 @@ edge)`` reads the cache, ``CacheCertificateOf`` what is known of its
 deviation, and ``CacheBoundOf`` the proven bound.
 
 ADR-0009 asks for a *certificate*: a bound on the deviation over the whole
-range, proven by interval evaluation of ``S(c(t))``. The kernel has no
-interval evaluation of composed curves yet, so every cache is
-``CacheCertificate::Uncertified``, with an infinite bound.
-``CacheCertificate::Certified`` is reserved for when interval evaluation
-lands. Sampling the deviation is a regression check in the tests, never a
-certificate.
+range, proven by interval evaluation of ``S(c(t))``. ``CacheEdgeCurve``
+asks ``CertifyDeviation`` (see :doc:`intersection`) for one within the
+edge's tolerance, and the cache is ``CacheCertificate::Certified`` with the
+proven bound when it gets one. It stays ``CacheCertificate::Uncertified``,
+with an infinite bound, when the edge has no tolerance to certify within,
+when the certifier does not cover the surface or pcurve types yet, or when
+the sampled cache deviates by more than the tolerance. Sampling the
+deviation is a regression check in the tests, never a certificate.
 
 Any change to what a cache was built from drops it, as ADR-0004 requires:
 

@@ -9,6 +9,7 @@ module;
 
 // The contract anchor (docs/toolchain/gcc16-feature-probe.md).
 #include <Stereon/Core/Contracts.hpp>
+#include <Stereon/Core/Try.hpp>
 
 #include <algorithm>
 #include <array>
@@ -45,16 +46,18 @@ namespace Stereon::Detail {
 
 namespace {
 
+/// A cylinder, erased and as itself, with its axis direction.
 struct Frame {
+    const Surface& Erased;
     const Cylinder& Geometry;
     Vec3 Axis;
     ExactVector<4> ExactAxis;
 };
 
-[[nodiscard]] Frame FrameOf(const Cylinder& c)
+[[nodiscard]] Frame FrameOf(const Surface& erased, const Cylinder& c)
 {
     const ExactVector<4> cross = ExactCross(Exactly(c.XAxis), Exactly(c.YAxis));
-    return {c, Stereon::Axis(c), c.RightHanded ? cross : ExactNegated(cross)};
+    return {erased, c, Stereon::Axis(c), c.RightHanded ? cross : ExactNegated(cross)};
 }
 
 /// The angle of a radial direction in the cylinder's frame.
@@ -65,8 +68,9 @@ struct Frame {
 
 /// The shared ruling through `point`, along A's axis, with a line on each
 /// cylinder. B's v runs the same way or the opposite one.
-void AddRuling(SurfaceSurfaceIntersection& result, const Frame& a, const Frame& b,
-               const Point3& point, const bool tangent, const Box2& boxA, const Box2& boxB)
+[[nodiscard]] Result<void> AddRuling(SurfaceSurfaceIntersection& result, const Frame& a,
+                                     const Frame& b, const Point3& point, const bool tangent,
+                                     const Box2& boxA, const Box2& boxB, const Context& ctx)
 {
     const Vec3 fromA = point - a.Geometry.Origin;
     const Vec3 fromB = point - b.Geometry.Origin;
@@ -75,31 +79,35 @@ void AddRuling(SurfaceSurfaceIntersection& result, const Frame& a, const Frame& 
     const Line2d onB{Point2{AngleOn(b.Geometry, fromB), Dot(fromB, b.Axis)}, Vec2{0.0, sense}};
     const Interval range = Intersection(ClipLine(onA, boxA), ClipLine(onB, boxB));
     if (range.IsEmpty()) {
-        return;
+        return {};
     }
     const Curve line{Line{point, a.Axis}};
-    result.Branches.push_back(tangent ? Tangency(line, Curve2d(onA), Curve2d(onB), range)
-                                      : Crossing(line, Curve2d(onA), Curve2d(onB), range));
+    return Keep(result,
+                tangent ? Tangency(line, Curve2d(onA), Curve2d(onB), range)
+                        : Crossing(line, Curve2d(onA), Curve2d(onB), range),
+                a.Erased, b.Erased, ctx);
 }
 
 /// The rulings of cylinders whose axes are `distance` apart across them,
 /// B's in direction `across` from A's: the two where the sections cross
 /// (`sumSign` negative, `differenceSign` positive), or the one where they
 /// touch, externally or internally.
-[[nodiscard]] SurfaceSurfaceIntersection Rulings(const Frame& a, const Frame& b, const Vec3& across,
-                                                 const double distance, const Sign sumSign,
-                                                 const Sign differenceSign, const Box2& boxA,
-                                                 const Box2& boxB)
+[[nodiscard]] Result<SurfaceSurfaceIntersection>
+Rulings(const Frame& a, const Frame& b, const Vec3& across, const double distance,
+        const Sign sumSign, const Sign differenceSign, const Box2& boxA, const Box2& boxB,
+        const Context& ctx)
 {
     const double rA = a.Geometry.Radius;
     const double rB = b.Geometry.Radius;
     SurfaceSurfaceIntersection result;
     if (sumSign == Sign::Zero) {
-        AddRuling(result, a, b, a.Geometry.Origin + rA * across, true, boxA, boxB);
+        STEREON_TRY_VOID(
+            AddRuling(result, a, b, a.Geometry.Origin + rA * across, true, boxA, boxB, ctx));
     } else if (differenceSign == Sign::Zero) {
         // B's axis is inside A when A is the larger; the touch is on its side.
         const double side = rA > rB ? rA : -rA;
-        AddRuling(result, a, b, a.Geometry.Origin + side * across, true, boxA, boxB);
+        STEREON_TRY_VOID(
+            AddRuling(result, a, b, a.Geometry.Origin + side * across, true, boxA, boxB, ctx));
     } else {
         const double cosine = std::clamp(
             (distance * distance + rA * rA - rB * rB) / (2.0 * distance * rA), -1.0, 1.0);
@@ -113,7 +121,7 @@ void AddRuling(SurfaceSurfaceIntersection& result, const Frame& a, const Frame& 
             return AngleOn(a.Geometry, p - a.Geometry.Origin);
         });
         for (const Point3& p : points) {
-            AddRuling(result, a, b, p, false, boxA, boxB);
+            STEREON_TRY_VOID(AddRuling(result, a, b, p, false, boxA, boxB, ctx));
         }
     }
     return result;
@@ -181,8 +189,8 @@ Result<SurfaceSurfaceIntersection> CylinderCylinder(const Surface& a, const Box2
         return Fail(ErrorCode::InvalidInput,
                     "CylinderCylinder: dispatched for other surface types");
     }
-    const Frame fa = FrameOf(*ca);
-    const Frame fb = FrameOf(*cb);
+    const Frame fa = FrameOf(a, *ca);
+    const Frame fb = FrameOf(b, *cb);
     if (!IsExactlyZero(ExactCross(fa.ExactAxis, fb.ExactAxis))) {
         return Fail(ErrorCode::NotImplemented,
                     "Cylinder x Cylinder with skew or intersecting axes is not implemented yet "
@@ -211,7 +219,8 @@ Result<SurfaceSurfaceIntersection> CylinderCylinder(const Surface& a, const Box2
     if (sumSign == Sign::Positive || differenceSign == Sign::Negative) {
         return SurfaceSurfaceIntersection{}; // Proved separate: apart, or nested.
     }
-    return Rulings(fa, fb, acrossVector / distance, distance, sumSign, differenceSign, boxA, boxB);
+    return Rulings(fa, fb, acrossVector / distance, distance, sumSign, differenceSign, boxA, boxB,
+                   ctx);
 }
 
 } // namespace Stereon::Detail

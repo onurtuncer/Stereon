@@ -100,8 +100,7 @@ HistoryEntry Fate(const OperationResult& result, const EntityKind kind, const st
 
 // --- Cached edge curves (ADR-0009) -------------------------------------------------
 
-TEST_CASE("an Intersection edge's cache follows its primary side and is not certified",
-          "[topo][cache]")
+TEST_CASE("an Intersection edge's cache follows its primary side and is certified", "[topo][cache]")
 {
     Body hinge = MakeHinge();
     const CurveRef cache = Must(hinge.Builder.CacheEdgeCurve(hinge.Edges[0]));
@@ -109,15 +108,16 @@ TEST_CASE("an Intersection edge's cache follows its primary side and is not cert
     const Shape shape = std::move(hinge).Freeze();
     REQUIRE(Stereon::ValidateTopology(shape).IsValid());
     const EdgeId e = shape.Resolve(hinge.Edges[0]);
-    REQUIRE(Stereon::CacheCertificateOf(shape, e) == CacheCertificate::Uncertified);
-    REQUIRE(std::isinf(Stereon::CacheBoundOf(shape, e)));
+    // Certified within the edge's tolerance (ADR-0009 section 4, CertifyDeviation).
+    REQUIRE(Stereon::CacheCertificateOf(shape, e) == CacheCertificate::Certified);
+    REQUIRE(Stereon::CacheBoundOf(shape, e) <= Stereon::ToleranceOf(shape, e));
     REQUIRE_FALSE(Stereon::CurveOf(shape, e).has_value()); // a cache is not the edge's own curve
     const Stereon::Curve& curve = Deref(Stereon::CachedCurveOf(shape, e));
     REQUIRE(Domain(curve) == Interval(0.0, 1.0));
     // The primary side is the line (0, t, 0) on face 0's plane.
     const Stereon::Curve2d hingeOnA = Segment2({0, 0}, {0, 1});
     REQUIRE(SampledDeviation(shape, e, XyPlane(), hingeOnA, 1000) <= 1e-12);
-    REQUIRE(Stereon::Describe(shape, e).find("cached, uncertified") != std::string::npos);
+    REQUIRE(Stereon::Describe(shape, e).find("cached, certified") != std::string::npos);
     // The other kinds keep no cache.
     const EdgeId side = shape.Resolve(hinge.Edges[1]);
     REQUIRE_FALSE(Stereon::CachedCurveOf(shape, side).has_value());
@@ -258,7 +258,7 @@ TEST_CASE("Compact keeps an edge's cache", "[topo][cache][compact]")
     const EdgeId after =
         compacted.Shape.GetSnapshot()->MakeId<EntityKind::Edge>(hingeFate[0].Target);
     const Stereon::Curve& cache = Deref(Stereon::CachedCurveOf(compacted.Shape, after));
-    REQUIRE(Stereon::CacheCertificateOf(compacted.Shape, after) == CacheCertificate::Uncertified);
+    REQUIRE(Stereon::CacheCertificateOf(compacted.Shape, after) == CacheCertificate::Certified);
     REQUIRE(Eval(cache, 0.3) ==
             Eval(Deref(Stereon::CachedCurveOf(shape, shape.Resolve(hinge.Edges[0]))), 0.3));
 }

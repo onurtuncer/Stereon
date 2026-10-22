@@ -70,7 +70,7 @@ NOT_OPERATIONS: dict[str, str] = {
     **dict.fromkeys(
         (
             "BoundingBox", "Domain", "Period", "Periods", "IsRational", "PoleCountU", "PoleCountV",
-            "Apex", "Axis", "GeometryNameOf", "BuiltinIndexOf", "VisitBuiltin",
+            "Apex", "Axis", "GeometryNameOf", "BuiltinIndexOf", "VisitBuiltin", "CertifyDeviation",
         ),
         _QUERY,
     ),

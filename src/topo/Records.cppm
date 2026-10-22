@@ -89,12 +89,12 @@ enum class CacheCertificate : std::uint8_t {
     /// pcurve, the primary coedge or a surface of the edge dropped it.
     None,
     /// A cached curve, built from the current pcurves and surfaces, whose
-    /// deviation is not certified: certificates need the interval evaluation
-    /// of S(c(t)) that ADR-0009 names, which the kernel does not have yet.
-    /// Sampling the deviation is a regression check, never a certificate.
+    /// deviation is not certified: the edge has no tolerance to certify
+    /// within, or CertifyDeviation does not cover its types yet. Sampling
+    /// the deviation is a regression check, never a certificate.
     Uncertified,
     /// A cached curve with a proven bound on its deviation over the whole
-    /// range. Reserved: nothing issues one until interval evaluation exists.
+    /// range, from CertifyDeviation (ADR-0009 section 4).
     Certified,
 };
 

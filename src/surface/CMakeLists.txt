@@ -9,6 +9,7 @@ stereon_add_library(surface
     MODULES
         BSplineSurface.cppm
         Capabilities.cppm
+        Certify.cppm
         Concepts.cppm
         Cone.cppm
         Conversion.cppm
@@ -25,6 +26,7 @@ stereon_add_library(surface
         Visit.cppm
     SOURCES
         BSplineSurface.cpp
+        Certify.cpp
         Conversion.cpp
         Factories.cpp
         Fitting.cpp

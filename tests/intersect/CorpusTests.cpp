@@ -133,6 +133,7 @@ void CheckCase(const std::filesystem::path& file)
         REQUIRE(result.error().GetCode() == ErrorCode::NotImplemented);
         return;
     }
+    INFO(IntersectTest::ErrorText(result));
     REQUIRE(result.has_value());
     const std::string want = ExpectedOf(expected);
     const std::string got = ConfigurationOf(*result);
