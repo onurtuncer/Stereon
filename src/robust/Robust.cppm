@@ -13,6 +13,7 @@ export module Stereon.Robust;
 export import Stereon.Core;
 
 export import :Domain;
+export import :Dynamic;
 export import :Expansion;
 export import :Filter;
 export import :Predicates;

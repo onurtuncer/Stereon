@@ -15,5 +15,6 @@ stereon_add_library(intersect
         Dispatch.cpp
         PlaneCylinder.cpp
         PlanePlane.cpp
+        SkewCylinders.cpp
     DEPENDS
         surface)

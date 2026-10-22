@@ -296,6 +296,16 @@ inline constexpr auto SurfacePairTable =
 
 } // namespace Stereon::Detail
 
+namespace Stereon::Detail {
+
+/// Cylinders whose axes are not parallel, which CylinderCylinder hands on
+/// after deciding that exactly; defined in SkewCylinders.cpp.
+Result<SurfaceSurfaceIntersection> SkewCylinders(const Surface& a, const Box2& boxA,
+                                                 const Surface& b, const Box2& boxB,
+                                                 const Context& ctx);
+
+} // namespace Stereon::Detail
+
 export namespace Stereon {
 
 /// The intersection of two curves over the requested parameter domains

@@ -139,9 +139,9 @@ Each phase ends with an exit gate checked in CI. The [detailed roadmap and versi
 
 | Release | Scope and milestone gates | Status |
 | --- | --- | --- |
-| Phase 0 / 0.0.x | Foundations (M1): build/CI, math, predicates, type erasure, controlled-edit prototype, debug viewer, diagnostics and minimal persistence prototype | 🚧 In progress |
-| v0.1 "Geometry" | Analytic/NURBS evaluation, fitting and projection; geometry persistence and numerical-domain checks (M1/M4) | Planned |
-| v0.2 "Intersections" | Curve/curve, curve/surface and surface/surface services; explicit tangency, overlap, coincidence and unresolved outcomes (M2/M4) | Planned |
+| Phase 0 / 0.0.x | Foundations (M1): build/CI, math, predicates, type erasure, controlled-edit prototype, debug viewer, diagnostics and minimal persistence prototype | 🚧 All but the exit gate, which waits for the [Boolean prototype](docs/planning/boolean-prototype-plan.md): its milestones M0–M4 are done, M5–M11 open |
+| v0.1 "Geometry" | Analytic/NURBS evaluation, fitting and projection; geometry persistence and numerical-domain checks (M1/M4) | 🚧 Every gate of the [acceptance ledger](docs/planning/v0.1-acceptance-ledger.md) done except the Phase 0 exit gate and clamped periodic B-splines |
+| v0.2 "Intersections" | Curve/curve, curve/surface and surface/surface services; explicit tangency, overlap, coincidence and unresolved outcomes (M2/M4) | 🚧 Started: plane and cylinder pairs with exact decisions and interval certificates (the prototype's M3, M3b, M4); the rest planned |
 | v0.3 "Solids" | Planar construction, sectioning and imprinting (M2); curved/trimmed construction, primitives, extrude/revolve/sweep/loft, sewing, history and native persistence (M4/M6) | Planned |
 | v0.4 "Planar Booleans" | Validated union/cut/common on the declared planar/polyhedral subset, with lineage and tags (M3) | Planned |
 | v0.5 "Curved Booleans" | Bounded analytic/trimmed-spline Boolean integration; seams, poles, tangencies and certificates (M4) | Planned |

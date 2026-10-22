@@ -192,9 +192,7 @@ Result<SurfaceSurfaceIntersection> CylinderCylinder(const Surface& a, const Box2
     const Frame fa = FrameOf(a, *ca);
     const Frame fb = FrameOf(b, *cb);
     if (!IsExactlyZero(ExactCross(fa.ExactAxis, fb.ExactAxis))) {
-        return Fail(ErrorCode::NotImplemented,
-                    "Cylinder x Cylinder with skew or intersecting axes is not implemented yet "
-                    "(the Boolean prototype's M3b)");
+        return SkewCylinders(a, boxA, b, boxB, ctx);
     }
     const double rA = fa.Geometry.Radius;
     const double rB = fb.Geometry.Radius;

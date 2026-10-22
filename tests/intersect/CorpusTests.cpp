@@ -129,8 +129,21 @@ void CheckCase(const std::filesystem::path& file)
                   Box2::Everything(), tolerance, IntersectTest::ctx);
     const JsonValue& expected = c["expected"];
     if (expected["nominal"]["tier"].AsString() == "B") {
-        REQUIRE_FALSE(result.has_value());
-        REQUIRE(result.error().GetCode() == ErrorCode::NotImplemented);
+        // A quartic: curves, or the outcome the contract names.
+        const JsonValue& tolerant = expected["tolerant"];
+        if (tolerant.Has("outcome")) {
+            REQUIRE_FALSE(result.has_value());
+            REQUIRE(tolerant["outcome"].AsString() == "NotSupported");
+            REQUIRE(result.error().GetCode() == ErrorCode::NotSupported);
+            return;
+        }
+        INFO(IntersectTest::ErrorText(result));
+        REQUIRE(result.has_value());
+        REQUIRE(result->Branches.size() ==
+                static_cast<std::size_t>(expected["nominal"]["branches"].AsNumber()));
+        for (const Stereon::IntersectionBranch& branch : result->Branches) {
+            REQUIRE(branch.IsCertified());
+        }
         return;
     }
     INFO(IntersectTest::ErrorText(result));
