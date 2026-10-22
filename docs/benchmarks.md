@@ -110,3 +110,8 @@ pages, copied fraction and heap delta through the same `OneEdit` harness.
 The edge case splits a shared interior edge and all its radial uses; the face
 case inserts a diagonal. Run these in the native benchmark configuration
 before accepting ADR-0005's copying targets. No measurements are recorded yet.
+
+`ADR-0005/EditSequence/Stereon` now includes 25 edits of each of the four
+kinds, on distinct original faces, and reports the maximum per-edit copied
+fraction as well as the combined snapshot memory ratio. The earlier two-kind
+measurements do not qualify this expanded sequence.

@@ -185,6 +185,47 @@ Result<void> ShapeBuilder::KillFaceMakeRingHole(const BuilderFaceId dead, const 
     return {};
 }
 
+/// Splitting a face is shell-preserving only if the moved loop can reach
+/// a remaining loop through radial neighbours in the same shell.
+bool ShapeBuilder::CanSeparateLoop(const std::uint32_t moved) const
+{
+    const auto source = m_Tables.Loops[moved].Face;
+    const auto shell = m_Tables.Faces[source.GetIndex()].Shell;
+    if (!shell.IsValid()) {
+        return true;
+    }
+    std::vector<bool> seen(m_Tables.Loops.GetSize(), false);
+    std::vector<std::uint32_t> pending{moved};
+    seen[moved] = true;
+    while (!pending.empty()) {
+        const auto loop = pending.back();
+        pending.pop_back();
+        for (const auto c : CycleFrom(m_Tables.Loops[loop].Anchor.GetIndex())) {
+            for (const auto use : UsesOf(m_Tables.Coedges[c].Edge.GetIndex())) {
+                const auto other = m_Tables.Coedges[use].Loop.GetIndex();
+                if (other == moved) {
+                    continue;
+                }
+                const auto face = m_Tables.Loops[other].Face;
+                if (face == source) {
+                    return true;
+                }
+                if (m_Tables.Faces[face.GetIndex()].Shell != shell) {
+                    continue;
+                }
+                for (auto next = m_Tables.Faces[face.GetIndex()].FirstLoop; next.IsValid();
+                     next = m_Tables.Loops[next.GetIndex()].NextInFace) {
+                    if (!seen[next.GetIndex()]) {
+                        seen[next.GetIndex()] = true;
+                        pending.push_back(next.GetIndex());
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
 Result<BuilderFaceId> ShapeBuilder::MakeFaceKillRingHole(const BuilderLoopId loop)
 {
     constexpr const char* op = "MakeFaceKillRingHole";
@@ -193,6 +234,9 @@ Result<BuilderFaceId> ShapeBuilder::MakeFaceKillRingHole(const BuilderLoopId loo
     const auto face = m_Tables.Faces[source];
     if (face.FirstLoop == face.LastLoop || !m_Tables.Loops[loop.GetIndex()].Anchor.IsValid()) {
         return Refuse(op, "a nonempty loop of a face with several loops is required");
+    }
+    if (!CanSeparateLoop(loop.GetIndex())) {
+        return Refuse(op, "separating the loop would disconnect its shell");
     }
     STEREON_TRY(const auto made, AddFace(face.Surface, face.Reversed));
     if (face.Shell.IsValid()) {

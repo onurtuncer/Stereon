@@ -16,6 +16,17 @@ import Stereon.Topo;
 using namespace Stereon;
 using TopoTest::Must;
 
+namespace {
+TopoTest::Body UnownedHoleSheet()
+{
+    TopoTest::Body body;
+    const auto face = body.AddFace(TopoTest::XyPlane());
+    TopoTest::AddBoundaryPolygon(body, face, {{0, 0, 0}, {3, 0, 0}, {3, 3, 0}, {0, 3, 0}});
+    TopoTest::AddBoundaryPolygon(body, face, {{1, 1, 0}, {1, 2, 0}, {2, 2, 0}, {2, 1, 0}});
+    return body;
+}
+} // namespace
+
 TEST_CASE("M5 split and join preserve every nonmanifold use", "[topo][euler][m5]")
 {
     for (const std::size_t valence : {1U, 2U, 3U, 7U}) {
@@ -81,7 +92,7 @@ TEST_CASE("M5 invalid split parameters and positions leave the builder unchanged
 
 TEST_CASE("M5 ring and hole inverse pairs restore cycles", "[topo][euler][m5]")
 {
-    auto body = TopoTest::MakeHoleSheet();
+    auto body = UnownedHoleSheet();
     auto& b = body.Builder;
     const auto outer = b.CoedgesOf(body.Loops[0]);
     const auto inner = b.CoedgesOf(body.Loops[1]);
@@ -238,5 +249,110 @@ TEST_CASE("M5 join refuses a third edge at the join vertex", "[topo][euler][m5]"
     const auto epoch = b.GetEpoch();
     REQUIRE_FALSE(b.JoinEdgeKillVertex(body.Edges[0], split.Upper));
     REQUIRE(b.GetEpoch() == epoch);
+    REQUIRE(b.Validate().IsValid());
+}
+
+TEST_CASE("M5 bridge inverse holds at every pair of loop attachment sites",
+          "[topo][euler][m5][property]")
+{
+    const std::array<Point2, 4> outerEnds{{{3, 0}, {3, 3}, {0, 3}, {0, 0}}};
+    const std::array<Point2, 4> innerEnds{{{1, 2}, {2, 2}, {2, 1}, {1, 1}}};
+    for (std::size_t a = 0; a < 4; ++a) {
+        for (std::size_t c = 0; c < 4; ++c) {
+            auto body = UnownedHoleSheet();
+            auto& b = body.Builder;
+            const auto outer = b.CoedgesOf(body.Loops[0]);
+            const auto inner = b.CoedgesOf(body.Loops[1]);
+            EdgeGeometry geometry;
+            geometry.Kind = EdgeCurveKind::Boundary;
+            geometry.Range = Interval{0, 1};
+            geometry.Tolerance = TopoTest::Tight;
+            geometry.PCurve =
+                Must(b.AddPCurve(Curve2d(Line2d{outerEnds[a], innerEnds[c] - outerEnds[a]})));
+            const auto bridge = Must(b.MakeEdgeKillRing(outer[a], inner[c], geometry));
+            REQUIRE(b.Validate().IsValid());
+            const auto ring = Must(b.KillEdgeMakeRing(bridge.Edge));
+            REQUIRE(b.Validate().IsValid());
+            REQUIRE(b.CoedgesOf(body.Loops[0]) == outer);
+            const auto restored = b.CoedgesOf(ring);
+            REQUIRE(
+                std::is_permutation(restored.begin(), restored.end(), inner.begin(), inner.end()));
+            const auto face = Must(b.MakeFaceKillRingHole(ring));
+            Must(b.KillFaceMakeRingHole(face, body.Faces[0]));
+            REQUIRE(b.Validate().IsValid());
+            REQUIRE(b.Count<EntityKind::Face>() == 1);
+        }
+    }
+}
+
+TEST_CASE("M5 endpoint containment failure rolls back earlier merge clusters", "[topo][euler][m5]")
+{
+    ShapeBuilder b;
+    const auto first = Must(b.AddVertex({5, 0, 0}, 0.001));
+    const auto firstMember = Must(b.AddVertex({5.0005, 0, 0}, 0.001));
+    const auto second = Must(b.AddVertex({0, 0, 0}, 0.001));
+    const auto secondMember = Must(b.AddVertex({0.0008, 0, 0}, 0.001));
+    EdgeSpec edge;
+    edge.Kind = EdgeCurveKind::Spatial;
+    edge.Start = secondMember;
+    edge.End = Must(b.AddVertex({0.0016, 0, 1}, 0.001));
+    edge.Curve = Must(b.AddCurve(Curve(Line{{0.0016, 0, 0}, {0, 0, 1}})));
+    edge.Range = Interval{0, 1};
+    edge.Tolerance = 0.001;
+    Must(b.AddEdge(edge));
+    const std::array vertices{first, firstMember, second, secondMember};
+    // The trace is within secondMember's tolerance, but outside second's
+    // tolerance. The first cluster has already merged in the candidate.
+    REQUIRE_FALSE(b.MergeVertices(vertices, Context::Default()));
+    REQUIRE(b.Count<EntityKind::Vertex>() == 5);
+    REQUIRE(b.GetTopologyEvents().empty());
+    REQUIRE(b.Validate().IsValid());
+    Must(b.SetTolerance(firstMember, 0.001, "the rolled-back handle remains live"));
+}
+
+TEST_CASE("M5 separating a ring refuses to disconnect its shell", "[topo][euler][m5]")
+{
+    auto body = TopoTest::MakeHoleSheet();
+    auto& b = body.Builder;
+    const auto epoch = b.GetEpoch();
+    const auto loops = b.Count<EntityKind::Loop>();
+    REQUIRE_FALSE(b.MakeFaceKillRingHole(body.Loops[1]));
+    REQUIRE(b.GetEpoch() == epoch);
+    REQUIRE(b.Count<EntityKind::Face>() == 1);
+    REQUIRE(b.Count<EntityKind::Loop>() == loops);
+    REQUIRE(b.GetTopologyEvents().empty());
+    REQUIRE(b.Validate().IsValid());
+}
+
+TEST_CASE("M5 ring separation preserves an existing path through the shell", "[topo][euler][m5]")
+{
+    auto body = UnownedHoleSheet();
+    const auto shape = std::move(body).Freeze();
+    const auto source = shape.Resolve(body.Faces[0]);
+    auto b = Must(ShapeBuilder::Open(shape));
+    const auto support = Must(b.AddFace(Must(b.AddSurface(SurfaceOf(shape, source)))));
+    const auto shell = Must(b.AddShell());
+    Must(b.AddFaceToShell(shell, b.Handle(source)));
+    Must(b.AddFaceToShell(shell, support));
+    // A second face shares both rings. After separation it supplies the
+    // edge-connected path between the retained face and the extracted face.
+    for (const auto loop : *LoopsOf(shape, source)) {
+        const auto added = Must(b.AddLoop(support));
+        std::vector<CoedgeId> uses;
+        for (const auto use : *CoedgesOf(shape, loop)) {
+            uses.push_back(use);
+        }
+        for (auto it = uses.rbegin(); it != uses.rend(); ++it) {
+            const auto pcurve = Must(b.AddPCurve(*PCurveOf(shape, *it)));
+            Must(b.AppendCoedge(added, b.Handle(EdgeOf(shape, *it)), EdgeUseSense::Opposite,
+                                pcurve));
+        }
+    }
+    REQUIRE(b.Validate().IsValid());
+    const auto split = Must(b.MakeFaceKillRingHole(b.Handle(shape.Resolve(body.Loops[1]))));
+    REQUIRE(b.Count<EntityKind::Face>() == 3);
+    REQUIRE(b.Validate().IsValid());
+    Must(b.KillFaceMakeRingHole(split, b.Handle(source)));
+    REQUIRE(b.Count<EntityKind::Face>() == 2);
     REQUIRE(b.Validate().IsValid());
 }

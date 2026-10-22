@@ -32,6 +32,7 @@
 #include "Memory.hpp"
 #include <benchmark/benchmark.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <utility>
@@ -343,9 +344,9 @@ void EditDeleteFace(benchmark::State& state)
     OneEdit(state, DeleteFace);
 }
 
-void SplitEdge(ShapeBuilder& b, const Shape& shape, const std::size_t n)
+void SplitEdgeAt(ShapeBuilder& b, const Shape& shape, const FaceId face)
 {
-    const auto loop = *Stereon::LoopsOf(shape, MiddleFace(shape, n))->begin();
+    const auto loop = *Stereon::LoopsOf(shape, face)->begin();
     const auto use = *Stereon::CoedgesOf(shape, loop)->begin();
     const auto edge = Stereon::EdgeOf(shape, use);
     const auto curve = *Stereon::CurveOf(shape, edge);
@@ -355,18 +356,41 @@ void SplitEdge(ShapeBuilder& b, const Shape& shape, const std::size_t n)
                                              Stereon::Context::DefaultResolution));
 }
 
-void SplitFace(ShapeBuilder& b, const Shape& shape, const std::size_t n)
+Point3 UseEnd(const Shape& shape, const Stereon::CoedgeId use)
 {
-    const auto loop = *Stereon::LoopsOf(shape, MiddleFace(shape, n))->begin();
-    const auto uses = b.CoedgesOf(b.Handle(loop));
-    const auto i = static_cast<double>(n / 2);
+    const auto edge = Stereon::EdgeOf(shape, use);
+    const auto vertex = Stereon::StoredEdgeUseSense(shape, use) == EdgeUseSense::Same
+                            ? Stereon::EndOf(shape, edge)
+                            : Stereon::StartOf(shape, edge);
+    return Stereon::PositionOf(shape, vertex);
+}
+
+void SplitFaceAt(ShapeBuilder& b, const Shape& shape, const FaceId face)
+{
+    const auto loop = *Stereon::LoopsOf(shape, face)->begin();
+    std::vector<Stereon::CoedgeId> uses;
+    for (const auto use : *Stereon::CoedgesOf(shape, loop)) {
+        uses.push_back(use);
+    }
+    const Point3 from = UseEnd(shape, uses[0]);
+    const Point3 to = UseEnd(shape, uses[2]);
     Stereon::EdgeGeometry geometry;
     geometry.Kind = EdgeCurveKind::Exact;
     geometry.Range = Interval{0, 1};
     geometry.Tolerance = Stereon::Context::DefaultResolution;
-    geometry.Curve = *b.AddCurve(Stereon::Curve(Stereon::Line{{i + 1, i, 0}, {-1, 1, 0}}));
-    geometry.PCurve = *b.AddPCurve(Stereon::Curve2d(Stereon::Line2d{{i + 1, i}, {-1, 1}}));
-    static_cast<void>(*b.MakeEdgeFace(uses[0], uses[2], geometry));
+    geometry.Curve = *b.AddCurve(Stereon::Curve(Stereon::Line{from, to - from}));
+    geometry.PCurve = *b.AddPCurve(
+        Stereon::Curve2d(Stereon::Line2d{{from.X, from.Y}, {to.X - from.X, to.Y - from.Y}}));
+    static_cast<void>(*b.MakeEdgeFace(b.Handle(uses[0]), b.Handle(uses[2]), geometry));
+}
+
+void SplitEdge(ShapeBuilder& b, const Shape& shape, const std::size_t n)
+{
+    SplitEdgeAt(b, shape, MiddleFace(shape, n));
+}
+void SplitFace(ShapeBuilder& b, const Shape& shape, const std::size_t n)
+{
+    SplitFaceAt(b, shape, MiddleFace(shape, n));
 }
 
 void EditSplitEdge(benchmark::State& state)
@@ -378,8 +402,8 @@ void EditSplitFace(benchmark::State& state)
     OneEdit(state, SplitFace);
 }
 
-/// 100 local edits in a row, half surface replacements and half face
-/// deletions spread over the sheet, each opened on the previous result
+/// 100 local edits in a row: equal parts surface replacement, face deletion,
+/// face splitting and edge splitting, each opened on the previous result
 /// and frozen, no Compact(): the memory of the body plus the final copy
 /// over the body alone, then Compact() of the result.
 void EditSequence(benchmark::State& state)
@@ -389,23 +413,35 @@ void EditSequence(benchmark::State& state)
     const Shape body = MakeSheet(n);
     const std::size_t bodyBytes = TableBytes(body);
     double ratio = 0.0;
+    double maxCopiedFraction = 0.0;
     for (auto _ : state) {
         Shape current = body;
         for (std::size_t k = 0; k < edits; ++k) {
             ShapeBuilder b = *ShapeBuilder::Open(current);
-            // Faces spread along a diagonal, never one twice.
-            const std::size_t i = 1 + (k * 7) % (n - 2);
-            const std::size_t j = 1 + (k * 11) % (n - 2);
+            // Distinct original faces, also for the 100-by-100 quick fixture.
+            const std::size_t width = n - 2;
+            const std::size_t offset = k * (width * width / edits);
+            const std::size_t i = 1 + offset % width;
+            const std::size_t j = 1 + offset / width;
             const FaceId face = current.GetSnapshot()->MakeId<EntityKind::Face>(
                 static_cast<std::uint32_t>(j * n + i));
-            if (k % 2 == 0) {
+            if (k % 4 == 0) {
                 const Stereon::SurfaceRef moved = *b.AddSurface(Stereon::Surface(Stereon::Plane{
                     Point3{0, 0, static_cast<double>(k)}, Vec3{1, 0, 0}, Vec3{0, 1, 0}}));
                 static_cast<void>(*b.SetSurface(b.Handle(face), moved));
-            } else {
+            } else if (k % 4 == 1) {
                 static_cast<void>(*b.RemoveFace(b.Handle(face)));
+            } else if (k % 4 == 2) {
+                SplitFaceAt(b, current, face);
+            } else {
+                SplitEdgeAt(b, current, face);
             }
-            current = *Stereon::Freeze(std::move(b));
+            const Shape edited = *Stereon::Freeze(std::move(b));
+            const double copied =
+                static_cast<double>(PageCount(edited) - SharedPages(current, edited));
+            maxCopiedFraction =
+                std::max(maxCopiedFraction, copied / static_cast<double>(PageCount(body)));
+            current = edited;
         }
         // What the two snapshots hold together: the body's pages plus the
         // pages the edits copied.
@@ -416,6 +452,7 @@ void EditSequence(benchmark::State& state)
     }
     state.counters["faces"] = static_cast<double>(n * n);
     state.counters["memory_ratio"] = ratio;
+    state.counters["max_copied_fraction"] = maxCopiedFraction;
 }
 
 void CompactAfterEdits(benchmark::State& state)

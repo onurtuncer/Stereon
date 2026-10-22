@@ -558,6 +558,10 @@ KEMR requires two opposite, nonadjacent uses in one loop and produces two
 nonempty loops. MEKR bridges the ends of uses in two loops of the same face.
 KFMRH moves a face's sole nonempty loop to a face with identical surface,
 orientation and shell; MFKRH moves one loop of a multi-loop face to a new face.
+When the face belongs to a shell, MFKRH first checks for a radial-edge path
+between the moved and remaining loops through faces of that shell. It refuses
+to disconnect the shell, before changing any records. Faces outside a shell
+have no such connectivity constraint.
 These are incidence operations: genus and connected-component interpretations
 require a manifold, geometrically classified input and are not inferred for
 arbitrary radial topology.

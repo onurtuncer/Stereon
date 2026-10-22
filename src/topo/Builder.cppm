@@ -356,7 +356,8 @@ public:
     /// is inferred. Inverse: MakeFaceKillRingHole on the moved loop.
     [[nodiscard]] Result<void> KillFaceMakeRingHole(BuilderFaceId dead, BuilderFaceId kept);
     /// MFKRH: move a nonempty loop of a multi-loop face into a new face on
-    /// the same surface and shell. Other loops stay. Inverse: KFMRH.
+    /// the same surface and shell. Refuses to disconnect a shell; faces
+    /// outside a shell are supported. Other loops stay. Inverse: KFMRH.
     [[nodiscard]] Result<BuilderFaceId> MakeFaceKillRingHole(BuilderLoopId loop);
     /// SEMV: split every radial use at t, strictly inside the bounded range.
     /// The caller supplies the split position and vertex tolerance; every
@@ -513,6 +514,7 @@ private:
                             const std::vector<std::uint32_t>& edges) const;
 
     [[nodiscard]] std::vector<std::uint32_t> UsesOf(std::uint32_t edge) const;
+    [[nodiscard]] bool CanSeparateLoop(std::uint32_t loop) const;
     void MoveLoop(std::uint32_t loop, std::uint32_t face);
     void RepointEdge(std::uint32_t edge, std::uint32_t start, std::uint32_t end);
     [[nodiscard]] Result<void> CheckPointAt(std::uint32_t edge, double t, const Point3& position,
