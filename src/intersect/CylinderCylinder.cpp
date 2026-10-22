@@ -144,13 +144,91 @@ Rulings(const Frame& a, const Frame& b, const Vec3& across, const double distanc
            Compare(squaredDistance, margin, scale) != Sign::Positive;
 }
 
+/// One turn is enough to describe a periodic domain. Preserve the caller's
+/// chart for bounded arcs; an unbounded interval covers the whole circle.
+[[nodiscard]] Interval OneTurn(const Interval& angle)
+{
+    if (!angle.IsBounded()) {
+        if (std::isfinite(angle.GetLower())) {
+            return {angle.GetLower(), angle.GetLower() + CirclePeriod};
+        }
+        if (std::isfinite(angle.GetUpper())) {
+            return {angle.GetUpper() - CirclePeriod, angle.GetUpper()};
+        }
+        return {0.0, CirclePeriod};
+    }
+    return {angle.GetLower(), std::min(angle.GetUpper(), angle.GetLower() + CirclePeriod)};
+}
+
+[[nodiscard]] bool CoversTurn(const Interval& angle)
+{
+    return !angle.IsBounded() || angle.GetUpper() - angle.GetLower() >= CirclePeriod;
+}
+
+/// Intersect the requested charts, splitting where the angular image wraps.
+/// The correspondence remains modulo the period, as ParameterMap specifies.
+[[nodiscard]] Result<std::vector<OverlapRegion>> ClipAngles(OverlapRegion overlap, const Box2& boxA,
+                                                            const Box2& boxB)
+{
+    const Interval arcA = OneTurn(boxA.X);
+    const Interval arcB = OneTurn(boxB.X);
+    const double widthA = arcA.GetUpper() - arcA.GetLower();
+    const double widthB = arcB.GetUpper() - arcB.GetLower();
+    if (CoversTurn(boxA.X) && CoversTurn(boxB.X)) {
+        overlap.OnA.X = boxA.X;
+        overlap.OnB.X = boxB.X;
+        overlap.FullDomain = overlap.OnA.Y == boxA.Y && overlap.OnB.Y == boxB.Y;
+        return std::vector<OverlapRegion>{std::move(overlap)};
+    }
+    const double sense = overlap.AToB.U.X;
+    const double startB = sense > 0.0 ? arcB.GetLower() : arcB.GetUpper();
+    const double startInA = sense * (startB - overlap.AToB.Offset.X);
+    double offset = std::fmod(startInA - arcA.GetLower(), CirclePeriod);
+    if (!std::isfinite(offset)) {
+        return Fail(ErrorCode::IntersectionFailed, "CylinderCylinder: angular chart overflow");
+    }
+    if (offset < 0.0) {
+        offset += CirclePeriod;
+    }
+    std::vector<OverlapRegion> pieces;
+    for (const double shift : {offset - CirclePeriod, offset}) {
+        const double low = std::max(0.0, shift);
+        const double high = std::min(widthA, shift + widthB);
+        if (low > high) {
+            continue;
+        }
+        OverlapRegion piece = overlap;
+        piece.OnA.X = Intersection(boxA.X, Interval{arcA.GetLower() + low, arcA.GetLower() + high});
+        const double b0 = startB + sense * (low - shift);
+        const double b1 = startB + sense * (high - shift);
+        piece.OnB.X = Intersection(boxB.X, Interval{std::min(b0, b1), std::max(b0, b1)});
+        piece.FullDomain = piece.OnA == boxA && piece.OnB == boxB;
+        pieces.push_back(std::move(piece));
+    }
+    return pieces;
+}
+
+/// Restrict the non-periodic height first, then the periodic angular chart.
+[[nodiscard]] Result<std::vector<OverlapRegion>> ClipOverlap(OverlapRegion overlap,
+                                                             const Box2& boxA, const Box2& boxB)
+{
+    const double heightSense = overlap.AToB.V.Y;
+    const double heightOffset = overlap.AToB.Offset.Y;
+    overlap.OnA.Y = Intersection(boxA.Y, AxisRange(heightOffset, heightSense, boxB.Y));
+    if (overlap.OnA.Y.IsEmpty()) {
+        return std::vector<OverlapRegion>{};
+    }
+    overlap.OnB.Y =
+        Intersection(boxB.Y, AxisRange(-heightSense * heightOffset, heightSense, overlap.OnA.Y));
+    return ClipAngles(std::move(overlap), boxA, boxB);
+}
+
 /// Coincident cylinders: an overlap whose map turns A's angle into B's and
 /// shifts the height; the angles run the same way when the frames turn the
 /// same way about the axis.
-[[nodiscard]] SurfaceSurfaceIntersection Coincident(const Frame& a, const Box2& boxA,
-                                                    const Frame& b, const Box2& boxB,
-                                                    const double distance, const double tolerance,
-                                                    const Context& ctx)
+[[nodiscard]] Result<SurfaceSurfaceIntersection>
+Coincident(const Frame& a, const Box2& boxA, const Frame& b, const Box2& boxB,
+           const double distance, const double tolerance, const Context& ctx)
 {
     const Cylinder& ca = a.Geometry;
     const Cylinder& cb = b.Geometry;
@@ -161,9 +239,6 @@ Rulings(const Frame& a, const Frame& b, const Vec3& across, const double distanc
     overlap.AToB.U = Vec2{sameTurn ? 1.0 : -1.0, 0.0};
     overlap.AToB.V = Vec2{0.0, Dot(a.Axis, b.Axis) > 0.0 ? 1.0 : -1.0};
     overlap.AToB.Offset = Vec2{AngleOn(cb, ca.XAxis), Dot(ca.Origin - cb.Origin, b.Axis)};
-    overlap.OnA = boxA;
-    overlap.OnB = boxB;
-    overlap.FullDomain = boxA == Domain(ca) && boxB == Domain(cb);
     overlap.SameOrientation = ca.RightHanded == cb.RightHanded;
     if (distance > 0.0) {
         overlap.Evidence = CoincidenceEvidence::Tolerant;
@@ -173,7 +248,7 @@ Rulings(const Frame& a, const Frame& b, const Vec3& across, const double distanc
                                     " mm: declared coincident, nothing moved (ADR-0029)");
     }
     SurfaceSurfaceIntersection result;
-    result.Overlaps.push_back(std::move(overlap));
+    STEREON_TRY(result.Overlaps, ClipOverlap(std::move(overlap), boxA, boxB));
     return result;
 }
 

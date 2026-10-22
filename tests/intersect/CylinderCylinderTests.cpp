@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <numbers>
 #include <string>
 #include <vector>
@@ -101,6 +102,111 @@ TEST_CASE("nearly coaxial cylinders within the pair tolerance are declared coinc
     const auto nested = Intersect(a, Box2::Everything(), b, Box2::Everything(), 5e-4, ctx);
     REQUIRE(nested.has_value());
     REQUIRE(nested->IsEmpty());
+}
+
+TEST_CASE("coincident cylinders intersect their requested height domains", "[intersect][cylinder]")
+{
+    const Interval turn{0.0, Stereon::CirclePeriod};
+    const Box2 first{turn, Interval{0.0, 1.0}};
+    const auto separate = Intersect(a, first, a, Box2{turn, Interval{2.0, 3.0}}, ctx);
+    REQUIRE(separate.has_value());
+    REQUIRE(separate->IsEmpty());
+    const auto same = Intersect(a, first, a, first, ctx);
+    REQUIRE(same.has_value());
+    REQUIRE(same->Overlaps.size() == 1);
+    REQUIRE(same->Overlaps.front().FullDomain);
+    REQUIRE(same->Overlaps.front().OnA == first);
+    REQUIRE(same->Overlaps.front().OnB == first);
+
+    const auto partial = Intersect(a, first, a, Box2{turn, Interval{0.5, 2.0}}, ctx);
+    REQUIRE(partial.has_value());
+    REQUIRE(partial->Overlaps.size() == 1);
+    const auto& overlap = partial->Overlaps.front();
+    REQUIRE_FALSE(overlap.FullDomain);
+    REQUIRE_THAT(overlap.OnA.Y.GetLower(), WithinAbs(0.5, 1e-14));
+    REQUIRE(overlap.OnA.Y.GetUpper() == 1.0);
+    REQUIRE(overlap.OnB.Y.GetLower() == 0.5);
+    REQUIRE_THAT(overlap.OnB.Y.GetUpper(), WithinAbs(1.0, 1e-14));
+
+    const Surface down = AboutMinusZ(Point3{0.0, 0.0, 9.0}, 3.0);
+    const Box2 reversed{turn, Interval{8.0, 9.0}};
+    const auto mapped = Intersect(a, first, down, reversed, ctx);
+    REQUIRE(mapped.has_value());
+    REQUIRE(mapped->Overlaps.size() == 1);
+    REQUIRE(mapped->Overlaps.front().FullDomain);
+    REQUIRE(mapped->Overlaps.front().OnB == reversed);
+    REQUIRE(Intersect(a, first, down, Box2{turn, Interval{4.0, 5.0}}, ctx)->IsEmpty());
+}
+
+TEST_CASE("coincident cylinder arcs split at the periodic seam", "[intersect][cylinder]")
+{
+    const Interval height{0.0, 1.0};
+    const Box2 first{Interval{0.0, 1.0}, height};
+    REQUIRE(Intersect(a, first, a, Box2{Interval{2.0, 3.0}, height}, ctx)->IsEmpty());
+    const auto same = Intersect(a, first, a, first, ctx);
+    REQUIRE(same.has_value());
+    REQUIRE(same->Overlaps.size() == 1);
+    REQUIRE(same->Overlaps.front().FullDomain);
+
+    const Box2 whole{Interval{0.0, Stereon::CirclePeriod}, height};
+    const Box2 across{Interval{-0.5, 0.5}, height};
+    const auto split = Intersect(a, whole, a, across, ctx);
+    REQUIRE(split.has_value());
+    REQUIRE(split->Overlaps.size() == 2);
+    double covered = 0.0;
+    for (const auto& overlap : split->Overlaps) {
+        REQUIRE_FALSE(overlap.FullDomain);
+        REQUIRE(Contains(whole.X, overlap.OnA.X));
+        REQUIRE(Contains(across.X, overlap.OnB.X));
+        covered += Width(overlap.OnA.X);
+    }
+    REQUIRE_THAT(covered, WithinAbs(1.0, 1e-14));
+
+    // Half-unbounded charts still cover a turn, but their returned chart
+    // must stay inside the requested interval.
+    const Box2 halfUnbounded{Interval{10.0, std::numeric_limits<double>::infinity()}, height};
+    const auto unbounded = Intersect(a, first, a, halfUnbounded, ctx);
+    REQUIRE(unbounded.has_value());
+    REQUIRE_FALSE(unbounded->IsEmpty());
+    for (const auto& overlap : unbounded->Overlaps) {
+        REQUIRE_FALSE(overlap.OnB.X.IsEmpty());
+        REQUIRE(Contains(halfUnbounded.X, overlap.OnB.X));
+    }
+}
+
+TEST_CASE("coincident cylinder overlap coverage agrees with an angular membership oracle",
+          "[intersect][cylinder][property]")
+{
+    // Exact quarter-turn frames and many independently sampled chart points.
+    // The oracle tests each requested interval modulo the period directly.
+    const Surface turned{Cylinder{Point3{}, 3.0, Vec3{0.0, 1.0, 0.0}, Vec3{-1.0, 0.0, 0.0}, true}};
+    const Surface reversed = AboutMinusZ(Point3{}, 3.0);
+    const auto inside = [](const Interval& arc, const double u) {
+        for (int k = -3; k <= 3; ++k) {
+            if (Contains(arc, u + k * Stereon::CirclePeriod)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    for (const Surface& other : {a, turned, reversed}) {
+        const double sense = other.Target<Cylinder>()->YAxis.Y < 0.0 ? -1.0 : 1.0;
+        const double offset = other.Target<Cylinder>()->XAxis.Y > 0.0 ? -pi / 2.0 : 0.0;
+        for (const double start : {-1.0, 0.25, 2.0, 5.5}) {
+            const Box2 boxA{Interval{-0.75, 5.0}, Interval{-1.0, 1.0}};
+            const Box2 boxB{Interval{start, start + 1.5}, Interval{-1.0, 1.0}};
+            const auto result = Intersect(a, boxA, other, boxB, ctx);
+            REQUIRE(result.has_value());
+            for (int sample = 0; sample < 100; ++sample) {
+                const double u = -0.75 + 5.75 * (sample + 0.5) / 100.0;
+                const bool expected = inside(boxB.X, offset + sense * u);
+                const bool found = std::ranges::any_of(result->Overlaps, [&](const auto& overlap) {
+                    return Contains(overlap.OnA.X, u);
+                });
+                REQUIRE(found == expected);
+            }
+        }
+    }
 }
 
 TEST_CASE("cylinders touching from outside share one tangent ruling, same side",

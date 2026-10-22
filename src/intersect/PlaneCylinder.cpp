@@ -162,7 +162,15 @@ struct Sides {
         std::pow(384.0 * budget / (5.0 * std::max(std::abs(amplitude), budget)), 0.25);
     // Not Width(range): GCC 16.2 rejects its contract here as not constant.
     const double width = range.GetUpper() - range.GetLower();
-    const auto n = static_cast<std::size_t>(std::max(16.0, std::ceil(width / spacing)));
+    // Bound both the conversion and the interpolation work before allocating.
+    // This is a work budget, not a geometric tolerance (ADR-0010).
+    constexpr std::size_t SampleBudget = std::size_t{1} << 16;
+    const double count = std::ceil(width / spacing);
+    if (!(spacing > 0.0 && std::isfinite(count) && count <= SampleBudget)) {
+        return Fail(ErrorCode::CertificationFailed,
+                    "PlaneCylinder: the sinusoid pcurve exceeds the sample budget");
+    }
+    const auto n = static_cast<std::size_t>(std::max(16.0, count));
     std::vector<Point2> samples(n + 1);
     for (std::size_t k = 0; k <= n; ++k) {
         const double t =

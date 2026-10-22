@@ -91,13 +91,22 @@ The configurations:
   cylinder is the sinusoid :math:`(u, v_c + B \cos t)`, which no exact 2D
   type represents: it is a clamped cubic B-spline through samples dense
   enough for the interpolation error bound to stay within half the
-  resolution, and the certificate below proves what it achieved.
+  resolution, and the certificate below proves what it achieved. The fit
+  is limited to 2^16 sample intervals; an excessive or non-finite count
+  returns ``CertificationFailed`` before integer conversion or allocation.
 - **Cylinder–cylinder, parallel axes:** two rulings, an external or
   internal tangent ruling (``SameSide``), a proved separation apart or
   nested, or an overlap, exact or declared: the surfaces' Hausdorff
   distance, the axes' distance plus the radii's difference, within the
   pair tolerance. Skew and intersecting axes, the quartic, report
   ``NotImplemented`` until their handler (M3b).
+
+Coincident cylinders intersect the requested height domains through the
+parameter map and intersect angular domains modulo the period. An overlap
+crossing a chart seam is returned as separate regions. Disjoint requested
+domains return no overlap, even when the supporting cylinders coincide.
+``FullDomain`` describes coverage of both requested domains, including
+bounded domains, rather than equality with the unbounded surface domains.
 
 A branch's ``Range`` is clipped to the requested domains with outward
 rounding on the nominal curve: exactly for lines and for the angular

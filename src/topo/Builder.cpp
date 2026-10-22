@@ -677,8 +677,7 @@ Result<CurveRef> ShapeBuilder::CacheEdgeCurve(const BuilderEdgeId edge)
     STEREON_TRY(BSplineCurve spline, Reparametrized(fit.Curve, e.Range));
     Curve cache(std::move(spline));
     const CacheBound certificate = CertifyCache(cache, surface, pcurve, e.Range, e.Tolerance);
-    const CurveRef ref =
-        CurveRef::FromIndex(static_cast<std::uint32_t>(m_Tables.Curves.PushBack(std::move(cache))));
+    STEREON_TRY(const CurveRef ref, AddCurve(std::move(cache)));
     m_Tables.Edges.Modify(edge.GetIndex(), [&](Detail::EdgeRecord& r) {
         r.Cached = ref;
         r.CacheStatus = certificate.Status;
