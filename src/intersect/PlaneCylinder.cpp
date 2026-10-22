@@ -52,17 +52,20 @@ namespace Stereon::Detail {
 
 namespace {
 
-/// The two surfaces with their normal and axis direction.
+/// The two surfaces, erased and as themselves, with their normal and axis
+/// direction.
 struct Sides {
+    const Surface& A;
+    const Surface& B;
     const Plane& P;
     Vec3 Normal;
     const Cylinder& C;
     Vec3 Axis;
 };
 
-[[nodiscard]] Sides SidesOf(const Plane& p, const Cylinder& c)
+[[nodiscard]] Sides SidesOf(const Surface& a, const Surface& b, const Plane& p, const Cylinder& c)
 {
-    return {p, Cross(p.XAxis, p.YAxis), c, Stereon::Axis(c)};
+    return {a, b, p, Cross(p.XAxis, p.YAxis), c, Stereon::Axis(c)};
 }
 
 [[nodiscard]] ExactVector<4> ExactAxis(const Cylinder& c)
@@ -78,8 +81,8 @@ struct Sides {
 
 /// The axis is perpendicular to the plane: the section circle at the
 /// plane's height, on the cylinder's angle.
-[[nodiscard]] SurfaceSurfaceIntersection CircleSection(const Sides& s, const Box2& boxA,
-                                                       const Box2& boxB)
+[[nodiscard]] Result<SurfaceSurfaceIntersection> CircleSection(const Sides& s, const Box2& boxA,
+                                                               const Box2& boxB, const Context& ctx)
 {
     const double v = Dot(s.P.Origin - s.C.Origin, s.Axis);
     const Point3 center = s.C.Origin + v * s.Axis;
@@ -92,34 +95,38 @@ struct Sides {
     const Interval range = Intersection(Domain(circle), boxB.X);
     SurfaceSurfaceIntersection result;
     if (!range.IsEmpty() && Contains(boxB.Y, v) && Intersects(planeBox, boxA)) {
-        result.Branches.push_back(
-            Crossing(Curve(circle), Curve2d(onPlane), Curve2d(onCylinder), range));
+        STEREON_TRY_VOID(Keep(result,
+                              Crossing(Curve(circle), Curve2d(onPlane), Curve2d(onCylinder), range),
+                              s.A, s.B, ctx));
     }
     return result;
 }
 
 /// The cylinder's ruling at angle u, with the line on each surface.
-void AddRuling(SurfaceSurfaceIntersection& result, const Sides& s, const double u,
-               const bool tangent, const Box2& boxA, const Box2& boxB)
+[[nodiscard]] Result<void> AddRuling(SurfaceSurfaceIntersection& result, const Sides& s,
+                                     const double u, const bool tangent, const Box2& boxA,
+                                     const Box2& boxB, const Context& ctx)
 {
     const Point3 point = Eval(s.C, Point2{u, 0.0});
     const Line2d onPlane{Project(s.P, point), InPlane(s.P, s.Axis)};
     const Line2d onCylinder{Point2{u, 0.0}, Vec2{0.0, 1.0}};
     const Interval range = Intersection(ClipLine(onPlane, boxA), ClipLine(onCylinder, boxB));
     if (range.IsEmpty()) {
-        return;
+        return {};
     }
     const Curve line{Line{point, s.Axis}};
-    result.Branches.push_back(tangent
-                                  ? Tangency(line, Curve2d(onPlane), Curve2d(onCylinder), range)
-                                  : Crossing(line, Curve2d(onPlane), Curve2d(onCylinder), range));
+    return Keep(result,
+                tangent ? Tangency(line, Curve2d(onPlane), Curve2d(onCylinder), range)
+                        : Crossing(line, Curve2d(onPlane), Curve2d(onCylinder), range),
+                s.A, s.B, ctx);
 }
 
 /// The axis lies along the plane: the rulings where the cylinder's height
 /// over the plane, h + r cos(u - phi), vanishes. `heightSign` compares h
 /// with r: zero for a tangency, negative for two rulings.
-[[nodiscard]] SurfaceSurfaceIntersection Rulings(const Sides& s, const Box2& boxA, const Box2& boxB,
-                                                 const Sign heightSign)
+[[nodiscard]] Result<SurfaceSurfaceIntersection> Rulings(const Sides& s, const Box2& boxA,
+                                                         const Box2& boxB, const Sign heightSign,
+                                                         const Context& ctx)
 {
     const Vec3 offset = s.C.Origin - s.P.Origin;
     const double phi = Atan2(Dot(s.Normal, s.C.YAxis), Dot(s.Normal, s.C.XAxis));
@@ -129,7 +136,7 @@ void AddRuling(SurfaceSurfaceIntersection& result, const Sides& s, const double 
     if (heightSign == Sign::Zero) {
         // Exactly tangent: the ruling on the plane's side of the axis.
         const double u = Dot(offset, s.Normal) > 0.0 ? phi + std::numbers::pi : phi;
-        AddRuling(result, s, WrappedAngle(Sin(u), Cos(u)), true, boxA, boxB);
+        STEREON_TRY_VOID(AddRuling(result, s, WrappedAngle(Sin(u), Cos(u)), true, boxA, boxB, ctx));
         return result;
     }
     const double delta = std::acos(cosine);
@@ -137,7 +144,7 @@ void AddRuling(SurfaceSurfaceIntersection& result, const Sides& s, const double 
                                  WrappedAngle(Sin(phi + delta), Cos(phi + delta))};
     std::ranges::sort(angles); // Deterministic order (ADR-0029 G1).
     for (const double u : angles) {
-        AddRuling(result, s, u, false, boxA, boxB);
+        STEREON_TRY_VOID(AddRuling(result, s, u, false, boxA, boxB, ctx));
     }
     return result;
 }
@@ -202,8 +209,9 @@ EllipseSection(const Sides& s, const Box2& boxA, const Box2& boxB, const Context
         return result;
     }
     STEREON_TRY(Curve2d onCylinder, SinusoidPcurve(u0, vCenter, amplitude, range, ctx));
-    result.Branches.push_back(
-        Crossing(Curve(ellipse), Curve2d(onPlane), std::move(onCylinder), range));
+    STEREON_TRY_VOID(Keep(result,
+                          Crossing(Curve(ellipse), Curve2d(onPlane), std::move(onCylinder), range),
+                          s.A, s.B, ctx));
     return result;
 }
 
@@ -218,11 +226,11 @@ Result<SurfaceSurfaceIntersection> PlaneCylinder(const Surface& a, const Box2& b
     if (plane == nullptr || cylinder == nullptr) {
         return Fail(ErrorCode::InvalidInput, "PlaneCylinder: dispatched for other surface types");
     }
-    const Sides s = SidesOf(*plane, *cylinder);
+    const Sides s = SidesOf(a, b, *plane, *cylinder);
     const ExactVector<4> normal = ExactCross(Exactly(s.P.XAxis), Exactly(s.P.YAxis));
     const ExactVector<4> axis = ExactAxis(s.C);
     if (IsExactlyZero(ExactCross(normal, axis))) {
-        return CircleSection(s, boxA, boxB);
+        return CircleSection(s, boxA, boxB, ctx);
     }
     if (SignOf(ExactDot(normal, axis)) != Sign::Zero) {
         return EllipseSection(s, boxA, boxB, ctx);
@@ -233,7 +241,7 @@ Result<SurfaceSurfaceIntersection> PlaneCylinder(const Surface& a, const Box2& b
     if (sign == Sign::Positive) {
         return SurfaceSurfaceIntersection{}; // Proved separate.
     }
-    return Rulings(s, boxA, boxB, sign);
+    return Rulings(s, boxA, boxB, sign, ctx);
 }
 
 Result<SurfaceSurfaceIntersection> CylinderPlane(const Surface& a, const Box2& boxA,

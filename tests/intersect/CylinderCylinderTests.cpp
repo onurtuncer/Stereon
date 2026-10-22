@@ -162,6 +162,8 @@ TEST_CASE("crossing cylinders share two rulings, in order of angle on the first"
     const Box2 boxB{Interval{0.0, Stereon::CirclePeriod}, Interval{1.0, 5.0}};
     const auto clipped = Intersect(a, boxA, b, boxB, ctx);
     REQUIRE(clipped->Branches.size() == 2);
+    REQUIRE(clipped->Branches.front().IsCertified());
+    REQUIRE(clipped->Branches.front().Bound < 1e-12);
     REQUIRE_THAT(clipped->Branches.front().Range.GetLower(), WithinAbs(1.0, 1e-14));
     REQUIRE_THAT(clipped->Branches.front().Range.GetUpper(), WithinAbs(2.0, 1e-14));
 

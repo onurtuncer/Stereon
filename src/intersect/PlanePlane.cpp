@@ -9,7 +9,9 @@ module;
 
 // The contract anchor (docs/toolchain/gcc16-feature-probe.md).
 #include <Stereon/Core/Contracts.hpp>
+#include <Stereon/Core/Try.hpp>
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cmath>
@@ -93,8 +95,10 @@ Coincident(const PlaneFrame& a, const Box2& boxA, const PlaneFrame& b, const Box
 
 /// Planes that are not parallel: their line, parametrised by arc length,
 /// with a Line2d on each plane on the same parameter.
-[[nodiscard]] Result<SurfaceSurfaceIntersection> Crossing(const PlaneFrame& a, const Box2& boxA,
-                                                          const PlaneFrame& b, const Box2& boxB)
+[[nodiscard]] Result<SurfaceSurfaceIntersection> Crossing(const Surface& sa, const PlaneFrame& a,
+                                                          const Box2& boxA, const Surface& sb,
+                                                          const PlaneFrame& b, const Box2& boxB,
+                                                          const Context& ctx)
 {
     const Vec3 direction = Normalized(Cross(a.Normal, b.Normal));
     // In plane A and across the line: where B's plane equation vanishes.
@@ -108,8 +112,10 @@ Coincident(const PlaneFrame& a, const Box2& boxA, const PlaneFrame& b, const Box
     const Interval range = Intersection(ClipLine(onA, boxA), ClipLine(onB, boxB));
     SurfaceSurfaceIntersection result;
     if (!range.IsEmpty()) {
-        result.Branches.push_back(
-            Detail::Crossing(Curve(Line{point, direction}), Curve2d(onA), Curve2d(onB), range));
+        STEREON_TRY_VOID(
+            Keep(result,
+                 Detail::Crossing(Curve(Line{point, direction}), Curve2d(onA), Curve2d(onB), range),
+                 sa, sb, ctx));
     }
     return result;
 }
@@ -128,7 +134,7 @@ Result<SurfaceSurfaceIntersection> PlanePlane(const Surface& a, const Box2& boxA
     const PlaneFrame fa = FrameOf(*pa);
     const PlaneFrame fb = FrameOf(*pb);
     if (!IsExactlyZero(ExactCross(fa.ExactNormal, fb.ExactNormal))) {
-        return Crossing(fa, boxA, fb, boxB);
+        return Crossing(a, fa, boxA, b, fb, boxB, ctx);
     }
     // The signed height of B's origin over A, in units of |nA|.
     const auto height =

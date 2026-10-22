@@ -674,15 +674,36 @@ Result<CurveRef> ShapeBuilder::CacheEdgeCurve(const BuilderEdgeId edge)
     // Uniform parametrisation puts sample k at k / (n - 1) of [0, 1], which
     // the reparametrisation maps to the edge's own parameter.
     STEREON_TRY(const CurveFit fit, Interpolate(points, 3, Parametrization::Uniform));
-    STEREON_TRY(BSplineCurve cache, Reparametrized(fit.Curve, e.Range));
-    const CurveRef ref = CurveRef::FromIndex(
-        static_cast<std::uint32_t>(m_Tables.Curves.PushBack(Curve(std::move(cache)))));
+    STEREON_TRY(BSplineCurve spline, Reparametrized(fit.Curve, e.Range));
+    Curve cache(std::move(spline));
+    const CacheBound certificate = CertifyCache(cache, surface, pcurve, e.Range, e.Tolerance);
+    const CurveRef ref =
+        CurveRef::FromIndex(static_cast<std::uint32_t>(m_Tables.Curves.PushBack(std::move(cache))));
     m_Tables.Edges.Modify(edge.GetIndex(), [&](Detail::EdgeRecord& r) {
         r.Cached = ref;
-        r.CacheStatus = CacheCertificate::Uncertified;
-        r.CacheBound = std::numeric_limits<double>::infinity();
+        r.CacheStatus = certificate.Status;
+        r.CacheBound = certificate.Bound;
     });
     return ref;
+}
+
+/// ADR-0009 section 4: the cache's deviation from S(c(t)) over the whole
+/// range, proved within the edge's tolerance where interval evaluation
+/// covers the types; otherwise the cache stays uncertified. An edge without
+/// a tolerance has nothing to certify within.
+ShapeBuilder::CacheBound ShapeBuilder::CertifyCache(const Curve& cache, const Surface& surface,
+                                                    const Curve2d& pcurve, const Interval& range,
+                                                    const double tolerance)
+{
+    CacheBound result{CacheCertificate::Uncertified, std::numeric_limits<double>::infinity()};
+    if (tolerance > 0.0) { // STEREON-LINT-ALLOW(epsilon): a sign test
+        if (const Result<DeviationCertificate> certificate =
+                CertifyDeviation(cache, surface, pcurve, range, tolerance)) {
+            result.Status = CacheCertificate::Certified;
+            result.Bound = certificate->Bound;
+        }
+    }
+    return result;
 }
 
 /// Takes the coedge out of its loop's cycle and its edge's radial ring and

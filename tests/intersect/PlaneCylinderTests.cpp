@@ -72,6 +72,8 @@ TEST_CASE("a plane across the axis cuts a circle on the cylinder's angle", "[int
     REQUIRE(branch.OnA.Target<Stereon::Circle2d>() != nullptr);
     REQUIRE(branch.OnB.Target<Stereon::Line2d>() != nullptr);
     REQUIRE(PcurveDeviation(branch, Horizontal(3.0), aboutZ) <= 1e-14);
+    REQUIRE(branch.IsCertified());
+    REQUIRE(branch.Bound <= ctx.GetResolution());
 
     // Half the angular domain: half the circle. Outside the height: nothing.
     const Box2 half{Interval{0.0, pi}, Interval::Everything()};
@@ -119,6 +121,8 @@ TEST_CASE("a plane along the axis cuts two rulings, in order of angle", "[inters
     for (const Stereon::IntersectionBranch& branch : clipped->Branches) {
         REQUIRE_THAT(branch.Range.GetLower(), WithinAbs(1.0, 1e-14));
         REQUIRE_THAT(branch.Range.GetUpper(), WithinAbs(4.0, 1e-14));
+        REQUIRE(branch.IsCertified());
+        REQUIRE(branch.Bound < 1e-12);
     }
 }
 
@@ -151,6 +155,7 @@ TEST_CASE("an oblique plane cuts an ellipse, exact on the plane and fitted on th
 {
     const Surface oblique{IntersectTest::PlaneWithNormal(Point3{}, Vec3{0.0, 1.0, 1.0})};
     const auto result = Intersect(oblique, aboutZ, ctx);
+    INFO(IntersectTest::ErrorText(result));
     REQUIRE(result.has_value());
     REQUIRE(result->Branches.size() == 1);
     const Stereon::IntersectionBranch& branch = result->Branches.front();
@@ -162,6 +167,9 @@ TEST_CASE("an oblique plane cuts an ellipse, exact on the plane and fitted on th
     REQUIRE(branch.OnA.Target<Stereon::Ellipse2d>() != nullptr);
     REQUIRE(branch.OnB.Target<Stereon::BSplineCurve2d>() != nullptr);
     REQUIRE_THAT(Width(branch.Range), WithinAbs(Stereon::CirclePeriod, 1e-14));
+    // Certified over the whole turn, the fitted pcurve included.
+    REQUIRE(branch.IsCertified());
+    REQUIRE(branch.Bound <= ctx.GetResolution());
     // The exact pcurve on the plane, the fitted one on the cylinder.
     for (const double t : IntersectTest::SamplesOf(branch.Range, 500)) {
         const Point3 p = Eval(branch.Curve3d, t);
@@ -188,6 +196,7 @@ TEST_CASE("the cylinder first gives the same branches with the sides swapped",
     const Surface oblique{
         IntersectTest::PlaneWithNormal(Point3{1.0, 2.0, 3.0}, Vec3{1.0, 0.0, 2.0})};
     const auto swapped = Intersect(aboutZ, oblique, ctx);
+    INFO(IntersectTest::ErrorText(swapped));
     REQUIRE(swapped.has_value());
     REQUIRE(swapped->Branches.size() == 1);
     REQUIRE(swapped->Branches.front().OnA.Target<Stereon::BSplineCurve2d>() != nullptr);

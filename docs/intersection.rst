@@ -91,7 +91,7 @@ The configurations:
   cylinder is the sinusoid :math:`(u, v_c + B \cos t)`, which no exact 2D
   type represents: it is a clamped cubic B-spline through samples dense
   enough for the interpolation error bound to stay within half the
-  resolution. Certification of that bound is the next milestone (M4).
+  resolution, and the certificate below proves what it achieved.
 - **Cylinder–cylinder, parallel axes:** two rulings, an external or
   internal tangent ruling (``SameSide``), a proved separation apart or
   nested, or an overlap, exact or declared: the surfaces' Hausdorff
@@ -106,6 +106,40 @@ the branch's parameter box leaves the domain entirely. A face-level
 operation restricts a branch to its loops itself; a box should include the
 face's tolerance for the clip to keep every point within it. A declared
 coincidence is logged at ``Info`` with its distance and the tolerance.
+
+Certificates
+------------
+
+Every branch over a bounded range is *certified* (ADR-0009 section 4): its
+``Bound`` is a proved bound on its deviation from both surfaces, through
+their pcurves, over the whole range, within the Context's resolution. A
+branch over an unbounded range stays uncertified until a face's loops
+bound it. A branch that cannot be certified fails the intersection with
+``CertificationFailed``, never a partial success (ADR-0029).
+
+The proof is ``CertifyDeviation(curve, surface, pcurve, range, target)``
+in ``Stereon.Surface``, which the topology's cached edge curves use too.
+It rests on ``IntervalScalar``, a ``Scalar`` (ADR-0021) whose arithmetic
+is core's outward-rounded ``Interval``: the geometry templates, given it,
+evaluate over parameter intervals and return rigorous enclosures, with the
+sine and cosine enclosing their extrema inside a span. The range is
+bisected; on each span the deviation ``f(t) = c(t) - S(p(t))`` is enclosed
+by the mean-value form ``f(m) + f'(span) (t - m)`` at the midpoint, and a
+span is accepted once its enclosure is within the target. The largest
+accepted enclosure is the bound, with the number of spans it took. A
+B-spline's enclosures come from its poles: the hull of those active over
+the span, narrowed within one knot span by the same mean-value form from
+its derivative curves; ``Eval``'s rounded basis functions are covered by a
+margin.
+
+The search cannot be fooled and does not run away: a span whose midpoint
+provably deviates by more than the target (the least magnitude of its
+enclosure) ends it at once with that witness; a span that can no longer be
+split, or a budget of 2^18 spans, ends it with the bound reached, which is
+where a target below the rounding of the enclosures leads. Lines, circles,
+ellipses and non-rational B-splines are covered as curves and pcurves, and
+planes and cylinders as surfaces; anything else is ``NotSupported``, and a
+range outside a B-spline's domain is ``InvalidInput``.
 
 Every other pair reports ``NotImplemented`` until Phase 2.
 
