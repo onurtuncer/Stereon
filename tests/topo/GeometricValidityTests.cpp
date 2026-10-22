@@ -16,6 +16,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -24,6 +25,7 @@
 import Stereon.Topo;
 
 #include "Bodies.hpp"
+#include "FaultGeometry.hpp"
 
 using namespace TopoTest;
 using Stereon::Context;
@@ -280,4 +282,54 @@ TEST_CASE("the Geometric rules have stable IDs", "[topo][validity]")
     REQUIRE(Stereon::RuleName(TopologyRule::VertexContainment) == "VertexContainment");
     REQUIRE(Stereon::RuleName(TopologyRule::EdgeContainment) == "EdgeContainment");
     REQUIRE(Stereon::RuleId(TopologyRule::EdgeCache) == "S17");
+}
+
+TEST_CASE("G02 rejects every non-finite interior sample on a lone Spatial trace",
+          "[topo][validity][property]")
+{
+    for (const double bad :
+         {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity()}) {
+        for (int k = 1; k < 16; ++k) {
+            Body body;
+            const auto a = body.AddVertex({0, 0, 0});
+            const auto z = body.AddVertex({1, 0, 0});
+            FaultGeometry::Curve faulty;
+            faulty.At = static_cast<double>(k) / 16;
+            faulty.Value = bad;
+            const auto curve = Must(body.Builder.AddCurve(Stereon::Curve(faulty)));
+            body.AddEdge({.Kind = Stereon::EdgeCurveKind::Spatial,
+                          .Start = a,
+                          .End = z,
+                          .Curve = curve,
+                          .Range = Interval{0.0, 1.0},
+                          .Tolerance = Tight});
+            const auto shape = std::move(body).Freeze();
+            const auto report = Geometric(shape);
+            REQUIRE_FALSE(report.IsValid());
+            REQUIRE(report.GetFindings().front().Rule == TopologyRule::EdgeContainment);
+            auto edit = Must(ShapeBuilder::Open(shape));
+            const auto result = Stereon::Commit(std::move(edit), Context::Default());
+            REQUIRE_FALSE(result);
+            REQUIRE(result.error().GetCode() == ErrorCode::InvalidResult);
+        }
+    }
+}
+
+TEST_CASE("G02 retains a non-finite surface sample before later finite samples", "[topo][validity]")
+{
+    for (const bool pole : {false, true}) {
+        Body body = pole ? MakePoleCap() : MakeBox(1.0, 1.0, 1.0);
+        const auto original = std::move(body).Freeze();
+        const auto face = original.Resolve(body.Faces.front());
+        FaultGeometry::Surface faulty;
+        faulty.Base = Stereon::SurfaceOf(original, face);
+        faulty.At = pole ? std::numbers::pi : 0.5;
+        faulty.Value = std::numeric_limits<double>::quiet_NaN();
+        auto edit = Must(ShapeBuilder::Open(original));
+        const auto replacement = Must(edit.AddSurface(Stereon::Surface(faulty)));
+        Must(edit.SetSurface(edit.Handle(face), replacement));
+        const auto shape = Must(Stereon::Freeze(std::move(edit)));
+        REQUIRE_FALSE(Geometric(shape).IsValid());
+        REQUIRE(Geometric(original).IsValid());
+    }
 }

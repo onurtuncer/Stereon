@@ -337,9 +337,9 @@ public:
     }
 
     /// True when the entry holds geometry: a built-in value, or a wrapper
-    /// that is not empty. A failed ShapeBuilder::Transaction pads the pools
-    /// with empty wrappers so that no reference the aborted edit made names
-    /// geometry added later.
+    /// that is not empty. After a failed ShapeBuilder::Transaction, later
+    /// allocations pad reserved indices with empty wrappers so that no
+    /// reference the aborted edit made names geometry added later.
     [[nodiscard]] bool HoldsGeometry(const std::size_t index) const
     {
         return Visit(index, []<typename T>(const T& value) {
