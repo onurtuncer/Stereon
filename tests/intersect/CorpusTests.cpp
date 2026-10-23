@@ -11,8 +11,10 @@
 // doubles, except that exactly parallel supports within the pair tolerance
 // are declared coincident (ADR-0029 section 6, decision D1 of the plan):
 // the corpus's one tolerant claim that nominal geometry honours. The pair
-// tolerance is the larger of the two (ADR-0001, decision D2). Tier B
-// pairs, the quartics, report NotImplemented until M3b.
+// tolerance is the larger of the two (ADR-0001, decision D2). Cylinder
+// pairs with skew axes, Tier B, are decided as the configuration the
+// corpus names for them (M3b), read off the result's branches: how many
+// closed curves they form and at how many nodes they meet.
 
 #include "Json.hpp"
 
@@ -93,6 +95,42 @@ std::string ConfigurationOf(const Stereon::SurfaceSurfaceIntersection& r)
     return "line";
 }
 
+/// The configuration of two cylinders with skew axes, in the corpus's words:
+/// an isolated point is a tangency, loops are counted as the closed curves
+/// the branches form, and nodes, where four branch ends meet, mark an
+/// internal tangency (one) or two ellipses (two).
+std::string SkewConfigurationOf(const Stereon::SurfaceSurfaceIntersection& r)
+{
+    if (r.IsEmpty()) {
+        return "disjoint";
+    }
+    if (r.Points.size() == 1 && r.Branches.empty()) {
+        return "tangent_point";
+    }
+    const IntersectTest::Connectivity shape = IntersectTest::ConnectivityOf(r);
+    if (shape.Nodes == 2) {
+        return "two_ellipses";
+    }
+    if (shape.Nodes == 1) {
+        return "internal_tangent";
+    }
+    if (shape.Curves == 1) {
+        return "one_loop";
+    }
+    return shape.Curves == 2 ? "two_loops" : "unexpected";
+}
+
+/// Whether the case is two cylinders whose axes are not parallel.
+bool IsSkewCylinders(const JsonValue& surfaces)
+{
+    if (surfaces[0]["type"].AsString() != "cylinder" ||
+        surfaces[1]["type"].AsString() != "cylinder") {
+        return false;
+    }
+    const Vec3 cross = Cross(VectorOf(surfaces[0]["axis"]), VectorOf(surfaces[1]["axis"]));
+    return cross != Vec3{};
+}
+
 /// What the kernel must return for the case: the nominal configuration, or
 /// the tolerant one where it is a declared coincidence.
 std::string ExpectedOf(const JsonValue& expected)
@@ -128,13 +166,22 @@ void CheckCase(const std::filesystem::path& file)
         Intersect(SurfaceOf(surfaces[0]), Box2::Everything(), SurfaceOf(surfaces[1]),
                   Box2::Everything(), tolerance, IntersectTest::ctx);
     const JsonValue& expected = c["expected"];
-    if (expected["nominal"]["tier"].AsString() == "B") {
+    if (expected.Has("kernel")) {
+        // The kernel refuses the case, for the reason the case gives.
         REQUIRE_FALSE(result.has_value());
-        REQUIRE(result.error().GetCode() == ErrorCode::NotImplemented);
+        REQUIRE(EnumName(result.error().GetCode()) == expected["kernel"]["outcome"].AsString());
         return;
     }
     INFO(IntersectTest::ErrorText(result));
     REQUIRE(result.has_value());
+    if (expected["nominal"]["tier"].AsString() == "B") {
+        REQUIRE(IsSkewCylinders(surfaces));
+        const std::string want = expected["nominal"]["configuration"].AsString();
+        const std::string got = SkewConfigurationOf(*result);
+        INFO("expected " << want << ", got " << got);
+        REQUIRE(got == want);
+        return;
+    }
     const std::string want = ExpectedOf(expected);
     const std::string got = ConfigurationOf(*result);
     INFO("expected " << want << ", got " << got);
@@ -168,5 +215,5 @@ TEST_CASE("every Tier A plane and cylinder case of the corpus is decided as requ
             ++count;
         }
     }
-    REQUIRE(count >= 12);
+    REQUIRE(count >= 21);
 }

@@ -2,11 +2,11 @@
   "format": "stereon-corpus-case/1",
   "id": "analytic-ssi/tier-b/cylinders-nearly-parallel",
   "kind": "hard",
-  "summary": "Axes 1e-9 rad from parallel: rotations are not admissible, so the pair is Tier B, not two lines.",
+  "summary": "Axes 1e-9 rad from parallel: rotations are not admissible, so the pair is Tier B, not two lines. The axes are coplanar and meet 5e9 mm away, and the radii are equal, so the quartic is two ellipses of that size, outside the size box.",
   "added": "2026-10-11",
   "source": "Authored for RS-0001",
   "licence": "MPL-2.0",
-  "references": ["RS-0001", "ADR-0010"],
+  "references": ["RS-0001", "ADR-0010", "ADR-0001"],
   "tags": ["tier-b", "threshold"],
   "inputs": {
     "surfaces": [
@@ -35,11 +35,16 @@
   "expected": {
     "nominal": {
       "tier": "B",
-      "configuration": "quartic"
+      "configuration": "two_ellipses"
     },
     "tolerant": {
       "status": "proposed",
-      "outcome": "NotSupported"
+      "configuration": "two_ellipses",
+      "snapped": false
+    },
+    "kernel": {
+      "outcome": "CertificationFailed",
+      "reason": "Over unbounded domains the ellipses leave the size box of ADR-0001, where no deviation can be certified within the resolution; within bounded heights the kernel returns the two nearly straight pieces inside them."
     }
   }
 }

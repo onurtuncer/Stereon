@@ -98,8 +98,58 @@ The configurations:
   internal tangent ruling (``SameSide``), a proved separation apart or
   nested, or an overlap, exact or declared: the surfaces' Hausdorff
   distance, the axes' distance plus the radii's difference, within the
-  pair tolerance. Skew and intersecting axes, the quartic, report
-  ``NotImplemented`` until their handler (M3b).
+  pair tolerance.
+- **Cylinder–cylinder, skew or intersecting axes:** the quartic, as
+  certified B-spline branches; see below.
+
+Cylinders with skew axes
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Whether two axes are parallel is decided exactly, so nearly parallel
+cylinders are the skew case (RS-0001 Tier B; ADR-0010's decisions on
+acceptance). Along a ruling of the first cylinder at angle :math:`u`, the
+second cylinder's equation is a quadratic in the height :math:`v`, so the
+curve is two sheets :math:`v_\pm(u)` over the angles where the discriminant
+is not negative. With :math:`\sigma` the angle from the axes' common normal
+and :math:`\delta` the distance between the axes, the discriminant is
+:math:`r_B^2 - (r_A \cos\sigma - \delta)^2`, and the configuration follows
+from :math:`\delta` against :math:`r_A + r_B` and :math:`|r_A - r_B|`,
+decided exactly on the input doubles (a polynomial of degree ten, on the
+heap-allocated expansions of :doc:`predicates` when the interval filter
+cannot settle it):
+
+- :math:`\delta > r_A + r_B`: a proved separation; :math:`\delta = r_A +
+  r_B`: one ``IntersectionPoint``, certified on both cylinders by interval
+  evaluation.
+- :math:`|r_A - r_B| < \delta < r_A + r_B`: one closed loop.
+- :math:`\delta < |r_A - r_B|`: two loops, where the smaller cylinder
+  enters and leaves the larger.
+- :math:`\delta = |r_A - r_B|`: internally tangent at a *node*, a double
+  root of the discriminant, where the loops meet; :math:`\delta = 0` with
+  equal radii: two ellipses through two nodes. Both are logged at ``Info``.
+
+Every branch is a ``Crossing`` with ``OppositeSide`` evidence; branches end
+at nodes, since the surfaces are tangent there, and at the chart seams of
+both cylinders, so that each pcurve stays within :math:`[0, 2\pi]`. A branch
+is parametrised so that it is smooth: by the first cylinder's angle where
+the discriminant stays positive, and otherwise so that the signed square
+root of the discriminant is smooth across the arc's ends, the folds where
+the curve's tangent runs along a ruling. Its 3D curve and both pcurves are
+cubic B-splines through samples of the closed form, the samples doubled
+from 32 until the midpoints agree with the closed form and the certificate
+below holds, within a budget of 2^14; beyond it the intersection fails with
+``CertificationFailed``, as it does at once for a branch that leaves the
+size box of ADR-0001, where the rounding of a B-spline's poles alone
+exceeds the resolution.
+
+Where the requested boxes are bounded, a branch is first clipped to them by
+interval evaluation of the closed form over spans of its parameter, bisected
+until a span is proved outside or inside: the heights on both cylinders and
+the angle on the first are clipped this way, the angle on the second only
+where a whole piece lies outside. Two cylinders whose axes are nearly
+parallel meet in loops of the order of :math:`r / \sin\gamma` along the
+axes, which a face's bounded heights cut down to the two nearly straight
+pieces inside them.
 
 Coincident cylinders intersect the requested height domains through the
 parameter map and intersect angular domains modulo the period. An overlap

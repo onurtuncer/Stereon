@@ -59,5 +59,8 @@ The seed cases assume these provisional rules until RS-0001 settles them:
 | sphere–sphere | `disjoint`, `tangent_point_external`, `tangent_point_internal`, `circle`, `coincident` |
 | sphere–cylinder (centre on axis) | `disjoint`, `tangent_circle`, `two_circles` |
 | cylinder–cylinder (parallel axes) | `disjoint`, `tangent_line_external`, `tangent_line_internal`, `two_lines`, `coincident` |
+| cylinder–cylinder (skew or meeting axes; Tier B) | `disjoint`, `tangent_point`, `one_loop`, `two_loops`, `internal_tangent`, `two_ellipses` |
 
 `disjoint` includes nested spheres and nested parallel cylinders. The contact type of each branch follows from the configuration: `tangent_*` is `Tangential`, `coincident` is `Overlap`, and every other branch is `Crossing` (ADR-0010, ADR-0013).
+
+Cylinders whose axes are not parallel are Tier B, a quartic, but the kernel decides them too (ADR-0010's decisions on acceptance; the Boolean prototype's M3b), so their cases carry the configuration the handler must find, from the distance between the axes against the sum and the difference of the radii: `one_loop` between them, `two_loops` below the difference (one cylinder through the other), `internal_tangent` at the difference (the loops meet at a node), `two_ellipses` for meeting axes and equal radii, `tangent_point` at the sum. A case may add `expected.kernel`, `{"outcome": <error code>, "reason": ...}`, where the kernel must refuse the case instead: geometry that leaves the size box of ADR-0001, say.

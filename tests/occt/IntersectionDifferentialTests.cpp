@@ -10,7 +10,10 @@
 // forms by another hand: for each plane–plane, plane–cylinder and parallel
 // cylinder–cylinder configuration the two kernels must agree on the kind of
 // result and, where there are curves, every point of Stereon's branches
-// must lie on one of OCCT's.
+// must lie on one of OCCT's. Cylinders with skew axes (M3b) are compared
+// with IntAna_IntQuadQuad's traces of the quartic, both ways: every sample
+// of Stereon's branches lies on OCCT's curves and every sample of OCCT's
+// curves lies on Stereon's branches.
 //
 // OCCT is LGPL-2.1 and linked only into this test (ADR-0008); build it with
 // tools/occt/build_occt.sh and configure with -DSTEREON_WITH_OCCT=ON.
@@ -19,7 +22,10 @@
 #include <Geom_BSplineCurve.hxx>
 #include <Geom_BSplineSurface.hxx>
 #include <Geom_Ellipse.hxx>
+#include <IntAna_Curve.hxx>
+#include <IntAna_IntQuadQuad.hxx>
 #include <IntAna_QuadQuadGeo.hxx>
+#include <IntAna_Quadric.hxx>
 #include <IntAna_ResultType.hxx>
 #include <NCollection_Array1.hxx>
 #include <NCollection_Array2.hxx>
@@ -212,4 +218,110 @@ TEST_CASE("parallel cylinder-cylinder intersections agree with OCCT", "[occt][in
         REQUIRE(occt.TypeInter() == c.Type);
         RequireOnOcct(*result, occt, 1e-9);
     }
+}
+
+namespace {
+
+/// The nearest of the points to p.
+double DistanceToNearest(const std::vector<Point3>& points, const Point3& p)
+{
+    double nearest = std::numeric_limits<double>::infinity();
+    for (const Point3& q : points) {
+        nearest = std::min(nearest, Distance(p, q));
+    }
+    return nearest;
+}
+
+/// Samples of every branch of Stereon's result.
+std::vector<Point3> SamplesOf(const Stereon::SurfaceSurfaceIntersection& result, const int count)
+{
+    std::vector<Point3> points;
+    for (const Stereon::IntersectionBranch& branch : result.Branches) {
+        for (int k = 0; k <= count; ++k) {
+            const double t = branch.Range.GetLower() +
+                             (branch.Range.GetUpper() - branch.Range.GetLower()) * k / count;
+            points.push_back(Eval(branch.Curve3d, t));
+        }
+    }
+    return points;
+}
+
+/// Samples of every curve OCCT traces for the quartic of two cylinders.
+std::vector<Point3> OcctQuarticSamples(const Cylinder& a, const Cylinder& b, const int count)
+{
+    const IntAna_IntQuadQuad occt(ToOcct(a), IntAna_Quadric(ToOcct(b)), Precision::Confusion());
+    REQUIRE(occt.IsDone());
+    REQUIRE_FALSE(occt.IdenticalElements());
+    std::vector<Point3> points;
+    for (int i = 1; i <= occt.NbCurve(); ++i) {
+        IntAna_Curve curve = occt.Curve(i);
+        double first = 0.0;
+        double last = 0.0;
+        curve.Domain(first, last);
+        for (int k = 0; k <= count; ++k) {
+            const gp_Pnt p = curve.Value(first + (last - first) * k / count);
+            points.push_back(Point3{p.X(), p.Y(), p.Z()});
+        }
+    }
+    return points;
+}
+
+} // namespace
+
+TEST_CASE("skew cylinder-cylinder intersections agree with OCCT", "[occt][intersect]")
+{
+    const Cylinder a{Point3{}, 3.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}, true};
+    const auto alongX = [](const Point3& through, const double radius) {
+        return Cylinder{through, radius, Vec3{0.0, 1.0, 0.0}, Vec3{0.0, 0.0, 1.0}, true};
+    };
+    const std::vector<Cylinder> others{
+        alongX(Point3{0.0, 4.0, 0.0}, 2.0), // one loop
+        alongX(Point3{0.0, 1.0, 0.0}, 1.0), // two loops, B through A
+        alongX(Point3{}, 2.0),              // meeting axes, two loops
+        Cylinder{Point3{1.0, 2.0, 0.5}, 2.5, Vec3{0.0, 0.6, 0.8}, Vec3{0.0, -0.8, 0.6}, true},
+    };
+    for (const Cylinder& other : others) {
+        for (const auto& [first, second] : {std::pair{a, other}, std::pair{other, a}}) {
+            const auto result = Intersect(Surface(first), Surface(second), ctx);
+            REQUIRE(result.has_value());
+            REQUIRE_FALSE(result->Branches.empty());
+            // OCCT's traces are sampled finely enough for a chord to stay
+            // within 1e-4 of the curve; Stereon's branches are certified
+            // within the resolution.
+            const std::vector<Point3> occt = OcctQuarticSamples(first, second, 2000);
+            const std::vector<Point3> ours = SamplesOf(*result, 400);
+            REQUIRE_FALSE(occt.empty());
+            for (const Point3& p : SamplesOf(*result, 40)) {
+                REQUIRE(DistanceToNearest(occt, p) <= 1e-3);
+            }
+            for (std::size_t i = 0; i < occt.size(); i += 50) {
+                REQUIRE(DistanceToNearest(ours, occt[i]) <= 1e-3);
+            }
+        }
+    }
+}
+
+TEST_CASE("the tangent point and the two ellipses of skew cylinders agree with OCCT",
+          "[occt][intersect]")
+{
+    const Cylinder a{Point3{}, 3.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}, true};
+    // Externally tangent: axes the sum of the radii apart.
+    const Cylinder touching{Point3{0.0, 5.0, 0.0}, 2.0, Vec3{0.0, 1.0, 0.0}, Vec3{0.0, 0.0, 1.0},
+                            true};
+    const auto point = Intersect(Surface(a), Surface(touching), ctx);
+    REQUIRE(point.has_value());
+    REQUIRE(point->Points.size() == 1);
+    const IntAna_QuadQuadGeo occtPoint(ToOcct(a), ToOcct(touching), Precision::Confusion());
+    REQUIRE(occtPoint.IsDone());
+    REQUIRE(occtPoint.TypeInter() == IntAna_Point);
+    REQUIRE(occtPoint.Point(1).Distance(ToOcct(point->Points.front().Position)) <= 1e-9);
+
+    // Meeting axes and equal radii: two ellipses.
+    const Cylinder crossing{Point3{}, 3.0, Vec3{0.0, 1.0, 0.0}, Vec3{0.0, 0.0, 1.0}, true};
+    const auto ellipses = Intersect(Surface(a), Surface(crossing), ctx);
+    REQUIRE(ellipses.has_value());
+    const IntAna_QuadQuadGeo occtEllipses(ToOcct(a), ToOcct(crossing), Precision::Confusion());
+    REQUIRE(occtEllipses.TypeInter() == IntAna_Ellipse);
+    REQUIRE(occtEllipses.NbSolutions() == 2);
+    RequireOnOcct(*ellipses, occtEllipses, 1e-4);
 }
