@@ -246,13 +246,20 @@ std::vector<Point3> SamplesOf(const Stereon::SurfaceSurfaceIntersection& result,
     return points;
 }
 
-/// Samples of every curve OCCT traces for the quartic of two cylinders.
-std::vector<Point3> OcctQuarticSamples(const Cylinder& a, const Cylinder& b, const int count)
+/// Samples of every curve OCCT traces for the quartic of two cylinders,
+/// with the largest gap between neighbours along a curve: a point within
+/// that gap of the nearest sample is on the curve to that accuracy.
+struct OcctTrace {
+    std::vector<Point3> Points;
+    double Gap = 0.0;
+};
+
+OcctTrace OcctQuarticSamples(const Cylinder& a, const Cylinder& b, const int count)
 {
     const IntAna_IntQuadQuad occt(ToOcct(a), IntAna_Quadric(ToOcct(b)), Precision::Confusion());
     REQUIRE(occt.IsDone());
     REQUIRE_FALSE(occt.IdenticalElements());
-    std::vector<Point3> points;
+    OcctTrace trace;
     for (int i = 1; i <= occt.NbCurve(); ++i) {
         IntAna_Curve curve = occt.Curve(i);
         double first = 0.0;
@@ -260,10 +267,27 @@ std::vector<Point3> OcctQuarticSamples(const Cylinder& a, const Cylinder& b, con
         curve.Domain(first, last);
         for (int k = 0; k <= count; ++k) {
             const gp_Pnt p = curve.Value(first + (last - first) * k / count);
-            points.push_back(Point3{p.X(), p.Y(), p.Z()});
+            const Point3 point{p.X(), p.Y(), p.Z()};
+            if (k > 0) {
+                trace.Gap = std::max(trace.Gap, Distance(point, trace.Points.back()));
+            }
+            trace.Points.push_back(point);
         }
     }
-    return points;
+    return trace;
+}
+
+/// The distance from p to the nearest of Stereon's branches, by the global
+/// projection onto their B-spline curves.
+double DistanceToBranches(const Stereon::SurfaceSurfaceIntersection& result, const Point3& p)
+{
+    double nearest = std::numeric_limits<double>::infinity();
+    for (const Stereon::IntersectionBranch& branch : result.Branches) {
+        const auto* curve = branch.Curve3d.Target<Stereon::BSplineCurve>();
+        REQUIRE(curve != nullptr);
+        nearest = std::min(nearest, Distance(p, Eval(*curve, Project(*curve, p))));
+    }
+    return nearest;
 }
 
 } // namespace
@@ -285,17 +309,17 @@ TEST_CASE("skew cylinder-cylinder intersections agree with OCCT", "[occt][inters
             const auto result = Intersect(Surface(first), Surface(second), ctx);
             REQUIRE(result.has_value());
             REQUIRE_FALSE(result->Branches.empty());
-            // OCCT's traces are sampled finely enough for a chord to stay
-            // within 1e-4 of the curve; Stereon's branches are certified
-            // within the resolution.
-            const std::vector<Point3> occt = OcctQuarticSamples(first, second, 2000);
-            const std::vector<Point3> ours = SamplesOf(*result, 400);
-            REQUIRE_FALSE(occt.empty());
+            // Stereon's samples lie within a sample gap of OCCT's traces,
+            // and OCCT's samples lie on Stereon's branches to the certified
+            // bound (within the resolution) plus OCCT's own accuracy.
+            const OcctTrace occt = OcctQuarticSamples(first, second, 4000);
+            REQUIRE_FALSE(occt.Points.empty());
+            REQUIRE(occt.Gap < 0.1);
             for (const Point3& p : SamplesOf(*result, 40)) {
-                REQUIRE(DistanceToNearest(occt, p) <= 1e-3);
+                REQUIRE(DistanceToNearest(occt.Points, p) <= occt.Gap + 1e-6);
             }
-            for (std::size_t i = 0; i < occt.size(); i += 50) {
-                REQUIRE(DistanceToNearest(ours, occt[i]) <= 1e-3);
+            for (std::size_t i = 0; i < occt.Points.size(); i += 50) {
+                REQUIRE(DistanceToBranches(*result, occt.Points[i]) <= 1e-4);
             }
         }
     }
