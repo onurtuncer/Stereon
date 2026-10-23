@@ -5,8 +5,14 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-/// Stereon.Boolean: union, cut and common (ADR-0013).
-/// Empty until Phase 1.
+/// Stereon.Boolean: union, cut and common (ADR-0013). So far the face
+/// clipping and imprinting of the Boolean prototype (:Clip and :Imprint,
+/// M6); the pipeline of docs/planning/boolean-prototype-plan.md follows
+/// milestone by milestone.
 export module Stereon.Boolean;
 
 export import Stereon.Build;
+export import Stereon.Intersect;
+
+export import :Clip;
+export import :Imprint;
