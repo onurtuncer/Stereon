@@ -71,6 +71,74 @@ inline const Stereon::Context ctx = Stereon::Context::Default();
     return worst;
 }
 
+/// |distance from the axis - radius|: how far a point is from the cylinder.
+[[nodiscard]] inline double DistanceFrom(const Stereon::Cylinder& cylinder,
+                                         const Stereon::Point3& point)
+{
+    const Stereon::Vec3 offset = point - cylinder.Origin;
+    return std::abs(Length(Cross(offset, Normalized(Axis(cylinder)))) - cylinder.Radius);
+}
+
+/// The shape of a result made of branches between their ends: how many
+/// connected curves the branches form when ends that coincide are joined,
+/// and how many points join four or more ends, the nodes where branches
+/// meet at a tangency.
+struct Connectivity {
+    std::size_t Curves = 0;
+    std::size_t Nodes = 0;
+};
+
+[[nodiscard]] inline Connectivity ConnectivityOf(const Stereon::SurfaceSurfaceIntersection& result,
+                                                 const double coincidence = 1e-7)
+{
+    std::vector<Stereon::Point3> clusters;
+    std::vector<std::size_t> ends; // the cluster of each branch end, two per branch
+    for (const Stereon::IntersectionBranch& branch : result.Branches) {
+        for (const double t : {branch.Range.GetLower(), branch.Range.GetUpper()}) {
+            const Stereon::Point3 p = Eval(branch.Curve3d, t);
+            std::size_t cluster = clusters.size();
+            for (std::size_t i = 0; i < clusters.size(); ++i) {
+                if (Distance(clusters[i], p) <= coincidence) {
+                    cluster = i;
+                    break;
+                }
+            }
+            if (cluster == clusters.size()) {
+                clusters.push_back(p);
+            }
+            ends.push_back(cluster);
+        }
+    }
+    // Union-find over the clusters, one edge per branch.
+    std::vector<std::size_t> parent(clusters.size());
+    for (std::size_t i = 0; i < parent.size(); ++i) {
+        parent[i] = i;
+    }
+    const auto find = [&](std::size_t i) {
+        while (parent[i] != i) {
+            i = parent[i] = parent[parent[i]];
+        }
+        return i;
+    };
+    for (std::size_t b = 0; b + 1 < ends.size(); b += 2) {
+        parent[find(ends[b])] = find(ends[b + 1]);
+    }
+    Connectivity c;
+    std::vector<std::size_t> degree(clusters.size(), 0);
+    for (const std::size_t e : ends) {
+        ++degree[e];
+    }
+    for (std::size_t i = 0; i < clusters.size(); ++i) {
+        if (find(i) == i) {
+            ++c.Curves;
+        }
+        if (degree[i] >= 4) {
+            ++c.Nodes;
+        }
+    }
+    return c;
+}
+
 /// The error's message when the result is one, for INFO before a REQUIRE.
 template <typename T>
 [[nodiscard]] std::string ErrorText(const Stereon::Result<T>& result)

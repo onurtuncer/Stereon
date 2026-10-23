@@ -14,6 +14,7 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <vector>
 
 export module Stereon.Robust:Expansion;
 
@@ -285,6 +286,70 @@ private:
     return h;
 }
 
+} // namespace Stereon
+
+namespace Stereon::Detail {
+
+/// The algorithms behind Sum and Scaled, writing into any expansion with
+/// PushBackNonZero: the stack-allocated Expansion<N> and the heap-allocated
+/// DynamicExpansion share them.
+
+/// Shewchuk's fast_expansion_sum_zeroelim: the components of both operands,
+/// neither empty, are merged by magnitude and summed with a running TwoSum,
+/// so that every roundoff becomes a component of the result.
+template <typename Out>
+constexpr void SumInto(Out& h, const std::span<const double> ec, const std::span<const double> fc)
+{
+    std::size_t ei = 0;
+    std::size_t fi = 0;
+    // The running sum starts as the smallest component; the first merge may
+    // use the cheaper FastTwoSum because the next component is at least as
+    // large.
+    double q = Magnitude(fc[0]) > Magnitude(ec[0]) ? ec[ei++] : fc[fi++];
+    bool first = true;
+    const auto absorb = [&](const double next) {
+        const Terms t = first ? FastTwoSumTerms(next, q) : TwoSumTerms(q, next);
+        first = false;
+        h.PushBackNonZero(t.Error);
+        q = t.Value;
+    };
+    while (ei < ec.size() && fi < fc.size()) {
+        absorb(Magnitude(fc[fi]) > Magnitude(ec[ei]) ? ec[ei++] : fc[fi++]);
+    }
+    while (ei < ec.size()) {
+        absorb(ec[ei++]);
+    }
+    while (fi < fc.size()) {
+        absorb(fc[fi++]);
+    }
+    h.PushBackNonZero(q);
+}
+
+/// Shewchuk's scale_expansion_zeroelim: each component of a non-empty
+/// expansion times the non-zero b as an exact TwoProduct, the pieces summed
+/// in order of magnitude.
+template <typename Out>
+constexpr void ScaleInto(Out& h, const std::span<const double> ec, const double b)
+{
+    const Halves bHalves = Split(b);
+    Terms head = TwoProductTerms(ec[0], b, bHalves);
+    h.PushBackNonZero(head.Error);
+    double q = head.Value;
+    for (std::size_t i = 1; i < ec.size(); ++i) {
+        const Terms product = TwoProductTerms(ec[i], b, bHalves);
+        const Terms sum = TwoSumTerms(q, product.Error);
+        h.PushBackNonZero(sum.Error);
+        head = FastTwoSumTerms(product.Value, sum.Value);
+        h.PushBackNonZero(head.Error);
+        q = head.Value;
+    }
+    h.PushBackNonZero(q);
+}
+
+} // namespace Stereon::Detail
+
+export namespace Stereon {
+
 // --- Expansion arithmetic ---------------------------------------------------
 
 /// e + f (Shewchuk's fast_expansion_sum_zeroelim): the components of both
@@ -299,34 +364,8 @@ template <std::size_t A, std::size_t B>
     if (f.IsZero()) {
         return Expansion<A + B>{e};
     }
-    const std::span<const double> ec = e.GetComponents();
-    const std::span<const double> fc = f.GetComponents();
-    std::size_t ei = 0;
-    std::size_t fi = 0;
-    // The running sum starts as the smallest component; the first merge may
-    // use the cheaper FastTwoSum because the next component is at least as
-    // large.
-    double q = Detail::Magnitude(fc[0]) > Detail::Magnitude(ec[0]) ? ec[ei++] : fc[fi++];
-    bool first = true;
-
     Expansion<A + B> h;
-    const auto absorb = [&](const double next) {
-        const Detail::Terms t =
-            first ? Detail::FastTwoSumTerms(next, q) : Detail::TwoSumTerms(q, next);
-        first = false;
-        h.PushBackNonZero(t.Error);
-        q = t.Value;
-    };
-    while (ei < ec.size() && fi < fc.size()) {
-        absorb(Detail::Magnitude(fc[fi]) > Detail::Magnitude(ec[ei]) ? ec[ei++] : fc[fi++]);
-    }
-    while (ei < ec.size()) {
-        absorb(ec[ei++]);
-    }
-    while (fi < fc.size()) {
-        absorb(fc[fi++]);
-    }
-    h.PushBackNonZero(q);
+    Detail::SumInto(h, e.GetComponents(), f.GetComponents());
     return h;
 }
 
@@ -354,23 +393,9 @@ template <std::size_t A>
 [[nodiscard]] constexpr Expansion<2 * A> Scaled(const Expansion<A>& e, const double b) noexcept
 {
     Expansion<2 * A> h;
-    if (e.IsZero() || b == 0.0) {
-        return h;
+    if (!e.IsZero() && b != 0.0) {
+        Detail::ScaleInto(h, e.GetComponents(), b);
     }
-    const Halves bHalves = Split(b);
-    const std::span<const double> ec = e.GetComponents();
-    Detail::Terms head = Detail::TwoProductTerms(ec[0], b, bHalves);
-    h.PushBackNonZero(head.Error);
-    double q = head.Value;
-    for (std::size_t i = 1; i < ec.size(); ++i) {
-        const Detail::Terms product = Detail::TwoProductTerms(ec[i], b, bHalves);
-        const Detail::Terms sum = Detail::TwoSumTerms(q, product.Error);
-        h.PushBackNonZero(sum.Error);
-        head = Detail::FastTwoSumTerms(product.Value, sum.Value);
-        h.PushBackNonZero(head.Error);
-        q = head.Value;
-    }
-    h.PushBackNonZero(q);
     return h;
 }
 
@@ -393,6 +418,139 @@ template <std::size_t A, std::size_t B>
         for (const double c : e.GetComponents()) {
             h = Expansion<2 * A * B>::Narrowed(Sum(h, Scaled(f, c)));
         }
+    }
+    return h;
+}
+
+// --- Expansions on the heap -------------------------------------------------
+
+/// A real number as a sum of doubles on the heap, under the same invariants
+/// and algorithms as Expansion, for the exact stage of a decision whose
+/// worst-case capacity has no place on the stack: the sign of a polynomial
+/// of degree ten in the input doubles needs a few hundred components, where
+/// the capacity arithmetic of Expansion would ask for over a million. The
+/// length is whatever the arithmetic needed. Not constexpr, since it
+/// allocates; a predicate reaches for it only after its interval filter
+/// fails to decide.
+class DynamicExpansion {
+public:
+    /// Zero.
+    DynamicExpansion() = default;
+
+    /// The expansion of one double; zero has no components.
+    explicit DynamicExpansion(const double value) { PushBackNonZero(value); }
+
+    /// A stack expansion as a heap one.
+    template <std::size_t N>
+    explicit DynamicExpansion(const Expansion<N>& e)
+        : m_Components(e.GetComponents().begin(), e.GetComponents().end())
+    {}
+
+    [[nodiscard]] std::size_t GetLength() const noexcept { return m_Components.size(); }
+    [[nodiscard]] bool IsZero() const noexcept { return m_Components.empty(); }
+
+    /// The components, smallest magnitude first, none of them zero.
+    [[nodiscard]] std::span<const double> GetComponents() const noexcept
+    {
+        return std::span<const double>{m_Components};
+    }
+    [[nodiscard]] double operator[](const std::size_t i) const STEREON_HOT_PRE(i < GetLength())
+    {
+        return m_Components[i];
+    }
+
+    /// The exact sign of the value: the sign of the last component.
+    [[nodiscard]] Sign GetSign() const noexcept
+    {
+        return m_Components.empty() ? Sign::Zero : SignOf(m_Components.back());
+    }
+
+    /// The last component, or zero; see Expansion::GetMostSignificant.
+    [[nodiscard]] double GetMostSignificant() const noexcept
+    {
+        return m_Components.empty() ? 0.0 : m_Components.back();
+    }
+
+    /// The components summed in floating point, smallest first.
+    [[nodiscard]] double GetEstimate() const noexcept
+    {
+        double sum = 0.0;
+        for (const double c : m_Components) {
+            sum += c;
+        }
+        return sum;
+    }
+
+    /// Appends a component; a zero is dropped.
+    void PushBackNonZero(const double c)
+    {
+        if (c != 0.0) {
+            m_Components.push_back(c);
+        }
+    }
+
+    /// Room for n components, so that the arithmetic allocates once.
+    void Reserve(const std::size_t n) { m_Components.reserve(n); }
+
+private:
+    std::vector<double> m_Components;
+};
+
+/// e + f, as Sum on Expansion.
+[[nodiscard]] inline DynamicExpansion Sum(const DynamicExpansion& e, const DynamicExpansion& f)
+{
+    if (e.IsZero()) {
+        return f;
+    }
+    if (f.IsZero()) {
+        return e;
+    }
+    DynamicExpansion h;
+    h.Reserve(e.GetLength() + f.GetLength());
+    Detail::SumInto(h, e.GetComponents(), f.GetComponents());
+    return h;
+}
+
+[[nodiscard]] inline DynamicExpansion Negated(const DynamicExpansion& e)
+{
+    DynamicExpansion h;
+    h.Reserve(e.GetLength());
+    for (const double c : e.GetComponents()) {
+        h.PushBackNonZero(-c);
+    }
+    return h;
+}
+
+/// e - f.
+[[nodiscard]] inline DynamicExpansion Difference(const DynamicExpansion& e,
+                                                 const DynamicExpansion& f)
+{
+    return Sum(e, Negated(f));
+}
+
+/// e * b, as Scaled on Expansion.
+[[nodiscard]] inline DynamicExpansion Scaled(const DynamicExpansion& e, const double b)
+{
+    DynamicExpansion h;
+    if (!e.IsZero() && b != 0.0) {
+        h.Reserve(2 * e.GetLength());
+        Detail::ScaleInto(h, e.GetComponents(), b);
+    }
+    return h;
+}
+
+/// e * f, as Product on Expansion: the longer expansion scaled by each
+/// component of the shorter one, the pieces summed.
+[[nodiscard]] inline DynamicExpansion Product(const DynamicExpansion& e, const DynamicExpansion& f)
+{
+    DynamicExpansion h;
+    if (e.IsZero() || f.IsZero()) {
+        return h;
+    }
+    const DynamicExpansion& longer = f.GetLength() <= e.GetLength() ? e : f;
+    const DynamicExpansion& shorter = f.GetLength() <= e.GetLength() ? f : e;
+    for (const double c : shorter.GetComponents()) {
+        h = Sum(h, Scaled(longer, c));
     }
     return h;
 }

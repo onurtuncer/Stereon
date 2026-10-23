@@ -1,0 +1,46 @@
+{
+  "format": "stereon-corpus-case/1",
+  "id": "analytic-ssi/cylinder-cylinder/axes-meeting-equal-radii",
+  "kind": "reference",
+  "summary": "Perpendicular axes that meet, equal radii: the quartic degenerates into two ellipses crossing at two points.",
+  "added": "2026-10-23",
+  "source": "Authored for the Boolean prototype's M3b",
+  "licence": "MPL-2.0",
+  "references": ["RS-0001", "ADR-0010", "ADR-0029"],
+  "tags": ["tier-b", "quartic", "tangency"],
+  "inputs": {
+    "surfaces": [
+      {
+        "name": "A",
+        "type": "cylinder",
+        "point": [0, 0, 0],
+        "axis": [0, 0, 1],
+        "radius": 3,
+        "tolerance": 0.001
+      },
+      {
+        "name": "B",
+        "type": "cylinder",
+        "point": [0, 0, 0],
+        "axis": [1, 0, 0],
+        "radius": 3,
+        "tolerance": 0.001
+      }
+    ]
+  },
+  "operation": {
+    "name": "intersect",
+    "operands": ["A", "B"]
+  },
+  "expected": {
+    "nominal": {
+      "tier": "B",
+      "configuration": "two_ellipses"
+    },
+    "tolerant": {
+      "status": "proposed",
+      "configuration": "two_ellipses",
+      "snapped": false
+    }
+  }
+}

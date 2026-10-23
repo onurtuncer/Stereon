@@ -178,7 +178,7 @@ struct CurveCurveIntersection {
 /// ordered pair of built-in types, in a table generated at compile time from
 /// BuiltinCurveTypes and BuiltinSurfaceTypes. A pair with a closed-form
 /// method gets an analytic handler (ADR-0010): plane–plane, plane–cylinder
-/// and cylinder–cylinder so far (the Boolean prototype's M3). Every other
+/// and cylinder–cylinder so far (the Boolean prototype's M3 and M3b). Every other
 /// pair has a stub, which reports NotImplemented naming both types. Types
 /// that are not built in report NotSupported: the generic subdivision path
 /// needs tier 2 and 3 capabilities that no user type can declare yet.
@@ -213,6 +213,11 @@ Result<SurfaceSurfaceIntersection> CylinderPlane(const Surface&, const Box2&, co
                                                  const Box2&, double, const Context&);
 Result<SurfaceSurfaceIntersection> CylinderCylinder(const Surface&, const Box2&, const Surface&,
                                                     const Box2&, double, const Context&);
+/// Cylinders whose axes are not parallel (RS-0001 Tier B, ADR-0010's
+/// decisions on acceptance): the quartic as fitted, certified branches.
+/// CylinderCylinder hands over to it; defined in CylinderCylinderSkew.cpp.
+Result<SurfaceSurfaceIntersection> CylinderCylinderSkew(const Surface&, const Box2&, const Surface&,
+                                                        const Box2&, double, const Context&);
 
 template <typename A, typename B>
 Result<CurveCurveIntersection> CurveStub(const Curve&, const Interval&, const Curve&,

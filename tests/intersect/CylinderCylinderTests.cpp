@@ -9,7 +9,7 @@
 // M3, ADR-0010, ADR-0029): a coincidence, exact or declared within the pair
 // tolerance, with the map between the frames; an external or internal
 // tangent ruling; two rulings; a proved separation apart or nested. Skew
-// axes are M3b and report NotImplemented.
+// axes are CylinderCylinderSkewTests.cpp.
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -294,17 +294,4 @@ TEST_CASE("cylinders apart or nested are proved separate", "[intersect][cylinder
     // The corpus's near-tangent pair: 5.0005 apart, radii 2 and 3, as numbers disjoint.
     const Surface two = AboutZ(Point3{}, 2.0);
     REQUIRE(Intersect(two, AboutZ(Point3{5.0005, 0.0, 0.0}, 3.0), ctx)->IsEmpty());
-}
-
-TEST_CASE("cylinders with skew axes are not implemented yet", "[intersect][cylinder]")
-{
-    const Surface aboutX{
-        Cylinder{Point3{5.0, 0.0, 0.0}, 3.0, Vec3{0.0, 1.0, 0.0}, Vec3{0.0, 0.0, 1.0}, true}};
-    const auto result = Intersect(a, aboutX, ctx);
-    REQUIRE_FALSE(result.has_value());
-    REQUIRE(result.error().GetCode() == ErrorCode::NotImplemented);
-    // Nearly parallel is skew too: the decision is exact (RS-0001).
-    const Surface nearly{
-        IntersectTest::CylinderAbout(Point3{5.0, 0.0, 0.0}, Vec3{1e-9, 0.0, 1.0}, 3.0)};
-    REQUIRE(Intersect(a, nearly, ctx).error().GetCode() == ErrorCode::NotImplemented);
 }

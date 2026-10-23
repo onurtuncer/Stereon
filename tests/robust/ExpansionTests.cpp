@@ -176,6 +176,56 @@ TEST_CASE("expansion arithmetic is exact", "[robust][expansion][property]")
         RC_ASSERT((e * 0.0).IsZero());
     });
 
+    rc::prop("the heap expansion agrees with the stack one, component for component", [] {
+        const Expansion<4> e = TwoProduct(RandomInteger(40), RandomInteger(40)) -
+                               TwoProduct(RandomInteger(40), RandomInteger(40));
+        const Expansion<2> f = TwoProduct(RandomInteger(20), RandomInteger(20));
+        const double b = RandomInteger(40);
+        const Stereon::DynamicExpansion de{e};
+        const Stereon::DynamicExpansion df{f};
+        const auto same = [](const auto& stack, const Stereon::DynamicExpansion& heap) {
+            RC_ASSERT(stack.GetLength() == heap.GetLength());
+            for (std::size_t i = 0; i < heap.GetLength(); ++i) {
+                RC_ASSERT(stack[i] == heap[i]);
+            }
+            RC_ASSERT(stack.GetSign() == heap.GetSign());
+            RC_ASSERT(stack.GetEstimate() == heap.GetEstimate());
+        };
+        same(e + f, Sum(de, df));
+        same(e - f, Difference(de, df));
+        same(e * b, Scaled(de, b));
+        same(e * f, Product(de, df));
+        same(-e, Negated(de));
+        RC_ASSERT(Difference(de, de).IsZero());
+        RC_ASSERT(Scaled(de, 0.0).IsZero());
+    });
+
+    rc::prop("a heap expansion is exact at a degree beyond any stack capacity", [] {
+        // Ten factors of twelve bits: the exact product has 120 bits, within
+        // the oracle, and its stack capacity would be 2^10 components per
+        // monomial.
+        Stereon::DynamicExpansion product{1.0};
+        Wide exact = 1;
+        for (int i = 0; i < 10; ++i) {
+            const double factor = RandomInteger(12);
+            product = Scaled(product, factor);
+            exact *= ToWide(factor);
+        }
+        const Expansion<2> other = TwoProduct(RandomInteger(52), RandomInteger(52));
+        const Stereon::DynamicExpansion difference =
+            Difference(product, Stereon::DynamicExpansion{other});
+        Wide total = 0;
+        for (const double c : difference.GetComponents()) {
+            RC_ASSERT(Stereon::Tests::IsIntegerValued(c));
+            total += ToWide(c);
+        }
+        RC_ASSERT(total == exact - WideValue(other));
+        RC_ASSERT(difference.GetSign() == Stereon::Tests::SignOfWide(total));
+        for (std::size_t i = 1; i < difference.GetLength(); ++i) {
+            RC_ASSERT(std::fabs(difference[i - 1]) < std::fabs(difference[i]));
+        }
+    });
+
     rc::prop("the estimate is the value to within a few roundings", [] {
         const Expansion<2> p = TwoProduct(RandomInteger(52), RandomInteger(52));
         const Expansion<2> q = TwoProduct(RandomInteger(52), RandomInteger(52));

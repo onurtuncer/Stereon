@@ -12,6 +12,7 @@ stereon_add_library(intersect
         Intersect.cppm
     SOURCES
         CylinderCylinder.cpp
+        CylinderCylinderSkew.cpp
         Dispatch.cpp
         PlaneCylinder.cpp
         PlanePlane.cpp

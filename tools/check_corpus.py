@@ -153,12 +153,40 @@ def sphere_cylinder(sphere: dict, cylinder: dict) -> dict:
 def cylinder_cylinder(a: dict, b: dict) -> dict:
     a1, a2 = vec(a["axis"]), vec(b["axis"])
     if not is_zero(cross(a1, a2)):
-        return {"tier": "B"}
+        return skew_cylinders(a, b)
     w = cross(a1, sub(vec(b["point"]), vec(a["point"])))
     distance_squared = dot(w, w) / dot(a1, a1)
     configuration = two_round(distance_squared, Fraction(a["radius"]), Fraction(b["radius"]), "tangent_line",
                               "two_lines")
     return {"tier": "A", "configuration": configuration}
+
+
+def skew_cylinders(a: dict, b: dict) -> dict:
+    """Cylinders whose axes are not parallel: a quartic, Tier B, with the configuration the kernel's
+    handler decides (ADR-0010's decisions on acceptance). The distance between the axes is |s| / |n| for
+    n = a1 x a2 and s = n . (p2 - p1); against the sum and the difference of the radii it gives a
+    separation, one point of external tangency, one loop, two loops, an internal tangency where the
+    loops meet at a node, or two ellipses when the axes meet and the radii are equal."""
+    n = cross(vec(a["axis"]), vec(b["axis"]))
+    s = dot(n, sub(vec(b["point"]), vec(a["point"])))
+    nn = dot(n, n)
+    r1, r2 = Fraction(a["radius"]), Fraction(b["radius"])
+    outer = compare(s * s, (r1 + r2) ** 2 * nn)
+    if outer > 0:
+        configuration = "disjoint"
+    elif outer == 0:
+        configuration = "tangent_point"
+    else:
+        inner = compare(s * s, (r1 - r2) ** 2 * nn)
+        if inner > 0:
+            configuration = "one_loop"
+        elif inner < 0:
+            configuration = "two_loops"
+        elif r1 == r2:
+            configuration = "two_ellipses"
+        else:
+            configuration = "internal_tangent"
+    return {"tier": "B", "configuration": configuration}
 
 
 # --- Case validation ---------------------------------------------------------
@@ -218,6 +246,16 @@ def check_tolerant(tolerant, is_pair: bool) -> list[str]:
     return []
 
 
+def check_kernel(kernel) -> list[str]:
+    """expected.kernel, when present, names the outcome the kernel must report instead of the nominal
+    configuration: the error code of geometry it refuses, with the reason."""
+    if kernel is None:
+        return []
+    if not isinstance(kernel, dict) or not isinstance(kernel.get("outcome"), str):
+        return ["expected.kernel must be an object with a string outcome"]
+    return [] if isinstance(kernel.get("reason"), str) else ["expected.kernel names its reason"]
+
+
 def check_analytic_ssi(case: dict) -> list[str]:
     surfaces, problems = check_surfaces(case["inputs"].get("surfaces"))
     if problems:
@@ -236,10 +274,11 @@ def check_analytic_ssi(case: dict) -> list[str]:
 
     nominal = case["expected"].get("nominal")
     problems += check_tolerant(case["expected"].get("tolerant"), is_pair)
+    problems += check_kernel(case["expected"].get("kernel"))
     if is_pair:
         computed = classify_pair(surfaces[operands[0]], surfaces[operands[1]])
         recorded = {k: v for k, v in (nominal or {}).items() if k in ("tier", "configuration")}
-        if computed["tier"] == "B":
+        if computed["tier"] == "B" and "configuration" not in computed:
             recorded.pop("configuration", None)
         if recorded != computed:
             problems.append(f"expected.nominal is {recorded}, but the exact input doubles give {computed}")
@@ -350,7 +389,16 @@ SELF_TEST = [
     (cylinder([0, 0, 0], [0, 0, 1], 2), cylinder([5, 0, 0], [0, 0, -3], 3), "tangent_line_external"),
     (cylinder([0, 0, 0], [0, 0, 1], 3), cylinder([0, 0, 9], [0, 0, 2], 3), "coincident"),
     (cylinder([0, 0, 0], [0, 0, 1], 3), cylinder([1, 0, 0], [0, 0, 1], 2), "tangent_line_internal"),
-    (cylinder([0, 0, 0], [0, 0, 1], 3), cylinder([5, 0, 0], [1e-12, 0, 1], 3), None),
+    # Skew axes: Tier B, with the handler's configuration. The last two have coplanar axes that
+    # meet far away, which no rounded evaluation would tell from parallel.
+    (cylinder([0, 0, 0], [0, 0, 1], 3), cylinder([0, 4, 0], [1, 0, 0], 2), "one_loop"),
+    (cylinder([0, 0, 0], [0, 0, 1], 3), cylinder([0, 1, 0], [1, 0, 0], 1), "two_loops"),
+    (cylinder([0, 0, 0], [0, 0, 1], 3), cylinder([0, 5, 0], [1, 0, 0], 2), "tangent_point"),
+    (cylinder([0, 0, 0], [0, 0, 1], 3), cylinder([0, 2, 0], [1, 0, 0], 1), "internal_tangent"),
+    (cylinder([0, 0, 0], [0, 0, 1], 3), cylinder([0, 6, 0], [1, 0, 0], 2), "disjoint"),
+    (cylinder([0, 0, 0], [0, 0, 1], 3), cylinder([0, 0, 0], [0, 1, 0], 2), "two_loops"),
+    (cylinder([0, 0, 0], [0, 0, 1], 3), cylinder([5, 0, 0], [1e-12, 0, 1], 3), "two_ellipses"),
+    (cylinder([0, 0, 0], [0, 0, 1], 3), cylinder([5, 0, 0], [1e-12, 0, 1], 2), "two_loops"),
 ]
 
 
@@ -359,7 +407,7 @@ def self_test() -> int:
     for first, second, expected in SELF_TEST:
         for a, b in ((first, second), (second, first)):
             result = classify_pair(a, b)
-            got = result.get("configuration") if result["tier"] == "A" else None
+            got = result.get("configuration")
             if got != expected:
                 failures.append(f"{a['type']}-{b['type']}: expected {expected}, got {got}")
     for failure in failures:

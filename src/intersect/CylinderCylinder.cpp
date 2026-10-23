@@ -34,8 +34,8 @@ import Stereon.Robust;
 
 /// Cylinder–cylinder with parallel axes (ADR-0010's analytic table, RS-0001
 /// Tier A). Whether the axes are parallel is decided exactly on the input
-/// doubles; nearly parallel axes are the skew case, the quartic of M3b,
-/// which reports NotImplemented until then. For parallel axes the distance
+/// doubles; nearly parallel axes are the skew case, the quartic, which
+/// CylinderCylinderSkew.cpp handles. For parallel axes the distance
 /// between them against the sum and difference of the radii decides
 /// between a proved separation (apart or nested), an external or internal
 /// tangent ruling, two rulings, and a coincidence, exact or declared within
@@ -267,9 +267,7 @@ Result<SurfaceSurfaceIntersection> CylinderCylinder(const Surface& a, const Box2
     const Frame fa = FrameOf(a, *ca);
     const Frame fb = FrameOf(b, *cb);
     if (!IsExactlyZero(ExactCross(fa.ExactAxis, fb.ExactAxis))) {
-        return Fail(ErrorCode::NotImplemented,
-                    "Cylinder x Cylinder with skew or intersecting axes is not implemented yet "
-                    "(the Boolean prototype's M3b)");
+        return CylinderCylinderSkew(a, boxA, b, boxB, tolerance, ctx);
     }
     const double rA = fa.Geometry.Radius;
     const double rB = fb.Geometry.Radius;
