@@ -685,3 +685,14 @@ TEST_CASE("trimmed surfaces agree with Geom_RectangularTrimmedSurface", "[occt][
         }
     }
 }
+
+TEST_CASE("horn torus derivatives agree with OCCT", "[occt][surface][regression]")
+{
+    const Frame f = TiltedFrame();
+    const Torus torus{f.Origin, 1.0, 1.0, f.X, f.Y};
+    const occ::handle<Geom_ToroidalSurface> occt =
+        new Geom_ToroidalSurface(ToOcctFrame(f), 1.0, 1.0);
+    for (int i = 0; i < SampleCount; ++i) {
+        CheckSecondOrder(torus, *occt, Point2{Sample(i), Sample(SampleCount - 1 - i)});
+    }
+}
