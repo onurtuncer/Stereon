@@ -54,7 +54,7 @@ ImprintedBodies Imprinted(const Shape& a, const Shape& b)
 void RequireShared(const ImprintedBodies& bodies, const std::size_t count)
 {
     REQUIRE(bodies.Shared.size() == count);
-    for (const auto& [ea, eb] : bodies.Shared) {
+    for (const auto& [ea, eb, transition] : bodies.Shared) {
         REQUIRE(ea.IsValid());
         REQUIRE(eb.IsValid());
         const Shape& a = bodies.A.Shape;
@@ -89,7 +89,7 @@ TEST_CASE("two boxes overlapping at a corner are imprinted with a six-piece chai
     }
     RequireShared(bodies, 6);
     // Every piece lies on the cube [5, 10]^3 shared by both boxes.
-    for (const auto& [ea, eb] : bodies.Shared) {
+    for (const auto& [ea, eb, transition] : bodies.Shared) {
         for (const Stereon::VertexId v : {StartOf(bodies.A.Shape, ea), EndOf(bodies.A.Shape, ea)}) {
             const Point3 p = PositionOf(bodies.A.Shape, v);
             REQUIRE(p.X >= 5.0 - 1e-9);
@@ -118,7 +118,7 @@ TEST_CASE("a cylinder through a box cuts two discs and two bands", "[boolean][bo
     REQUIRE(CountOf<EntityKind::Face>(bodies.B.Shape) == 5);
     REQUIRE(CountOf<EntityKind::Edge>(bodies.B.Shape) == 7);
     RequireShared(bodies, 2);
-    for (const auto& [ea, eb] : bodies.Shared) {
+    for (const auto& [ea, eb, transition] : bodies.Shared) {
         REQUIRE(CurveOf(bodies.A.Shape, ea)->Target<Stereon::Circle>() != nullptr);
         REQUIRE(KindOf(bodies.B.Shape, eb) == Stereon::EdgeCurveKind::Exact);
     }

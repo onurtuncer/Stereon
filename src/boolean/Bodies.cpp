@@ -160,12 +160,14 @@ private:
     std::vector<FaceNetwork> m_Networks;
 };
 
-/// A piece of the intersection: its edge in each body's networks.
+/// A piece of the intersection: its edge in each body's networks, and the
+/// branch's side transition.
 struct SharedPiece {
     FaceId FaceA;
     std::size_t EdgeA;
     FaceId FaceB;
     std::size_t EdgeB;
+    SideTransition Transition;
 };
 
 /// The piece of a branch over `range`, inside both faces, added to both
@@ -200,7 +202,7 @@ void AddPiece(Networks& a, Networks& b, const Shape& sa, const Shape& sb, const 
     };
     const std::size_t onA = edgeOn(a, sa, fa, clipA, pa, branch.OnA);
     const std::size_t onB = edgeOn(b, sb, fb, clipB, pb, branch.OnB);
-    shared.push_back({fa.Face, onA, fb.Face, onB});
+    shared.push_back({fa.Face, onA, fb.Face, onB, branch.Transition});
 }
 
 /// Every piece of the branch inside both faces: the common stretches of the
@@ -302,8 +304,8 @@ Result<ImprintedBodies> ImprintBodies(const Shape& a, const Shape& b, const Cont
     STEREON_TRY(const Imprinted bodyB, ImprintBody(b, networksB, ctx));
     ImprintedBodies result{bodyA.Result, bodyB.Result, {}};
     for (const SharedPiece& piece : shared) {
-        result.Shared.emplace_back(EdgeOfPiece(bodyA, piece.FaceA, piece.EdgeA),
-                                   EdgeOfPiece(bodyB, piece.FaceB, piece.EdgeB));
+        result.Shared.push_back({EdgeOfPiece(bodyA, piece.FaceA, piece.EdgeA),
+                                 EdgeOfPiece(bodyB, piece.FaceB, piece.EdgeB), piece.Transition});
     }
     return result;
 }
