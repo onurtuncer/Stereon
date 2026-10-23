@@ -150,6 +150,18 @@ struct Diagnostic {
     std::vector<std::string> Entities;
 };
 
+/// Low-level operator provenance within one builder transaction. Indices
+/// may name intermediates later deleted; these are events, not HistoryEntry
+/// references into the published shape. Failed candidates publish no events.
+enum class TopologyEventKind : std::uint8_t { Created, Deleted, Modified, Split, Merged };
+struct TopologyEvent {
+    EntityKind Kind = EntityKind::Vertex;
+    TopologyEventKind Event = TopologyEventKind::Created;
+    std::uint32_t Source = NoEntity;
+    std::uint32_t Target = NoEntity;
+    constexpr bool operator==(const TopologyEvent&) const = default;
+};
+
 /// The published result of a shape-producing operation (ADR-0006).
 class OperationResult {
 public:
@@ -157,6 +169,7 @@ public:
     Stereon::History History;
     std::vector<ToleranceChange> ToleranceChanges;
     std::vector<Diagnostic> Warnings;
+    std::vector<TopologyEvent> TopologyEvents;
     /// The highest validity level the result was checked at before it was
     /// published. Structural for now: the Geometric and Solid checks of
     /// ADR-0018 do not exist yet, whatever the Context asks for.

@@ -119,11 +119,13 @@ ShapeBuilder::ShapeBuilder(ShapeBuilder&& other) noexcept
     , m_SourceStore(other.m_SourceStore)
     , m_Source(std::move(other.m_Source))
     , m_ToleranceChanges(std::move(other.m_ToleranceChanges))
+    , m_Events(std::move(other.m_Events))
 {
     // Cursors on the source are invalid from now on (ADR-0038).
     other.Advance();
     other.m_Tables = {};
     other.m_ToleranceChanges.clear();
+    other.m_Events.clear();
 }
 
 ShapeBuilder& ShapeBuilder::operator=(ShapeBuilder&& other) noexcept
@@ -137,9 +139,11 @@ ShapeBuilder& ShapeBuilder::operator=(ShapeBuilder&& other) noexcept
         m_SourceStore = other.m_SourceStore;
         m_Source = std::move(other.m_Source);
         m_ToleranceChanges = std::move(other.m_ToleranceChanges);
+        m_Events = std::move(other.m_Events);
         other.Advance();
         other.m_Tables = {};
         other.m_ToleranceChanges.clear();
+        other.m_Events.clear();
     }
     return *this;
 }
@@ -959,6 +963,7 @@ ShapeBuilder::ShapeBuilder(const ShapeBuilder& other, CandidateKey)
     , m_SourceStore(other.m_SourceStore)
     , m_Source(other.m_Source)
     , m_ToleranceChanges(other.m_ToleranceChanges)
+    , m_Events(other.m_Events)
 {}
 
 void ShapeBuilder::Abandon(const ShapeBuilder& candidate) noexcept
@@ -1201,6 +1206,7 @@ Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context)
     ShapeBuilder consumed(std::move(builder));
     const std::shared_ptr<const TopologySnapshot> source = consumed.m_Source;
     std::vector<ToleranceChange> calls = std::move(consumed.m_ToleranceChanges);
+    std::vector<TopologyEvent> events = std::move(consumed.m_Events);
     if constexpr (STEREON_CHECKED_HANDLES) {
         if (source != nullptr) {
             const ValidityReport report = Detail::ValidateStructure(source->GetTables());
@@ -1239,6 +1245,7 @@ Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context)
                     "Commit: the History does not account for every entity (a kernel bug)");
     }
     OperationResult published;
+    published.TopologyEvents = std::move(events);
     published.Warnings = WarningsOf(changes, before, *frozen);
     published.ToleranceChanges = std::move(changes);
     published.History = std::move(history);

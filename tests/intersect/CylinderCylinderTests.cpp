@@ -190,8 +190,13 @@ TEST_CASE("coincident cylinder overlap coverage agrees with an angular membershi
         return false;
     };
     for (const Surface& other : {a, turned, reversed}) {
-        const double sense = other.Target<Cylinder>()->YAxis.Y < 0.0 ? -1.0 : 1.0;
-        const double offset = other.Target<Cylinder>()->XAxis.Y > 0.0 ? -pi / 2.0 : 0.0;
+        const Cylinder* cylinder = other.Target<Cylinder>();
+        if (cylinder == nullptr) {
+            FAIL("the angular oracle requires a cylinder fixture");
+            return;
+        }
+        const double sense = cylinder->YAxis.Y < 0.0 ? -1.0 : 1.0;
+        const double offset = cylinder->XAxis.Y > 0.0 ? -pi / 2.0 : 0.0;
         for (const double start : {-1.0, 0.25, 2.0, 5.5}) {
             const Box2 boxA{Interval{-0.75, 5.0}, Interval{-1.0, 1.0}};
             const Box2 boxB{Interval{start, start + 1.5}, Interval{-1.0, 1.0}};

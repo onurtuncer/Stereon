@@ -222,8 +222,8 @@ are tombstones, so what an inverse brings back has new handles.
   shell takes one side. ``KillEdgeFace`` (KEF) removes an edge between two
   such faces and one of the faces, joining its loop into the other.
 
-The pairs that remain, KEMR/MEKR, KFMRH/MFKRH and SEMV/JEKV, follow, with
-``MergeVertices``.
+The KEMR/MEKR, KFMRH/MFKRH and SEMV/JEKV pairs and ``MergeVertices``
+are described in `M5 ring, split and merge operators`_ below.
 
 .. code-block:: cpp
 
@@ -507,10 +507,6 @@ is refused through a ``Result`` naming the entity with ``Describe``, or by
 ``Freeze`` with the rule. The O(1) accessors report the same faults as a
 contract violation in checked builds.
 
-.. todo::
-
-   Document KEMR/MEKR, KFMRH/MFKRH, SEMV/JEKV and MergeVertices as they land (ADR-0027).
-
 Related design decisions
 ------------------------
 
@@ -520,3 +516,82 @@ Related design decisions
 - `ADR-0009: Parameter-space representation <https://github.com/onurtuncer/Stereon/blob/main/docs/adr/0009-parameter-space-representation.md>`_
 - `ADR-0030: Entity lineage in operation results <https://github.com/onurtuncer/Stereon/blob/main/docs/adr/0030-entity-lineage-in-operation-results.md>`_
 
+
+M5 ring, split and merge operators
+---------------------------------
+
+The remaining classical operators are exposed on ``ShapeBuilder``. They
+change incidence and membership; callers retain responsibility for geometric
+nesting and face classification. None infers that a loop is a hole from its
+orientation. Use ``Transaction`` for compound edits and ``Commit`` to publish
+with structural/geometric validation and tolerance policy checks.
+
+.. list-table:: Entity-count changes (inverse operations negate these)
+   :header-rows: 1
+
+   * - Operation
+     - Vertices
+     - Edges
+     - Coedges
+     - Loops
+     - Faces
+   * - ``KillEdgeMakeRing`` (KEMR)
+     - 0
+     - -1
+     - -2
+     - +1
+     - 0
+   * - ``MakeFaceKillRingHole`` (MFKRH)
+     - 0
+     - 0
+     - 0
+     - 0
+     - +1
+   * - ``SplitEdgeMakeVertex`` (SEMV), radial valence k
+     - +1
+     - +1
+     - +k
+     - 0
+     - 0
+
+KEMR requires two opposite, nonadjacent uses in one loop and produces two
+nonempty loops. MEKR bridges the ends of uses in two loops of the same face.
+KFMRH moves a face's sole nonempty loop to a face with identical surface,
+orientation and shell; MFKRH moves one loop of a multi-loop face to a new face.
+When the face belongs to a shell, MFKRH first checks for a radial-edge path
+between the moved and remaining loops through faces of that shell. It refuses
+to disconnect the shell, before changing any records. Faces outside a shell
+have no such connectivity constraint.
+These are incidence operations: genus and connected-component interpretations
+require a manifold, geometrically classified input and are not inferred for
+arbitrary radial topology.
+
+SEMV requires a strictly interior parameter on a nondegenerate edge. Its new
+vertex must contain every incident trace at that parameter. It restricts the
+shared curve and pcurve parameter ranges, preserves certified cache bounds by
+restriction, and duplicates every radial use, including seam sides and
+non-manifold uses. JEKV requires adjacent uses with matching pcurves and primary
+sides, contiguous ranges of identical geometry, and a degree-two join vertex.
+It retains a common cache with the larger bound, or drops differing caches.
+
+``MergeVertices`` sorts unique candidates by slot index and clusters against
+the first candidate's original position and tolerance. It never averages or
+chains through a previous cluster member. The representative's tolerance is
+the maximum of member tolerances and the context resolution; the exact pair
+predicate guarantees that this contains the cluster radius. Growth is logged,
+the context ceiling and growth policy are enforced, and every incident endpoint
+trace is checked before redirecting edges. Unsupported exact-predicate domains
+are explicit failures. The operation uses a candidate transaction, so failed
+merges leave topology and event history unchanged (rollback still reserves any
+allocated identities and advances the epoch as specified by ADR-0040).
+
+``GetTopologyEvents`` and ``OperationResult.TopologyEvents`` expose low-level
+created, deleted, modified, split and merged relations from the Euler edits.
+Indices may refer to intermediate entities and are not snapshot handles. These
+events survive successful transactions and disappear on rollback; the enclosing
+Boolean operation still supplies final multi-input semantic history in M8.
+
+Regression tests cover inverse pairs, invalid preconditions, seam and closed
+edges, arbitrary radial valence, fixed merge representatives and event rollback.
+Native GCC 16 debug/sanitizer qualification and benchmark measurements remain
+required before closing the M5 milestone.

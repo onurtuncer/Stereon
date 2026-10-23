@@ -101,3 +101,17 @@ Stereon is measured against OpenCASCADE (OCCT) on **speed, memory and robustness
 - The report of a release gate is a **reference run**: the `OCCT reference run` workflow (`.github/workflows/occt-reference.yml`) on the reference image, `gcc:16.2` on a GitHub-hosted `ubuntu-24.04` runner, against the cached OCCT pin. It uploads the raw JSON, the machine record and the report that `tools/bench_report.py` renders; the release commits that report. Runs on a developer's machine are development runs and say so.
 - Release notes quote only benchmarks whose correctness gate passed on both kernels.
 - A regression of > 10% in any Stereon benchmark between commits blocks the merge unless explained in the PR.
+
+### M5 splitting edits
+
+`B0.5/SplitEdge/Stereon` and `B0.5/SplitFace/Stereon` use the existing
+10,000- and 1,000,000-face sheet fixtures and report elapsed time, copied
+pages, copied fraction and heap delta through the same `OneEdit` harness.
+The edge case splits a shared interior edge and all its radial uses; the face
+case inserts a diagonal. Run these in the native benchmark configuration
+before accepting ADR-0005's copying targets. No measurements are recorded yet.
+
+`ADR-0005/EditSequence/Stereon` now includes 25 edits of each of the four
+kinds, on distinct original faces, and reports the maximum per-edit copied
+fraction as well as the combined snapshot memory ratio. The earlier two-kind
+measurements do not qualify this expanded sequence.

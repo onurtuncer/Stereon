@@ -18,10 +18,13 @@ stereon_add_library(topo
         Builder.cpp
         Compact.cpp
         Describe.cpp
+        EulerRings.cpp
+        EulerSplit.cpp
         Euler.cpp
         Operation.cpp
         Shape.cpp
         Validate.cpp
         ValidateGeometry.cpp
     DEPENDS
-        intersect)
+        intersect
+        robust)

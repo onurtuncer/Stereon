@@ -156,6 +156,7 @@ BuilderCoedgeId ShapeBuilder::NewUse(const std::uint32_t edge, const std::uint32
             e.Primary = self;
         }
     });
+    RecordEvent(EntityKind::Coedge, TopologyEventKind::Created, NoEntity, use.GetIndex());
     return use;
 }
 
@@ -173,6 +174,7 @@ void ShapeBuilder::KillEdgeAndUses(const std::uint32_t edge)
         }
     }
     for (const std::uint32_t c : uses) {
+        RecordEvent(EntityKind::Coedge, TopologyEventKind::Deleted, c, NoEntity);
         Release<EntityKind::Coedge>(c);
     }
     m_Tables.Edges.Modify(edge, [](Detail::EdgeRecord& e) {
@@ -339,6 +341,10 @@ Result<VertexFaceShell> ShapeBuilder::MakeVertexFaceShell(const Point3& position
     STEREON_TRY(made.Loop, AddLoop(made.Face));
     STEREON_TRY(made.Shell, solid.IsValid() ? AddShell(solid) : AddShell());
     STEREON_TRY_VOID(AddFaceToShell(made.Shell, made.Face));
+    RecordEvent(EntityKind::Vertex, TopologyEventKind::Created, NoEntity, made.Vertex.GetIndex());
+    RecordEvent(EntityKind::Face, TopologyEventKind::Created, NoEntity, made.Face.GetIndex());
+    RecordEvent(EntityKind::Loop, TopologyEventKind::Created, NoEntity, made.Loop.GetIndex());
+    RecordEvent(EntityKind::Shell, TopologyEventKind::Created, NoEntity, made.Shell.GetIndex());
     return made;
 }
 
@@ -375,6 +381,10 @@ Result<void> ShapeBuilder::KillVertexFaceShell(const BuilderVertexId vertex,
     }
     Release<EntityKind::Shell>(shell);
     Release<EntityKind::Vertex>(vertex.GetIndex());
+    RecordEvent(EntityKind::Vertex, TopologyEventKind::Deleted, vertex.GetIndex(), NoEntity);
+    RecordEvent(EntityKind::Face, TopologyEventKind::Deleted, face.GetIndex(), NoEntity);
+    RecordEvent(EntityKind::Loop, TopologyEventKind::Deleted, loop, NoEntity);
+    RecordEvent(EntityKind::Shell, TopologyEventKind::Deleted, shell, NoEntity);
     return {};
 }
 
@@ -408,6 +418,8 @@ Result<EdgeVertex> ShapeBuilder::GrowStrut(const std::uint32_t loop, const std::
     cycle.insert(at, {made.Out.GetIndex(), made.Back.GetIndex()});
     RelinkCycle(loop, cycle);
     CheckNeighbourhood({loop}, {made.Edge.GetIndex()});
+    RecordEvent(EntityKind::Vertex, TopologyEventKind::Created, NoEntity, made.Vertex.GetIndex());
+    RecordEvent(EntityKind::Edge, TopologyEventKind::Created, NoEntity, made.Edge.GetIndex());
     return made;
 }
 
@@ -479,6 +491,8 @@ Result<void> ShapeBuilder::KillEdgeVertex(const BuilderEdgeId edge, const Builde
     KillEdgeAndUses(edge.GetIndex());
     Release<EntityKind::Vertex>(v);
     CheckNeighbourhood({loop}, {});
+    RecordEvent(EntityKind::Vertex, TopologyEventKind::Deleted, v, NoEntity);
+    RecordEvent(EntityKind::Edge, TopologyEventKind::Deleted, edge.GetIndex(), NoEntity);
     return {};
 }
 
@@ -536,6 +550,10 @@ Result<EdgeFace> ShapeBuilder::MakeEdgeFace(const BuilderCoedgeId a, const Build
     RelinkCycle(made.Loop.GetIndex(), split);
     RelinkCycle(loop, kept);
     CheckNeighbourhood({loop, made.Loop.GetIndex()}, {made.Edge.GetIndex()});
+    RecordEvent(EntityKind::Edge, TopologyEventKind::Created, NoEntity, made.Edge.GetIndex());
+    RecordEvent(EntityKind::Face, TopologyEventKind::Split, m_Tables.Loops[loop].Face.GetIndex(),
+                made.Face.GetIndex());
+    RecordEvent(EntityKind::Loop, TopologyEventKind::Split, loop, made.Loop.GetIndex());
     return made;
 }
 
@@ -574,6 +592,10 @@ Result<void> ShapeBuilder::KillEdgeFace(const BuilderEdgeId edge, const BuilderF
     }
     Release<EntityKind::Face>(face.GetIndex());
     CheckNeighbourhood({keptLoop}, {});
+    RecordEvent(EntityKind::Edge, TopologyEventKind::Deleted, edge.GetIndex(), NoEntity);
+    RecordEvent(EntityKind::Face, TopologyEventKind::Merged, face.GetIndex(),
+                m_Tables.Loops[keptLoop].Face.GetIndex());
+    RecordEvent(EntityKind::Loop, TopologyEventKind::Merged, goneLoop, keptLoop);
     return {};
 }
 
