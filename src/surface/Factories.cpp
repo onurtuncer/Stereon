@@ -78,10 +78,10 @@ Result<Torus> MakeTorus(const Point3& center, const double majorRadius, const do
     constexpr std::string_view where = "MakeTorus";
     STEREON_TRY_VOID(Detail::CheckFinite(center, "Center", where));
     STEREON_TRY_VOID(Detail::CheckPositive(minorRadius, "MinorRadius", where));
-    if (!Detail::IsFiniteValue(majorRadius) || !(majorRadius > minorRadius)) {
+    if (!Detail::IsFiniteValue(majorRadius) || !(majorRadius >= minorRadius)) {
         return Fail(ErrorCode::InvalidInput,
-                    "MakeTorus: MajorRadius must be finite and greater than MinorRadius "
-                    "(only ring tori are supported)");
+                    "MakeTorus: MajorRadius must be finite and at least MinorRadius "
+                    "(ring and horn tori are supported)");
     }
     STEREON_TRY_VOID(Detail::CheckOrthonormal(xAxis, yAxis, where));
     return Torus{center, majorRadius, minorRadius, xAxis, yAxis, rightHanded};

@@ -1247,3 +1247,20 @@ TEST_CASE("sweeps of trimmed profiles read from a file keep their exact forms",
     REQUIRE(nested != nullptr);
     REQUIRE(nested->GetPiece() != nullptr);
 }
+
+TEST_CASE("horn tori survive geometry archive validation", "[io][archive][regression]")
+{
+    GeometryArchive original;
+    original.Surfaces = {Surface(Torus{O, 1.0, 1.0, X, Y})};
+    if constexpr (!Stereon::SerializationAvailable) {
+        REQUIRE(WriteGeometry(original).error().GetCode() == ErrorCode::NotSupported);
+        return;
+    }
+    const Bytes bytes = Written(original);
+    const auto loaded = Read(bytes);
+    REQUIRE(loaded.Archive.Surfaces.size() == 1);
+    REQUIRE(Written(loaded.Archive) == bytes);
+    const auto* horn = loaded.Archive.Surfaces[0].Target<Torus>();
+    REQUIRE(horn != nullptr);
+    REQUIRE(horn->MajorRadius == horn->MinorRadius);
+}

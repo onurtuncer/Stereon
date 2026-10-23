@@ -438,7 +438,8 @@ TEST_CASE("analytic surfaces validate data from outside the kernel", "[surface][
             ErrorCode::InvalidInput);
 
     REQUIRE(Stereon::MakeTorus(Point3{}, 2.0, 1.0, x, y).has_value());
-    REQUIRE(codeOf(Stereon::MakeTorus(Point3{}, 1.0, 1.0, x, y)) == ErrorCode::InvalidInput);
+    REQUIRE(Stereon::MakeTorus(Point3{}, 1.0, 1.0, x, y).has_value());
+    REQUIRE(codeOf(Stereon::MakeTorus(Point3{}, 0.5, 1.0, x, y)) == ErrorCode::InvalidInput);
     REQUIRE(codeOf(Stereon::MakeTorus(Point3{}, 2.0, 0.0, x, y)) == ErrorCode::InvalidInput);
 
     REQUIRE(Stereon::MakePlane(Point3{}, x, y).has_value());
@@ -448,4 +449,29 @@ TEST_CASE("analytic surfaces validate data from outside the kernel", "[surface][
     REQUIRE_FALSE(leftHanded.value().RightHanded);
     REQUIRE(codeOf(Stereon::MakeCylinder(Point3{INFINITY, 0.0, 0.0}, 1.0, x, y)) ==
             ErrorCode::InvalidInput);
+}
+
+TEST_CASE("horn torus projection and bounds include the pinch", "[surface][torus][regression]")
+{
+    const auto made = Stereon::MakeTorus(Point3{}, 1.0, 1.0, Vec3{1, 0, 0}, Vec3{0, 1, 0});
+    REQUIRE(made.has_value());
+    const Torus t = *made;
+    const Point2 pinch = Project(t, t.Center);
+    REQUIRE(pinch.X == 0.0);
+    REQUIRE(pinch.Y == std::numbers::pi);
+    REQUIRE(Near(Eval(t, pinch), t.Center));
+    for (double u : {0.0, 0.5, 2.0, CirclePeriod}) {
+        REQUIRE(Near(Eval(t, Point2{u, std::numbers::pi}), t.Center));
+        REQUIRE(Deriv(t, Point2{u, std::numbers::pi}, 1, 0) == Vec3{});
+    }
+    rc::prop("horn projections attain the independent meridian distance", [&] {
+        const Point3 p = RandomPoint();
+        const double expected = std::abs(std::hypot(std::hypot(p.X, p.Y) - 1.0, p.Z) - 1.0);
+        const Point3 foot = Eval(t, Project(t, p));
+        RC_ASSERT(std::abs(Distance(foot, p) - expected) <= Tolerance * (1.0 + expected));
+        RC_ASSERT(Contains(BoundingBox(t), foot));
+        const Point2 uv{RandomAngle(), RandomAngle()};
+        RC_ASSERT(Near(Eval(t, Project(t, Eval(t, uv))), Eval(t, uv)));
+        CheckDerivatives(t, uv, 2);
+    });
 }

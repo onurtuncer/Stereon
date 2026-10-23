@@ -362,10 +362,15 @@ The cone is unbounded, so its bounding box is ``Box3::Everything()``.
 The torus
 ~~~~~~~~~
 
-Only the *ring torus*, :math:`R > r > 0`, is a ``Torus``. The horn torus
-(:math:`R = r`) and the spindle torus (:math:`R < r`) touch or cross their
-axis, where they are self-intersecting and singular; STEP gives the
-degenerate torus its own entity, and ``MakeTorus`` rejects them.
+``Torus`` supports ring tori (:math:`R > r > 0`) and horn tori
+(:math:`R = r > 0`). ``MakeTorus`` rejects spindle tori (:math:`R < r`).
+At the horn's inner point, :math:`v = \pi`, all values of :math:`u` map to
+the centre. Normals and curvatures are undefined there and return
+``DegenerateResult``. Nearby regular points use a cancellation-resistant
+half-angle expression for the radial coordinate. Projection of the centre
+chooses :math:`(u,v) = (0,\pi)`. Bounding boxes and rational B-spline
+conversion also support horns. This is surface geometry support; it does
+not introduce a toroidal solid primitive or Boolean support at the pinch.
 
 The closest point lies in the half-plane at :math:`u_p`, and within it on
 the tube's cross-section circle of centre :math:`(R, 0)` and radius
@@ -383,7 +388,7 @@ tube's centre circle is equally close to the whole cross-section and gets
 **Bounding box.** Along coordinate axis :math:`i`, with
 :math:`A = \sqrt{x_i^2 + y_i^2}`, the offset from the centre is
 :math:`(R + r\cos v) A \cos(u - u_i) + r\sin v\, z_i` for some phase
-:math:`u_i`. Since :math:`R + r\cos v > 0` on a ring torus,
+:math:`u_i`. Since :math:`R + r\cos v \ge 0` on a ring or horn torus,
 
 .. math::
 
@@ -411,7 +416,7 @@ message naming the factory and the value when
 - a radius is not positive (the cone's reference radius may be 0, putting
   the apex at the origin), the ellipse's radii are out of order, the cone's
   semi-angle is not strictly between 0 and :math:`\pi/2` in magnitude, or a
-  torus is not a ring torus;
+  torus is neither a ring nor a horn torus;
 - the frame is not orthonormal within ``FrameAllowance``.
 
 .. code-block:: cpp

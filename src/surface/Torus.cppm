@@ -10,13 +10,14 @@ module;
 #include <Stereon/Core/Contracts.hpp>
 
 #include <algorithm>
+#include <type_traits>
 
 export module Stereon.Surface:Torus;
 
 import Stereon.Curve;
 import :Concepts;
 
-/// The ring torus.
+/// Ring and horn tori.
 
 export namespace Stereon {
 
@@ -27,11 +28,10 @@ export namespace Stereon {
 /// orthonormal; the axis follows the handedness flag as for BasicCylinder,
 /// so the normal points out of the tube in a right-handed frame.
 ///
-/// Only the ring torus, MajorRadius > MinorRadius > 0, is represented: the
-/// horn and spindle tori, which touch or cross the axis, are
-/// self-intersecting and singular, and STEP's degenerate_toroidal_surface
-/// has its own entity. The conventions are STEP's toroidal_surface and
-/// OCCT's Geom_ToroidalSurface.
+/// Ring and horn tori satisfy MajorRadius >= MinorRadius > 0. A horn
+/// torus has a singular point at v = pi: every u maps to the centre and
+/// differential properties there return DegenerateResult. Spindle tori
+/// (MajorRadius < MinorRadius) are not supported.
 template <Scalar T>
 struct BasicTorus {
     BasicPoint3<T> Center;
@@ -47,7 +47,7 @@ struct BasicTorus {
 using Torus = BasicTorus<double>;
 
 /// The torus after validating data from outside the kernel (ADR-0006):
-/// InvalidInput unless every value is finite, MajorRadius > MinorRadius > 0
+/// InvalidInput unless every value is finite, MajorRadius >= MinorRadius > 0
 /// and the axes are orthonormal within FrameAllowance.
 [[nodiscard]] Result<Torus> MakeTorus(const Point3& center, const double majorRadius,
                                       const double minorRadius, const Vec3& xAxis,
@@ -60,11 +60,35 @@ template <Scalar T>
     return FrameAxis(torus.XAxis, torus.YAxis, torus.RightHanded);
 }
 
+} // namespace Stereon
+
+namespace Stereon::Detail {
+
+/// R + r cos(v), without cancellation near the horn's inner point.
+/// The double chart uses the principal angle so canonical v = +/-pi
+/// collapses exactly. Other scalars keep the original differentiable expression.
+template <Scalar T>
+[[nodiscard]] constexpr T TorusRadial(const BasicTorus<T>& torus, const T& v)
+{
+    if constexpr (std::is_same_v<T, double>) {
+        if (torus.MajorRadius == torus.MinorRadius) {
+            const double angle = WrappedAngle(Sin(v), Cos(v));
+            const double halfCos = Sin((angle - CirclePeriod / 2.0) / 2.0);
+            return torus.MinorRadius * (2.0 * halfCos * halfCos);
+        }
+    }
+    return torus.MajorRadius + torus.MinorRadius * Cos(v);
+}
+
+} // namespace Stereon::Detail
+
+export namespace Stereon {
+
 template <Scalar T>
 [[nodiscard]] constexpr BasicPoint3<T> Eval(const BasicTorus<T>& torus, const BasicPoint2<T>& uv)
 {
     Detail::RequireFinite(uv, "Eval(Torus)", "a non-finite parameter");
-    const T radius = torus.MajorRadius + torus.MinorRadius * Cos(uv.Y);
+    const T radius = Detail::TorusRadial(torus, uv.Y);
     return torus.Center + radius * RadialDirection(torus.XAxis, torus.YAxis, uv.X, 0) +
            (torus.MinorRadius * Sin(uv.Y)) * Axis(torus);
 }
@@ -81,7 +105,7 @@ template <Scalar T>
     Detail::Require(du >= 0 && dv >= 0 && du + dv >= 1, "Deriv(Torus)",
                     "a derivative order that does not exist");
     const BasicCosSin<T> tube = QuarterTurned(Cos(uv.Y), Sin(uv.Y), dv);
-    const T radial = (dv == 0 ? torus.MajorRadius : T{}) + torus.MinorRadius * tube.Cos;
+    const T radial = dv == 0 ? Detail::TorusRadial(torus, uv.Y) : torus.MinorRadius * tube.Cos;
     const BasicVec3<T> around = radial * RadialDirection(torus.XAxis, torus.YAxis, uv.X, du);
     if (du != 0) {
         return around;
@@ -134,7 +158,7 @@ export namespace Stereon {
 /// A box containing the torus. Along axis i the coordinate is
 /// (R + r cos v) * A cos(u - u_i) + r sin v * Z_i with A = sqrt(X_i^2 + Y_i^2),
 /// which is at most R * A + r * (A cos v + Z_i sin v) because R + r cos v is
-/// positive, and so at most R * A + r * sqrt(A^2 + Z_i^2). The bound is tight
+/// nonnegative, and so at most R * A + r * sqrt(A^2 + Z_i^2). The bound is tight
 /// and is computed in interval arithmetic with the axis the evaluator uses,
 /// so the box encloses the exact torus.
 [[nodiscard]] constexpr Box3 BoundingBox(const Torus& torus)

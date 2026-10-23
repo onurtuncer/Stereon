@@ -181,3 +181,29 @@ TEST_CASE("curvatures survive the exact NURBS conversion", "[surface][properties
         RC_ASSERT(Dot(*UnitNormal(torus, uv), *UnitNormal(nurbs, st)) >= 1.0 - 1e-12);
     });
 }
+
+TEST_CASE("horn properties distinguish the pinch from nearby regular points",
+          "[surface][properties][regression]")
+{
+    const Torus horn{Point3{}, 1.0, 1.0, Vec3{1, 0, 0}, Vec3{0, 1, 0}};
+    const Surface erased(horn);
+    for (const double v : {Pi, -Pi}) {
+        const Point2 pinch{0.5, v};
+        const auto normal = UnitNormal(horn, pinch);
+        REQUIRE_FALSE(normal.has_value());
+        CHECK(normal.error().GetCode() == ErrorCode::DegenerateResult);
+        CHECK_FALSE(UnitNormal(erased, pinch).has_value());
+        CHECK_FALSE(FundamentalForms(horn, pinch).has_value());
+        CHECK_FALSE(GaussianCurvature(horn, pinch).has_value());
+        CHECK_FALSE(MeanCurvature(horn, pinch).has_value());
+        CHECK_FALSE(PrincipalCurvatures(horn, pinch).has_value());
+    }
+    for (const double offset : {-1e-7, -1e-9, 1e-9, 1e-7}) {
+        const Point2 uv{0.0, Pi + offset};
+        const auto normal = UnitNormal(horn, uv);
+        REQUIRE(normal.has_value());
+        CHECK(Near(normal->X, std::cos(uv.Y)));
+        CHECK(Near(normal->Z, std::sin(uv.Y)));
+        REQUIRE(PrincipalCurvatures(horn, uv).has_value());
+    }
+}

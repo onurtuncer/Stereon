@@ -131,6 +131,8 @@ TEST_CASE("analytic surfaces convert exactly to NURBS", "[surface][conversion][p
         const double band = *rc::gen::inRange(10, 280) / 100.0;
         CheckConversion(Sphere{o, 2.0, f.X, f.Y, false},
                         Box2{RandomRange(6.0, CirclePeriod), Interval{-1.4, -1.4 + band}});
+        CheckConversion(Torus{o, 1.0, 1.0, f.X, f.Y},
+                        Box2{RandomRange(6.0, CirclePeriod), RandomRange(6.0, CirclePeriod)});
         CheckConversion(Torus{o, 3.0, 1.0, f.X, f.Y},
                         Box2{RandomRange(6.0, CirclePeriod), RandomRange(6.0, CirclePeriod)});
     });
@@ -212,4 +214,14 @@ TEST_CASE("surface conversion through the wrapper and its errors", "[surface][co
     // A whole sphere and a whole torus are fine.
     REQUIRE(Stereon::ToBSpline(sphere, Domain(sphere)).has_value());
     REQUIRE(Stereon::ToBSpline(torus, Domain(torus)).has_value());
+}
+
+TEST_CASE("a converted horn torus collapses its inner circle", "[surface][conversion][regression]")
+{
+    const Torus horn{Point3{}, 1.0, 1.0, Vec3{1, 0, 0}, Vec3{0, 1, 0}};
+    const auto converted = Stereon::ToBSpline(horn, Domain(horn));
+    REQUIRE(converted.has_value());
+    for (const double u : {0.0, 0.5, 2.0, CirclePeriod}) {
+        REQUIRE(Distance(Eval(*converted, Point2{u, std::numbers::pi}), horn.Center) <= Tolerance);
+    }
 }
