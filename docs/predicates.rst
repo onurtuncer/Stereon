@@ -305,6 +305,15 @@ per component. The result has at most :math:`2 \abs{e}` components.
 ``Product(e, f)`` scales the longer expansion by each component of the
 shorter one and sums the pieces; its capacity is :math:`2 \abs{e} \abs{f}`.
 
+``DynamicExpansion`` keeps its components on the heap, under the same
+invariants and with the same three operations, for a decision whose
+worst-case capacity has no place on the stack. The cylinder–cylinder
+handler for skew axes compares the squared distance between the axes with
+the squared sum or difference of the radii, a polynomial of degree ten in
+the input doubles: the capacity arithmetic would ask for over a million
+components, while the arithmetic itself needs a few hundred. Nothing is
+allocated unless the interval filter fails to decide.
+
 With these, the determinants of the previous section read as they are
 written. The capacities the predicates need are:
 
