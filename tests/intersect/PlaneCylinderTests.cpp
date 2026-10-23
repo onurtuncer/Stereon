@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <numbers>
 #include <string>
 #include <vector>
@@ -188,6 +189,21 @@ TEST_CASE("an oblique plane cuts an ellipse, exact on the plane and fitted on th
     // Heights the ellipse never reaches (it stays within |z| <= 5).
     const Box2 above{Interval{0.0, Stereon::CirclePeriod}, Interval{6.0, 9.0}};
     REQUIRE(Intersect(oblique, Box2::Everything(), aboutZ, above, ctx)->IsEmpty());
+}
+
+TEST_CASE("ellipse pcurve work is bounded before converting or allocating its samples",
+          "[intersect][cylinder]")
+{
+    const Surface oblique{IntersectTest::PlaneWithNormal(Point3{}, Vec3{0.0, 1.0, 1.0})};
+    // The first count is finite but beyond the work budget, the second beyond
+    // size_t, and the last underflows the spacing calculation to zero.
+    for (const double resolution : {1e-20, 1e-100, std::numeric_limits<double>::denorm_min()}) {
+        const auto result = Intersect(oblique, aboutZ, ctx.WithResolution(resolution));
+        REQUIRE_FALSE(result.has_value());
+        REQUIRE(result.error().GetCode() == Stereon::ErrorCode::CertificationFailed);
+        REQUIRE(std::string(result.error().GetMessage()).find("sample budget") !=
+                std::string::npos);
+    }
 }
 
 TEST_CASE("the cylinder first gives the same branches with the sides swapped",

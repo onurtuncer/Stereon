@@ -124,6 +124,56 @@ TEST_CASE("an Intersection edge's cache follows its primary side and is certifie
     REQUIRE(Stereon::CacheCertificateOf(shape, side) == CacheCertificate::None);
 }
 
+TEST_CASE("cached curve references stay refused after transaction rollback", "[topo][cache]")
+{
+    Body hinge = MakeHinge();
+    ShapeBuilder& builder = hinge.Builder;
+    CurveRef abandoned;
+    CurveRef fresh;
+    SECTION("a failed cache is not reused by AddCurve")
+    {
+        const auto failed =
+            builder.Transaction([&](ShapeBuilder& candidate) -> Stereon::Result<void> {
+                abandoned = Must(candidate.CacheEdgeCurve(hinge.Edges[0]));
+                return Stereon::Fail(ErrorCode::DegenerateResult, "rollback the cache");
+            });
+        REQUIRE_FALSE(failed.has_value());
+        fresh = Must(builder.AddCurve(Stereon::Curve(Stereon::Line{})));
+    }
+    SECTION("a cache does not reuse a failed AddCurve")
+    {
+        const auto failed =
+            builder.Transaction([&](ShapeBuilder& candidate) -> Stereon::Result<void> {
+                abandoned = Must(candidate.AddCurve(Stereon::Curve(Stereon::Line{})));
+                return Stereon::Fail(ErrorCode::DegenerateResult, "rollback the curve");
+            });
+        REQUIRE_FALSE(failed.has_value());
+        fresh = Must(builder.CacheEdgeCurve(hinge.Edges[0]));
+    }
+    SECTION("repeated failed caches reserve distinct indices")
+    {
+        for (int attempt = 0; attempt < 3; ++attempt) {
+            const CurveRef previous = abandoned;
+            const auto failed =
+                builder.Transaction([&](ShapeBuilder& candidate) -> Stereon::Result<void> {
+                    abandoned = Must(candidate.CacheEdgeCurve(hinge.Edges[0]));
+                    return Stereon::Fail(ErrorCode::DegenerateResult, "rollback again");
+                });
+            REQUIRE_FALSE(failed.has_value());
+            REQUIRE(abandoned != previous);
+        }
+        fresh = Must(builder.CacheEdgeCurve(hinge.Edges[0]));
+    }
+    REQUIRE(fresh.GetIndex() > abandoned.GetIndex());
+    const auto stale = builder.AddEdge({.Kind = EdgeCurveKind::Spatial,
+                                        .Start = hinge.Vertices[0],
+                                        .End = hinge.Vertices[1],
+                                        .Curve = abandoned,
+                                        .Range = Interval(0.0, 1.0)});
+    REQUIRE_FALSE(stale.has_value());
+    REQUIRE(stale.error().GetCode() == ErrorCode::InvalidInput);
+}
+
 TEST_CASE("a cache of a curved primary side passes through every sample", "[topo][cache]")
 {
     // Face 0 on a cylinder of radius 1.5 about the y axis, the hinge's
