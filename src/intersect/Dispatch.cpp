@@ -87,6 +87,34 @@ Result<CurveCurveIntersection> Intersect(const Curve& a, const Curve& b, const C
     return Intersect(a, Domain(a), b, Domain(b), ctx);
 }
 
+Result<PlanarIntersection> Intersect(const Curve2d& a, const Interval& domainA, const Curve2d& b,
+                                     const Interval& domainB, const Context& ctx)
+{
+    if (a.IsEmpty() || b.IsEmpty()) {
+        return Fail(ErrorCode::InvalidInput, "cannot intersect an empty plane curve");
+    }
+    if (const Result<void> ok = CheckDomains(IsDomain(domainA) && IsDomain(domainB), "plane curve");
+        !ok) {
+        return std::unexpected(ok.error());
+    }
+    const std::size_t i = BuiltinIndexOf(a);
+    const std::size_t j = BuiltinIndexOf(b);
+    if (i == BuiltinCurve2dTypes::Size || j == BuiltinCurve2dTypes::Size) {
+        return Fail(ErrorCode::NotSupported,
+                    "plane curve intersection needs built-in curve types until user types can "
+                    "declare the capabilities of tiers 2 and 3 (ADR-0003)");
+    }
+    return Detail::PlanarPairTable[i][j](a, domainA, b, domainB, ctx);
+}
+
+Result<PlanarIntersection> Intersect(const Curve2d& a, const Curve2d& b, const Context& ctx)
+{
+    if (a.IsEmpty() || b.IsEmpty()) {
+        return Fail(ErrorCode::InvalidInput, "cannot intersect an empty plane curve");
+    }
+    return Intersect(a, Domain(a), b, Domain(b), ctx);
+}
+
 Result<SurfaceSurfaceIntersection> Intersect(const Surface& a, const Box2& domainA,
                                              const Surface& b, const Box2& domainB,
                                              const double tolerance, const Context& ctx)

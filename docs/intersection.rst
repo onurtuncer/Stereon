@@ -8,7 +8,7 @@
 Intersections
 =============
 
-Curve-curve, curve-surface and surface-surface intersection, including the marching and subdivision strategy.
+Curve-curve, curve-surface and surface-surface intersection, including the marching and subdivision strategy; plane curve intersection for the face clipping of the Booleans.
 
 Outcomes
 --------
@@ -165,6 +165,40 @@ the branch's parameter box leaves the domain entirely. A face-level
 operation restricts a branch to its loops itself; a box should include the
 face's tolerance for the clip to keep every point within it. A declared
 coincidence is logged at ``Info`` with its distance and the tolerance.
+
+Plane curves
+------------
+
+``Intersect(curve2d, domain, curve2d, domain, ctx)`` meets two plane
+curves: the pcurves of a face's loop against the pcurve of a branch in the
+face's parameter space, which is how a face-level operation restricts a
+branch to its loops (ADR-0009; the Boolean prototype's M6). A
+``PlanarIntersection`` holds ``PlanarPoint`` entries, in order of the first
+curve's parameter, each with its parameter on both curves, its position,
+the ``ContactType`` there (``Crossing`` or ``Tangential``) and whether the
+count and the contact were *decided* exactly on the input doubles; and
+``PlanarOverlap`` stretches where coincident lines or circles share their
+domains, with the parameter correspondence. A point is kept when both
+parameters lie in the requested domains, a periodic curve's taken modulo
+its period and placed there.
+
+Lines, circles and ellipses against each other decide every configuration
+as the sign of a polynomial in the input doubles (RS-0001 G5): the
+determinant of two directions, whether a parallel line passes through a
+point, the discriminant of the quadratic a line cuts out of a circle or an
+ellipse, and the distance between two centres against the sum and the
+difference of the radii. The polynomials are written once over a scalar
+field and read as an enclosure first and exactly, on heap expansions, only
+when the enclosure straddles zero. Two conics, a circle or an ellipse
+against an ellipse, give a quartic in :math:`\tan(s/2)` over each half of
+the turn; its simple roots are isolated by Bernstein subdivision and each
+is certified a crossing by the exact signs of the quartic on either side,
+while a root where the signs agree, a touch or a near miss, is reported as
+a tangency bracketed to rounding and not decided. A B-spline against a
+line or a circle is a polynomial per Bézier segment, whose roots are
+bracketed to rounding; nothing there is decided, and a touch of even
+multiplicity may be missed, which changes no side. Every other pair reports
+``NotImplemented``; a rational B-spline is ``NotSupported``.
 
 Certificates
 ------------

@@ -172,6 +172,38 @@ struct CurveCurveIntersection {
     [[nodiscard]] bool IsEmpty() const noexcept { return Points.empty() && Overlaps.empty(); }
 };
 
+/// A point where two plane curves meet, the pcurves of a face's loop and of
+/// an intersection branch in the face's parameter space (ADR-0009): its
+/// parameter on each, where it is, how the curves meet there, and whether
+/// the count and the contact were decided exactly on the input doubles
+/// (RS-0001 G5). Lines, circles and ellipses decide their crossings and
+/// tangencies exactly, except that a tangency of two conics is bracketed to
+/// rounding; every meeting with a B-spline is bracketed to rounding.
+struct PlanarPoint {
+    double ParameterA = 0.0;
+    double ParameterB = 0.0;
+    Point2 Position;
+    ContactType Contact = ContactType::Crossing;
+    bool Decided = true;
+};
+
+/// A stretch where two plane curves coincide: the parameter interval on
+/// each, and whether they run the same way along it.
+struct PlanarOverlap {
+    Interval OnA;
+    Interval OnB;
+    bool SameDirection = true;
+};
+
+/// A complete intersection of two plane curves over the requested domains:
+/// a result with no component is a proved separation.
+struct PlanarIntersection {
+    std::vector<PlanarPoint> Points;
+    std::vector<PlanarOverlap> Overlaps;
+
+    [[nodiscard]] bool IsEmpty() const noexcept { return Points.empty() && Overlaps.empty(); }
+};
+
 } // namespace Stereon
 
 /// The type-pair dispatch of ADR-0003 for binary operations: one handler per
@@ -218,6 +250,41 @@ Result<SurfaceSurfaceIntersection> CylinderCylinder(const Surface&, const Box2&,
 /// CylinderCylinder hands over to it; defined in CylinderCylinderSkew.cpp.
 Result<SurfaceSurfaceIntersection> CylinderCylinderSkew(const Surface&, const Box2&, const Surface&,
                                                         const Box2&, double, const Context&);
+
+/// The plane curve handlers (the Boolean prototype's M6, face clipping):
+/// lines, circles and ellipses against each other, every configuration
+/// decision the sign of a polynomial in the input doubles, and B-splines
+/// against lines and circles, bracketed to rounding. Defined in
+/// PlanarLines.cpp, PlanarConics.cpp and PlanarSpline.cpp.
+using PlanarHandler = Result<PlanarIntersection> (*)(const Curve2d&, const Interval&,
+                                                     const Curve2d&, const Interval&,
+                                                     const Context&);
+Result<PlanarIntersection> LineLine2d(const Curve2d&, const Interval&, const Curve2d&,
+                                      const Interval&, const Context&);
+Result<PlanarIntersection> LineCircle2d(const Curve2d&, const Interval&, const Curve2d&,
+                                        const Interval&, const Context&);
+Result<PlanarIntersection> CircleLine2d(const Curve2d&, const Interval&, const Curve2d&,
+                                        const Interval&, const Context&);
+Result<PlanarIntersection> CircleCircle2d(const Curve2d&, const Interval&, const Curve2d&,
+                                          const Interval&, const Context&);
+Result<PlanarIntersection> LineEllipse2d(const Curve2d&, const Interval&, const Curve2d&,
+                                         const Interval&, const Context&);
+Result<PlanarIntersection> EllipseLine2d(const Curve2d&, const Interval&, const Curve2d&,
+                                         const Interval&, const Context&);
+Result<PlanarIntersection> CircleEllipse2d(const Curve2d&, const Interval&, const Curve2d&,
+                                           const Interval&, const Context&);
+Result<PlanarIntersection> EllipseCircle2d(const Curve2d&, const Interval&, const Curve2d&,
+                                           const Interval&, const Context&);
+Result<PlanarIntersection> EllipseEllipse2d(const Curve2d&, const Interval&, const Curve2d&,
+                                            const Interval&, const Context&);
+Result<PlanarIntersection> SplineLine2d(const Curve2d&, const Interval&, const Curve2d&,
+                                        const Interval&, const Context&);
+Result<PlanarIntersection> LineSpline2d(const Curve2d&, const Interval&, const Curve2d&,
+                                        const Interval&, const Context&);
+Result<PlanarIntersection> SplineCircle2d(const Curve2d&, const Interval&, const Curve2d&,
+                                          const Interval&, const Context&);
+Result<PlanarIntersection> CircleSpline2d(const Curve2d&, const Interval&, const Curve2d&,
+                                          const Interval&, const Context&);
 
 template <typename A, typename B>
 Result<CurveCurveIntersection> CurveStub(const Curve&, const Interval&, const Curve&,
@@ -283,6 +350,99 @@ consteval SurfaceHandler SurfaceHandlerFor()
     }
 }
 
+template <typename A, typename B>
+Result<PlanarIntersection> PlanarStub(const Curve2d&, const Interval&, const Curve2d&,
+                                      const Interval&, const Context&)
+{
+    // The names are read at compile time.
+    constexpr std::string_view nameA = GeometryTypeName<A>;
+    constexpr std::string_view nameB = GeometryTypeName<B>;
+    std::string message(nameA);
+    message += " x ";
+    message += nameB;
+    message += " intersection is not implemented yet (ADR-0010)";
+    return Fail(ErrorCode::NotImplemented, std::move(message));
+}
+
+/// The handlers of a line against each B.
+template <typename B>
+consteval PlanarHandler LineAgainst()
+{
+    if constexpr (std::same_as<B, Line2d>) {
+        return &LineLine2d;
+    } else if constexpr (std::same_as<B, Circle2d>) {
+        return &LineCircle2d;
+    } else if constexpr (std::same_as<B, Ellipse2d>) {
+        return &LineEllipse2d;
+    } else if constexpr (std::same_as<B, BSplineCurve2d>) {
+        return &LineSpline2d;
+    } else {
+        return &PlanarStub<Line2d, B>;
+    }
+}
+
+/// The handlers of a circle against each B.
+template <typename B>
+consteval PlanarHandler CircleAgainst()
+{
+    if constexpr (std::same_as<B, Line2d>) {
+        return &CircleLine2d;
+    } else if constexpr (std::same_as<B, Circle2d>) {
+        return &CircleCircle2d;
+    } else if constexpr (std::same_as<B, Ellipse2d>) {
+        return &CircleEllipse2d;
+    } else if constexpr (std::same_as<B, BSplineCurve2d>) {
+        return &CircleSpline2d;
+    } else {
+        return &PlanarStub<Circle2d, B>;
+    }
+}
+
+/// The handlers of an ellipse against each B.
+template <typename B>
+consteval PlanarHandler EllipseAgainst()
+{
+    if constexpr (std::same_as<B, Line2d>) {
+        return &EllipseLine2d;
+    } else if constexpr (std::same_as<B, Circle2d>) {
+        return &EllipseCircle2d;
+    } else if constexpr (std::same_as<B, Ellipse2d>) {
+        return &EllipseEllipse2d;
+    } else {
+        return &PlanarStub<Ellipse2d, B>;
+    }
+}
+
+/// The handlers of a B-spline against each B.
+template <typename B>
+consteval PlanarHandler SplineAgainst()
+{
+    if constexpr (std::same_as<B, Line2d>) {
+        return &SplineLine2d;
+    } else if constexpr (std::same_as<B, Circle2d>) {
+        return &SplineCircle2d;
+    } else {
+        return &PlanarStub<BSplineCurve2d, B>;
+    }
+}
+
+/// The handler of the ordered plane curve pair (A, B); see SurfaceHandlerFor.
+template <typename A, typename B>
+consteval PlanarHandler PlanarHandlerFor()
+{
+    if constexpr (std::same_as<A, Line2d>) {
+        return LineAgainst<B>();
+    } else if constexpr (std::same_as<A, Circle2d>) {
+        return CircleAgainst<B>();
+    } else if constexpr (std::same_as<A, Ellipse2d>) {
+        return EllipseAgainst<B>();
+    } else if constexpr (std::same_as<A, BSplineCurve2d>) {
+        return SplineAgainst<B>();
+    } else {
+        return &PlanarStub<A, B>;
+    }
+}
+
 /// Class templates wrapping the handlers, so MakePairTable can take them as
 /// a template template parameter.
 template <typename A, typename B>
@@ -293,11 +453,17 @@ template <typename A, typename B>
 struct SurfaceHandlerOf {
     static constexpr SurfaceHandler Call = SurfaceHandlerFor<A, B>();
 };
+template <typename A, typename B>
+struct PlanarHandlerOf {
+    static constexpr PlanarHandler Call = PlanarHandlerFor<A, B>();
+};
 
 inline constexpr auto CurvePairTable =
     MakePairTable<CurveHandler, CurveStubOf>(BuiltinCurveTypes{});
 inline constexpr auto SurfacePairTable =
     MakePairTable<SurfaceHandler, SurfaceHandlerOf>(BuiltinSurfaceTypes{});
+inline constexpr auto PlanarPairTable =
+    MakePairTable<PlanarHandler, PlanarHandlerOf>(BuiltinCurve2dTypes{});
 
 } // namespace Stereon::Detail
 
@@ -315,6 +481,23 @@ export namespace Stereon {
 /// Over the curves' whole domains.
 [[nodiscard]] Result<CurveCurveIntersection> Intersect(const Curve& a, const Curve& b,
                                                        const Context& ctx);
+
+/// The intersection of two plane curves over the requested parameter
+/// domains (ADR-0029; the Boolean prototype's M6): the points where they
+/// meet, in order of the parameter on `a`, and the stretches where they
+/// coincide, or the reason there is none. A point is kept when both its
+/// parameters lie in the requested domains, a periodic curve's taken
+/// modulo its period and placed in its domain. InvalidInput for an empty
+/// curve or a domain that is empty or NaN-bounded; NotSupported for a
+/// type that is not built in or a rational B-spline; NotImplemented for a
+/// pair without a handler yet.
+[[nodiscard]] Result<PlanarIntersection> Intersect(const Curve2d& a, const Interval& domainA,
+                                                   const Curve2d& b, const Interval& domainB,
+                                                   const Context& ctx);
+
+/// Over the curves' whole domains.
+[[nodiscard]] Result<PlanarIntersection> Intersect(const Curve2d& a, const Curve2d& b,
+                                                   const Context& ctx);
 
 /// The intersection of two surfaces over the requested parameter domains
 /// (ADR-0029); see Intersect(Curve, Interval, Curve, Interval). A face's
