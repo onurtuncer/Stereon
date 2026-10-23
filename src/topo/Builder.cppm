@@ -441,6 +441,20 @@ public:
     /// loop or a handle that is not a live loop of this builder.
     [[nodiscard]] std::vector<BuilderCoedgeId> CoedgesOf(BuilderLoopId loop) const;
 
+    /// Connectivity read back during an edit, for the operations that
+    /// compose the operators (the Booleans' imprinting, M6): a coedge's
+    /// edge, loop and sense, an edge's vertices, a vertex's position, and a
+    /// face's loops in order. An invalid handle, Same, the origin or an
+    /// empty list for a handle that is not live in this builder. Geometry
+    /// beyond positions is read from the frozen Shape the edit started from.
+    [[nodiscard]] BuilderEdgeId EdgeOf(BuilderCoedgeId coedge) const noexcept;
+    [[nodiscard]] BuilderLoopId LoopOf(BuilderCoedgeId coedge) const noexcept;
+    [[nodiscard]] EdgeUseSense SenseOf(BuilderCoedgeId coedge) const noexcept;
+    [[nodiscard]] BuilderVertexId StartOf(BuilderEdgeId edge) const noexcept;
+    [[nodiscard]] BuilderVertexId EndOf(BuilderEdgeId edge) const noexcept;
+    [[nodiscard]] Point3 PositionOf(BuilderVertexId vertex) const noexcept;
+    [[nodiscard]] std::vector<BuilderLoopId> LoopsOf(BuilderFaceId face) const;
+
     /// The structural check Freeze() will run, without freezing.
     [[nodiscard]] ValidityReport Validate() const;
 
@@ -537,6 +551,9 @@ private:
 
     template <EntityKind K>
     [[nodiscard]] bool IsLive(BuilderId<K> h) const noexcept;
+    /// The builder handle of a live slot, at its current generation.
+    template <EntityKind K>
+    [[nodiscard]] BuilderId<K> HandleOfSlot(std::uint32_t index) const noexcept;
     template <EntityKind K>
     [[nodiscard]] Result<void> Require(BuilderId<K> h, const char* operation) const;
     template <EntityKind K>

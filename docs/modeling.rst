@@ -51,6 +51,55 @@ These are the first operations of the Boolean prototype
    Extrude, revolve, sweep, loft, sewing, Boolean operations, blends and
    operation history.
 
+Face clipping and imprinting
+----------------------------
+
+The Boolean prototype (``docs/planning/boolean-prototype-plan.md``) builds
+its pipeline in ``Stereon.Boolean`` milestone by milestone; M6 is the two
+steps that take an intersection branch into a body's topology.
+
+``ClipToFace(shape, face, branch, side, ctx)`` restricts a branch of two
+surfaces to a face on one of them, in that face's parameter space. The
+branch's pcurve on the face (``side`` says which of its two) is met with
+the pcurve of every coedge of the face's loops through the plane curve
+intersection of :doc:`intersection`; the meetings are the ``Crossings`` of
+the ``FaceClip``, in order along the branch, each with the coedge, the
+parameter on its edge and on the branch, and the loop vertex it is at when
+it lies within that vertex's tolerance (ADR-0001). The stretches between
+crossings are ``Inside`` the face or outside it by the parity of a ray from
+their middle, the ray turned by irrational fractions of a turn until it
+meets no loop vertex; stretches along a loop edge are ``OnBoundary``.
+Everything else is decided on the nominal geometry, exactly where the
+pcurves are lines, circles and ellipses (decision D1 of the plan), and
+``Decided`` says whether every crossing and every side was.
+
+``ImprintClip(builder, shape, face, branch, side, clip, ctx)`` writes the
+clip into a ``ShapeBuilder`` opened on the shape, inside the caller's
+transaction, through the Euler operators of :doc:`topology`: the edges the
+branch crosses are split at the crossings (SEMV), and each inside piece
+becomes an edge, splitting the face in two when its ends lie on one loop
+(MEF), bridging two loops of the face when they lie on different ones
+(MEKR), or a ring inside the face when the piece is closed (a strut by
+MEV, the closed edge by MEF on the strut's own use, the strut removed by
+KEMR, which leaves the ring as a loop of the face and the closed edge's
+other use as the new face's boundary). The new edge is ``Exact`` with the
+branch's curve where that is a line, a circle or an ellipse, and otherwise
+a ``Trim`` edge with its cached curve (ADR-0009, section 8), its tolerance
+the larger of the resolution and the branch's certified bound. The
+``Imprint`` names each piece's edge, its end vertices and the face it cut
+off, and the vertices the splits made. A piece that ends inside the face
+is ``NotSupported`` here: branches meet at nodes, which the assembly of M8
+joins.
+
+.. code-block:: cpp
+
+   const auto clip = Stereon::ClipToFace(shape, face, branch, Stereon::BranchSide::A, ctx);
+   auto builder = *Stereon::ShapeBuilder::Open(shape);
+   const auto imprint = builder.Transaction([&](Stereon::ShapeBuilder& candidate) {
+       return Stereon::ImprintClip(candidate, shape, face, branch, Stereon::BranchSide::A, *clip, ctx);
+   });
+   const auto result = Stereon::Commit(std::move(builder), ctx);
+
 Related design decisions
 ------------------------
 

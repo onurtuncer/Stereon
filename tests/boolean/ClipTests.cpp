@@ -24,18 +24,21 @@
 
 import Stereon.Boolean;
 
+#include "Fixtures.hpp"
+
+using BooleanTest::Box;
+using BooleanTest::BranchOn;
+using BooleanTest::ctx;
+using BooleanTest::faceBox;
+using BooleanTest::PlaneFaceAlong;
+using BooleanTest::VerticalPlane;
 using Catch::Matchers::WithinAbs;
 using Stereon::Box2;
-using Stereon::Box3;
 using Stereon::BranchSide;
 using Stereon::ContactType;
-using Stereon::Context;
 using Stereon::Cylinder;
-using Stereon::EntityKind;
-using Stereon::FaceClip;
 using Stereon::FaceId;
 using Stereon::IntersectionBranch;
-using Stereon::Interval;
 using Stereon::Plane;
 using Stereon::Point3;
 using Stereon::Shape;
@@ -45,74 +48,6 @@ using Stereon::Vec3;
 namespace {
 
 constexpr double pi = std::numbers::pi;
-const Context ctx = Context::Default();
-
-/// The unit box scaled to 10, from the origin.
-Shape Box()
-{
-    const auto box = MakeBoxSolid(Box3::FromCorners(Point3{}, Point3{10.0, 10.0, 10.0}), ctx);
-    REQUIRE(box.has_value());
-    return box->Shape;
-}
-
-/// A cylinder of radius 3 and height 10 about z from the origin.
-Shape Drum()
-{
-    const auto drum =
-        MakeCylinderSolid(Point3{}, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}, 3.0, 10.0, ctx);
-    REQUIRE(drum.has_value());
-    return drum->Shape;
-}
-
-/// The face whose plane's normal points along n.
-FaceId PlaneFaceAlong(const Shape& shape, const Vec3& n)
-{
-    const auto faces = AllEntities<EntityKind::Face>(shape);
-    REQUIRE(faces.has_value());
-    for (const FaceId face : *faces) {
-        const Surface surface = SurfaceOf(shape, face);
-        if (const Plane* plane = surface.Target<Plane>();
-            plane != nullptr && Dot(Normalized(Cross(plane->XAxis, plane->YAxis)), n) > 0.9) {
-            return face;
-        }
-    }
-    FAIL("no face along the direction");
-    return {};
-}
-
-/// The face on a cylinder.
-FaceId CylinderFace(const Shape& shape)
-{
-    const auto faces = AllEntities<EntityKind::Face>(shape);
-    REQUIRE(faces.has_value());
-    for (const FaceId face : *faces) {
-        if (SurfaceOf(shape, face).Target<Cylinder>() != nullptr) {
-            return face;
-        }
-    }
-    FAIL("no cylindrical face");
-    return {};
-}
-
-/// The one branch of the face's surface against `other`, the face's surface
-/// as side A, over the face's parameter box (planes are unbounded).
-IntersectionBranch BranchOn(const Shape& shape, const FaceId face, const Surface& other,
-                            const Box2& box)
-{
-    const auto result = Intersect(SurfaceOf(shape, face), box, other, Box2::Everything(), ctx);
-    REQUIRE(result.has_value());
-    REQUIRE(result->Branches.size() == 1);
-    return result->Branches.front();
-}
-
-Surface VerticalPlane(const double x)
-{
-    return Surface{Plane{Point3{x, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}, Vec3{0.0, 0.0, 1.0}}};
-}
-
-/// The box's face parameters span [0, 10] in both directions; a margin lets
-/// the lines be clipped beside the face too.
-const Box2 faceBox{Interval{-1.0, 11.0}, Interval{-1.0, 11.0}};
 
 } // namespace
 
@@ -183,10 +118,7 @@ TEST_CASE("a circle inside a face is one closed piece; through its edges, four a
 {
     const Shape box = Box();
     const FaceId top = PlaneFaceAlong(box, Vec3{0.0, 0.0, 1.0});
-    const auto drill = [](const double radius) {
-        return Surface{Cylinder{Point3{5.0, 5.0, 0.0}, radius, Vec3{1.0, 0.0, 0.0},
-                                Vec3{0.0, 1.0, 0.0}, true}};
-    };
+    const auto drill = BooleanTest::Drill;
     const IntersectionBranch small = BranchOn(box, top, drill(2.0), faceBox);
     const auto inside = ClipToFace(box, top, small, BranchSide::A, ctx);
     REQUIRE(inside.has_value());
@@ -226,8 +158,8 @@ TEST_CASE("a circle inside a face is one closed piece; through its edges, four a
 
 TEST_CASE("an ellipse's sinusoid pcurve is clipped on a cylinder's lateral face", "[boolean][clip]")
 {
-    const Shape drum = Drum();
-    const FaceId lateral = CylinderFace(drum);
+    const Shape drum = BooleanTest::Drum();
+    const FaceId lateral = BooleanTest::CylinderFace(drum);
     const auto oblique = [](const double z) {
         return Surface{
             Plane{Point3{0.0, 0.0, z}, Vec3{1.0, 0.0, 0.0}, Normalized(Vec3{0.0, 1.0, -1.0})}};

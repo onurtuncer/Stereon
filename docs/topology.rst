@@ -240,6 +240,16 @@ and the builder is exactly as it was. Handles are valid in both. In
 checked builds every operator also checks the loops, radial rings and
 vertex lists it touched, a contract, while ``Freeze`` and ``Commit`` run
 the independent validator in every build.
+
+An edit composed of operators reads the connectivity it has made so far
+back from the builder: ``EdgeOf``, ``LoopOf`` and ``SenseOf`` a coedge,
+``StartOf`` and ``EndOf`` an edge, ``PositionOf`` a vertex, ``LoopsOf`` a
+face and ``CoedgesOf`` a loop, each as handles at the current generation
+(an invalid handle, or an empty list, for one that is not live). Geometry
+beyond positions is read from the frozen ``Shape`` the edit started from;
+the Booleans' imprinting (:doc:`modeling`) finds the two uses an MEF joins
+this way after the splits before it.
+
 Freeze and certification
 ------------------------
 

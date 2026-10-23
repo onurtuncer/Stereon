@@ -996,6 +996,72 @@ std::vector<BuilderCoedgeId> ShapeBuilder::CoedgesOf(const BuilderLoopId loop) c
     return coedges;
 }
 
+template <EntityKind K>
+BuilderId<K> ShapeBuilder::HandleOfSlot(const std::uint32_t index) const noexcept
+{
+    if (index == Id<K>::Invalid || !m_Tables.template IsLive<K>(index)) {
+        return {};
+    }
+    return BuilderId<K>::Make(index, m_Tables.template Table<K>()[index].Slot.GetGeneration(),
+                              m_Token.GetValue());
+}
+
+BuilderEdgeId ShapeBuilder::EdgeOf(const BuilderCoedgeId coedge) const noexcept
+{
+    if (!IsLive(coedge)) {
+        return {};
+    }
+    return HandleOfSlot<EntityKind::Edge>(m_Tables.Coedges[coedge.GetIndex()].Edge.GetIndex());
+}
+
+BuilderLoopId ShapeBuilder::LoopOf(const BuilderCoedgeId coedge) const noexcept
+{
+    if (!IsLive(coedge)) {
+        return {};
+    }
+    return HandleOfSlot<EntityKind::Loop>(m_Tables.Coedges[coedge.GetIndex()].Loop.GetIndex());
+}
+
+EdgeUseSense ShapeBuilder::SenseOf(const BuilderCoedgeId coedge) const noexcept
+{
+    return IsLive(coedge) ? m_Tables.Coedges[coedge.GetIndex()].Sense : EdgeUseSense::Same;
+}
+
+BuilderVertexId ShapeBuilder::StartOf(const BuilderEdgeId edge) const noexcept
+{
+    if (!IsLive(edge)) {
+        return {};
+    }
+    return HandleOfSlot<EntityKind::Vertex>(m_Tables.Edges[edge.GetIndex()].Start.GetIndex());
+}
+
+BuilderVertexId ShapeBuilder::EndOf(const BuilderEdgeId edge) const noexcept
+{
+    if (!IsLive(edge)) {
+        return {};
+    }
+    return HandleOfSlot<EntityKind::Vertex>(m_Tables.Edges[edge.GetIndex()].End.GetIndex());
+}
+
+Point3 ShapeBuilder::PositionOf(const BuilderVertexId vertex) const noexcept
+{
+    return IsLive(vertex) ? m_Tables.Vertices[vertex.GetIndex()].Position : Point3{};
+}
+
+std::vector<BuilderLoopId> ShapeBuilder::LoopsOf(const BuilderFaceId face) const
+{
+    std::vector<BuilderLoopId> loops;
+    if (!IsLive(face)) {
+        return loops;
+    }
+    for (std::uint32_t l = m_Tables.Faces[face.GetIndex()].FirstLoop.GetIndex();
+         l != LoopId::Invalid && loops.size() < m_Tables.Loops.GetSize();
+         l = m_Tables.Loops[l].NextInFace.GetIndex()) {
+        loops.push_back(HandleOfSlot<EntityKind::Loop>(l));
+    }
+    return loops;
+}
+
 ValidityReport ShapeBuilder::Validate() const
 {
     return Detail::ValidateStructure(m_Tables);

@@ -9,8 +9,10 @@ stereon_add_library(boolean
     MODULES
         Boolean.cppm
         Clip.cppm
+        Imprint.cppm
     SOURCES
         Clip.cpp
+        Imprint.cpp
     DEPENDS
         build
         intersect)
