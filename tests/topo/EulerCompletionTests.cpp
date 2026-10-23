@@ -17,14 +17,37 @@ using namespace Stereon;
 using TopoTest::Must;
 
 namespace {
+void AddExactPolygon(TopoTest::Body& body, BuilderFaceId face, std::span<const Point3> corners)
+{
+    std::vector<BuilderVertexId> vertices;
+    for (const auto& point : corners) {
+        vertices.push_back(body.AddVertex(point));
+    }
+    const auto loop = body.AddLoop(face);
+    for (std::size_t i = 0; i < corners.size(); ++i) {
+        const auto j = (i + 1) % corners.size();
+        const auto curve =
+            Must(body.Builder.AddCurve(Curve(Line{corners[i], corners[j] - corners[i]})));
+        const auto edge = body.AddEdge({.Kind = EdgeCurveKind::Exact,
+                                        .Start = vertices[i],
+                                        .End = vertices[j],
+                                        .Curve = curve,
+                                        .Range = Interval(0.0, 1.0),
+                                        .Tolerance = TopoTest::Tight});
+        const Point2 from{corners[i].X, corners[i].Y};
+        const Point2 to{corners[j].X, corners[j].Y};
+        body.AddCoedge(loop, edge, EdgeUseSense::Same, Curve2d(Line2d{from, to - from}));
+    }
+}
+
 TopoTest::Body UnownedHoleSheet()
 {
     TopoTest::Body body;
     const auto face = body.AddFace(TopoTest::XyPlane());
     const std::array<Point3, 4> outer{{{0, 0, 0}, {3, 0, 0}, {3, 3, 0}, {0, 3, 0}}};
     const std::array<Point3, 4> inner{{{1, 1, 0}, {1, 2, 0}, {2, 2, 0}, {2, 1, 0}}};
-    TopoTest::AddBoundaryPolygon(body, face, outer);
-    TopoTest::AddBoundaryPolygon(body, face, inner);
+    AddExactPolygon(body, face, outer);
+    AddExactPolygon(body, face, inner);
     return body;
 }
 } // namespace
@@ -350,7 +373,9 @@ TEST_CASE("M5 ring separation preserves an existing path through the shell", "[t
                                 pcurve));
         }
     }
-    REQUIRE(b.Validate().IsValid());
+    const auto report = b.Validate();
+    INFO(report.ToText());
+    REQUIRE(report.IsValid());
     const auto split = Must(b.MakeFaceKillRingHole(b.Handle(shape.Resolve(body.Loops[1]))));
     REQUIRE(b.Count<EntityKind::Face>() == 3);
     REQUIRE(b.Validate().IsValid());
