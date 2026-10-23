@@ -71,14 +71,13 @@ Imprinted ImprintOn(const Shape& shape, const FaceId face, const IntersectionBra
     const auto made = builder->Transaction([&](ShapeBuilder& candidate) {
         return ImprintClip(candidate, shape, face, branch, side, *clip, ctx);
     });
-    if (!made) {
-        INFO(std::string(made.error().GetMessage()));
-    }
+    const std::string imprintError = made ? std::string() : std::string(made.error().GetMessage());
+    INFO(imprintError);
     REQUIRE(made.has_value());
     auto committed = Commit(std::move(*builder), ctx);
-    if (!committed) {
-        INFO(std::string(committed.error().GetMessage()));
-    }
+    const std::string commitError =
+        committed ? std::string() : std::string(committed.error().GetMessage());
+    INFO(commitError);
     REQUIRE(committed.has_value());
     return {*made, std::move(*committed)};
 }
@@ -188,10 +187,12 @@ TEST_CASE("an ellipse inside a cylinder's lateral face is an exact ring, a quart
     REQUIRE(ellipse.has_value());
     const Imprinted exact = ImprintOn(drum, lateral, ellipse->Branches.front(), BranchSide::B);
     REQUIRE(exact.Made.Pieces.size() == 1);
+    // The ellipse's pcurve starts and ends on the seam: the seam is split
+    // there and the lateral face in two bands, not a ring.
     const Shape& cut = exact.Result.Shape;
     REQUIRE(CountOf<EntityKind::Face>(cut) == 4);
-    REQUIRE(CountOf<EntityKind::Edge>(cut) == 4);
-    REQUIRE(CountOf<EntityKind::Loop>(cut) == 5);
+    REQUIRE(CountOf<EntityKind::Edge>(cut) == 5);
+    REQUIRE(CountOf<EntityKind::Loop>(cut) == 4);
     const Stereon::EdgeId ring = cut.Resolve(exact.Made.Pieces.front().Edge);
     REQUIRE(KindOf(cut, ring) == EdgeCurveKind::Exact);
     REQUIRE(CurveOf(cut, ring)->Target<Stereon::Ellipse>() != nullptr);

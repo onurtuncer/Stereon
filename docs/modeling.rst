@@ -73,26 +73,48 @@ Everything else is decided on the nominal geometry, exactly where the
 pcurves are lines, circles and ellipses (decision D1 of the plan), and
 ``Decided`` says whether every crossing and every side was.
 
-``ImprintClip(builder, shape, face, branch, side, clip, ctx)`` writes the
-clip into a ``ShapeBuilder`` opened on the shape, inside the caller's
-transaction, through the Euler operators of :doc:`topology`: the edges the
-branch crosses are split at the crossings (SEMV), and each inside piece
-becomes an edge, splitting the face in two when its ends lie on one loop
-(MEF), bridging two loops of the face when they lie on different ones
-(MEKR), or a ring inside the face when the piece is closed (a strut by
-MEV, the closed edge by MEF on the strut's own use, the strut removed by
-KEMR, which leaves the ring as a loop of the face and the closed edge's
-other use as the new face's boundary). The new edge is ``Exact`` with the
+A face receives a *curve network* from the intersection: a ``FaceNetwork``
+of vertices, each a crossing of the face's boundary or a junction inside
+the face where the intersection passes from one face of the other body to
+the next, and edges, the pieces of branches between them.
+``ImprintNetworks(builder, shape, networks, ctx)`` writes a body's networks
+into a ``ShapeBuilder`` opened on the shape, inside the caller's
+transaction, through the Euler operators of :doc:`topology`. The edges the
+networks cross are split at the crossings (SEMV), once per distinct
+crossing, so that the two faces sharing an edge meet at the same vertex.
+Each piece then becomes an edge: a strut when it reaches a junction not yet
+made (MEV); a split of the face when both its ends exist on one loop (MEF),
+or a bridge when on two loops of the face (MEKR); a component that touches
+no boundary is hung on a helper strut from a loop vertex, removed once the
+component has closed (KEMR), which leaves a ring as a loop of the face and
+the ring's other use as the new face's boundary. Where a piece starts and
+ends on one edge, a cylinder's seam, the sense of the coedge it crossed
+tells the two uses of that edge apart. The new edge is ``Exact`` with the
 branch's curve where that is a line, a circle or an ellipse, and otherwise
 a ``Trim`` edge with its cached curve (ADR-0009, section 8), its tolerance
 the larger of the resolution and the branch's certified bound. The
 ``Imprint`` names each piece's edge, its end vertices and the face it cut
-off, and the vertices the splits made. A piece that ends inside the face
-is ``NotSupported`` here: branches meet at nodes, which the assembly of M8
-joins.
+off, the builder's vertex for every network vertex, and the vertices the
+splits made. ``NetworkOf`` turns one clip into a network, and
+``ImprintClip`` imprints it.
+
+``ImprintBodies(a, b, ctx)`` is the pipeline's first four steps for two
+solids: candidate face pairs by bounding box in input order, the surface
+intersection of each pair over the faces' parameter boxes, each branch
+clipped to both faces, and both bodies imprinted with the networks their
+faces receive, inside one transaction per body. The common stretch of a
+branch inside both faces is a piece of the intersection; its end is a
+crossing in the face whose boundary it meets and a junction in the other.
+The result holds both ``OperationResult`` s and the pairs of edges, one in
+each body, that are the same piece, for the assembly of M8 to identify;
+coincident faces (an overlap) are ``NotSupported`` until then.
 
 .. code-block:: cpp
 
+   const auto bodies = Stereon::ImprintBodies(boxA, boxB, ctx);
+   for (const auto& [edgeInA, edgeInB] : bodies->Shared) { /* one piece, twice */ }
+
+   // One face, one branch, by hand.
    const auto clip = Stereon::ClipToFace(shape, face, branch, Stereon::BranchSide::A, ctx);
    auto builder = *Stereon::ShapeBuilder::Open(shape);
    const auto imprint = builder.Transaction([&](Stereon::ShapeBuilder& candidate) {
