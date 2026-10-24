@@ -618,7 +618,7 @@ enum class Fit : std::uint8_t { Outside, Partly, Inside };
 [[nodiscard]] Result<void> CheckAngularChart(const Interval& range)
 {
     constexpr double MaxChartAngle = 0x1p52;
-    if (range.IsBounded() && Width(range) < CirclePeriod &&
+    if (range.IsBounded() && (range.GetUpper() - range.GetLower()) < CirclePeriod &&
         std::max(std::abs(range.GetLower()), std::abs(range.GetUpper())) >= MaxChartAngle) {
         return Fail(ErrorCode::InvalidInput,
                     "CylinderCylinder: angular chart is too large to resolve whole-period shifts");
@@ -646,7 +646,10 @@ enum class Fit : std::uint8_t { Outside, Partly, Inside };
 /// otherwise the clip subdivides. A zero-width arc must also point forwards.
 [[nodiscard]] Fit SectorFit(const IntervalScalar& x, const IntervalScalar& y, const Interval& range)
 {
-    if (!range.IsBounded() || Width(range) >= CirclePeriod) {
+    // Inline the width: GCC 16 rejects imported Width's contract here
+    // (docs/toolchain/gcc16-feature-probe.md).
+    const double width = range.GetUpper() - range.GetLower();
+    if (!range.IsBounded() || width >= CirclePeriod) {
         return Fit::Inside;
     }
     using I = IntervalScalar;
@@ -654,11 +657,11 @@ enum class Fit : std::uint8_t { Outside, Partly, Inside };
     const I end{range.GetUpper()};
     const Interval left = (Cos(start) * y - Sin(start) * x).Value;
     const Interval right = (Sin(end) * x - Cos(end) * y).Value;
-    const Fit sides = HalfPlaneFit(left, right, Width(range) > Pi);
+    const Fit sides = HalfPlaneFit(left, right, width > Pi);
     if (sides == Fit::Outside) {
         return sides;
     }
-    if (Width(range) == 0.0) {
+    if (width == 0.0) {
         const Interval forward = (Cos(start) * x + Sin(start) * y).Value;
         return forward.GetUpper() < 0.0 ? Fit::Outside : Fit::Partly;
     }
