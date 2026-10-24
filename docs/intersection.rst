@@ -142,11 +142,13 @@ below holds, within a budget of 2^14; beyond it the intersection fails with
 size box of ADR-0001, where the rounding of a B-spline's poles alone
 exceeds the resolution.
 
-Where the requested boxes are bounded, a branch is first clipped to them by
-interval evaluation of the closed form over spans of its parameter, bisected
-until a span is proved outside or inside: the heights on both cylinders and
-the angle on the first are clipped this way, the angle on the second only
-where a whole piece lies outside. Two cylinders whose axes are nearly
+A branch is first clipped to the requested angular and height restrictions
+on both cylinders by interval evaluation of the closed form over spans of
+its parameter, bisected until a span is proved outside or inside. Half-infinite
+height intervals also restrict the result. Angular sectors may cross a seam
+or be shifted by whole turns. A bounded angular interval narrower than one
+turn with either endpoint of magnitude at least 2^52 radians is refused with
+``InvalidInput``: its whole-period shifts cannot be resolved safely. Two cylinders whose axes are nearly
 parallel meet in loops of the order of :math:`r / \sin\gamma` along the
 axes, which a face's bounded heights cut down to the two nearly straight
 pieces inside them.
