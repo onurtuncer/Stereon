@@ -307,6 +307,24 @@ RayParity(const Curve2d& ray, const std::vector<LoopEdge>& edges, bool& decided,
 
 } // namespace
 
+Result<std::optional<bool>> FaceContains(const Shape& shape, const FaceId face, const Point2& uv,
+                                         const Context& ctx)
+{
+    STEREON_TRY(const std::vector<LoopEdge> edges, LoopEdgesOf(shape, face));
+    const Surface surface = SurfaceOf(shape, face);
+    const Point3 point = Eval(surface, uv);
+    for (const LoopEdge& edge : edges) {
+        const Point2 onEdge = Eval(edge.PCurve, NearestOn(edge, uv));
+        if (Distance(point, Eval(surface, onEdge)) <=
+            ToleranceOf(shape, EdgeOf(shape, edge.Coedge))) {
+            return std::optional<bool>{}; // On the boundary.
+        }
+    }
+    bool decided = true;
+    STEREON_TRY(const bool inside, InsideLoops(uv, edges, decided, ctx));
+    return std::optional<bool>{inside};
+}
+
 Result<FaceClip> ClipToFace(const Shape& shape, const FaceId face, const IntersectionBranch& branch,
                             const BranchSide side, const Context& ctx)
 {
