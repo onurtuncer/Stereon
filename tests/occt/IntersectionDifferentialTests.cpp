@@ -277,6 +277,25 @@ OcctTrace OcctQuarticSamples(const Cylinder& a, const Cylinder& b, const int cou
     return trace;
 }
 
+/// Refine the reference sampling itself until its spatial gap is small
+/// enough. Uniform parameter spacing need not imply uniform spatial spacing,
+/// particularly next to a quartic's folds. Keep a finite work budget.
+OcctTrace RefinedOcctQuarticSamples(const Cylinder& a, const Cylinder& b)
+{
+    constexpr int InitialCount = 4000;
+    constexpr int MaxCount = 64000;
+    constexpr double MaxGap = 0.1;
+    for (int count = InitialCount;; count *= 2) {
+        OcctTrace trace = OcctQuarticSamples(a, b, count);
+        REQUIRE_FALSE(trace.Points.empty());
+        if (trace.Gap < MaxGap) {
+            return trace;
+        }
+        INFO("OCCT reference sampling count " << count << ", gap " << trace.Gap);
+        REQUIRE(count < MaxCount);
+    }
+}
+
 /// The distance from p to the nearest of Stereon's branches, by the global
 /// projection onto their B-spline curves.
 double DistanceToBranches(const Stereon::SurfaceSurfaceIntersection& result, const Point3& p)
@@ -312,7 +331,7 @@ TEST_CASE("skew cylinder-cylinder intersections agree with OCCT", "[occt][inters
             // Stereon's samples lie within a sample gap of OCCT's traces,
             // and OCCT's samples lie on Stereon's branches to the certified
             // bound (within the resolution) plus OCCT's own accuracy.
-            const OcctTrace occt = OcctQuarticSamples(first, second, 4000);
+            const OcctTrace occt = RefinedOcctQuarticSamples(first, second);
             REQUIRE_FALSE(occt.Points.empty());
             REQUIRE(occt.Gap < 0.1);
             for (const Point3& p : SamplesOf(*result, 40)) {

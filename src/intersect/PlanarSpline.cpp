@@ -180,11 +180,14 @@ Result<PlanarIntersection> SplineLine2d(const Curve2d& a, const Interval& domain
     const Vec2 normal = Perpendicular(line->Direction);
     const double scale = Dot(line->Direction, line->Direction);
     for (const Segment& segment : segments) {
+        // The constant term carries the origin (no separate [0]: GCC's
+        // null-dereference check cannot see the size).
+        const double offset = Dot(normal, line->Origin - Point2{});
         std::vector<double> distance(segment.X.size());
         for (std::size_t i = 0; i < distance.size(); ++i) {
-            distance[i] = normal.X * segment.X[i] + normal.Y * segment.Y[i];
+            distance[i] =
+                normal.X * segment.X[i] + normal.Y * segment.Y[i] - (i == 0 ? offset : 0.0);
         }
-        distance[0] -= Dot(normal, line->Origin - Point2{});
         RootsOfSegment(
             result, *spline, segment, distance, domainA, domainB, false,
             [&](const Point2&, const Vec2& tangent) { return Dot(normal, tangent) == 0.0; },
@@ -214,17 +217,20 @@ Result<PlanarIntersection> SplineCircle2d(const Curve2d& a, const Interval& doma
     PlanarIntersection result;
     // |B(t) - C|² - r² = (x - Cx)² + (y - Cy)² - r².
     for (const Segment& segment : segments) {
-        std::vector<double> x = segment.X;
-        std::vector<double> y = segment.Y;
-        x[0] -= circle->Center.X;
-        y[0] -= circle->Center.Y;
+        // The constant terms carry the centre and the radius (no separate
+        // [0]: GCC's null-dereference check cannot see the size).
+        std::vector<double> x(segment.X.size());
+        std::vector<double> y(segment.Y.size());
+        for (std::size_t i = 0; i < x.size(); ++i) {
+            x[i] = segment.X[i] - (i == 0 ? circle->Center.X : 0.0);
+            y[i] = segment.Y[i] - (i == 0 ? circle->Center.Y : 0.0);
+        }
         const std::vector<double> xx = Multiply(x, x);
         const std::vector<double> yy = Multiply(y, y);
         std::vector<double> squared(xx.size());
         for (std::size_t i = 0; i < squared.size(); ++i) {
-            squared[i] = xx[i] + yy[i];
+            squared[i] = xx[i] + yy[i] - (i == 0 ? circle->Radius * circle->Radius : 0.0);
         }
-        squared[0] -= circle->Radius * circle->Radius;
         RootsOfSegment(
             result, *spline, segment, squared, domainA, domainB, true,
             [&](const Point2& p, const Vec2& tangent) {

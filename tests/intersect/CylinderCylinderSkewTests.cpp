@@ -372,3 +372,96 @@ TEST_CASE("nearly parallel cylinders are the quartic within bounded heights and 
     REQUIRE(upper > 0);
     REQUIRE(upper < bounded->Branches.size());
 }
+
+TEST_CASE("skew cylinder angular clipping respects both operands",
+          "[intersect][cylinder][skew][regression]")
+{
+    const Surface b = AlongX(Point3{0.0, 4.0, 0.0}, 2.0);
+    const Box2 whole = Domain(a);
+    // B's patch has y >= 4 + 2 cos(0.5) > 3, outside A altogether.
+    const Box2 away{Interval{0.0, 0.5}, Interval::Everything()};
+    for (const bool swap : {false, true}) {
+        const auto result =
+            swap ? Intersect(b, away, a, whole, ctx) : Intersect(a, whole, b, away, ctx);
+        INFO(IntersectTest::ErrorText(result));
+        REQUIRE(result.has_value());
+        REQUIRE(result->IsEmpty());
+    }
+}
+
+TEST_CASE("skew cylinder angular clipping retains arcs across chart seams",
+          "[intersect][cylinder][skew][regression]")
+{
+    // Rotate B's chart by pi: the intersection now straddles its seam.
+    const Surface b{
+        Cylinder{Point3{0.0, 4.0, 0.0}, 2.0, Vec3{0.0, -1.0, 0.0}, Vec3{0.0, 0.0, -1.0}, true}};
+    // A narrow seam-crossing sector, a shifted copy, and a sector wider than pi.
+    for (const Interval arc :
+         {Interval{-0.4, 0.4}, Interval{Stereon::CirclePeriod - 0.4, Stereon::CirclePeriod + 0.4},
+          Interval{0.2, 5.0}}) {
+        const Box2 patch{arc, Interval::Everything()};
+        for (const bool swap : {false, true}) {
+            const auto result = swap ? Intersect(b, patch, a, Domain(a), ctx)
+                                     : Intersect(a, Domain(a), b, patch, ctx);
+            INFO(IntersectTest::ErrorText(result));
+            REQUIRE(result.has_value());
+            REQUIRE_FALSE(result->Branches.empty());
+            for (const auto& branch : result->Branches) {
+                REQUIRE(branch.IsCertified());
+                for (const double t : IntersectTest::SamplesOf(branch.Range, 50)) {
+                    const double u = Eval(swap ? branch.OnA : branch.OnB, t).X;
+                    const double fromMiddle =
+                        std::abs(std::remainder(u - Midpoint(arc), Stereon::CirclePeriod));
+                    REQUIRE(fromMiddle <= Width(arc) / 2.0 + 1e-5);
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("skew cylinders respect half-infinite height restrictions",
+          "[intersect][cylinder][skew][regression]")
+{
+    const Surface b = AlongX(Point3{0.0, 4.0, 0.0}, 2.0);
+    const double infinity = std::numeric_limits<double>::infinity();
+    for (const Interval height : {Interval{4.0, infinity}, Interval{-infinity, -4.0},
+                                  Interval{0.0, infinity}, Interval{-infinity, 0.0}}) {
+        const Box2 patch{Interval{0.0, Stereon::CirclePeriod}, height};
+        for (const bool swap : {false, true}) {
+            const auto result = swap ? Intersect(b, patch, a, Domain(a), ctx)
+                                     : Intersect(a, Domain(a), b, patch, ctx);
+            INFO(IntersectTest::ErrorText(result));
+            REQUIRE(result.has_value());
+            if (!Contains(height, 0.0)) {
+                REQUIRE(result->IsEmpty());
+                continue;
+            }
+            REQUIRE_FALSE(result->Branches.empty());
+            for (const auto& branch : result->Branches) {
+                REQUIRE(branch.IsCertified());
+                for (const double t : IntersectTest::SamplesOf(branch.Range, 50)) {
+                    const double v = Eval(swap ? branch.OnA : branch.OnB, t).Y;
+                    REQUIRE(v >= height.GetLower() - 1e-5);
+                    REQUIRE(v <= height.GetUpper() + 1e-5);
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("skew cylinders reject angular charts too large for period shifts",
+          "[intersect][cylinder][skew][regression]")
+{
+    const Surface b = AlongX(Point3{0.0, 4.0, 0.0}, 2.0);
+    for (const double angle : {-1e20, 1e20}) {
+        const Box2 patch{Interval{angle}, Interval::Everything()};
+        for (const bool swap : {false, true}) {
+            const auto result = swap ? Intersect(b, patch, a, Domain(a), ctx)
+                                     : Intersect(a, Domain(a), b, patch, ctx);
+            REQUIRE_FALSE(result.has_value());
+            REQUIRE(result.error().GetCode() == ErrorCode::InvalidInput);
+            REQUIRE(std::string(result.error().GetMessage()).find("angular chart") !=
+                    std::string::npos);
+        }
+    }
+}
