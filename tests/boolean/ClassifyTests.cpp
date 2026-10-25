@@ -132,6 +132,36 @@ TEST_CASE("a cylinder through a box: the discs inside the cylinder, the band ins
     REQUIRE(drumTally.FacesOutside == 4);
 }
 
+TEST_CASE("without rays the winding number classifies every region the same way",
+          "[boolean][classify][winding]")
+{
+    const auto drum = MakeCylinderSolid(Point3{5.0, 5.0, -2.0}, Vec3{1.0, 0.0, 0.0},
+                                        Vec3{0.0, 1.0, 0.0}, 3.0, 15.0, ctx);
+    REQUIRE(drum.has_value());
+    const auto bodies = ImprintBodies(Box(), drum->Shape, ctx);
+    REQUIRE(bodies.has_value());
+    const auto byRays = Classify(*bodies, ctx);
+    REQUIRE(byRays.has_value());
+    const auto byWinding = Classify(*bodies, ctx, Stereon::ClassifyBudget{.Rays = 0});
+    const std::string error =
+        byWinding ? std::string() : std::string(byWinding.error().GetMessage());
+    INFO(error);
+    REQUIRE(byWinding.has_value());
+    const auto same = [](const std::vector<Region>& rays, const std::vector<Region>& winding) {
+        REQUIRE(rays.size() == winding.size());
+        for (std::size_t i = 0; i < rays.size(); ++i) {
+            REQUIRE(winding[i].Faces == rays[i].Faces);
+            REQUIRE(winding[i].Side == rays[i].Side);
+            REQUIRE(winding[i].Rays == 0);
+            REQUIRE_FALSE(rays[i].Winding.has_value());
+            REQUIRE(winding[i].Winding.has_value());
+            REQUIRE(winding[i].Winding->IsDecided());
+        }
+    };
+    same(byRays->A, byWinding->A);
+    same(byRays->B, byWinding->B);
+}
+
 TEST_CASE("bodies apart are each one region outside the other", "[boolean][classify]")
 {
     const auto far =
