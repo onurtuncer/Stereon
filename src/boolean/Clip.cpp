@@ -116,6 +116,62 @@ void SnapToVertex(const Shape& shape, const IntersectionBranch& branch, const Lo
     return {};
 }
 
+/// The parameter of the edge's pcurve nearest p, within the edge's range: a
+/// periodic parameter is placed in the range when the range holds one of
+/// its images, and a parameter beyond the range is its nearer end.
+[[nodiscard]] double NearestOn(const LoopEdge& edge, const Point2& p)
+{
+    const double s = Project(edge.PCurve, p);
+    if (edge.PCurve.Target<Line2d>() == nullptr) {
+        for (const double shift : {0.0, CirclePeriod, -CirclePeriod}) {
+            if (Contains(edge.Range, s + shift)) {
+                return s + shift;
+            }
+        }
+    }
+    return std::clamp(s, edge.Range.GetLower(), edge.Range.GetUpper());
+}
+
+/// Whether a crossing of the coedge within rounding of t is already known.
+[[nodiscard]] bool HasCrossingAt(const FaceClip& clip, const CoedgeId coedge, const double t,
+                                 const double sliver)
+{
+    return std::ranges::any_of(clip.Crossings, [&](const LoopCrossing& c) {
+        return c.Coedge == coedge && std::abs(c.OnBranch - t) <= sliver;
+    });
+}
+
+/// A branch end lying within an edge's tolerance of that edge is on it
+/// (ADR-0001), whether or not the plane curve intersection found a root
+/// there: a B-spline pcurve's root at the very end of its domain may be
+/// missed. The end becomes a crossing of the edge, bracketed, not decided.
+void AddEndCrossings(const Shape& shape, const Surface& surface, const IntersectionBranch& branch,
+                     const Curve2d& pcurve, const std::vector<LoopEdge>& edges, FaceClip& clip)
+{
+    const double sliver =
+        1e-9 * Width(branch.Range); // STEREON-LINT-ALLOW(epsilon): a parameter gap
+    for (const double t : {branch.Range.GetLower(), branch.Range.GetUpper()}) {
+        const Point2 p = Eval(pcurve, t);
+        const Point3 point = Eval(branch.Curve3d, t);
+        for (const LoopEdge& edge : edges) {
+            if (HasCrossingAt(clip, edge.Coedge, t, sliver)) {
+                continue;
+            }
+            const double s = NearestOn(edge, p);
+            const Point2 onEdge = Eval(edge.PCurve, s);
+            const double tolerance = std::max(ToleranceOf(shape, EdgeOf(shape, edge.Coedge)),
+                                              branch.IsCertified() ? branch.Bound : 0.0);
+            if (Distance(point, Eval(surface, onEdge)) <= tolerance) {
+                LoopCrossing crossing{edge.Coedge,           VertexId{}, s, t, onEdge,
+                                      ContactType::Crossing, false};
+                SnapToVertex(shape, branch, edge, crossing);
+                clip.Decided = false;
+                clip.Crossings.push_back(crossing);
+            }
+        }
+    }
+}
+
 /// Crossings in order along the branch; the two edges meeting at a vertex
 /// the branch passes through report it once each, which is one crossing.
 void OrderCrossings(FaceClip& clip)
@@ -214,17 +270,26 @@ RayParity(const Curve2d& ray, const std::vector<LoopEdge>& edges, bool& decided,
     // at both its ends, found to rounding.
     const double sliver =
         1e-9 * Width(branch.Range); // STEREON-LINT-ALLOW(epsilon): a parameter gap
+    // A crossing at the branch's own end is that end: the piece starting or
+    // ending there is on the boundary, not inside.
     std::vector<std::optional<std::size_t>> cuts{std::nullopt};
     std::vector<double> parameters{branch.Range.GetLower()};
+    std::optional<std::size_t> last;
     for (std::size_t i = 0; i < clip.Crossings.size(); ++i) {
         const double t = clip.Crossings[i].OnBranch;
-        if (clip.Crossings[i].Contact == ContactType::Crossing && t - parameters.back() > sliver &&
-            branch.Range.GetUpper() - t > sliver) {
+        if (clip.Crossings[i].Contact != ContactType::Crossing) {
+            continue;
+        }
+        if (t - branch.Range.GetLower() <= sliver) {
+            cuts.front() = i;
+        } else if (branch.Range.GetUpper() - t <= sliver) {
+            last = i;
+        } else if (t - parameters.back() > sliver) {
             cuts.push_back(i);
             parameters.push_back(t);
         }
     }
-    cuts.push_back(std::nullopt);
+    cuts.push_back(last);
     parameters.push_back(branch.Range.GetUpper());
     for (std::size_t i = 1; i < parameters.size(); ++i) {
         const Interval piece{parameters[i - 1], parameters[i]};
@@ -252,6 +317,7 @@ Result<FaceClip> ClipToFace(const Shape& shape, const FaceId face, const Interse
     const Curve2d& pcurve = PCurveOf(branch, side);
     FaceClip clip;
     STEREON_TRY_VOID(CollectCrossings(shape, branch, pcurve, edges, clip, ctx));
+    AddEndCrossings(shape, SurfaceOf(shape, face), branch, pcurve, edges, clip);
     OrderCrossings(clip);
     STEREON_TRY_VOID(CollectPieces(branch, pcurve, edges, clip, ctx));
     return clip;
