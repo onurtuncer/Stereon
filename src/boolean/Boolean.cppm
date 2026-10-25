@@ -14,5 +14,6 @@ export module Stereon.Boolean;
 export import Stereon.Build;
 export import Stereon.Intersect;
 
+export import :Bodies;
 export import :Clip;
 export import :Imprint;

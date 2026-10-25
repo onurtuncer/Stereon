@@ -562,7 +562,7 @@ template <Scalar T>
 [[nodiscard]] bool Restricts(const Box2& box)
 {
     const bool wholeTurn = !box.X.IsBounded() || Width(box.X) >= CirclePeriod;
-    return !wholeTurn || box.Y.IsBounded();
+    return !wholeTurn || box.Y != Interval::Everything();
 }
 
 /// The shifts by whole periods that could bring `angle` onto `range`, both
@@ -572,7 +572,13 @@ template <typename Test>
 {
     const double first = std::ceil((range.GetLower() - angle.GetUpper()) / CirclePeriod);
     const double last = std::floor((range.GetUpper() - angle.GetLower()) / CirclePeriod);
-    for (double k = first; k <= last; k += 1.0) {
+    // Two intervals narrower than a turn need at most three candidate shifts.
+    // Count iterations with an integer even at the limit of double precision.
+    for (int step = 0; step < 3; ++step) {
+        const double k = first + static_cast<double>(step);
+        if (k > last) {
+            break;
+        }
         const Interval shifted =
             Interval{angle.GetLower(), angle.GetUpper()} + Interval{k} * Interval{CirclePeriod};
         if (test(shifted)) {
@@ -606,21 +612,80 @@ template <typename Test>
 
 enum class Fit : std::uint8_t { Outside, Partly, Inside };
 
-/// How the track over the span lies against the requested boxes, from the
-/// enclosures of u and v on A and of v on B (u on B is not clipped):
-/// Outside is proved, Inside says every point of the span is within.
+/// Refuse narrow charts whose shift can no longer be counted exactly. A full
+/// turn needs no reduction. Never silently discard angular constraints at
+/// magnitudes where the double chart cannot resolve individual turns.
+[[nodiscard]] Result<void> CheckAngularChart(const Interval& range)
+{
+    constexpr double MaxChartAngle = 0x1p52;
+    if (range.IsBounded() && (range.GetUpper() - range.GetLower()) < CirclePeriod &&
+        std::max(std::abs(range.GetLower()), std::abs(range.GetUpper())) >= MaxChartAngle) {
+        return Fail(ErrorCode::InvalidInput,
+                    "CylinderCylinder: angular chart is too large to resolve whole-period shifts");
+    }
+    return {};
+}
+
+/// Combine two oriented half-plane tests for a narrow sector (intersection)
+/// or a wide one (union), retaining uncertainty for subdivision.
+[[nodiscard]] Fit HalfPlaneFit(const Interval& left, const Interval& right, const bool wide)
+{
+    const bool leftOut = left.GetUpper() < 0.0;
+    const bool rightOut = right.GetUpper() < 0.0;
+    const bool leftIn = left.GetLower() >= 0.0;
+    const bool rightIn = right.GetLower() >= 0.0;
+    if (wide) {
+        return leftOut && rightOut ? Fit::Outside : (leftIn || rightIn ? Fit::Inside : Fit::Partly);
+    }
+    return leftOut || rightOut ? Fit::Outside : (leftIn && rightIn ? Fit::Inside : Fit::Partly);
+}
+
+/// Membership of B's angular sector without atan2 or a branch cut. For an
+/// arc at most pi wide both oriented boundary half-planes must hold; for
+/// a wider arc either suffices. Interval signs prove inclusion or exclusion,
+/// otherwise the clip subdivides. A zero-width arc must also point forwards.
+[[nodiscard]] Fit SectorFit(const IntervalScalar& x, const IntervalScalar& y, const Interval& range)
+{
+    // Inline the width: GCC 16 rejects imported Width's contract here
+    // (docs/toolchain/gcc16-feature-probe.md).
+    const double width = range.GetUpper() - range.GetLower();
+    if (!range.IsBounded() || width >= CirclePeriod) {
+        return Fit::Inside;
+    }
+    using I = IntervalScalar;
+    const I start{range.GetLower()};
+    const I end{range.GetUpper()};
+    const Interval left = (Cos(start) * y - Sin(start) * x).Value;
+    const Interval right = (Sin(end) * x - Cos(end) * y).Value;
+    const Fit sides = HalfPlaneFit(left, right, width > Pi);
+    if (sides == Fit::Outside) {
+        return sides;
+    }
+    if (width == 0.0) {
+        const Interval forward = (Cos(start) * x + Sin(start) * y).Value;
+        return forward.GetUpper() < 0.0 ? Fit::Outside : Fit::Partly;
+    }
+    return sides;
+}
+
+/// How the track over the span lies against both requested boxes. Outside
+/// is proved; Inside says every enclosed point satisfies every restriction.
 [[nodiscard]] Fit FitOf(const Pair& p, const Configuration& c, const Track& k, const Interval& span,
                         const Box2& boxA, const Box2& boxB)
 {
     using I = IntervalScalar;
     const Place<I> place = PlaceOf(p, c, k, I{span});
-    const Interval heightB = Dot(place.Point - Wide<I>(p.B.Origin), Wide<I>(p.AxisB)).Value;
+    const BasicVec3<I> offsetB = place.Point - Wide<I>(p.B.Origin);
+    const Interval heightB = Dot(offsetB, Wide<I>(p.AxisB)).Value;
+    const Fit angleB =
+        SectorFit(Dot(offsetB, Wide<I>(p.B.XAxis)), Dot(offsetB, Wide<I>(p.B.YAxis)), boxB.X);
     if (!MeetsAngles(place.U.Value, boxA.X) || !Intersects(place.Height.Value, boxA.Y) ||
-        !Intersects(heightB, boxB.Y)) {
+        !Intersects(heightB, boxB.Y) || angleB == Fit::Outside) {
         return Fit::Outside;
     }
     const bool inside = AnglesWithin(place.U.Value, boxA.X) &&
-                        Contains(boxA.Y, place.Height.Value) && Contains(boxB.Y, heightB);
+                        Contains(boxA.Y, place.Height.Value) && Contains(boxB.Y, heightB) &&
+                        angleB == Fit::Inside;
     return inside ? Fit::Inside : Fit::Partly;
 }
 
@@ -1025,6 +1090,8 @@ Result<SurfaceSurfaceIntersection> CylinderCylinderSkew(const Surface& a, const 
         return Fail(ErrorCode::InvalidInput,
                     "CylinderCylinderSkew: dispatched for other surface types");
     }
+    STEREON_TRY_VOID(CheckAngularChart(boxA.X));
+    STEREON_TRY_VOID(CheckAngularChart(boxB.X));
     const ExactNormal exact = ExactNormalOf(*ca, *cb);
     const Sign outer = CompareDistance(exact, ExactSum(ca->Radius, cb->Radius));
     const Sign inner = CompareDistance(exact, ExactDifference(ca->Radius, cb->Radius));
