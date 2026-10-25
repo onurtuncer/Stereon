@@ -59,7 +59,9 @@ struct ClassifyBudget {
 /// and the winding number when the rays could not settle it.
 struct Region {
     std::vector<FaceId> Faces;
-    Side Side = Side::Unresolved;
+    // Qualified: an unqualified type would change the meaning of the name
+    // the member declares (-Wchanges-meaning).
+    Stereon::Side Side = Stereon::Side::Unresolved;
     FaceId SeedFace;
     Point3 Seed;
     int Rays = 0;
