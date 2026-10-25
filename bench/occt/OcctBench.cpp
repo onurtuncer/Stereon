@@ -5,9 +5,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-// The Phase 1 benchmarks of docs/benchmarks.md, Stereon against OpenCASCADE
-// on the same geometry:
+// The curve and surface benchmarks of docs/benchmarks.md, Stereon against
+// OpenCASCADE on the same geometry:
 //
+//   B0.2  curve dispatch, 10^8 evaluations of a line, a circle and a cubic B-spline
 //   B1.1  B-spline curve and surface evaluation, D0 to D2
 //   B1.3  point projection onto B-spline curves and surfaces
 //   B1.4  curve interpolation and approximation
@@ -38,10 +39,14 @@
 #include <GeomLProp_SLProps.hxx>
 #include <Geom_BSplineCurve.hxx>
 #include <Geom_BSplineSurface.hxx>
+#include <Geom_Circle.hxx>
+#include <Geom_Curve.hxx>
+#include <Geom_Line.hxx>
 #include <NCollection_Array1.hxx>
 #include <NCollection_Array2.hxx>
 #include <NCollection_HArray1.hxx>
 #include <benchmark/benchmark.h>
+#include <gp_Ax2.hxx>
 #include <gp_Dir.hxx>
 #include <gp_Pnt.hxx>
 #include <gp_Vec.hxx>
@@ -50,6 +55,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <numbers>
 #include <span>
 #include <vector>
 
@@ -229,6 +235,184 @@ std::vector<Point3> FitPoints()
 void Items(benchmark::State& state, const std::size_t perIteration)
 {
     state.SetItemsProcessed(state.iterations() * static_cast<std::int64_t>(perIteration));
+}
+
+// ---------------------------------------------------------------------------
+// B0.2: curve dispatch
+//
+// 10^8 evaluations per measurement of the curves of bench/GeometryBench.cpp,
+// a line, a circle and ADR-0003's cubic B-spline, along three paths:
+//
+//   Direct    the concrete type: Eval(line, t) against EvalD0 through
+//             occ::handle<Geom_Line>, where EvalD0 is final, so not virtual
+//   Dispatch  VisitBuiltin, one type test and then the concrete loop, against
+//             EvalD0 through occ::handle<Geom_Curve>, a virtual call per
+//             evaluation: the comparison B0.2 names
+//   Virtual   the erased Curve, a virtual call per evaluation, against the
+//             same OCCT virtual call: like for like
+//
+// B0.2's other target, VisitBuiltin within 1.1x of the direct call, compares
+// two Stereon rows; the report has a table for it. OCCT's line is
+// parametrised by arc length and Stereon's by Origin + t Direction, so OCCT's
+// parameters are scaled by |Direction|. The counter sum_x_mm, the x
+// coordinates summed over one pass, shows both evaluate the same points.
+
+constexpr std::size_t DispatchSampleCount = 1 << 16;
+
+/// Iterations of DispatchSampleCount evaluations that make at least 10^8.
+constexpr auto HundredMillion = static_cast<benchmark::IterationCount>(
+    (100'000'000 + DispatchSampleCount - 1) / DispatchSampleCount);
+
+Stereon::Line DispatchLine()
+{
+    return {Point3{1.0, 2.0, 3.0}, Stereon::Vec3{0.5, -1.0, 2.0}};
+}
+
+Stereon::Circle DispatchCircle()
+{
+    return {Point3{1.0, 2.0, 3.0}, 2.5, Stereon::Vec3{1.0, 0.0, 0.0}, Stereon::Vec3{0.0, 1.0, 0.0}};
+}
+
+/// ADR-0003's cubic B-spline: eight poles over [0, 2 pi], the range the
+/// parameters cover.
+BSplineCurve DispatchBSpline()
+{
+    constexpr double end = 2.0 * std::numbers::pi;
+    return {3,
+            {0.0, 0.0, 0.0, 0.0, 0.2 * end, 0.4 * end, 0.6 * end, 0.8 * end, end, end, end, end},
+            {Point3{0.0, 0.0, 0.0}, Point3{1.0, 2.0, 0.0}, Point3{2.0, -1.0, 1.0},
+             Point3{3.0, 1.0, 2.0}, Point3{4.0, 0.0, 0.0}, Point3{5.0, 2.0, 1.0},
+             Point3{6.0, -1.0, 0.0}, Point3{7.0, 0.0, 1.0}},
+            {}};
+}
+
+gp_Vec ToOcct(const Stereon::Vec3& v)
+{
+    return {v.X, v.Y, v.Z};
+}
+
+occ::handle<Geom_Line> ToOcct(const Stereon::Line& line)
+{
+    return new Geom_Line(ToOcct(line.Origin), gp_Dir(ToOcct(line.Direction)));
+}
+
+occ::handle<Geom_Circle> ToOcct(const Stereon::Circle& circle)
+{
+    const gp_Vec x = ToOcct(circle.XAxis);
+    const gp_Vec y = ToOcct(circle.YAxis);
+    return new Geom_Circle(gp_Ax2(ToOcct(circle.Center), gp_Dir(x.Crossed(y)), gp_Dir(x)),
+                           circle.Radius);
+}
+
+/// OCCT's parameter per unit of Stereon's: |Direction| for a line, which OCCT
+/// parametrises by arc length, 1 for the others.
+double OcctParameterScale(const Stereon::Line& line)
+{
+    return ToOcct(line.Direction).Magnitude();
+}
+
+template <typename G>
+double OcctParameterScale(const G&)
+{
+    return 1.0;
+}
+
+/// DispatchSampleCount parameters over [0, 2 pi), times scale.
+std::vector<double> DispatchParameters(const double scale)
+{
+    std::vector<double> t(DispatchSampleCount);
+    for (std::size_t i = 0; i < DispatchSampleCount; ++i) {
+        t[i] = scale * static_cast<double>(i) * (2.0 * std::numbers::pi / DispatchSampleCount);
+    }
+    return t;
+}
+
+template <typename G>
+double SumX(const G& geometry, const std::vector<double>& t)
+{
+    double sum = 0.0;
+    for (const double u : t) {
+        sum += Eval(geometry, u).X;
+    }
+    return sum;
+}
+
+/// The same sum through an OCCT handle: occ::handle<Geom_Line> calls the
+/// final EvalD0 directly, occ::handle<Geom_Curve> through the vtable.
+template <typename C>
+double OcctSumX(const occ::handle<C>& curve, const std::vector<double>& t)
+{
+    double sum = 0.0;
+    for (const double u : t) {
+        sum += curve->EvalD0(u).X();
+    }
+    return sum;
+}
+
+void DispatchItems(benchmark::State& state, const double sum)
+{
+    Items(state, DispatchSampleCount);
+    state.counters["sum_x_mm"] = sum;
+}
+
+template <typename G>
+void DispatchDirect(benchmark::State& state, const G geometry)
+{
+    const std::vector<double> t = DispatchParameters(1.0);
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(SumX(geometry, t));
+    }
+    DispatchItems(state, SumX(geometry, t));
+}
+
+template <typename G>
+void DispatchVisit(benchmark::State& state, const G geometry)
+{
+    const Stereon::Curve curve(geometry);
+    const std::vector<double> t = DispatchParameters(1.0);
+    const auto pass = [&] {
+        return VisitBuiltin(curve, [&t](const auto& g) { return SumX(g, t); });
+    };
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(pass());
+    }
+    DispatchItems(state, pass());
+}
+
+template <typename G>
+void DispatchErased(benchmark::State& state, const G geometry)
+{
+    const Stereon::Curve curve(geometry);
+    const std::vector<double> t = DispatchParameters(1.0);
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(SumX(curve, t));
+    }
+    DispatchItems(state, SumX(curve, t));
+}
+
+/// The OCCT twin of Direct: the concrete handle. The curve is built here, not
+/// at registration, so no OCCT object exists before main().
+template <typename G>
+void OcctDispatchDirect(benchmark::State& state, const G geometry)
+{
+    const auto curve = ToOcct(geometry);
+    const std::vector<double> t = DispatchParameters(OcctParameterScale(geometry));
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(OcctSumX(curve, t));
+    }
+    DispatchItems(state, OcctSumX(curve, t));
+}
+
+/// The OCCT twin of Dispatch and Virtual: the base-class handle.
+template <typename G>
+void OcctDispatchVirtual(benchmark::State& state, const G geometry)
+{
+    const occ::handle<Geom_Curve> curve = ToOcct(geometry);
+    const std::vector<double> t = DispatchParameters(OcctParameterScale(geometry));
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(OcctSumX(curve, t));
+    }
+    DispatchItems(state, OcctSumX(curve, t));
 }
 
 // ---------------------------------------------------------------------------
@@ -712,6 +896,33 @@ void OcctPointAtLength(benchmark::State& state)
 }
 
 } // namespace
+
+// B0.2: each curve along each path, 10^8 evaluations per measurement.
+#define STEREON_B0_2(curve, make)                                                                  \
+    BENCHMARK_CAPTURE(DispatchDirect, curve, make())                                               \
+        ->Name("B0.2/Direct/" #curve "/Stereon")                                                   \
+        ->Iterations(HundredMillion);                                                              \
+    BENCHMARK_CAPTURE(OcctDispatchDirect, curve, make())                                           \
+        ->Name("B0.2/Direct/" #curve "/OCCT")                                                      \
+        ->Iterations(HundredMillion);                                                              \
+    BENCHMARK_CAPTURE(DispatchVisit, curve, make())                                                \
+        ->Name("B0.2/Dispatch/" #curve "/Stereon")                                                 \
+        ->Iterations(HundredMillion);                                                              \
+    BENCHMARK_CAPTURE(OcctDispatchVirtual, curve, make())                                          \
+        ->Name("B0.2/Dispatch/" #curve "/OCCT")                                                    \
+        ->Iterations(HundredMillion);                                                              \
+    BENCHMARK_CAPTURE(DispatchErased, curve, make())                                               \
+        ->Name("B0.2/Virtual/" #curve "/Stereon")                                                  \
+        ->Iterations(HundredMillion);                                                              \
+    BENCHMARK_CAPTURE(OcctDispatchVirtual, curve, make())                                          \
+        ->Name("B0.2/Virtual/" #curve "/OCCT")                                                     \
+        ->Iterations(HundredMillion)
+
+STEREON_B0_2(line, DispatchLine);
+STEREON_B0_2(circle, DispatchCircle);
+STEREON_B0_2(bspline, DispatchBSpline);
+
+#undef STEREON_B0_2
 
 BENCHMARK(CurveD0<3, false>)->Name("B1.1/CurveD0/cubic/Stereon");
 BENCHMARK(OcctCurveD0<3, false>)->Name("B1.1/CurveD0/cubic/OCCT");

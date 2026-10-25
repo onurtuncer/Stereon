@@ -99,6 +99,7 @@ Stereon is measured against OpenCASCADE (OCCT) on **speed, memory and robustness
 
 - One report per release gate, stored in `bench/reports/`, with OCCT version, hardware, and the full table above.
 - The report of a release gate is a **reference run**: the `OCCT reference run` workflow (`.github/workflows/occt-reference.yml`) on the reference image, `gcc:16.2` on a GitHub-hosted `ubuntu-24.04` runner, against the cached OCCT pin. It uploads the raw JSON, the machine record and the report that `tools/bench_report.py` renders; the release commits that report. Runs on a developer's machine are development runs and say so.
+- The trend between releases is kept by the `Benchmarks` workflow (`.github/workflows/bench.yml`): on every push to main, `stereon_bench` with five repetitions, recorded by `tools/bench_trend.py` on the `bench-data` branch, compared with the run before and plotted on the trend page published with the manual (`benchmarks/trend/`). Stereon only, and never a gate: the runner differs between runs.
 - Release notes quote only benchmarks whose correctness gate passed on both kernels.
 - A regression of > 10% in any Stereon benchmark between commits blocks the merge unless explained in the PR.
 
