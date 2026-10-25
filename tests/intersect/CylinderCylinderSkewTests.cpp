@@ -465,3 +465,103 @@ TEST_CASE("skew cylinders reject angular charts too large for period shifts",
         }
     }
 }
+
+TEST_CASE("skew cylinders exclude a wide angular sector containing no intersection",
+          "[intersect][cylinder][skew][regression]")
+{
+    const Surface b = AlongX(Point3{0.0, 4.0, 0.0}, 2.0);
+    // Intersection requires cos(u_B) <= -1/2. The sector is wider than pi,
+    // but [-2, 2] contains none of those angles, including modulo a turn.
+    for (const double shift : {0.0, Stereon::CirclePeriod}) {
+        const Box2 patch{Interval{-2.0 + shift, 2.0 + shift}, Interval::Everything()};
+        for (const bool swap : {false, true}) {
+            const auto result = swap ? Intersect(b, patch, a, Domain(a), ctx)
+                                     : Intersect(a, Domain(a), b, patch, ctx);
+            INFO(IntersectTest::ErrorText(result));
+            REQUIRE(result.has_value());
+            REQUIRE(result->IsEmpty());
+        }
+    }
+}
+
+TEST_CASE("skew cylinder singleton sectors reject the opposite ray",
+          "[intersect][cylinder][skew][regression]")
+{
+    const Surface b = AlongX(Point3{0.0, 4.0, 0.0}, 2.0);
+    // u_B = 0 is the generator y=6, z=0, outside A. Its opposite ray
+    // u_B = pi does meet A, so half-plane tests alone cannot reject it.
+    const Box2 patch{Interval{0.0}, Interval::Everything()};
+    for (const bool swap : {false, true}) {
+        const auto result =
+            swap ? Intersect(b, patch, a, Domain(a), ctx) : Intersect(a, Domain(a), b, patch, ctx);
+        INFO(IntersectTest::ErrorText(result));
+        REQUIRE(result.has_value());
+        REQUIRE(result->IsEmpty());
+    }
+}
+
+TEST_CASE("skew cylinder singleton sectors retain both generator intersections",
+          "[intersect][cylinder][skew][regression]")
+{
+    const Surface b = AlongX(Point3{0.0, 4.0, 0.0}, 2.0);
+    const Box2 patch{Interval{pi}, Interval::Everything()};
+    for (const bool swap : {false, true}) {
+        const auto result =
+            swap ? Intersect(b, patch, a, Domain(a), ctx) : Intersect(a, Domain(a), b, patch, ctx);
+        INFO(IntersectTest::ErrorText(result));
+        REQUIRE(result.has_value());
+        REQUIRE_FALSE(result->IsEmpty());
+        bool positive = false;
+        bool negative = false;
+        const auto check = [&](const Point3& point) {
+            REQUIRE_THAT(point.Y, WithinAbs(2.0, ctx.GetResolution()));
+            REQUIRE_THAT(point.Z, WithinAbs(0.0, ctx.GetResolution()));
+            REQUIRE_THAT(std::abs(point.X), WithinAbs(std::sqrt(5.0), ctx.GetResolution()));
+            positive = positive || point.X > 0.0;
+            negative = negative || point.X < 0.0;
+        };
+        for (const auto& branch : result->Branches) {
+            REQUIRE(branch.IsCertified());
+            for (const double t : IntersectTest::SamplesOf(branch.Range, 10)) {
+                check(Eval(branch.Curve3d, t));
+            }
+        }
+        for (const auto& point : result->Points) {
+            check(point.Position);
+        }
+        REQUIRE(positive);
+        REQUIRE(negative);
+    }
+}
+
+TEST_CASE("skew cylinders clip wide sectors at either angular boundary",
+          "[intersect][cylinder][skew][regression]")
+{
+    const Surface b = AlongX(Point3{0.0, 4.0, 0.0}, 2.0);
+    // Unlike the rotated seam case, these patches cut through the loop at
+    // each end of a wide sector. Its union must retain either half-plane.
+    for (const Interval arc : {Interval{0.0, 4.0}, Interval{3.0, 7.0}}) {
+        const Box2 patch{arc, Interval::Everything()};
+        for (const bool swap : {false, true}) {
+            const auto result = swap ? Intersect(b, patch, a, Domain(a), ctx)
+                                     : Intersect(a, Domain(a), b, patch, ctx);
+            INFO(IntersectTest::ErrorText(result));
+            REQUIRE(result.has_value());
+            REQUIRE_FALSE(result->Branches.empty());
+            bool retainedBeyondPi = false;
+            for (const auto& branch : result->Branches) {
+                REQUIRE(branch.IsCertified());
+                for (const double t : IntersectTest::SamplesOf(branch.Range, 50)) {
+                    const double u = Eval(swap ? branch.OnA : branch.OnB, t).X;
+                    const double fromMiddle =
+                        std::abs(std::remainder(u - Midpoint(arc), Stereon::CirclePeriod));
+                    REQUIRE(fromMiddle <= Width(arc) / 2.0 + 1e-5);
+                    retainedBeyondPi = retainedBeyondPi || u > pi + 0.5;
+                }
+            }
+            // Both patches contain u=pi+0.5, including the side that a
+            // mistaken intersection of the half-planes would discard.
+            REQUIRE(retainedBeyondPi);
+        }
+    }
+}
