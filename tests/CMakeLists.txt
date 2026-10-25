@@ -312,6 +312,8 @@ if(Python3_Interpreter_FOUND)
                 --root "${PROJECT_SOURCE_DIR}")
     add_test(NAME "tools: benchmark report self-test"
         COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/bench_report.py" --self-test)
+    add_test(NAME "tools: benchmark trend self-test"
+        COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/bench_trend.py" --self-test)
     set_tests_properties("tools: complexity self-test" "tools: complexity"
         PROPERTIES SKIP_RETURN_CODE 77)
     # ADR-0008: every dependency's declared licence is on the allow-list,

@@ -4,7 +4,9 @@
 # Builds the Sphinx manual (docs/) with the Doxygen API reference and deploys
 # it to GitHub Pages from main. Pull requests that touch the docs only build
 # it, so a broken page shows up before merge. The repository's Pages source
-# must be set to "GitHub Actions".
+# must be set to "GitHub Actions". The benchmark trend page from the
+# bench-data branch is published with it, under benchmarks/trend/, and a
+# Benchmarks run on main redeploys the site so the page stays current.
 
 name: Docs
 
@@ -23,6 +25,11 @@ on:
       - 'src/**'
       - 'README.md'
       - '.github/workflows/deploy-docs.yml'
+  # The benchmark trend page changes with every Benchmarks run on main.
+  workflow_run:
+    workflows: [Benchmarks]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -37,6 +44,7 @@ concurrency:
 jobs:
   build:
     name: Build manual
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -115,6 +123,17 @@ jobs:
           fi
           grep -q "PagedArena" build/html/api.html
           echo "Pages built: $(find build/html -name '*.html' | wc -l)"
+
+      # The trend page lives on the bench-data branch, written by the
+      # Benchmarks workflow (tools/bench_trend.py); the manual links to it.
+      - name: Add the benchmark trend page
+        run: |
+          if git fetch --depth=1 origin bench-data; then
+            mkdir -p build/html/benchmarks/trend
+            git show FETCH_HEAD:index.html > build/html/benchmarks/trend/index.html
+          else
+            echo "No bench-data branch yet; the trend page is left out."
+          fi
 
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'
