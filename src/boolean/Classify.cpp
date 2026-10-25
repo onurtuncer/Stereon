@@ -15,6 +15,7 @@ module;
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <map>
 #include <numbers>
 #include <optional>
@@ -31,9 +32,6 @@ namespace Stereon {
 
 namespace {
 
-/// How many directions a seed's ray tries before the region is Unresolved
-/// (the plan, M7).
-constexpr int RayDirections = 16;
 /// How many points a face is probed at for a seed inside it.
 constexpr int SeedProbes = 12;
 
@@ -222,10 +220,29 @@ struct Hit {
     return std::optional<int>{crossings};
 }
 
-/// The region's side by its seed: the parity of a ray's crossings of the
-/// other body, the ray turned until no meeting is ambiguous.
+/// The side by the parity of a ray's crossings of the other body, the ray
+/// turned until no meeting is ambiguous; nothing when every direction of
+/// the budget is.
+[[nodiscard]] Result<std::optional<Side>> SeedByRays(Region& region, const Shape& other,
+                                                     const int rays, const Context& ctx)
+{
+    for (int k = 0; k < rays; ++k) {
+        ++region.Rays;
+        STEREON_TRY(const std::optional<int> crossings,
+                    Crossings(other, region.Seed, Direction(k), ctx));
+        if (crossings) {
+            return std::optional<Side>{*crossings % 2 == 1 ? Side::Inside : Side::Outside};
+        }
+    }
+    return std::optional<Side>{};
+}
+
+/// The region's side by its seed: by a ray, else by the seed's bounded
+/// winding number (ADR-0013, the decisions on acceptance); Unresolved when
+/// neither settles it, naming the face, the rays tried and the last
+/// interval (ADR-0029, section 6).
 [[nodiscard]] Result<void> SeedRegion(Region& region, const Shape& own, const Shape& other,
-                                      const Context& ctx)
+                                      const ClassifyBudget& budget, const Context& ctx)
 {
     for (const FaceId face : region.Faces) {
         STEREON_TRY(const std::optional<Point2> uv, SeedIn(own, face, ctx));
@@ -234,21 +251,27 @@ struct Hit {
         }
         region.SeedFace = face;
         region.Seed = Eval(SurfaceOf(own, face), *uv);
-        for (int k = 0; k < RayDirections; ++k) {
-            ++region.Rays;
-            STEREON_TRY(const std::optional<int> crossings,
-                        Crossings(other, region.Seed, Direction(k), ctx));
-            if (crossings) {
-                region.Side = *crossings % 2 == 1 ? Side::Inside : Side::Outside;
-                return {};
-            }
+        STEREON_TRY(const std::optional<Side> byRay, SeedByRays(region, other, budget.Rays, ctx));
+        if (byRay) {
+            region.Side = *byRay;
+            return {};
         }
-        return Fail(ErrorCode::IntersectionFailed,
-                    "Classify: every ray from " + std::string(Describe(own, face)) +
-                        " meets the other body ambiguously; the region is Unresolved (decision "
-                        "D6)");
+        STEREON_TRY(const WindingNumber winding,
+                    WindingNumberOf(other, region.Seed, budget.Refinements, ctx));
+        region.Winding = winding;
+        if (winding.IsDecided()) {
+            region.Side = winding.IsInside() ? Side::Inside : Side::Outside;
+            return {};
+        }
+        return Fail(ErrorCode::Unresolved,
+                    std::format("Classify: every ray from {} meets the other body ambiguously ({} "
+                                "tried), and the winding number {:.6g} ± {:.3g} after {} "
+                                "refinements does not settle it: the region is Unresolved "
+                                "(decision D6)",
+                                std::string(Describe(own, face)), region.Rays, winding.Value,
+                                winding.Bound, winding.Refinements));
     }
-    return Fail(ErrorCode::IntersectionFailed,
+    return Fail(ErrorCode::Unresolved,
                 "Classify: no point inside any face of a region could be found for its seed");
 }
 
@@ -282,10 +305,11 @@ struct Hit {
         const Side second = regions[RegionOfFace(regions, adjacent[1])].Side;
         const bool differ = first != second;
         if (differ != (transition == SideTransition::OppositeSide)) {
-            return Fail(ErrorCode::IntersectionFailed,
+            return Fail(ErrorCode::DegenerateResult,
                         "Classify: the regions on either side of " +
                             std::string(Describe(shape, edge)) +
-                            " disagree with the branch's side transition (ADR-0013)");
+                            " disagree with the branch's side transition, so the intersection, "
+                            "the imprint or a seed went wrong (ADR-0013)");
         }
     }
     return {};
@@ -293,7 +317,8 @@ struct Hit {
 
 [[nodiscard]] Result<std::vector<Region>>
 ClassifyBody(const Shape& own, const Shape& other,
-             const std::vector<std::pair<EdgeId, SideTransition>>& edges, const Context& ctx)
+             const std::vector<std::pair<EdgeId, SideTransition>>& edges,
+             const ClassifyBudget& budget, const Context& ctx)
 {
     std::set<std::uint32_t> imprinted;
     for (const auto& [edge, transition] : edges) {
@@ -301,7 +326,7 @@ ClassifyBody(const Shape& own, const Shape& other,
     }
     STEREON_TRY(std::vector<Region> regions, RegionsOf(own, imprinted));
     for (Region& region : regions) {
-        STEREON_TRY_VOID(SeedRegion(region, own, other, ctx));
+        STEREON_TRY_VOID(SeedRegion(region, own, other, budget, ctx));
     }
     STEREON_TRY_VOID(CrossCheck(own, regions, edges));
     return regions;
@@ -311,6 +336,12 @@ ClassifyBody(const Shape& own, const Shape& other,
 
 Result<Classification> Classify(const ImprintedBodies& bodies, const Context& ctx)
 {
+    return Classify(bodies, ctx, ClassifyBudget{});
+}
+
+Result<Classification> Classify(const ImprintedBodies& bodies, const Context& ctx,
+                                const ClassifyBudget& budget)
+{
     std::vector<std::pair<EdgeId, SideTransition>> inA;
     std::vector<std::pair<EdgeId, SideTransition>> inB;
     for (const SharedEdge& shared : bodies.Shared) {
@@ -318,8 +349,8 @@ Result<Classification> Classify(const ImprintedBodies& bodies, const Context& ct
         inB.emplace_back(shared.B, shared.Transition);
     }
     Classification result;
-    STEREON_TRY(result.A, ClassifyBody(bodies.A.Shape, bodies.B.Shape, inA, ctx));
-    STEREON_TRY(result.B, ClassifyBody(bodies.B.Shape, bodies.A.Shape, inB, ctx));
+    STEREON_TRY(result.A, ClassifyBody(bodies.A.Shape, bodies.B.Shape, inA, budget, ctx));
+    STEREON_TRY(result.B, ClassifyBody(bodies.B.Shape, bodies.A.Shape, inB, budget, ctx));
     return result;
 }
 

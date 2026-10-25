@@ -87,9 +87,14 @@ made (MEV); a split of the face when both its ends exist on one loop (MEF),
 or a bridge when on two loops of the face (MEKR); a component that touches
 no boundary is hung on a helper strut from a loop vertex, removed once the
 component has closed (KEMR), which leaves a ring as a loop of the face and
-the ring's other use as the new face's boundary. Where a piece starts and
-ends on one edge, a cylinder's seam, the sense of the coedge it crossed
-tells the two uses of that edge apart. The new edge is ``Exact`` with the
+the ring's other use as the new face's boundary. The ring must run against
+the face's outer loop, a hole; where the pcurve turns the other way the
+ring and the disc change faces (KFMRH, then MFKRH), so the disc is the
+piece's face. Where a piece starts and ends on one edge, a cylinder's
+seam, both uses of that edge end at the vertex, one from either side of
+the chart, and the imprint takes the use the piece's own pcurve reaches,
+so the loops stay continuous in the face's parameter space. The new edge
+is ``Exact`` with the
 branch's curve where that is a line, a circle or an ellipse, and otherwise
 a ``Trim`` edge with its cached curve (ADR-0009, section 8), its tolerance
 the larger of the resolution and the branch's certified bound. The
@@ -138,16 +143,51 @@ twice, in closed form; a hit counts when ``FaceContains`` puts it inside
 the face. A ray that runs along a surface, grazes a cylinder, starts on a
 face or hits a face's boundary is ambiguous, and the next of sixteen
 directions (irrational fractions of a turn, tilted) is tried; a seed whose
-every direction is ambiguous leaves the region ``Unresolved`` and the
-operation fails naming the face (decision D6 of the plan), never guessing.
+every direction is ambiguous falls back to its winding number, below.
+
+When every direction is ambiguous, the seed's *bounded generalised winding
+number* decides (``WindingNumberOf``, ADR-0013's decisions on acceptance).
+Each face of the other body is triangulated in its parameter space, every
+face sharing an edge taking the same points along it, so the triangles
+close up into a polyhedron; the polyhedron's winding number at the seed is
+the sum of the triangles' solid angles (Van Oosterom and Strackee) over
+:math:`4\pi`. It equals the body's own winding number wherever the seed is
+farther from every triangle than the face can stray from them: a surface
+that agrees with the face inside and runs along the chords at its boundary
+deforms onto the triangles within that distance without crossing the seed,
+so the two numbers differ by a whole number, which must be zero. That
+distance is summed from the cylinder's sagitta over a cell's turn, the
+chords' deviation from the edges (:math:`h^2 / 8` of a bound on the second
+derivative of :math:`S(p(t))`, :math:`r\,u'^2 + (\lvert S_u \rvert +
+\lvert S_v \rvert)\,\lvert p'' \rvert`, with :math:`u'` and :math:`p''`
+bounded in closed form for lines, circles and ellipses and by the poles of
+the derivative curves for non-rational B-splines) and the tolerances of
+the face's edges and vertices. A loop whose pcurves do not meet in the
+face's parameter space, a face split across a seam say, is
+``InvalidResult`` naming the two edges rather than a sum. A cell of a face's parameter space that
+is not separated from the seed is split across its longer side and its
+loops clipped to the halves (Sutherland–Hodgman), down to the round's
+deviation target; a round that leaves a cell unseparated is followed by
+one with the target quartered, from a sixty-fourth of the body's extent
+down to the resolution, up to ``ClassifyBudget::Refinements`` rounds (eight
+by default). The result carries its bound, the cells left unseparated plus
+the rounding of the sum, and a side is read from it only when the number
+lies further from one half than the bound (ADR-0029, section 4); a decided
+number that is neither 0 nor 1 is ``InvalidResult``, since the faces then
+do not close up or one is oriented against its loops. A seed undecided
+after the budget leaves its region ``Unresolved`` and the operation fails
+with ``ErrorCode::Unresolved`` naming the face, the rays tried and the
+last interval (decision D6 of the plan), never guessing. The rays and the
+rounds are a ``ClassifyBudget``, so a caller, or a test, can ask for no
+rays and go straight to the winding number.
 
 Every region is seeded on its own, and the seeds are then checked against
 each other across the imprinted edges by the branches' side transitions
 (ADR-0029, section 3): the regions on either side of an ``OppositeSide``
 edge must differ, of a ``SameSide`` edge agree, and an ``Unresolved`` edge
-checks nothing. A disagreement fails the operation: this is the cross-check
-table of ADR-0013. The bounded generalised winding number the plan names
-as the fallback before ``Unresolved`` is still to come.
+checks nothing. A disagreement fails the operation with
+``DegenerateResult``, since the intersection, the imprint or a seed went
+wrong: this is the cross-check table of ADR-0013.
 
 Related design decisions
 ------------------------

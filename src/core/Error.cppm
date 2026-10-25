@@ -42,6 +42,8 @@ enum class ErrorCode : std::uint32_t {
     NotSupported,        ///< The input is valid but outside what the kernel handles.
     NotImplemented,      ///< The case is planned but not yet implemented.
     ParseError,          ///< A file or stream is malformed.
+    Unresolved,          ///< An established-state question, a classification say, could not be
+                         ///< settled within the work limits (ADR-0029, section 6).
 };
 
 /// True when ToString reports enumerator names (see EnumNames).

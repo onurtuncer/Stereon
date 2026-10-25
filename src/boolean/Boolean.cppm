@@ -7,8 +7,9 @@
 
 /// Stereon.Boolean: union, cut and common (ADR-0013). So far the face
 /// clipping and imprinting of the Boolean prototype (:Clip and :Imprint,
-/// M6); the pipeline of docs/planning/boolean-prototype-plan.md follows
-/// milestone by milestone.
+/// M6), the two-body driver (:Bodies, M6d) and the classification with its
+/// winding-number fallback (:Classify and :Winding, M7); the pipeline of
+/// docs/planning/boolean-prototype-plan.md follows milestone by milestone.
 export module Stereon.Boolean;
 
 export import Stereon.Build;
@@ -18,3 +19,4 @@ export import :Bodies;
 export import :Classify;
 export import :Clip;
 export import :Imprint;
+export import :Winding;

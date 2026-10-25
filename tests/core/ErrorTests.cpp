@@ -102,13 +102,14 @@ TEST_CASE("error codes keep their numeric values", "[core][errors]")
     STATIC_REQUIRE(static_cast<std::uint32_t>(ErrorCode::NotSupported) == 7);
     STATIC_REQUIRE(static_cast<std::uint32_t>(ErrorCode::NotImplemented) == 8);
     STATIC_REQUIRE(static_cast<std::uint32_t>(ErrorCode::ParseError) == 9);
+    STATIC_REQUIRE(static_cast<std::uint32_t>(ErrorCode::Unresolved) == 10);
 }
 
 #if STEREON_TEST_REFLECTION
 TEST_CASE("the numeric-value test covers every error code", "[core][errors]")
 {
     // Fails when a code is appended without pinning its number above.
-    STATIC_REQUIRE(std::meta::enumerators_of(^^Stereon::ErrorCode).size() == 9);
+    STATIC_REQUIRE(std::meta::enumerators_of(^^Stereon::ErrorCode).size() == 10);
 }
 
 TEST_CASE("error code names come from the enumerators", "[core][errors]")
@@ -116,11 +117,12 @@ TEST_CASE("error code names come from the enumerators", "[core][errors]")
     STATIC_REQUIRE(Stereon::ErrorCodeNames);
     STATIC_REQUIRE(Stereon::ToString(ErrorCode::InvalidInput) == "InvalidInput");
     STATIC_REQUIRE(Stereon::ToString(ErrorCode::ParseError) == "ParseError");
+    STATIC_REQUIRE(Stereon::ToString(ErrorCode::Unresolved) == "Unresolved");
     REQUIRE(Stereon::ToString(static_cast<ErrorCode>(0)) == "Unknown");
-    REQUIRE(Stereon::ToString(static_cast<ErrorCode>(10)) == "Unknown");
+    REQUIRE(Stereon::ToString(static_cast<ErrorCode>(11)) == "Unknown");
 
     std::vector<std::string> names;
-    for (std::uint32_t value = 1; value <= 9; ++value) {
+    for (std::uint32_t value = 1; value <= 10; ++value) {
         const auto name = Stereon::ToString(static_cast<ErrorCode>(value));
         REQUIRE(name != "Unknown");
         names.emplace_back(name);

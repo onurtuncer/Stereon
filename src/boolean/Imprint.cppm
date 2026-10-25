@@ -47,8 +47,10 @@ struct NetworkVertex {
 /// A piece of a branch inside the face, from the vertex Start to the
 /// vertex End (one vertex, when closed): its 3D curve and its pcurve on the
 /// face over the range, the branch's certified bound, and at an end on the
-/// boundary the sense of the coedge crossed there, which tells the two
-/// uses of one edge apart when both end at the vertex (a seam).
+/// boundary the sense of the coedge the clip names as crossed there. Where
+/// both uses of one edge end at the vertex (a seam) the clip cannot tell
+/// them apart, so the imprint takes the use the pcurve's own end reaches,
+/// and these senses are kept for the record.
 struct NetworkEdge {
     Curve Curve3d;
     Curve2d PCurve;
