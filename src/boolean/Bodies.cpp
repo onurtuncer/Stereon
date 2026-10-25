@@ -90,7 +90,9 @@ constexpr double Infinity = std::numeric_limits<double>::infinity();
 /// A face of one body with what the pairing needs of it.
 struct FaceData {
     FaceId Face;
-    Surface Surface;
+    // Qualified: an unqualified type would change the meaning of the name
+    // the member declares (-Wchanges-meaning).
+    Stereon::Surface Surface;
     Box3 Box;
     Box2 Parameters;
 };
