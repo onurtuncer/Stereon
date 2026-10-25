@@ -68,6 +68,13 @@ struct FaceClip {
     bool Decided = true;
 };
 
+/// Whether the face contains the point at the parameters uv: inside its
+/// loops, by the parity of a ray turned past the loops' vertices; nothing
+/// when the point lies on the boundary, within an edge's tolerance of the
+/// edge (ADR-0001). IntersectionFailed when every ray meets a vertex.
+[[nodiscard]] Result<std::optional<bool>> FaceContains(const Shape& shape, FaceId face,
+                                                       const Point2& uv, const Context& ctx);
+
 /// The branch restricted to the face, whose surface is the one the pcurve
 /// of `side` lies on. InvalidInput for a face the shape does not hold, or a
 /// coedge without a pcurve; IntersectionFailed when a side cannot be

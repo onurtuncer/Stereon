@@ -122,6 +122,33 @@ coincident faces (an overlap) are ``NotSupported`` until then.
    });
    const auto result = Stereon::Commit(std::move(builder), ctx);
 
+Classification
+--------------
+
+``Classify(bodies, ctx)`` is pipeline step 5 (M7; ADR-0013). The faces of
+each imprinted body fall into *regions*, connected across every edge but
+the imprinted ones (a union-find over the faces), and each region lies
+``Inside`` the other solid or ``Outside`` it. One seed per region is
+classified by deterministic rays: a point inside one of the region's faces
+(probed at the parameter box's centre and at offsets from the midpoints of
+its edges' pcurves, each probe settled by ``FaceContains``), then a ray
+from it cast against every face of the other body, which it crosses an odd
+number of times from inside. A plane is met once and a cylinder up to
+twice, in closed form; a hit counts when ``FaceContains`` puts it inside
+the face. A ray that runs along a surface, grazes a cylinder, starts on a
+face or hits a face's boundary is ambiguous, and the next of sixteen
+directions (irrational fractions of a turn, tilted) is tried; a seed whose
+every direction is ambiguous leaves the region ``Unresolved`` and the
+operation fails naming the face (decision D6 of the plan), never guessing.
+
+Every region is seeded on its own, and the seeds are then checked against
+each other across the imprinted edges by the branches' side transitions
+(ADR-0029, section 3): the regions on either side of an ``OppositeSide``
+edge must differ, of a ``SameSide`` edge agree, and an ``Unresolved`` edge
+checks nothing. A disagreement fails the operation: this is the cross-check
+table of ADR-0013. The bounded generalised winding number the plan names
+as the fallback before ``Unresolved`` is still to come.
+
 Related design decisions
 ------------------------
 
