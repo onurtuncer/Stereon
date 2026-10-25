@@ -74,6 +74,8 @@ jobs:
           python tools/check_corpus.py
       - name: Benchmark report renderer (self-test; occt-reference.yml uses it)
         run: python tools/bench_report.py --self-test
+      - name: Benchmark trend recorder (self-test; bench.yml uses it)
+        run: python tools/bench_trend.py --self-test
 
       - name: ADR references and index (self-test, then docs/adr)
         run: |

@@ -21,8 +21,9 @@
 //
 // The "/1e8" runs make ADR-0003's 10^8 evaluations in one measurement.
 //
-// The cubic B-spline of the ADR's verification is included; the OCCT side
-// (Geom_Curve::D0 through occ::handle) joins with the OCCT benchmark harness. The copy benchmarks
+// The cubic B-spline of the ADR's verification is included. The OCCT
+// comparison, B0.2 proper, is in bench/occt/OcctBench.cpp, which runs the
+// same curves along the same paths beside OCCT's. The copy benchmarks
 // measure the wrapper at buffer sizes 64, 96 and 128 bytes against the built-in types' sizes, which
 // is how ADR-0003 fixes GeometryBufferSize.
 

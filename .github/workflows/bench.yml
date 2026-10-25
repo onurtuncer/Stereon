@@ -1,8 +1,13 @@
 # SPDX-FileCopyrightText: 2026 Onur Tuncer and Stereon contributors
 # SPDX-License-Identifier: MPL-2.0
 #
-# Builds the benchmarks and smoke-runs them. Not a required check until it
-# is added to branch protection.
+# Builds the benchmarks and smoke-runs them on pull requests. On every push
+# to main it keeps the trend instead (docs/benchmarks.md, Harness): the whole
+# of stereon_bench with repetitions, recorded by tools/bench_trend.py as one
+# run file on the bench-data branch, compared with the run before (a
+# regression of more than 10 % is a warning and in the job summary), and the
+# trend page rendered there for the Docs workflow to publish. Not a required
+# check: timings on a shared runner cannot gate a merge.
 
 name: Benchmarks
 
@@ -23,9 +28,14 @@ env:
   CTEST_OUTPUT_ON_FAILURE: "1"
   CMAKE_BUILD_PARALLEL_LEVEL: "4"
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   bench:
     name: Benchmarks build (bench)
+    if: github.event_name != 'push'
     runs-on: ubuntu-24.04
     container: gcc:16.2
     steps:
@@ -40,3 +50,94 @@ jobs:
         run: cmake --build --preset bench
       - name: Smoke run
         run: ./build/bench/bench/stereon_bench --benchmark_min_time=0.01s
+
+  trend:
+    name: Benchmark trend (main)
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    container: gcc:16.2
+    timeout-minutes: 120
+    permissions:
+      contents: write # the run file and the page, pushed to bench-data
+    # One writer of bench-data at a time; a newer push waits for the last.
+    concurrency:
+      group: bench-data
+      cancel-in-progress: false
+    steps:
+      - name: Install CMake, Ninja and Python
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends cmake ninja-build python3
+      - uses: actions/checkout@v7
+      - name: Configure
+        run: cmake --preset bench -DSTEREON_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build --preset bench --target stereon_bench
+      - name: Record the machine
+        run: |
+          mkdir -p build/trend
+          {
+            echo "date=$(date -u +%Y-%m-%d)"
+            echo "commit=${{ github.sha }}"
+            echo "workflow_run=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "runner=GitHub Actions ubuntu-24.04 (${{ runner.os }}, ${{ runner.arch }}), container gcc:16.2"
+            echo "cpu=$(sed -n 's/^model name[[:space:]]*: //p' /proc/cpuinfo | head -1)"
+            echo "cpus=$(nproc)"
+            echo "compiler=$(g++ --version | head -1)"
+          } | tee build/trend/machine.txt
+      # Every benchmark but the 10^6-face topology rows and the 10^8-evaluation
+      # dispatch rows, which take minutes each and belong to the reference run.
+      # Those fix their iterations, so their names end "/ 1e8/iterations:N".
+      - name: Run the benchmarks
+        run: >
+          ./build/bench/bench/stereon_bench
+          --benchmark_repetitions=5
+          --benchmark_enable_random_interleaving=true
+          --benchmark_display_aggregates_only=true
+          --benchmark_filter='-(/1000000$|/ 1e8/)'
+          --benchmark_out=build/trend/results.json --benchmark_out_format=json
+      - name: Check out bench-data
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git fetch --depth=1 origin bench-data; then
+            git worktree add --detach build/trend/data FETCH_HEAD
+          else
+            echo "No bench-data branch yet; starting it."
+            git worktree add --detach build/trend/data HEAD
+            git -C build/trend/data checkout --orphan bench-data
+            git -C build/trend/data rm -rfq .
+          fi
+      - name: Record, compare and render
+        run: |
+          data=build/trend/data
+          python3 tools/bench_trend.py record build/trend/results.json --machine build/trend/machine.txt \
+            --out "$data/runs/$(date -u +%Y%m%dT%H%M%SZ)-${GITHUB_SHA::12}.json"
+          python3 tools/bench_trend.py compare "$data/runs" --annotate --out build/trend/summary.md
+          { echo "## Benchmark trend"; echo; cat build/trend/summary.md; } >> "$GITHUB_STEP_SUMMARY"
+          python3 tools/bench_trend.py render "$data/runs" --out "$data/index.html" \
+            --repo-url "${{ github.server_url }}/${{ github.repository }}"
+          cat > "$data/README.md" <<'EOF'
+          # bench-data
+
+          Written by the Benchmarks workflow (`.github/workflows/bench.yml`) on every
+          push to main: `runs/` holds one file per run of `stereon_bench`, made by
+          `tools/bench_trend.py record`, and `index.html` is the trend page that the
+          Docs workflow publishes under `benchmarks/trend/`. Not edited by hand.
+          EOF
+      - name: Push bench-data
+        run: |
+          data=build/trend/data
+          git -C "$data" add -A
+          git -C "$data" commit -q -m "bench: run of ${GITHUB_SHA::12}"
+          git -C "$data" push origin HEAD:refs/heads/bench-data
+      - name: Upload the run
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-trend-${{ github.sha }}
+          path: |
+            build/trend/results.json
+            build/trend/machine.txt
+            build/trend/summary.md
+          retention-days: 30
