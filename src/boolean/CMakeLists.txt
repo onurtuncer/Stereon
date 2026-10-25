@@ -9,10 +9,12 @@ stereon_add_library(boolean
     MODULES
         Bodies.cppm
         Boolean.cppm
+        Classify.cppm
         Clip.cppm
         Imprint.cppm
     SOURCES
         Bodies.cpp
+        Classify.cpp
         Clip.cpp
         Imprint.cpp
     DEPENDS

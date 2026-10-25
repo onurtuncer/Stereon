@@ -25,12 +25,20 @@ import :Imprint;
 
 export namespace Stereon {
 
-/// Both bodies imprinted, and the pairs of edges, one in each result, that
-/// are the same piece of the intersection.
+/// One piece of the intersection as an edge in each body, with the branch's
+/// side transition across it (ADR-0029, section 3).
+struct SharedEdge {
+    EdgeId A;
+    EdgeId B;
+    SideTransition Transition = SideTransition::Unresolved;
+};
+
+/// Both bodies imprinted, and the pieces of the intersection, each an edge
+/// in each result.
 struct ImprintedBodies {
     OperationResult A;
     OperationResult B;
-    std::vector<std::pair<EdgeId, EdgeId>> Shared;
+    std::vector<SharedEdge> Shared;
 };
 
 /// Intersects every face pair of the two solids and imprints both.
