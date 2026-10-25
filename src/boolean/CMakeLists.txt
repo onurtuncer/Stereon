@@ -12,11 +12,13 @@ stereon_add_library(boolean
         Classify.cppm
         Clip.cppm
         Imprint.cppm
+        Winding.cppm
     SOURCES
         Bodies.cpp
         Classify.cpp
         Clip.cpp
         Imprint.cpp
+        Winding.cpp
     DEPENDS
         build
         intersect)

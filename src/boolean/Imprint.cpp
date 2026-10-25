@@ -108,13 +108,16 @@ struct BoundaryVertex {
 }
 
 /// The imprint of one network in progress: the builder's vertex for each
-/// network vertex (invalid until made), the faces the original has become,
-/// the pieces done so far, and the helper struts to remove at the end.
+/// network vertex (invalid until made), the frozen shape the edit started
+/// from (the builder reads no geometry beyond positions), the faces the
+/// original has become, the pieces done so far, and the helper struts to
+/// remove at the end.
 struct Work {
     ShapeBuilder& Builder;
     const FaceNetwork& Network;
     const Context& Ctx;
     Imprint& Made;
+    const Shape& Frozen;
     std::vector<BuilderFaceId> Faces;
     std::vector<bool> Done;
     std::vector<BuilderEdgeId> Helpers;
@@ -185,6 +188,46 @@ struct UseAt {
     return first;
 }
 
+/// Keeps the sense of the use `coedge` of the face if its pcurve, at the
+/// crossing's parameter on the edge, comes nearer to `uv` than any before.
+void NearerUse(const Work& w, const CoedgeId coedge, const LoopCrossing& crossing, const Point2& uv,
+               double& nearest, std::optional<EdgeUseSense>& sense)
+{
+    if (EdgeOf(w.Frozen, coedge) != EdgeOf(w.Frozen, crossing.Coedge)) {
+        return;
+    }
+    const std::optional<Curve2d> pcurve = PCurveOf(w.Frozen, coedge);
+    const double distance = pcurve ? Distance(Eval(*pcurve, crossing.OnEdge), uv) : nearest;
+    if (distance < nearest) {
+        nearest = distance;
+        sense = StoredEdgeUseSense(w.Frozen, coedge);
+    }
+}
+
+/// The sense of the face's use of the crossed edge that the piece's own
+/// pcurve reaches at `uv`, its end. Where a piece ends on a seam, both uses
+/// of the edge end at the vertex, one from either side of the chart, and
+/// the clip names one of them without telling which: the piece's pcurve
+/// does. Nothing for a junction, which no use ends at.
+[[nodiscard]] Result<std::optional<EdgeUseSense>> SenseAt(const Work& w, const std::size_t vertex,
+                                                          const Point2& uv)
+{
+    const std::optional<LoopCrossing>& crossing = w.Network.Vertices[vertex].Crossing;
+    if (!crossing) {
+        return std::optional<EdgeUseSense>{};
+    }
+    std::optional<EdgeUseSense> sense{StoredEdgeUseSense(w.Frozen, crossing->Coedge)};
+    double nearest = std::numeric_limits<double>::infinity();
+    STEREON_TRY(const LoopRange loops, LoopsOf(w.Frozen, w.Network.Face));
+    for (const LoopId loop : loops) {
+        STEREON_TRY(const CoedgeRange coedges, CoedgesOf(w.Frozen, loop));
+        for (const CoedgeId coedge : coedges) {
+            NearerUse(w, coedge, *crossing, uv, nearest, sense);
+        }
+    }
+    return sense;
+}
+
 /// A piece between two made vertices: a face split when they lie on one
 /// loop, a bridge when on two loops of one face.
 [[nodiscard]] Result<void> ImprintBetween(Work& w, const std::size_t index)
@@ -192,8 +235,12 @@ struct UseAt {
     const NetworkEdge& edge = w.Network.Edges[index];
     const BuilderVertexId start = w.Made.Vertices[edge.Start];
     const BuilderVertexId end = w.Made.Vertices[edge.End];
-    const std::optional<UseAt> a = UseEndingAt(w, start, edge.StartSense);
-    const std::optional<UseAt> b = UseEndingAt(w, end, edge.EndSense);
+    STEREON_TRY(const std::optional<EdgeUseSense> startSense,
+                SenseAt(w, edge.Start, Eval(edge.PCurve, edge.Range.GetLower())));
+    STEREON_TRY(const std::optional<EdgeUseSense> endSense,
+                SenseAt(w, edge.End, Eval(edge.PCurve, edge.Range.GetUpper())));
+    const std::optional<UseAt> a = UseEndingAt(w, start, startSense);
+    const std::optional<UseAt> b = UseEndingAt(w, end, endSense);
     if (!a || !b || a->Face != b->Face) {
         return Fail(ErrorCode::IntersectionFailed,
                     "ImprintNetwork: a piece's ends are not both on the boundary of one face");
@@ -217,7 +264,9 @@ struct UseAt {
 {
     const NetworkEdge& edge = w.Network.Edges[index];
     const BuilderVertexId start = w.Made.Vertices[edge.Start];
-    const std::optional<UseAt> at = UseEndingAt(w, start, edge.StartSense);
+    STEREON_TRY(const std::optional<EdgeUseSense> startSense,
+                SenseAt(w, edge.Start, Eval(edge.PCurve, edge.Range.GetLower())));
+    const std::optional<UseAt> at = UseEndingAt(w, start, startSense);
     if (!at) {
         return Fail(ErrorCode::IntersectionFailed,
                     "ImprintNetwork: a piece starts at a vertex on no loop of the face");
@@ -310,15 +359,65 @@ struct UseAt {
     return std::ranges::all_of(w.Done, [](const bool done) { return done; });
 }
 
+/// The signed area a closed pcurve bounds over its range, by sampling:
+/// positive when it turns counter-clockwise in the face's parameter space.
+[[nodiscard]] double SignedAreaOf(const Curve2d& pcurve, const Interval& range)
+{
+    constexpr int samples = 64;
+    double twice = 0.0;
+    Point2 previous = Eval(pcurve, range.GetUpper());
+    for (int k = 0; k < samples; ++k) {
+        const Point2 p = Eval(pcurve, range.GetLower() + Width(range) * static_cast<double>(k) /
+                                                             static_cast<double>(samples));
+        twice += previous.X * p.Y - p.X * previous.Y;
+        previous = p;
+    }
+    return 0.5 * twice;
+}
+
+/// A ring a closed piece leaves in the original face must be a hole: it runs
+/// clockwise about Su x Sv in a face oriented with its surface, and the disc
+/// cut off runs the other way. MakeEdgeFace from a coedge to itself has no
+/// loop order to take that from and keeps the Same use in the original face
+/// whichever way the pcurve turns; when that is the wrong way round the two
+/// loops change faces, the disc's into the original face (KFMRH) and the
+/// ring's out into a new face (MFKRH), which then is the piece's face.
+[[nodiscard]] Result<void> OrientRing(Work& w, const BuilderLoopId ring)
+{
+    const std::vector<BuilderCoedgeId> uses = w.Builder.CoedgesOf(ring);
+    if (uses.size() != 1) {
+        return {};
+    }
+    const BuilderEdgeId edge = w.Builder.EdgeOf(uses.front());
+    const auto piece = std::ranges::find_if(
+        w.Made.Pieces, [edge](const ImprintedPiece& p) { return p.Edge == edge; });
+    if (piece == w.Made.Pieces.end() || !piece->Face.IsValid()) {
+        return {};
+    }
+    const auto index = static_cast<std::size_t>(piece - w.Made.Pieces.begin());
+    const NetworkEdge& network = w.Network.Edges[index];
+    const double along = w.Builder.SenseOf(uses.front()) == EdgeUseSense::Same ? 1.0 : -1.0;
+    const double turn = along * SignedAreaOf(network.PCurve, network.Range);
+    const bool reversed = IsReversed(w.Frozen, w.Network.Face);
+    if (reversed ? turn > 0.0 : turn < 0.0) { // STEREON-LINT-ALLOW(epsilon): the turn's sense
+        return {};
+    }
+    STEREON_TRY_VOID(w.Builder.KillFaceMakeRingHole(piece->Face, w.Faces.front()));
+    STEREON_TRY(piece->Face, w.Builder.MakeFaceKillRingHole(ring));
+    w.Faces.push_back(piece->Face);
+    return {};
+}
+
 /// One network's pieces, its boundary vertices already made.
-[[nodiscard]] Result<void> ImprintPieces(ShapeBuilder& builder, const FaceNetwork& network,
-                                         Imprint& made, const Context& ctx)
+[[nodiscard]] Result<void> ImprintPieces(ShapeBuilder& builder, const Shape& shape,
+                                         const FaceNetwork& network, Imprint& made,
+                                         const Context& ctx)
 {
     const BuilderFaceId handle = builder.Handle(network.Face);
     if (!handle.IsValid()) {
         return Fail(ErrorCode::InvalidInput, "ImprintNetwork: the face is not live in the builder");
     }
-    Work w{builder, network, ctx, made, {handle}, {}, {}};
+    Work w{builder, network, ctx, made, shape, {handle}, {}, {}};
     w.Done.assign(network.Edges.size(), false);
     while (!AllDone(w)) {
         STEREON_TRY(const bool progress, ImprintRound(w));
@@ -334,7 +433,8 @@ struct UseAt {
         STEREON_TRY_VOID(HangHelper(w, *start));
     }
     for (const BuilderEdgeId helper : w.Helpers) {
-        STEREON_TRY_VOID(builder.KillEdgeMakeRing(helper));
+        STEREON_TRY(const BuilderLoopId ring, builder.KillEdgeMakeRing(helper));
+        STEREON_TRY_VOID(OrientRing(w, ring));
     }
     return {};
 }
@@ -388,7 +488,7 @@ Result<std::vector<Imprint>> ImprintNetworks(ShapeBuilder& builder, const Shape&
     STEREON_TRY_VOID(SplitCrossedEdges(builder, shape, networks, made, imprints));
     for (std::size_t n = 0; n < networks.size(); ++n) {
         imprints[n].Vertices = std::move(made[n]);
-        STEREON_TRY_VOID(ImprintPieces(builder, networks[n], imprints[n], ctx));
+        STEREON_TRY_VOID(ImprintPieces(builder, shape, networks[n], imprints[n], ctx));
     }
     return imprints;
 }
