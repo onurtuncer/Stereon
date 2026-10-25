@@ -533,3 +533,35 @@ TEST_CASE("skew cylinder singleton sectors retain both generator intersections",
         REQUIRE(negative);
     }
 }
+
+TEST_CASE("skew cylinders clip wide sectors at either angular boundary",
+          "[intersect][cylinder][skew][regression]")
+{
+    const Surface b = AlongX(Point3{0.0, 4.0, 0.0}, 2.0);
+    // Unlike the rotated seam case, these patches cut through the loop at
+    // each end of a wide sector. Its union must retain either half-plane.
+    for (const Interval arc : {Interval{0.0, 4.0}, Interval{3.0, 7.0}}) {
+        const Box2 patch{arc, Interval::Everything()};
+        for (const bool swap : {false, true}) {
+            const auto result = swap ? Intersect(b, patch, a, Domain(a), ctx)
+                                     : Intersect(a, Domain(a), b, patch, ctx);
+            INFO(IntersectTest::ErrorText(result));
+            REQUIRE(result.has_value());
+            REQUIRE_FALSE(result->Branches.empty());
+            bool retainedBeyondPi = false;
+            for (const auto& branch : result->Branches) {
+                REQUIRE(branch.IsCertified());
+                for (const double t : IntersectTest::SamplesOf(branch.Range, 50)) {
+                    const double u = Eval(swap ? branch.OnA : branch.OnB, t).X;
+                    const double fromMiddle =
+                        std::abs(std::remainder(u - Midpoint(arc), Stereon::CirclePeriod));
+                    REQUIRE(fromMiddle <= Width(arc) / 2.0 + 1e-5);
+                    retainedBeyondPi = retainedBeyondPi || u > pi + 0.5;
+                }
+            }
+            // Both patches contain u=pi+0.5, including the side that a
+            // mistaken intersection of the half-planes would discard.
+            REQUIRE(retainedBeyondPi);
+        }
+    }
+}
