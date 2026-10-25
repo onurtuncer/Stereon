@@ -71,6 +71,18 @@ from it. The report a release gate cites (``docs/benchmarks.md``,
 runner's CPU differs from run to run and is shared with other jobs, so a
 row whose spread is large is run again rather than quoted.
 
+A third kind, the *trend run*, follows Stereon alone from commit to commit.
+Every push to main runs ``stereon_bench`` (all of it but the
+:math:`10^6`-face topology rows and the :math:`10^8`-evaluation dispatch
+rows) with five interleaved repetitions in the same container, and
+``tools/bench_trend.py`` records each benchmark's median per item on the
+``bench-data`` branch, one file per run. The job's summary lists every
+benchmark more than 10 % slower than in the run before, as
+``docs/benchmarks.md`` asks a pull request to explain, and the
+`trend page <benchmarks/trend/index.html>`_ plots the last 60 runs. It warns
+and never fails: the runner's CPU, recorded with every run, changes between
+runs, and a step in a chart is read against it.
+
 Each library gets its best usage where it has one. Projections reuse an
 initialised projector, ``GeomAPI_ProjectPointOnCurve::Perform`` against a
 reused ``CurveProjector``. Evaluation with derivatives is one ``D2`` call
@@ -553,6 +565,30 @@ which on a curve whose knot spans range from :math:`10^{-6}` to
 length. It now stops on the length residual, and all 400 are within
 :math:`10^{-9}`. That is the point of hunting both ways.
 
+Curve dispatch (B0.2)
+---------------------
+
+B0.2 times :math:`10^8` evaluations per measurement of a line, a circle and
+ADR-0003's cubic B-spline, along three paths, each against its OCCT
+counterpart in the same process:
+
+- *Direct*: ``Eval`` on the concrete type, against ``EvalD0`` through
+  ``occ::handle<Geom_Line>`` (or ``Geom_Circle``, ``Geom_BSplineCurve``),
+  where ``EvalD0`` is ``final`` and the call is not virtual.
+- *Dispatch*: ``VisitBuiltin``, one type test and then the concrete loop,
+  against ``EvalD0`` through ``occ::handle<Geom_Curve>``, a virtual call per
+  evaluation. B0.2 asks Stereon to be faster here.
+- *Virtual*: the erased ``Curve``, a virtual call per evaluation, against
+  the same OCCT call, like for like.
+
+B0.2's second target, ``VisitBuiltin`` within :math:`1.1\times` of the direct
+call, compares two Stereon rows; the report renders it as a table of its
+own. OCCT parametrises a line by arc length, so its parameters are scaled
+by :math:`\lVert d \rVert`, and the ``sum_x_mm`` counter, the
+:math:`x`-coordinates summed over one pass, shows that both libraries
+evaluate the same points. The rows run with B1 in the reference run;
+results are quoted here from the first reference run that includes them.
+
 Topology (B0.3–B0.5)
 --------------------
 
@@ -690,6 +726,7 @@ With OCCT installed by ``tools/occt/build_occt.sh``:
    build/bench-occt/bench/stereon_occt_bench --benchmark_repetitions=5 \
          --benchmark_report_aggregates_only=true
 
-``--benchmark_filter=B1.6`` runs one group. The ``length_mm`` counter of
+``--benchmark_filter=B1.6`` runs one group, ``--benchmark_filter=B0.2``
+the dispatch rows, about a second per row. The ``length_mm`` counter of
 the arc-length rows prints each library's result, so the accuracy check
 travels with the timing.
