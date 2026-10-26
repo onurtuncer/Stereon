@@ -4,7 +4,7 @@ The corpus is how Stereon is judged: a collection of geometry cases, each with a
 
 ## Rules
 
-- **Regression cases are never deleted.** A case that once exposed a defect stays in the corpus permanently. If its format becomes obsolete, it is converted, not removed.
+- **Regression cases are never deleted.** A case that once exposed a defect stays in the corpus permanently. If its format becomes obsolete, it is converted, not removed. The lint job enforces this: `python tools/check_corpus.py --base origin/<base branch>` fails a pull request that deletes a regression case of its base branch or changes its kind.
 - **Every case states how correctness is judged**: analytic ground truth, agreement with another kernel, or "valid result" at minimum.
 - **Only redistributable files.** Cases authored for Stereon are MPL-2.0 (covered by `REUSE.toml`). Anything else needs a row in [`LICENSES.md`](LICENSES.md) naming the case, its source and its licence (ADR-0008).
 - **Inputs are doubles.** Numbers in case files are read as the IEEE-754 double nearest to the decimal text, as `strtod` and every JSON parser do. Ground truth refers to those doubles, not to the decimal text. For example, `0.3 - 0.2 < 0.1` holds for the doubles, so a decimal-looking tangency may be a small crossing; see `analytic-ssi/plane-sphere/decimal-tangent-double-circle`.
@@ -53,6 +53,6 @@ A suite may add fields inside `inputs`, `operation` and `expected`, never at the
 
 ## Workflow for a failing case
 
-1. Reduce the failure to the smallest input that still fails, and save it with its operation journal if there is one.
-2. Add it as a `regression` case with `found` filled in, in the suite and family that match.
-3. The fix and the case land together; the case keeps running forever.
+1. Reduce the failure to the smallest input that still fails, and save it with its operation journal if there is one: a `MemoryJournal` given to the `Context` as its journal sink records every operation the run made, and its `ToText()`, one line per entry (`#<id> <operation> <parameters>`), is the replay file, attached as `<case>.journal` with the same stem as the case.
+2. Add it as a `regression` case with `found` filled in (the commit, the issue and what was observed), in the suite and family that match; a defect in an operation no suite covers yet starts a suite, with a README that defines its `inputs` and `expected`.
+3. The fix and the case land together; the case keeps running forever, and `check_corpus.py --base` refuses any later pull request that would drop it.

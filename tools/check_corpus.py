@@ -20,7 +20,11 @@ not of the decimal text and not of a floating-point evaluation. The
 tolerant expectation is the claim under test in RS-0001 and is only
 checked for shape.
 
-Usage: check_corpus.py [--root <repository root>] | --self-test
+With --base <git ref>, every regression case of that ref (the pull
+request's base branch in CI) must still be present as a regression
+case: regression cases are never deleted (corpus/README.md).
+
+Usage: check_corpus.py [--root <repository root>] [--base <git ref>] | --self-test
 """
 
 from __future__ import annotations
@@ -29,6 +33,7 @@ import argparse
 import json
 import math
 import re
+import subprocess
 import sys
 from fractions import Fraction
 from pathlib import Path
@@ -356,6 +361,70 @@ def check_tree(root: Path) -> int:
     return 0
 
 
+# --- Regression cases are never deleted -----------------------------------
+
+
+def kinds_at(root: Path, base: str) -> dict[str, str]:
+    """The kind of every case at a git ref, by case id."""
+    git = ["git", "-C", str(root)]
+    listing = subprocess.run(git + ["ls-tree", "-r", "--name-only", base, "--", "corpus"],
+                             capture_output=True, text=True, check=True).stdout
+    kinds = {}
+    for path in listing.splitlines():
+        if not path.endswith(".json"):
+            continue
+        text = subprocess.run(git + ["show", f"{base}:{path}"], capture_output=True, text=True, check=True).stdout
+        try:
+            case = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        kinds[Path(path).relative_to("corpus").with_suffix("").as_posix()] = case.get("kind")
+    return kinds
+
+
+def kinds_in(root: Path) -> dict[str, str]:
+    """The kind of every case in the working tree, by case id."""
+    kinds = {}
+    for path in (root / "corpus").rglob("*.json"):
+        try:
+            case = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        kinds[path.relative_to(root / "corpus").with_suffix("").as_posix()] = case.get("kind")
+    return kinds
+
+
+def lost_regressions(previous: dict[str, str], current: dict[str, str]) -> list[str]:
+    """The regression cases of the base that the tree deletes or downgrades."""
+    problems = []
+    for case_id, kind in sorted(previous.items()):
+        if kind != "regression":
+            continue
+        now = current.get(case_id)
+        if now is None:
+            problems.append(f"{case_id}: a regression case of the base is deleted; regression cases are "
+                            "never deleted (corpus/README.md)")
+        elif now != "regression":
+            problems.append(f"{case_id}: a regression case of the base is now {now!r}; it stays a "
+                            "regression (corpus/README.md)")
+    return problems
+
+
+def check_kept(root: Path, base: str) -> int:
+    previous = kinds_at(root, base)
+    problems = lost_regressions(previous, kinds_in(root))
+    for message in problems:
+        print(f"check_corpus: {message}", file=sys.stderr)
+    if problems:
+        return 1
+    kept = sum(1 for kind in previous.values() if kind == "regression")
+    print(f"check_corpus: {kept} regression case(s) of {base} kept")
+    return 0
+
+
+# --- Self-test ---------------------------------------------------------------
+
+
 def plane(point, normal):
     return {"type": "plane", "point": point, "normal": normal}
 
@@ -410,11 +479,18 @@ def self_test() -> int:
             got = result.get("configuration")
             if got != expected:
                 failures.append(f"{a['type']}-{b['type']}: expected {expected}, got {got}")
+    lost = lost_regressions({"s/f/a": "regression", "s/f/b": "hard"}, {"s/f/b": "hard"})
+    kept = lost_regressions({"s/f/a": "regression"}, {"s/f/a": "regression", "s/f/c": "reference"})
+    downgraded = lost_regressions({"s/f/a": "regression"}, {"s/f/a": "hard"})
+    if len(lost) != 1 or kept or len(downgraded) != 1:
+        failures.append("lost_regressions: a deleted or downgraded regression case must be reported, "
+                        "a hard case may go")
     for failure in failures:
         print("self-test: " + failure, file=sys.stderr)
     if failures:
         return 1
-    print(f"check_corpus self-test: {len(SELF_TEST)} surface pairs pass in both orders")
+    print(f"check_corpus self-test: {len(SELF_TEST)} surface pairs pass in both orders, and lost "
+          "regressions are reported")
     return 0
 
 
@@ -422,10 +498,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent)
     parser.add_argument("--self-test", action="store_true", help="run the built-in cases and exit")
+    parser.add_argument("--base", help="a git ref whose regression cases must all still be present, e.g. origin/main")
     args = parser.parse_args()
     if args.self_test:
         return self_test()
-    return check_tree(args.root.resolve())
+    root = args.root.resolve()
+    status = check_tree(root)
+    if status or not args.base:
+        return status
+    return check_kept(root, args.base)
 
 
 if __name__ == "__main__":
