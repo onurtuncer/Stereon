@@ -15,20 +15,24 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iterator>
 #include <limits>
+#include <mutex>
 #include <numbers>
 #include <ostream>
 #include <span>
 #include <sstream>
 #include <streambuf>
 #include <string>
+#include <thread>
 #include <vector>
 
 import Stereon.Io;
@@ -1199,27 +1203,60 @@ TEST_CASE("a save that fails is reported and leaves the file it would replace",
     const fs::path path = dir / "model.stn";
     GeometryArchive other;
     other.Curves = {Curve(Line{O, X})};
+    const auto entries = [&] {
+        return std::distance(fs::directory_iterator(dir), fs::directory_iterator());
+    };
     // Replacing a file: the new content, and nothing left beside it.
     REQUIRE(Stereon::SaveGeometry(path, EveryType()).has_value());
     REQUIRE(Stereon::SaveGeometry(path, other).has_value());
     REQUIRE(FileBytes(path) == Written(other));
-    REQUIRE_FALSE(fs::exists(dir / "model.stn.partial"));
+    REQUIRE(entries() == 1);
     // A target that cannot be replaced, a directory: reported, nothing left.
     fs::create_directory(dir / "taken.stn");
     REQUIRE(Stereon::SaveGeometry(dir / "taken.stn", other).error().GetCode() ==
             ErrorCode::InvalidInput);
     REQUIRE(fs::is_directory(dir / "taken.stn"));
-    REQUIRE_FALSE(fs::exists(dir / "taken.stn.partial"));
+    REQUIRE(entries() == 2);
     // A directory that does not exist: nothing written.
     REQUIRE(Stereon::SaveGeometry(dir / "missing" / "model.stn", other).error().GetCode() ==
             ErrorCode::InvalidInput);
     REQUIRE_FALSE(fs::exists(dir / "missing"));
-    // A save that cannot write leaves the file it would have replaced as it
-    // was: here the partial file's name is taken by a directory.
-    fs::create_directory(dir / "model.stn.partial");
-    REQUIRE(Stereon::SaveGeometry(path, EveryType()).error().GetCode() == ErrorCode::InvalidInput);
-    REQUIRE(FileBytes(path) == Written(other));
-    REQUIRE(fs::is_directory(dir / "model.stn.partial"));
+    // Saves racing for one target, from two threads: each writes a file of
+    // its own and renames it over the target once whole, so the target is
+    // always one archive or the other, never one's bytes in the other's
+    // file, and nothing is left beside it.
+    constexpr int RaceRounds = 25;
+    const GeometryArchive every = EveryType();
+    const std::vector<std::byte> first = Written(every);
+    const std::vector<std::byte> second = Written(other);
+    std::atomic<int> failures = 0;
+    std::mutex lock;
+    std::string firstError;
+    {
+        const auto race = [&](const GeometryArchive& archive) {
+            for (int round = 0; round < RaceRounds; ++round) {
+                const auto saved = Stereon::SaveGeometry(path, archive);
+                if (!saved) {
+                    ++failures;
+                    const std::scoped_lock guard(lock);
+                    if (firstError.empty()) {
+                        firstError = std::string(saved.error().GetMessage());
+                    }
+                }
+            }
+        };
+        const std::jthread a(race, std::cref(every));
+        const std::jthread b(race, std::cref(other));
+    }
+    // Two renames racing for one target can fail on Windows, where a file
+    // being replaced cannot be replaced again at that instant: a failed
+    // save is reported, never a torn file, and the other save goes through.
+    INFO("first failure: " << firstError << " (" << failures.load() << " of " << 2 * RaceRounds
+                           << ")");
+    REQUIRE(failures < 2 * RaceRounds);
+    const std::vector<std::byte> published = FileBytes(path);
+    REQUIRE((published == first || published == second));
+    REQUIRE(entries() == 2);
     fs::remove_all(dir);
 }
 

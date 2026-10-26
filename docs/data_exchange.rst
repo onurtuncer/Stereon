@@ -44,11 +44,16 @@ them back bit for bit:
        // loaded->Warnings lists the optional chunks the reader skipped.
    }
 
-``SaveGeometry`` writes the archive to ``part.stn.partial`` beside the
-target, flushes and closes it, checking each step, and only then renames it
-over ``part.stn``. A failure at any step, including one the stream reports
-only when its buffer reaches the disk, is returned as ``InvalidInput``, and
-leaves an existing file untouched.
+``SaveGeometry`` writes the archive to a file of its own beside the target,
+``part.stn.partial-`` followed by random digits and created only if no file
+of that name exists, flushes and closes it, checking each step, and only
+then renames it over ``part.stn``. A failure at any step, including one the
+stream reports only when its buffer reaches the disk, is returned as
+``InvalidInput``, and leaves an existing file untouched; two saves racing
+for one target each publish a whole archive, never the other's half-written
+bytes. On Windows a rename onto a file that is being replaced at that
+instant can be refused, so one of two racing saves may fail with "cannot
+replace", reported like any other failure, while the other goes through.
 
 ``WriteGeometry`` and ``ReadGeometry`` do the same with bytes, and
 ``GeometryToJson`` gives a JSON view of an archive for debugging and diffs,
