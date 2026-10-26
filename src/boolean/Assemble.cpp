@@ -353,9 +353,17 @@ struct Carried {
         STEREON_TRY_VOID(w.Builder.SetTolerance(
             made, tolerance, "Boolean: one piece of the intersection with the other body's"));
     }
-    STEREON_TRY_VOID(RecordGenerators(w, made.GetIndex(), shared));
-    Record(w, EntityKind::Edge, made.GetIndex(), other,
-           w.Origin[other].Of(EntityKind::Edge, shared.Edges[other].GetIndex()));
+    const std::optional<std::uint32_t> ownOrigin =
+        w.Origin[body].Of(EntityKind::Edge, edge.GetIndex());
+    const std::optional<std::uint32_t> otherOrigin =
+        w.Origin[other].Of(EntityKind::Edge, shared.Edges[other].GetIndex());
+    // The faces that met generate an edge new to both operands; an edge
+    // that continues an operand's edge is a continuation, not generated as
+    // well (ADR-0030), and a History reading it both ways is refused.
+    if (!ownOrigin && !otherOrigin) {
+        STEREON_TRY_VOID(RecordGenerators(w, made.GetIndex(), shared));
+    }
+    Record(w, EntityKind::Edge, made.GetIndex(), other, otherOrigin);
     return made;
 }
 

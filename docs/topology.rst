@@ -413,8 +413,11 @@ refuses the History, with ``InvalidResult`` naming the first problem,
 unless it is complete and well formed (``Detail::HistoryProblem``): every
 live entity of the result has provenance, every live entity of every input
 a disposition, every entry names live entities of an input that exists, a
-generator names a live entity of its kind, and every group is one split or
-one merge.
+generator names a live entity of its kind, every group is one split or one
+merge, and the entries of one entity agree: only ``Modified`` continuations
+repeat (a split, a merge or a many-to-many change), so an input entity
+deleted and also continued, or continued unchanged and also into a merge,
+and a result entity generated and also continuing an input, are refused.
 
 ``builder.SetTolerance(entity, value, reason)`` is the explicit operation
 through which ADR-0001 lets a local tolerance change. ``Commit`` reports

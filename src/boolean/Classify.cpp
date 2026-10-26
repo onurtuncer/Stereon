@@ -39,6 +39,14 @@ namespace {
 /// a region narrower than that has no interior to seed.
 constexpr int SeedHalvings = 40;
 
+/// Newton steps that refine a ray's hit on the surface's own residual.
+constexpr int HitRefinements = 3;
+
+/// How far along the ray a refined hit may still be from the true meeting,
+/// as a share of the resolution, before the meeting counts as ambiguous:
+/// FaceContains then sees every hit within half its band of the true one.
+constexpr double HitErrorShare = 0.5;
+
 /// The k-th ray direction: a fixed turn about z by irrational fractions of
 /// a turn, tilted by an irrational fraction too, so that no direction
 /// aligns with the frames of boxes and cylinders.
@@ -214,7 +222,7 @@ using IVec3 = std::array<Interval, 3>;
 /// line may run along it: d . (X x Y) is decided in Interval arithmetic on
 /// the input doubles, and a sign the interval does not settle makes the ray
 /// ambiguous, so another direction is tried; the parameter itself is a
-/// construction, and FaceContains judges the hit within the tolerances.
+/// construction, which Refined then checks.
 [[nodiscard]] std::optional<std::vector<double>> MeetPlane(const Plane& plane, const Point3& origin,
                                                            const Vec3& d)
 {
@@ -261,8 +269,9 @@ using IVec3 = std::array<Interval, 3>;
     if (discriminant != Sign::Positive) {
         return std::nullopt; // A graze, or not certainly a crossing.
     }
-    // The crossings' parameters, constructed in doubles; FaceContains then
-    // judges each hit within the tolerances.
+    // The crossings' parameters, constructed in doubles without the
+    // cancellation of -b +- root; the discriminant itself still cancels for
+    // an origin far from the cylinder, which Refined repairs and checks.
     const Vec3 unit = Normalized(Axis(cylinder));
     const Vec3 wv = origin - cylinder.Origin;
     const Vec3 dp = d - Dot(d, unit) * unit;
@@ -271,22 +280,96 @@ using IVec3 = std::array<Interval, 3>;
     const double qb = Dot(dp, wp);
     const double qc = Dot(wp, wp) - cylinder.Radius * cylinder.Radius;
     const double root = std::sqrt(std::max(qb * qb - qa * qc, 0.0));
-    return std::vector<double>{(-qb - root) / qa, (-qb + root) / qa};
+    const double far = -(qb + std::copysign(root, qb));
+    if (far == 0.0) { // STEREON-LINT-ALLOW(epsilon): a division guard
+        return std::nullopt;
+    }
+    return std::vector<double>{far / qa, qc / far};
+}
+
+/// The surface's signed residual at a point, its distance off the surface
+/// to first order, and the residual's gradient, of unit length: the offset
+/// along the plane's normal, or the distance from the cylinder's axis less
+/// the radius.
+struct Residual {
+    double Value;
+    Vec3 Gradient;
+};
+
+[[nodiscard]] Residual ResidualOf(const Plane& plane, const Point3& p)
+{
+    const Vec3 n = Normalized(Cross(plane.XAxis, plane.YAxis));
+    return {Dot(p - plane.Origin, n), n};
+}
+
+[[nodiscard]] Residual ResidualOf(const Cylinder& cylinder, const Point3& p)
+{
+    const Vec3 unit = Normalized(Axis(cylinder));
+    const Vec3 w = p - cylinder.Origin;
+    const Vec3 radial = w - Dot(w, unit) * unit;
+    const double distance = Length(radial);
+    return {distance - cylinder.Radius, radial / distance};
+}
+
+/// The hit at parameter s refined by Newton steps on the surface's residual,
+/// which is evaluated next to the surface and does not cancel the way the
+/// quadratic's coefficients do for a far origin; nothing when the refined
+/// hit may still lie more than HitErrorShare of the resolution along the ray
+/// from the true meeting, as it may when the ray nearly grazes.
+template <typename G>
+[[nodiscard]] std::optional<double> Refined(const G& geometry, const Point3& origin, const Vec3& d,
+                                            double s, const double resolution)
+{
+    for (int step = 0; step < HitRefinements; ++step) {
+        const Residual r = ResidualOf(geometry, origin + s * d);
+        const double rate = Dot(r.Gradient, d);
+        if (rate == 0.0) { // STEREON-LINT-ALLOW(epsilon): a division guard
+            return std::nullopt;
+        }
+        s -= r.Value / rate;
+    }
+    const Residual r = ResidualOf(geometry, origin + s * d);
+    const double rate = std::abs(Dot(r.Gradient, d));
+    if (!(std::abs(r.Value) * Length(d) <= HitErrorShare * resolution * rate)) {
+        return std::nullopt;
+    }
+    return s;
+}
+
+/// The meetings with every hit refined, or nothing when one cannot be.
+template <typename G>
+[[nodiscard]] std::optional<std::vector<double>>
+Checked(const G& geometry, std::optional<std::vector<double>> hits, const Point3& origin,
+        const Vec3& d, const double resolution)
+{
+    if (!hits) {
+        return std::nullopt;
+    }
+    for (double& s : *hits) {
+        const std::optional<double> refined = Refined(geometry, origin, d, s, resolution);
+        if (!refined) {
+            return std::nullopt;
+        }
+        s = *refined;
+    }
+    return hits;
 }
 
 /// The parameters at which the line meets the surface: a plane once, a
 /// cylinder up to twice; nothing when a meeting is ambiguous, the line
 /// running along the surface or touching it, or a sign the certified filter
-/// does not settle, so that another direction is tried. A sign is never
-/// taken from rounded doubles.
-[[nodiscard]] std::optional<std::vector<double>> MeetSurface(const Surface& surface,
-                                                             const Point3& origin, const Vec3& d)
+/// does not settle, so that another direction is tried, or a hit whose
+/// position Refined cannot vouch for. A sign is never taken from rounded
+/// doubles.
+[[nodiscard]] std::optional<std::vector<double>>
+MeetSurface(const Surface& surface, const Point3& origin, const Vec3& d, const Context& ctx)
 {
     if (const Plane* plane = surface.Target<Plane>()) {
-        return MeetPlane(*plane, origin, d);
+        return Checked(*plane, MeetPlane(*plane, origin, d), origin, d, ctx.GetResolution());
     }
     if (const Cylinder* cylinder = surface.Target<Cylinder>()) {
-        return MeetCylinder(*cylinder, origin, d);
+        return Checked(*cylinder, MeetCylinder(*cylinder, origin, d), origin, d,
+                       ctx.GetResolution());
     }
     return std::nullopt;
 }
@@ -321,7 +404,7 @@ using IVec3 = std::array<Interval, 3>;
     STEREON_TRY(const auto faces, AllEntities<EntityKind::Face>(body));
     for (const FaceId face : faces) {
         const Surface surface = SurfaceOf(body, face);
-        const std::optional<std::vector<double>> hits = MeetSurface(surface, origin, d);
+        const std::optional<std::vector<double>> hits = MeetSurface(surface, origin, d, ctx);
         if (!hits) {
             return std::optional<int>{};
         }
@@ -539,9 +622,9 @@ Result<std::optional<Point2>> Detail::SeedPointIn(const Shape& shape, const Face
 }
 
 std::optional<std::vector<double>> Detail::RayMeets(const Surface& surface, const Point3& origin,
-                                                    const Vec3& d)
+                                                    const Vec3& d, const Context& ctx)
 {
-    return MeetSurface(surface, origin, d);
+    return MeetSurface(surface, origin, d, ctx);
 }
 
 Result<Classification> Classify(const ImprintedBodies& bodies, const Context& ctx)
