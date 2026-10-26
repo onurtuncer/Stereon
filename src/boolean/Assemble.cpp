@@ -111,6 +111,10 @@ using Ledger = std::map<std::pair<int, std::uint32_t>, Provenance>;
 struct SharedPair {
     std::uint8_t Representative = BodyA;
     std::array<EdgeId, 2> Edges;
+    /// Whether the two edges run the same way: always for a piece of a
+    /// transverse intersection, which both bodies carry on the branch's
+    /// parameter; either way for edges paired on coincident faces.
+    bool Along = true;
 };
 
 struct Work {
@@ -191,24 +195,78 @@ void Record(Work& w, const EntityKind kind, const std::uint32_t target, const st
     return {};
 }
 
-/// The pieces of the intersection: each edge pair, the body whose edge the
-/// result takes (A's where a kept face of A uses it), and the ends of B's
-/// identified with A's. Both edges carry the branch's curve over one range,
-/// so they run the same way.
+/// Whether B's edge runs the way A's does: its start nearer A's start than
+/// its end is. A closed edge of a pair is a piece of one curve over one
+/// range in both bodies (an intersection branch, or a coincident face's
+/// circle imprinted on the other), so it runs the same way.
+[[nodiscard]] bool RunsAlong(const Work& w, const EdgeId a, const EdgeId b)
+{
+    const Shape& sa = w.Bodies.A.Shape;
+    const Shape& sb = w.Bodies.B.Shape;
+    const Point3 start = PositionOf(sa, StartOf(sa, a));
+    return StartOf(sb, b) == EndOf(sb, b) || Distance(start, PositionOf(sb, StartOf(sb, b))) <=
+                                                 Distance(start, PositionOf(sb, EndOf(sb, b)));
+}
+
+/// The pieces of the intersection and the edges paired on coincident faces:
+/// each pair, the body whose edge the result takes (A's where a kept face
+/// of A uses it), which way B's runs, and the ends of B's identified with
+/// A's.
 [[nodiscard]] Result<void> PairPieces(Work& w)
 {
+    const Shape& sa = w.Bodies.A.Shape;
+    const Shape& sb = w.Bodies.B.Shape;
     for (const SharedEdge& shared : w.Bodies.Shared) {
         STEREON_TRY(const bool usedByA, KeptUses(w, BodyA, shared.A));
-        SharedPair pair{usedByA ? BodyA : BodyB, {shared.A, shared.B}};
+        const bool along = RunsAlong(w, shared.A, shared.B);
+        SharedPair pair{usedByA ? BodyA : BodyB, {shared.A, shared.B}, along};
         w.PairOf[{BodyA, shared.A.GetIndex()}] = w.Pairs.size();
         w.PairOf[{BodyB, shared.B.GetIndex()}] = w.Pairs.size();
         w.Pairs.push_back(pair);
-        const Shape& sa = w.Bodies.A.Shape;
-        const Shape& sb = w.Bodies.B.Shape;
-        STEREON_TRY_VOID(Identify(w, StartOf(sa, shared.A), StartOf(sb, shared.B)));
-        STEREON_TRY_VOID(Identify(w, EndOf(sa, shared.A), EndOf(sb, shared.B)));
+        const VertexId bStart = StartOf(sb, shared.B);
+        const VertexId bEnd = EndOf(sb, shared.B);
+        STEREON_TRY_VOID(Identify(w, StartOf(sa, shared.A), along ? bStart : bEnd));
+        STEREON_TRY_VOID(Identify(w, EndOf(sa, shared.A), along ? bEnd : bStart));
     }
     return {};
+}
+
+/// A body's use of an edge carried onto the result's edge: when the edge is
+/// the other half of a pair, its sense turned round where the two run
+/// against each other, and its pcurve put on the representative's parameter
+/// (ADR-0009: every use of an edge on one parameter). Two edges over one
+/// range running the same way need nothing; otherwise the pcurve must be a
+/// line, which an affine change of parameter keeps one. NotSupported for a
+/// curved pcurve on another parameter.
+struct Carried {
+    Curve2d PCurve;
+    bool Flip = false;
+};
+
+[[nodiscard]] Result<Carried> Carry(const Work& w, const std::uint8_t body, const EdgeId edge,
+                                    const Curve2d& pcurve)
+{
+    const auto at = w.PairOf.find({body, edge.GetIndex()});
+    if (at == w.PairOf.end() || w.Pairs[at->second].Representative == body) {
+        return Carried{pcurve, false};
+    }
+    const SharedPair& pair = w.Pairs[at->second];
+    const Interval own = RangeOf(w.ShapeOf(body), edge);
+    const Interval rep = RangeOf(w.ShapeOf(pair.Representative), pair.Edges[pair.Representative]);
+    if (pair.Along && own == rep) {
+        return Carried{pcurve, false};
+    }
+    const Line2d* line = pcurve.Target<Line2d>();
+    if (line == nullptr) {
+        return Fail(ErrorCode::NotSupported,
+                    "Boolean: a curved use of " + std::string(Describe(w.ShapeOf(body), edge)) +
+                        " on another parameter than the edge it is identified with");
+    }
+    // s(t) = s0 + (t - t0) k, the use's own parameter at the representative's t.
+    const double k = (pair.Along ? 1.0 : -1.0) * Width(own) / Width(rep);
+    const double s0 = pair.Along ? own.GetLower() : own.GetUpper();
+    const Point2 origin = line->Origin + (s0 - rep.GetLower() * k) * line->Direction;
+    return Carried{Curve2d(Line2d{origin, k * line->Direction}), !pair.Along};
 }
 
 // --- Vertices and edges ------------------------------------------------------------
@@ -359,8 +417,10 @@ void Record(Work& w, const EntityKind kind, const std::uint32_t target, const st
                             " has no pcurve");
         }
         STEREON_TRY(const BuilderEdgeId edge, EdgeFor(w, body, EdgeOf(shape, coedge)));
-        STEREON_TRY(const PCurveRef curve, w.Builder.AddPCurve(*pcurve));
-        const EdgeUseSense sense = StoredEdgeUseSense(shape, coedge);
+        STEREON_TRY(const Carried carried, Carry(w, body, EdgeOf(shape, coedge), *pcurve));
+        STEREON_TRY(const PCurveRef curve, w.Builder.AddPCurve(carried.PCurve));
+        const EdgeUseSense stored = StoredEdgeUseSense(shape, coedge);
+        const EdgeUseSense sense = carried.Flip ? Flipped(stored) : stored;
         STEREON_TRY(
             const BuilderCoedgeId use,
             w.Builder.AppendCoedge(made, edge, w.Reversed[body] ? Flipped(sense) : sense, curve));
@@ -633,27 +693,33 @@ template <EntityKind K>
 
 // --- The keep rules ------------------------------------------------------------------
 
-/// The side of the other solid a body's regions must lie on to be kept: for
-/// a union outside, for a common inside, and for a cut A outside B and B
-/// inside A.
-[[nodiscard]] Side KeptSide(const BooleanOperation operation, const std::uint8_t body)
+/// Whether the operation keeps a body's region on this side of the other
+/// solid: for a union what lies outside, for a common what lies inside, and
+/// for a cut A outside B and B inside A. A coincident region is kept once,
+/// from A: its OnSame copy in a union or a common, where both solids are on
+/// the same side of it, its OnOpposite copy in a cut, where B lies against A
+/// from outside (the usual rules; ADR-0013, ADR-0029).
+[[nodiscard]] bool Keeps(const BooleanOperation operation, const std::uint8_t body, const Side side)
 {
+    const bool a = body == BodyA;
     switch (operation) {
     case BooleanOperation::Union:
-        return Side::Outside;
+        return side == Side::Outside || (a && side == Side::OnSame);
     case BooleanOperation::Common:
-        return Side::Inside;
+        return side == Side::Inside || (a && side == Side::OnSame);
     case BooleanOperation::Cut:
-        return body == BodyA ? Side::Outside : Side::Inside;
+        return a ? side == Side::Outside || side == Side::OnOpposite : side == Side::Inside;
     }
-    return Side::Unresolved;
+    return false;
 }
 
-[[nodiscard]] std::set<std::uint32_t> KeptFaces(const std::vector<Region>& regions, const Side side)
+[[nodiscard]] std::set<std::uint32_t> KeptFaces(const std::vector<Region>& regions,
+                                                const BooleanOperation operation,
+                                                const std::uint8_t body)
 {
     std::set<std::uint32_t> kept;
     for (const Region& region : regions) {
-        if (region.Side == side) {
+        if (Keeps(operation, body, region.Side)) {
             for (const FaceId face : region.Faces) {
                 kept.insert(face.GetIndex());
             }
@@ -671,8 +737,7 @@ Result<OperationResult> Boolean(const Shape& a, const Shape& b, const BooleanOpe
     STEREON_TRY(const Classification classes, Classify(bodies, ctx));
     Work w(bodies, ctx);
     w.Reversed = {false, operation == BooleanOperation::Cut};
-    w.Kept = {KeptFaces(classes.A, KeptSide(operation, BodyA)),
-              KeptFaces(classes.B, KeptSide(operation, BodyB))};
+    w.Kept = {KeptFaces(classes.A, operation, BodyA), KeptFaces(classes.B, operation, BodyB)};
     STEREON_TRY_VOID(PairPieces(w));
     STEREON_TRY_VOID(CopyKeptFaces(w));
     STEREON_TRY_VOID(MakeShells(w));

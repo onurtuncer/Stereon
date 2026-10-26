@@ -51,6 +51,7 @@ Stereon
    topology
    intersection
    modeling
+   imprinting
    meshing
    data_exchange
    errors

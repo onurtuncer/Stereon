@@ -21,7 +21,10 @@ import :Winding;
 /// The faces of an imprinted body fall into regions, connected across every
 /// edge but the imprinted ones; each region lies inside the other solid or
 /// outside it. One seed point per region is classified by deterministic
-/// rays: a ray from a point inside one of the region's faces, cast against
+/// rays, unless the seed lies on a coincident planar face of the other body,
+/// within that face's tolerance of its plane and inside its loops: then the
+/// region is OnSame or OnOpposite by the faces' outward normals, which no
+/// ray could decide. Otherwise: a ray from a point inside one of the region's faces, cast against
 /// every face of the other body, crosses it an odd number of times from
 /// inside. A ray that meets a face's boundary, grazes its surface or starts
 /// on it is ambiguous and the next of up to sixteen directions is tried;
@@ -41,6 +44,12 @@ export namespace Stereon {
 enum class Side : std::uint8_t {
     Inside,
     Outside,
+    /// On a face of the other solid that coincides with it, their outward
+    /// normals agreeing (ADR-0029, section 4).
+    OnSame,
+    /// On a coincident face of the other solid whose outward normal is
+    /// opposite.
+    OnOpposite,
     /// Neither a ray nor the winding number could settle it (decision D6:
     /// the operation fails).
     Unresolved,

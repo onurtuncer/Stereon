@@ -437,6 +437,81 @@ MeetSurface(const Surface& surface, const Point3& origin, const Vec3& d, const C
     return std::optional<Side>{};
 }
 
+/// The outward normal of a planar face, or nothing for another surface.
+[[nodiscard]] std::optional<Vec3> PlaneNormal(const Shape& shape, const FaceId face)
+{
+    const Surface surface = SurfaceOf(shape, face); // Target points into it
+    const Plane* plane = surface.Target<Plane>();
+    if (plane == nullptr) {
+        return std::nullopt;
+    }
+    const Vec3 n = Normalized(Cross(plane->XAxis, plane->YAxis));
+    return IsReversed(shape, face) ? -n : n;
+}
+
+/// The largest tolerance of the face's edges, and the resolution: how far a
+/// point may lie from the face's plane and still be on the face, the pair
+/// tolerance of ADR-0001 as the face sees it.
+[[nodiscard]] Result<double> FaceTolerance(const Shape& shape, const FaceId face,
+                                           const Context& ctx)
+{
+    double tolerance = ctx.GetResolution();
+    STEREON_TRY(const LoopRange loops, LoopsOf(shape, face));
+    for (const LoopId loop : loops) {
+        STEREON_TRY(const CoedgeRange coedges, CoedgesOf(shape, loop));
+        for (const CoedgeId coedge : coedges) {
+            tolerance = std::max(tolerance, ToleranceOf(shape, EdgeOf(shape, coedge)));
+        }
+    }
+    return tolerance;
+}
+
+/// Whether the seed lies on the other body's planar face: within the
+/// face's tolerance of its plane and strictly inside its loops.
+[[nodiscard]] Result<bool> OnFace(const Shape& other, const FaceId face, const Point3& seed,
+                                  const Context& ctx)
+{
+    const Surface surface = SurfaceOf(other, face); // Target points into it
+    const Plane* plane = surface.Target<Plane>();
+    STEREON_TRY(const double tolerance, FaceTolerance(other, face, ctx));
+    const Vec3 n = Normalized(Cross(plane->XAxis, plane->YAxis));
+    if (std::abs(Dot(seed - plane->Origin, n)) > tolerance) {
+        return false;
+    }
+    STEREON_TRY(const std::optional<bool> inside,
+                FaceContains(other, face, Project(*plane, seed), ctx));
+    return inside && *inside;
+}
+
+/// OnSame or OnOpposite when the seed, on a planar face of its own body,
+/// lies on a planar face of the other (a coincidence the imprint has bounded
+/// with paired edges); nothing otherwise. A seed inside a region lies on a
+/// face of the other body only if the two faces are coplanar: a transverse
+/// face would meet the region along an imprinted edge that bounds it.
+[[nodiscard]] Result<std::optional<Side>> CoincidentSide(const Shape& own, const FaceId face,
+                                                         const Point3& seed, const Shape& other,
+                                                         const Context& ctx)
+{
+    const std::optional<Vec3> normal = PlaneNormal(own, face);
+    if (!normal) {
+        return std::optional<Side>{};
+    }
+    STEREON_TRY(const auto faces, AllEntities<EntityKind::Face>(other));
+    for (const FaceId candidate : faces) {
+        const std::optional<Vec3> theirs = PlaneNormal(other, candidate);
+        if (!theirs) {
+            continue;
+        }
+        STEREON_TRY(const bool on, OnFace(other, candidate, seed, ctx));
+        if (on) {
+            // The normals are parallel: the sign of their product says which way.
+            const bool same = Dot(*normal, *theirs) > 0.0; // STEREON-LINT-ALLOW(epsilon): a sign
+            return std::optional<Side>{same ? Side::OnSame : Side::OnOpposite};
+        }
+    }
+    return std::optional<Side>{};
+}
+
 /// The region's side by its seed: by a ray, else by the seed's bounded
 /// winding number (ADR-0013, the decisions on acceptance); Unresolved when
 /// neither settles it, naming the face, the rays tried and the last
@@ -451,6 +526,12 @@ MeetSurface(const Surface& surface, const Point3& origin, const Vec3& d, const C
         }
         region.SeedFace = face;
         region.Seed = Eval(SurfaceOf(own, face), *uv);
+        STEREON_TRY(const std::optional<Side> coincident,
+                    CoincidentSide(own, face, region.Seed, other, ctx));
+        if (coincident) {
+            region.Side = *coincident;
+            return {};
+        }
         STEREON_TRY(const std::optional<Side> byRay, SeedByRays(region, other, budget.Rays, ctx));
         if (byRay) {
             region.Side = *byRay;
