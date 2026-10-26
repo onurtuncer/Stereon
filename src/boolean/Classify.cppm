@@ -114,4 +114,26 @@ export namespace Stereon::Detail {
 [[nodiscard]] std::optional<std::vector<double>> RayMeets(const Surface& surface,
                                                           const Point3& origin, const Vec3& d);
 
+/// The k-th of the classifier's ray directions, fixed turns by irrational
+/// fractions so that none aligns with the frames of boxes and cylinders.
+/// For the Boolean's assembly.
+[[nodiscard]] Vec3 RayDirection(int k);
+
+/// A ray's crossing of a face: the parameter along the ray, and whether the
+/// ray enters the surface's own material side there, against the surface's
+/// normal (a plane's X x Y, a cylinder's outward radial), or leaves it.
+struct FaceCrossing {
+    double Parameter = 0.0;
+    bool Entering = false;
+};
+
+/// A ray's crossings of a face, as the classifier counts them: the meetings
+/// of the line origin + s d with the face's surface (RayMeets) that lie
+/// ahead and strictly inside the face's loops; nothing when a meeting is
+/// ambiguous. For the Boolean's assembly, which places the shells it makes
+/// by rays before the result is a body.
+[[nodiscard]] Result<std::optional<std::vector<FaceCrossing>>>
+FaceCrossingsOf(const Shape& shape, FaceId face, const Point3& origin, const Vec3& d,
+                const Context& ctx);
+
 } // namespace Stereon::Detail

@@ -530,6 +530,19 @@ ClassifyBody(const Shape& own, const Shape& other,
     return regions;
 }
 
+/// Whether the ray enters the surface's material side at a meeting: for a
+/// plane, when d runs against X x Y, whose sign MeetPlane has settled; for
+/// a cylinder, at the nearer of its two meetings, the one a line reaches
+/// first from outside.
+[[nodiscard]] bool Entering(const Surface& surface, const Vec3& d, const bool nearer)
+{
+    if (const Plane* plane = surface.Target<Plane>()) {
+        const double along = Dot(d, Cross(plane->XAxis, plane->YAxis));
+        return along < 0.0; // STEREON-LINT-ALLOW(epsilon): a sign MeetPlane settled in Intervals
+    }
+    return nearer;
+}
+
 } // namespace
 
 Result<std::optional<Point2>> Detail::SeedPointIn(const Shape& shape, const FaceId face,
@@ -542,6 +555,34 @@ std::optional<std::vector<double>> Detail::RayMeets(const Surface& surface, cons
                                                     const Vec3& d)
 {
     return MeetSurface(surface, origin, d);
+}
+
+Vec3 Detail::RayDirection(const int k)
+{
+    return Direction(k);
+}
+
+Result<std::optional<std::vector<Detail::FaceCrossing>>>
+Detail::FaceCrossingsOf(const Shape& shape, const FaceId face, const Point3& origin, const Vec3& d,
+                        const Context& ctx)
+{
+    const Surface surface = SurfaceOf(shape, face);
+    const std::optional<std::vector<double>> hits = MeetSurface(surface, origin, d);
+    if (!hits) {
+        return std::optional<std::vector<FaceCrossing>>{};
+    }
+    std::vector<FaceCrossing> crossings;
+    for (const double s : *hits) {
+        STEREON_TRY(const std::optional<bool> crosses,
+                    CrossesFace(shape, face, surface, origin, d, s, ctx));
+        if (!crosses) {
+            return std::optional<std::vector<FaceCrossing>>{};
+        }
+        if (*crosses) {
+            crossings.push_back({s, Entering(surface, d, s <= *std::ranges::min_element(*hits))});
+        }
+    }
+    return std::optional<std::vector<FaceCrossing>>{std::move(crossings)};
 }
 
 Result<Classification> Classify(const ImprintedBodies& bodies, const Context& ctx)

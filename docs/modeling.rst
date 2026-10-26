@@ -215,8 +215,20 @@ the tolerance logged (ADR-0001's representative policy). What no kept face
 uses is never copied, so the result is regularised: a contact of lower
 dimension leaves nothing behind, and two solids apart have nothing in
 common, a successful empty result. The faces fall into shells by the
-edges they share; a shell made only of B's reversed faces is a void of the
-solid around it, and every other shell bounds a solid of its own.
+edges they share, and each shell is placed by a ray from a point off one
+of its faces, cast back at the face and read against the shell's faces
+alone with the classifier's certified meetings (ADR-0013): the parity of
+its crossings says whether the point is inside what the shell bounds, and
+the way the nearest crossed face points, as the result orients it, whether
+the ray leaves material there. Inside and leaving, or outside and
+entering, the faces point outward and the shell bounds a solid of its own;
+otherwise they point inward and the shell is a void, of the solid whose
+material lies closest around the void's slab of that ray. The test does
+not ask which operand the faces came from, so an operand's own cavity
+stays a void of its solid through a cut by a body apart from it, a tool's
+reversed shell inside the other operand becomes one, and a body floating
+in a cavity is a solid of its own with the cavity's shell on the solid
+around it.
 
 The result is published through ``Commit`` with a History of both
 operands, input 0 and input 1. Each entity of the result is traced through
