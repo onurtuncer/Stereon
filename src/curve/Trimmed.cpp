@@ -276,9 +276,28 @@ double Project(const TrimmedCurve2d& curve, const Point2& p)
     return ProjectTrimmed(curve, p);
 }
 
+double Detail::SimilarityScaleOf(const Transform& x)
+{
+    return std::cbrt(std::abs(Determinant(x.Linear)));
+}
+
+double Detail::ParameterScaleOf(const Curve& basis, const double scale)
+{
+    if (basis.Target<Parabola>() != nullptr) {
+        return scale;
+    }
+    if (const TrimmedCurve* trimmed = basis.Target<TrimmedCurve>()) {
+        return ParameterScaleOf(trimmed->GetBasis(), scale);
+    }
+    return 1.0;
+}
+
 TrimmedCurve Transformed(const TrimmedCurve& curve, const Transform& x)
 {
-    return {Transformed(curve.GetBasis(), x), curve.GetRange(), curve.IsReversed()};
+    const double k = Detail::ParameterScaleOf(curve.GetBasis(), Detail::SimilarityScaleOf(x));
+    const Interval range = curve.GetRange();
+    return {Transformed(curve.GetBasis(), x), Interval{k * range.GetLower(), k * range.GetUpper()},
+            curve.IsReversed()};
 }
 
 namespace {

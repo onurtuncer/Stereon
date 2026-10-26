@@ -208,6 +208,34 @@ TEST_CASE("a trimmed curve converts, moves and bounds as its piece", "[curve][tr
     REQUIRE(Distance(Eval(moved, 0.0), Point3{0.0, 1.0, 3.0}) <= Tolerance);
 }
 
+TEST_CASE("a trimmed curve scaled is the image of the piece", "[curve][trimmed]")
+{
+    // A similarity rescales a parabola's parameter, a distance along its
+    // axis, with its focal length, and keeps a line's (its direction is
+    // carried unscaled) and a circle's (an angle): the range follows, so
+    // the piece is the image of the piece and not another part of the
+    // image of the basis.
+    const Transform scaling = Stereon::MakeScaling(Point3{1.0, 0.0, 0.0}, 2.0);
+    const Vec3 x{1.0, 0.0, 0.0};
+    const Vec3 y{0.0, 1.0, 0.0};
+    const TrimmedCurve parabola = Trim(Curve(Parabola{Point3{}, 0.5, x, y}), Interval{-2.0, 1.0});
+    const TrimmedCurve scaled = Transformed(parabola, scaling);
+    REQUIRE(scaled.GetRange() == Interval{-4.0, 2.0});
+    for (const double t : {-2.0, -0.5, 1.0}) {
+        REQUIRE(Distance(Eval(scaled, 2.0 * t), Transformed(Eval(parabola, t), scaling)) <=
+                Tolerance);
+    }
+    const TrimmedCurve line =
+        Trim(Curve(Line{Point3{}, Vec3{0.5, -1.0, 2.0}}), Interval{-1.0, 3.0});
+    REQUIRE(Transformed(line, scaling).GetRange() == Interval{-1.0, 3.0});
+    REQUIRE(Distance(Eval(Transformed(line, scaling), 3.0),
+                     Transformed(Eval(line, 3.0), scaling)) <= Tolerance);
+    const TrimmedCurve arc = Trim(Curve(Circle{Point3{}, 2.0, x, y}), Interval{5.0, 7.0});
+    REQUIRE(Transformed(arc, scaling).GetRange() == Interval{5.0, 7.0});
+    REQUIRE(Distance(Eval(Transformed(arc, scaling), 7.0), Transformed(Eval(arc, 7.0), scaling)) <=
+            Tolerance);
+}
+
 TEST_CASE("arc length of a trimmed B-spline splits at its knots", "[curve][trimmed]")
 {
     const BSplineCurve spline =
