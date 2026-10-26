@@ -168,6 +168,36 @@ operation restricts a branch to its loops itself; a box should include the
 face's tolerance for the clip to keep every point within it. A declared
 coincidence is logged at ``Info`` with its distance and the tolerance.
 
+Space curves
+------------
+
+The first v0.2 3D curve handler is ``Line`` against ``Line`` through the
+existing ``Intersect(Curve, domain, Curve, domain, ctx)`` overload. Directions
+need not be unit vectors; returned parameters retain each input's speed and
+orientation. Other 3D curve pairs still return ``NotImplemented``.
+
+Cross products and the scalar triple product decide parallelism, collinearity
+and coplanarity exactly on the input doubles. Skew and parallel distinct
+supports return an empty result even when closer than the model resolution.
+There is no tolerant snapping. A nonparallel coplanar pair returns one point
+only when its exact rational parameters belong to both requested closed
+domains. Rounded parameters are never used to decide domain membership.
+
+Collinear requested domains return an overlap, a single endpoint contact,
+or proved separation. Endpoint-only contact is a ``CurveCurvePoint``, not a
+zero-length overlap. Overlap intervals enclose the exact endpoint parameters
+with outward rounding, restricted to the requested domains; ``SameDirection``
+records orientation. Whole lines and half-infinite domains are supported.
+
+The handler checks finite origins, finite nonzero directions and the numerical
+domain of its degree-four expansion comparisons, including finite parameter
+bounds. Inputs requiring rescaling or exceeding that domain return
+``NotSupported`` in this initial implementation. Infinite-only domains are
+``InvalidInput``. Point coordinates and rounded parameters must satisfy a
+conservative interval error bound within the Context resolution; otherwise the
+operation returns ``CertificationFailed``. This conservative check may reject
+large-coordinate contacts even when a particular rounded point is exact.
+
 Plane curves
 ------------
 
@@ -244,5 +274,6 @@ Every other pair reports ``NotImplemented`` until Phase 2.
 
 Related design decisions
 ------------------------
+
 
 

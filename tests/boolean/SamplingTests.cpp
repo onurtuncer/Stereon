@@ -181,23 +181,45 @@ TEST_CASE("a seed's ray takes no sign the certified filter does not settle", "[b
     const Stereon::Surface drill{
         Stereon::Cylinder{Point3{0, 0, 0}, 0.1, Stereon::Vec3{1, 0, 0}, Stereon::Vec3{0, 1, 0}}};
     const Stereon::Vec3 along{1, 0, 0};
-    REQUIRE_FALSE(Stereon::Detail::RayMeets(drill, Point3{-5, 0.1, 0}, along).has_value());
+    REQUIRE_FALSE(Stereon::Detail::RayMeets(drill, Point3{-5, 0.1, 0}, along, ctx).has_value());
     // Clear of the tangent the filter decides: two crossings, or none.
-    const auto through = Stereon::Detail::RayMeets(drill, Point3{-5, 0.05, 0}, along);
+    const auto through = Stereon::Detail::RayMeets(drill, Point3{-5, 0.05, 0}, along, ctx);
     REQUIRE(through.has_value());
     REQUIRE(through->size() == 2);
-    const auto past = Stereon::Detail::RayMeets(drill, Point3{-5, 0.2, 0}, along);
+    const auto past = Stereon::Detail::RayMeets(drill, Point3{-5, 0.2, 0}, along, ctx);
     REQUIRE(past.has_value());
     REQUIRE(past->empty());
     // Along the axis, and parallel to a plane: ambiguous.
-    REQUIRE_FALSE(
-        Stereon::Detail::RayMeets(drill, Point3{0.5, 0, 0}, Stereon::Vec3{0, 0, 1}).has_value());
+    REQUIRE_FALSE(Stereon::Detail::RayMeets(drill, Point3{0.5, 0, 0}, Stereon::Vec3{0, 0, 1}, ctx)
+                      .has_value());
     const Stereon::Surface floor{
         Stereon::Plane{Point3{0, 0, 0}, Stereon::Vec3{1, 0, 0}, Stereon::Vec3{0, 1, 0}}};
-    REQUIRE_FALSE(Stereon::Detail::RayMeets(floor, Point3{0, 0, 1}, along).has_value());
-    const auto down = Stereon::Detail::RayMeets(floor, Point3{0, 0, 1}, Stereon::Vec3{0, 0, -1});
+    REQUIRE_FALSE(Stereon::Detail::RayMeets(floor, Point3{0, 0, 1}, along, ctx).has_value());
+    const auto down =
+        Stereon::Detail::RayMeets(floor, Point3{0, 0, 1}, Stereon::Vec3{0, 0, -1}, ctx);
     REQUIRE(down.has_value());
     REQUIRE(down->size() == 1);
+}
+
+TEST_CASE("a far seed's ray hits the cylinder within the resolution", "[boolean][classify]")
+{
+    // A cylinder of radius 0.31 about z, and a ray along the classifier's
+    // first direction from 400 m away, inside the size box, through a point
+    // 0.2 off the axis. The quadratic's discriminant is certainly positive,
+    // but |w|^2 - r^2 cancels at |w|^2 ~ 1.6e11 and its roots alone put the
+    // hits ~5e-5 off the surface, beyond the 1e-5 resolution.
+    const double radius = 0.31;
+    const Stereon::Surface drill{
+        Stereon::Cylinder{Point3{0, 0, 0}, radius, Stereon::Vec3{1, 0, 0}, Stereon::Vec3{0, 1, 0}}};
+    const Stereon::Vec3 d = Stereon::Normalized(Stereon::Vec3{1, 0, Stereon::Sin(0.37)});
+    const Point3 origin = Point3{0, 0.2, 0} - 4e5 * d;
+    const auto hits = Stereon::Detail::RayMeets(drill, origin, d, ctx);
+    REQUIRE(hits.has_value());
+    REQUIRE(hits->size() == 2);
+    for (const double s : *hits) {
+        const Point3 p = origin + s * d;
+        CHECK(std::abs(std::hypot(p.X, p.Y) - radius) <= 0.5 * ctx.GetResolution());
+    }
 }
 
 TEST_CASE("a narrow region gets a seed strictly inside it", "[boolean][classify]")
