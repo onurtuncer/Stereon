@@ -359,52 +359,66 @@ void NearerUse(const Work& w, const CoedgeId coedge, const LoopCrossing& crossin
     return std::ranges::all_of(w.Done, [](const bool done) { return done; });
 }
 
-/// The signed area a closed pcurve bounds over its range, by sampling:
-/// positive when it turns counter-clockwise in the face's parameter space.
-[[nodiscard]] double SignedAreaOf(const Curve2d& pcurve, const Interval& range)
+/// The signed area the ring's uses bound in the face's parameter space,
+/// their pcurves sampled in the order and direction the loop runs:
+/// positive when it turns counter-clockwise. Nothing when a use is not a
+/// piece of this network, which a ring KEMR leaves never is.
+[[nodiscard]] std::optional<double> TurnOf(const Work& w, const std::vector<BuilderCoedgeId>& uses)
 {
-    constexpr int samples = 64;
+    constexpr int samples = 64; // per piece
+    std::vector<Point2> polygon;
+    for (const BuilderCoedgeId use : uses) {
+        const BuilderEdgeId edge = w.Builder.EdgeOf(use);
+        const auto piece = std::ranges::find_if(
+            w.Made.Pieces, [edge](const ImprintedPiece& p) { return p.Edge == edge; });
+        if (piece == w.Made.Pieces.end()) {
+            return std::nullopt;
+        }
+        const NetworkEdge& n =
+            w.Network.Edges[static_cast<std::size_t>(piece - w.Made.Pieces.begin())];
+        const bool along = w.Builder.SenseOf(use) == EdgeUseSense::Same;
+        for (int k = 0; k < samples; ++k) {
+            const double s = static_cast<double>(along ? k : samples - k) / samples;
+            polygon.push_back(Eval(n.PCurve, n.Range.GetLower() + Width(n.Range) * s));
+        }
+    }
     double twice = 0.0;
-    Point2 previous = Eval(pcurve, range.GetUpper());
-    for (int k = 0; k < samples; ++k) {
-        const Point2 p = Eval(pcurve, range.GetLower() + Width(range) * static_cast<double>(k) /
-                                                             static_cast<double>(samples));
-        twice += previous.X * p.Y - p.X * previous.Y;
-        previous = p;
+    for (std::size_t i = 0; i < polygon.size(); ++i) {
+        const Point2& p = polygon[i];
+        const Point2& q = polygon[(i + 1) % polygon.size()];
+        twice += p.X * q.Y - q.X * p.Y;
     }
     return 0.5 * twice;
 }
 
-/// A ring a closed piece leaves in the original face must be a hole: it runs
-/// clockwise about Su x Sv in a face oriented with its surface, and the disc
-/// cut off runs the other way. MakeEdgeFace from a coedge to itself has no
-/// loop order to take that from and keeps the Same use in the original face
-/// whichever way the pcurve turns; when that is the wrong way round the two
-/// loops change faces, the disc's into the original face (KFMRH) and the
-/// ring's out into a new face (MFKRH), which then is the piece's face.
+/// A ring a closed component leaves in the original face must be a hole: it
+/// runs clockwise about Su x Sv in a face oriented with its surface, and the
+/// disc cut off runs the other way. The MakeEdgeFace that closed the
+/// component, from a coedge to itself for a single closed piece or between
+/// two struts for several pieces, has no loop order to take that from and
+/// may leave the disc's loop in the original face; when the ring turns the
+/// wrong way the two loops change faces, the disc's into the original face
+/// (KFMRH) and the ring's out into a new face (MFKRH), which then is the
+/// face of the piece that closed the component.
 [[nodiscard]] Result<void> OrientRing(Work& w, const BuilderLoopId ring)
 {
     const std::vector<BuilderCoedgeId> uses = w.Builder.CoedgesOf(ring);
-    if (uses.size() != 1) {
+    const auto closer = std::ranges::find_if(w.Made.Pieces, [&](const ImprintedPiece& p) {
+        return p.Face.IsValid() && std::ranges::any_of(uses, [&](const BuilderCoedgeId use) {
+                   return w.Builder.EdgeOf(use) == p.Edge;
+               });
+    });
+    const std::optional<double> turn = TurnOf(w, uses);
+    if (closer == w.Made.Pieces.end() || !turn) {
         return {};
     }
-    const BuilderEdgeId edge = w.Builder.EdgeOf(uses.front());
-    const auto piece = std::ranges::find_if(
-        w.Made.Pieces, [edge](const ImprintedPiece& p) { return p.Edge == edge; });
-    if (piece == w.Made.Pieces.end() || !piece->Face.IsValid()) {
-        return {};
-    }
-    const auto index = static_cast<std::size_t>(piece - w.Made.Pieces.begin());
-    const NetworkEdge& network = w.Network.Edges[index];
-    const double along = w.Builder.SenseOf(uses.front()) == EdgeUseSense::Same ? 1.0 : -1.0;
-    const double turn = along * SignedAreaOf(network.PCurve, network.Range);
     const bool reversed = IsReversed(w.Frozen, w.Network.Face);
-    if (reversed ? turn > 0.0 : turn < 0.0) { // STEREON-LINT-ALLOW(epsilon): the turn's sense
+    if (reversed ? *turn > 0.0 : *turn < 0.0) { // STEREON-LINT-ALLOW(epsilon): the turn's sense
         return {};
     }
-    STEREON_TRY_VOID(w.Builder.KillFaceMakeRingHole(piece->Face, w.Faces.front()));
-    STEREON_TRY(piece->Face, w.Builder.MakeFaceKillRingHole(ring));
-    w.Faces.push_back(piece->Face);
+    STEREON_TRY_VOID(w.Builder.KillFaceMakeRingHole(closer->Face, w.Faces.front()));
+    STEREON_TRY(closer->Face, w.Builder.MakeFaceKillRingHole(ring));
+    w.Faces.push_back(closer->Face);
     return {};
 }
 
@@ -467,7 +481,11 @@ FaceNetwork NetworkOf(const Shape& shape, const FaceId face, const IntersectionB
     };
     for (const FacePiece& piece : clip.Inside) {
         const std::size_t start = vertexAt(piece.Start, piece.Range.GetLower());
-        const bool closed = !piece.Start && !piece.End && piece.Range == branch.Range;
+        // A loop only when the branch is a closed curve: a whole branch with
+        // no crossing may be a segment lying inside the face.
+        const bool closed = !piece.Start && !piece.End && piece.Range == branch.Range &&
+                            Distance(Eval(branch.Curve3d, branch.Range.GetLower()),
+                                     Eval(branch.Curve3d, branch.Range.GetUpper())) <= tolerance;
         const std::size_t end = closed ? start : vertexAt(piece.End, piece.Range.GetUpper());
         network.Edges.push_back({branch.Curve3d, pcurve, piece.Range, branch.Bound, start, end,
                                  senseAt(piece.Start), senseAt(piece.End)});
