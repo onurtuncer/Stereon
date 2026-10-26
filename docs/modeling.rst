@@ -197,6 +197,39 @@ checks nothing. A disagreement fails the operation with
 ``DegenerateResult``, since the intersection, the imprint or a seed went
 wrong: this is the cross-check table of ADR-0013.
 
+Assembly
+--------
+
+``Boolean(a, b, operation, ctx)`` is pipeline step 6 (M8; ADR-0013,
+ADR-0030): the regularised ``Union``, ``Cut`` or ``Common`` of two
+solids. The bodies are imprinted and their regions classified, and the
+regions the operation keeps are copied into a new shape, A's before B's:
+for a union each body's regions outside the other, for a common those
+inside it, and for a cut A's regions outside B with B's regions inside A
+turned inside out (the face reversed, its loops traversed backwards). A
+piece of the intersection, an edge in each body carrying the same curve
+over the same range, becomes one edge used by both bodies' faces, A's
+where a kept face of A uses it; its end vertices are identified within the
+pair tolerance, the larger of the two, A's position kept and any growth of
+the tolerance logged (ADR-0001's representative policy). What no kept face
+uses is never copied, so the result is regularised: a contact of lower
+dimension leaves nothing behind, and two solids apart have nothing in
+common, a successful empty result. The faces fall into shells by the
+edges they share; a shell made only of B's reversed faces is a void of the
+solid around it, and every other shell bounds a solid of its own.
+
+The result is published through ``Commit`` with a History of both
+operands, input 0 and input 1. Each entity of the result is traced through
+the imprint, its History and its split events, to the operand entities it
+continues: an operand entity continued by several is a split, several
+continued by one a merge, each grouped; an intersection edge is
+``Generated`` by the face of each operand that met there; and every
+operand entity nothing continues is ``Deleted``. ``Commit`` checks the
+History is complete before anything is published.
+
+Coincident faces, ``OnSame`` and ``OnOpposite``, are still refused by the
+imprint with ``NotSupported``; they are M8's next step.
+
 Related design decisions
 ------------------------
 
