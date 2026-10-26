@@ -233,6 +233,11 @@ using SurfaceHandler = Result<SurfaceSurfaceIntersection> (*)(const Surface&, co
                                                               const Surface&, const Box2&, double,
                                                               const Context&);
 
+/// Exact 3D line support decisions and domain clipping; rounded contact
+/// positions must be representable within the Context resolution.
+Result<CurveCurveIntersection> LineLine(const Curve&, const Interval&, const Curve&,
+                                        const Interval&, const Context&);
+
 /// The analytic handlers (ADR-0010's table, RS-0001 Tier A): every
 /// configuration decision is the sign of a polynomial in the input doubles
 /// and the tolerance, settled by Stereon.Robust (RS-0001 G5). Defined in
@@ -447,7 +452,13 @@ consteval PlanarHandler PlanarHandlerFor()
 /// a template template parameter.
 template <typename A, typename B>
 struct CurveStubOf {
-    static constexpr CurveHandler Call = &CurveStub<A, B>;
+    static constexpr CurveHandler Call = [] {
+        if constexpr (std::same_as<A, Line> && std::same_as<B, Line>) {
+            return &LineLine;
+        } else {
+            return &CurveStub<A, B>;
+        }
+    }();
 };
 template <typename A, typename B>
 struct SurfaceHandlerOf {
