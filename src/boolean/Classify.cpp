@@ -357,7 +357,8 @@ using IVec3 = std::array<Interval, 3>;
 /// The outward normal of a planar face, or nothing for another surface.
 [[nodiscard]] std::optional<Vec3> PlaneNormal(const Shape& shape, const FaceId face)
 {
-    const Plane* plane = SurfaceOf(shape, face).Target<Plane>();
+    const Surface surface = SurfaceOf(shape, face); // Target points into it
+    const Plane* plane = surface.Target<Plane>();
     if (plane == nullptr) {
         return std::nullopt;
     }
@@ -387,7 +388,8 @@ using IVec3 = std::array<Interval, 3>;
 [[nodiscard]] Result<bool> OnFace(const Shape& other, const FaceId face, const Point3& seed,
                                   const Context& ctx)
 {
-    const Plane* plane = SurfaceOf(other, face).Target<Plane>();
+    const Surface surface = SurfaceOf(other, face); // Target points into it
+    const Plane* plane = surface.Target<Plane>();
     STEREON_TRY(const double tolerance, FaceTolerance(other, face, ctx));
     const Vec3 n = Normalized(Cross(plane->XAxis, plane->YAxis));
     if (std::abs(Dot(seed - plane->Origin, n)) > tolerance) {
