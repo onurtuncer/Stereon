@@ -146,8 +146,8 @@ Per [ADR-0035](docs/adr/0035-debug-viewer.md): objects reach the viewer as `.stn
 
 ## 11. Documentation (ongoing)
 
-- [ ] API reference generation (Doxygen or MrDocs) published to GitHub Pages
-- [ ] `docs/architecture.md`: library layering diagram and data flow
+- [x] API reference generation (Doxygen or MrDocs) published to GitHub Pages. Doxygen XML through Breathe (`docs/api.rst`), built and checked by `deploy-docs.yml` (the job fails unless `api.html` documents the kernel), live at https://onurtuncer.github.io/Stereon/api.html
+- [x] `docs/architecture.md`: library layering diagram and data flow. In `docs/architecture.rst`: the eleven libraries, why they stack in that order, and a Boolean from primitives to a mesh
 - [ ] `docs/contributing-with-ai.md`: how agents are given ADR context and tests
 - [ ] `docs/references.md`: reading list (Piegl & Tiller, Patrikalakis & Maekawa, Stroud, Golovanov, Shewchuk) with the chapters each module relies on
 - [ ] `docs/debugging.md`: checked handles, `Describe()`, pretty-printer setup, journals, viewer and `stn-dump`. Started as `docs/debugging.rst`: pretty-printers, contract reports and journals; `Describe()`, the viewer and `stn-dump` follow when they exist
