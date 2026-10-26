@@ -135,8 +135,12 @@ each imprinted body fall into *regions*, connected across every edge but
 the imprinted ones (a union-find over the faces), and each region lies
 ``Inside`` the other solid or ``Outside`` it. One seed per region is
 classified by deterministic rays: a point inside one of the region's faces
-(probed at the parameter box's centre and at offsets from the midpoints of
-its edges' pcurves, each probe settled by ``FaceContains``), then a ray
+(probed at the parameter box's centre and then at offsets from the
+midpoints of its edges' pcurves, inward and outward, starting at a quarter
+of the face's parameter extent and halved forty times, every edge at one
+offset before the next smaller, so the widest seed is found first and a
+region however narrow still gets one; each probe settled by
+``FaceContains``), then a ray
 from it cast against every face of the other body, which it crosses an odd
 number of times from inside. A plane is met once and a cylinder up to
 twice, in closed form; a hit counts when ``FaceContains`` puts it inside
@@ -162,7 +166,11 @@ derivative of :math:`S(p(t))`, :math:`r\,u'^2 + (\lvert S_u \rvert +
 \lvert S_v \rvert)\,\lvert p'' \rvert`, with :math:`u'` and :math:`p''`
 bounded in closed form for lines, circles and ellipses and by the poles of
 the derivative curves for non-rational B-splines) and the tolerances of
-the face's edges and vertices. A loop whose pcurves do not meet in the
+the face's edges and vertices. An edge is sampled at every knot of a
+B-spline pcurve of any of its uses, since a B-spline is smooth only within
+a knot span and a polyline turns its corners at the knots, and uniformly
+within each span. Its samples are capped at :math:`2^{20}`; where the cap
+binds, the deviation the samples reach, not the target, enters the bound. A loop whose pcurves do not meet in the
 face's parameter space, a face split across a seam say, is
 ``InvalidResult`` naming the two edges rather than a sum. A cell of a face's parameter space that
 is not separated from the seed is split across its longer side and its

@@ -32,8 +32,10 @@ namespace Stereon {
 
 namespace {
 
-/// How many points a face is probed at for a seed inside it.
-constexpr int SeedProbes = 12;
+/// How many times the seed probes' offset is halved: from a quarter of the
+/// face's parameter extent down to 2^-40 of it, below any edge tolerance, so
+/// a region narrower than that has no interior to seed.
+constexpr int SeedHalvings = 40;
 
 /// The k-th ray direction: a fixed turn about z by irrational fractions of
 /// a turn, tilted by an irrational fraction too, so that no direction
@@ -90,13 +92,52 @@ constexpr int SeedProbes = 12;
 
 // --- Seeds --------------------------------------------------------------
 
+/// The midpoint of a coedge's pcurve and the unit normal to it there.
+struct Midpoint2 {
+    Point2 At;
+    Vec2 Across;
+};
+
+/// Probes the box's centre, then offsets from the midpoints of the face's
+/// pcurves, inward and outward, at a quarter of the face's parameter extent
+/// halved SeedHalvings times: every edge at one distance before the next
+/// smaller, so the widest seed is found first and a region however narrow
+/// still gets one. The first probe FaceContains puts strictly inside.
+[[nodiscard]] Result<std::optional<Point2>> FirstInside(const Shape& shape, const FaceId face,
+                                                        const Box2& box,
+                                                        const std::vector<Midpoint2>& middles,
+                                                        const Context& ctx)
+{
+    const auto inside = [&](const Point2& probe) -> Result<bool> {
+        STEREON_TRY(const std::optional<bool> in, FaceContains(shape, face, probe, ctx));
+        return in && *in;
+    };
+    const Point2 centre{Midpoint(box.X), Midpoint(box.Y)};
+    STEREON_TRY(const bool atCentre, inside(centre));
+    if (atCentre) {
+        return std::optional<Point2>{centre};
+    }
+    double step = 0.25 * std::max(Width(box.X), Width(box.Y));
+    for (int halving = 0; halving < SeedHalvings; ++halving, step *= 0.5) {
+        for (const Midpoint2& m : middles) {
+            for (const Point2& probe : {m.At + step * m.Across, m.At - step * m.Across}) {
+                STEREON_TRY(const bool in, inside(probe));
+                if (in) {
+                    return std::optional<Point2>{probe};
+                }
+            }
+        }
+    }
+    return std::optional<Point2>{};
+}
+
 /// A point of the face's parameter domain inside its loops, off the
-/// boundary: probed at the box's centre and along deterministic offsets
-/// from the midpoints of its edges' pcurves, inward and outward.
+/// boundary (FirstInside). The box is the hull of the pcurves' ends and
+/// midpoints, so a loop of one closed pcurve still spans it.
 [[nodiscard]] Result<std::optional<Point2>> SeedIn(const Shape& shape, const FaceId face,
                                                    const Context& ctx)
 {
-    std::vector<Point2> probes;
+    std::vector<Midpoint2> middles;
     Box2 box = Box2::Empty();
     STEREON_TRY(const LoopRange loops, LoopsOf(shape, face));
     for (const LoopId loop : loops) {
@@ -107,26 +148,18 @@ constexpr int SeedProbes = 12;
                 continue;
             }
             const Interval range = RangeOf(shape, EdgeOf(shape, coedge));
-            const double middle = 0.5 * (range.GetLower() + range.GetUpper());
+            const double middle = Midpoint(range);
             const Point2 p = Eval(*pcurve, middle);
-            const Vec2 across = Perpendicular(Normalized(Deriv(*pcurve, middle, 1)));
-            box = Hull(Hull(box, Eval(*pcurve, range.GetLower())), Eval(*pcurve, range.GetUpper()));
-            for (int k = 1; k <= SeedProbes / 2; ++k) {
-                const double step = 0.05 * static_cast<double>(k);
-                probes.push_back(p + step * across);
-                probes.push_back(p - step * across);
-            }
+            middles.push_back({p, Perpendicular(Normalized(Deriv(*pcurve, middle, 1)))});
+            box = Hull(
+                Hull(Hull(box, Eval(*pcurve, range.GetLower())), Eval(*pcurve, range.GetUpper())),
+                p);
         }
     }
-    probes.insert(probes.begin(), Point2{0.5 * (box.X.GetLower() + box.X.GetUpper()),
-                                         0.5 * (box.Y.GetLower() + box.Y.GetUpper())});
-    for (const Point2& probe : probes) {
-        STEREON_TRY(const std::optional<bool> inside, FaceContains(shape, face, probe, ctx));
-        if (inside && *inside) {
-            return std::optional<Point2>{probe};
-        }
+    if (box.IsEmpty()) {
+        return std::optional<Point2>{};
     }
-    return std::optional<Point2>{};
+    return FirstInside(shape, face, box, middles, ctx);
 }
 
 // --- Rays against the other body ----------------------------------------
@@ -333,6 +366,12 @@ ClassifyBody(const Shape& own, const Shape& other,
 }
 
 } // namespace
+
+Result<std::optional<Point2>> Detail::SeedPointIn(const Shape& shape, const FaceId face,
+                                                  const Context& ctx)
+{
+    return SeedIn(shape, face, ctx);
+}
 
 Result<Classification> Classify(const ImprintedBodies& bodies, const Context& ctx)
 {

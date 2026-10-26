@@ -110,19 +110,20 @@ TEST_CASE("the winding number is 1 inside a box and 0 outside", "[boolean][windi
     }
 }
 
-TEST_CASE("the winding number refines near a face and stays undecided on it", "[boolean][winding]")
+TEST_CASE("the winding number is exact near a box's face and undecided on it", "[boolean][winding]")
 {
     const Shape box = Box();
-    const Point3 near{5.0, 5.0, 10.0 - 1e-4};
-    const WindingNumber refined = Winding(box, near);
-    RequireInside(refined);
-    REQUIRE(refined.Refinements > 0);
-    // Without refinement the first round's deviation, a fraction of the box's
-    // extent, swallows the point.
-    const WindingNumber coarse = Winding(box, near, 0);
-    REQUIRE_FALSE(coarse.IsDecided());
-    REQUIRE(coarse.Refinements == 0);
-    REQUIRE(coarse.Bound >= 1.0);
+    // Planar faces with line edges are triangulated exactly: their chords
+    // are the edges, so the only deviation is the tolerances, four times
+    // 1e-5, and a point 1e-4 inside is decided in the first round.
+    const WindingNumber near = Winding(box, Point3{5.0, 5.0, 10.0 - 1e-4}, 0);
+    RequireInside(near);
+    REQUIRE(near.Refinements == 0);
+    // Within those tolerances of the face no round can separate the point:
+    // undecided, never a guess.
+    const WindingNumber within = Winding(box, Point3{5.0, 5.0, 10.0 - 2e-5});
+    REQUIRE_FALSE(within.IsDecided());
+    REQUIRE(within.Bound >= 1.0);
     // On the face every round leaves a cell unseparated: undecided, never a
     // guess, and the interval says so.
     const WindingNumber on = Winding(box, Point3{5.0, 5.0, 10.0});
