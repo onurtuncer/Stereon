@@ -342,11 +342,14 @@ constexpr EntityKind AllKinds[] = {EntityKind::Vertex, EntityKind::Edge, EntityK
                                    EntityKind::Loop,   EntityKind::Face, EntityKind::Shell,
                                    EntityKind::Solid};
 
-/// What the entries account for: the result's entities they target, and
-/// each input's entities they dispose of.
+/// What the entries say of each entity: the relations read of every result
+/// entity they target, and of every input entity they dispose of. One
+/// entity bears one relation, repeated only by Modified continuations (a
+/// split, a merge or a many-to-many change): a Deleted or Unchanged entity
+/// has no other entry, and a Generated one continues nothing.
 struct Accounted {
-    std::set<std::pair<int, std::uint32_t>> Targeted;
-    std::set<std::tuple<int, int, std::uint32_t>> Disposed;
+    std::map<std::pair<int, std::uint32_t>, std::set<HistoryRelation>> Targeted;
+    std::map<std::tuple<int, int, std::uint32_t>, std::set<HistoryRelation>> Disposed;
 };
 
 /// The entry's target: live in the result unless the entry is a deletion,
@@ -399,10 +402,44 @@ struct Accounted {
         return problem;
     }
     if (e.Relation != HistoryRelation::Deleted) {
-        seen.Targeted.insert({static_cast<int>(e.Kind), e.Target});
+        seen.Targeted[{static_cast<int>(e.Kind), e.Target}].insert(e.Relation);
     }
     if (e.Relation != HistoryRelation::Generated) {
-        seen.Disposed.insert({e.Input, static_cast<int>(e.Kind), e.Source});
+        seen.Disposed[{e.Input, static_cast<int>(e.Kind), e.Source}].insert(e.Relation);
+    }
+    return std::nullopt;
+}
+
+/// The relations named: "Unchanged and Deleted".
+[[nodiscard]] std::string Listed(const std::set<HistoryRelation>& relations)
+{
+    std::string out;
+    for (const HistoryRelation relation : relations) {
+        out += out.empty() ? "" : " and ";
+        out += ToString(relation);
+    }
+    return out;
+}
+
+/// Every entity read with one relation (Accounted): an input entity deleted
+/// and also continued, or continued unchanged and also otherwise, or a
+/// result entity generated and also a continuation, is contradictory.
+[[nodiscard]] std::optional<std::string> ReadingProblem(const Accounted& seen)
+{
+    for (const auto& [key, relations] : seen.Disposed) {
+        if (relations.size() > 1) {
+            const auto& [input, kind, source] = key;
+            return std::format("{} {} of input {} is {} at once",
+                               KindName(static_cast<EntityKind>(kind)), source, input,
+                               Listed(relations));
+        }
+    }
+    for (const auto& [key, relations] : seen.Targeted) {
+        if (relations.size() > 1) {
+            return std::format("{} {} of the result is {} at once",
+                               KindName(static_cast<EntityKind>(key.first)), key.second,
+                               Listed(relations));
+        }
     }
     return std::nullopt;
 }
@@ -462,9 +499,13 @@ std::optional<std::string> HistoryProblem(const History& history,
                                           const std::span<const TopologyTables* const> inputs,
                                           const TopologyTables& result)
 {
+    const std::span<const HistoryEntry> entries = history.GetEntries();
+    if (std::ranges::adjacent_find(entries) != entries.end()) { // sorted: duplicates are adjacent
+        return std::string("an entry twice");
+    }
     Accounted seen;
     std::map<std::uint32_t, std::vector<HistoryEntry>> groups;
-    for (const HistoryEntry& e : history.GetEntries()) {
+    for (const HistoryEntry& e : entries) {
         if (std::optional<std::string> problem = EntryProblem(e, inputs, result, seen)) {
             return problem;
         }
@@ -476,6 +517,9 @@ std::optional<std::string> HistoryProblem(const History& history,
         if (std::optional<std::string> problem = GroupProblem(members)) {
             return problem;
         }
+    }
+    if (std::optional<std::string> problem = ReadingProblem(seen)) {
+        return problem;
     }
     return CoverageProblem(inputs, result, seen);
 }
