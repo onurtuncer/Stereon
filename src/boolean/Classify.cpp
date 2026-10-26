@@ -650,7 +650,7 @@ Detail::FaceCrossingsOf(const Shape& shape, const FaceId face, const Point3& ori
                         const Context& ctx)
 {
     const Surface surface = SurfaceOf(shape, face);
-    const std::optional<std::vector<double>> hits = MeetSurface(surface, origin, d);
+    const std::optional<std::vector<double>> hits = MeetSurface(surface, origin, d, ctx);
     if (!hits) {
         return std::optional<std::vector<FaceCrossing>>{};
     }
