@@ -544,7 +544,7 @@ Related design decisions
 
 
 M5 ring, split and merge operators
----------------------------------
+----------------------------------
 
 The remaining classical operators are exposed on ``ShapeBuilder``. They
 change incidence and membership; callers retain responsibility for geometric

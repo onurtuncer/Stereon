@@ -227,8 +227,20 @@ continued by one a merge, each grouped; an intersection edge is
 operand entity nothing continues is ``Deleted``. ``Commit`` checks the
 History is complete before anything is published.
 
-Coincident faces, ``OnSame`` and ``OnOpposite``, are still refused by the
-imprint with ``NotSupported``; they are M8's next step.
+Faces of the two solids that lie in one plane are coincident. The imprint
+draws each such face's boundary onto the other, so both split along the
+outline of their overlap, and afterwards pairs every edge of A with the
+edge of B it coincides with on those planes, either way round, which then
+bounds regions as a piece of the intersection does. A region whose seed
+lies on a coplanar face of the other solid is ``OnSame`` or ``OnOpposite``
+by the two faces' outward normals, which no ray could decide. The keep
+rules take a coincident region once, from A: its ``OnSame`` copy in a
+union or a common, where both solids lie on the same side of it, and its
+``OnOpposite`` copy in a cut, where B lies against A from outside;
+``OnOpposite`` in a union or a common, two solids touching face to face,
+and ``OnSame`` in a cut leave nothing. Coincident curved faces, two
+cylinders on one axis and radius, are still refused with ``NotSupported``.
+:doc:`imprinting` gives every step in detail.
 
 Related design decisions
 ------------------------
