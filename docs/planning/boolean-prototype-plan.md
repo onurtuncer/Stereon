@@ -18,7 +18,7 @@ It must pass:
 | The same with deliberately loosened inputs, 1e-4 to 1e-2 mm | ADR-0001 verification |
 | The merge-policy chain test at 0.8× the pair tolerance, byte-identical across thread counts and runs | ADR-0001 verification |
 | Every Tier A case of `corpus/analytic-ssi/` decided as RS-0001 requires | TODO.md §10, RS-0001 |
-| Identical output at 1, 2, 8 and 32 threads; a speed-up of at least 5× on 8 cores on a many-face fixture; the cross-platform (G2) comparison | ADR-0007 verification |
+| Identical output at 1, 2, 8 and 32 threads; a speed-up of at least 3× on the 4 cores of the hosted reference runner on a many-face fixture; the cross-platform (G2) comparison (ADR-0007, revised 2026-10-25) | ADR-0007 verification |
 | Splitting a face and an edge within ADR-0005's copy budget | ADR-0005 verification |
 | Volumes, areas and face counts against OCCT's `BRepAlgoAPI` on shared cases | TODO.md §9 |
 
@@ -48,7 +48,7 @@ Each milestone merges on its own, with tests. Estimates are working days.
 | M7 | Classification | Fragment connectivity; seeding by up to 16 deterministic rays per region, decided exactly for plane and cylinder faces; then the bounded generalised winding number (exact solid angles for planar faces, tessellated cylinders with a deviation bound), accepted only beyond its bound; then `Unresolved`; propagation; the cross-check table (ADR-0013's acceptance). **Done 2026-10-25:** regions, rays and the cross-check (#119, brought to main by #123) in `src/boolean/Classify.cpp`; the winding number in `src/boolean/Winding.cpp`, the faces triangulated into one polyhedron and each cell accepted only where the seed is separated from its triangles by more than the face can stray, refined around the seed down to a quartering target; `ErrorCode::Unresolved` appended (ADR-0029 §6) and the cross-check's failure `DegenerateResult` as ADR-0013 says; `tests/boolean/{Classify,Winding}Tests.cpp`; `docs/modeling.rst`, *Classification*. Regions are seeded independently and cross-checked rather than propagated: with a seed per region the propagation rule has nothing left to carry. | 10 |
 | M8 | Assembly, merging, History | Keep rules; the ADR-0001 merge policy for vertices and edges; regularisation; a History with input ordinals, split and merge groups and Generated provenance (extending `HistoryEntry`). | 6 |
 | M9 | Tolerance variants | Loosened inputs from 1e-4 to 1e-2 mm; growth logged; the merge-chain test. | 3 |
-| M10 | Parallelism and determinism | Pair finding and surface intersection run in parallel through `ParallelFor`; the thread-count identity check; the 5× speed-up on a many-face fixture (a box with a grid of cylindrical holes); the G2 comparison job. | 4 |
+| M10 | Parallelism and determinism | The worker pool moved into the `Context` (ADR-0007: one pool per `Context`, none per call); pair finding and surface intersection run in parallel through `ParallelFor`; the thread-count identity check on union, cut and common; the 3× speed-up on 4 cores on a many-face fixture (a box with a grid of cylindrical holes); the G2 comparison job. | 4 |
 | M11 | OCCT differential tests | Volumes, areas and face counts against `BRepAlgoAPI` on the same fixtures. | 2 |
 
 About 65 working days in sequence. M0 comes first, and M1 needs none of it. M1, M2 and M5 have no dependencies on each other and can go in parallel; M3 needs M2, M3b needs M3 and M4, M6 needs M3 and M5, M7 needs M6, M8 needs M7, and M9 to M11 follow M8.
@@ -68,5 +68,5 @@ About 65 working days in sequence. M0 comes first, and M1 needs none of it. M1, 
 
 - **Face clipping** in parameter space (M6) is where most Boolean bugs live: tangential contacts at loop boundaries, branches through vertices. Exact predicates help; the corpus needs cases for each.
 - **History with two inputs** (M8) changes `HistoryEntry`. That is a public type, and `Commit` builds it today from one source.
-- **The 5× speed-up** needs enough independent work: a box with a grid of 100 to 400 cylindrical holes is the planned fixture.
+- **The 3× speed-up on 4 cores** needs enough independent work: a box with a grid of 100 to 400 cylindrical holes is the planned fixture.
 - **Full validation at every `Commit`** (ADR-0005) makes large results slow to publish. That is acceptable for the prototype; incremental validation is a Phase 1 item.
