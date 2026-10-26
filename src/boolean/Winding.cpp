@@ -32,7 +32,9 @@ namespace {
 
 /// The first round's deviation target is the body's extent over this.
 constexpr double FirstTargetDivisor = 64.0;
-/// Segments an edge is sampled into at most, whatever the target asks.
+/// Segments an edge is sampled into at most, whatever the target asks; past
+/// it the edge's chords stray further than the target, and the deviation
+/// the sampling achieves, not the target, enters the bound.
 constexpr double MaxSegments = 1 << 20;
 /// Cells are split at most this deep, whatever the target asks.
 constexpr int MaxDepth = 60;
@@ -165,7 +167,9 @@ struct PcurveRates {
     }
     PcurveRates rates{PoleBounds(*first).first, 0.0};
     if (b.Degree < 2) {
-        return rates; // A polyline curves nowhere.
+        // A polyline curves nowhere within a knot span; its corners are at
+        // the knots, where SamplingOf always places a point.
+        return rates;
     }
     const std::optional<Hodograph> second = Differentiated(*first, b.Degree - 1);
     if (!second) {
@@ -198,15 +202,39 @@ struct PcurveRates {
 
 // --- The faces' boundary polygons ----------------------------------------------
 
-/// Segments the edge is sampled into so that on every face using it the
-/// chords stay within `target` of the face's true boundary: the chord of a
-/// span of length h is within h^2 / 8 of the second derivative of S(p(t)),
-/// which PcurveRates bounds. The same for every use, so the faces agree on
-/// the points.
-[[nodiscard]] Result<std::size_t> SegmentsOf(const Shape& shape, const EdgeId edge,
-                                             const double target)
+/// Where an edge is sampled, in increasing order from one end of its range
+/// to the other, and how far the chords between the samples may lie from
+/// S(p(t)) on any face using it.
+using Sampling = Detail::EdgeSampling;
+
+/// The ends of the edge's range and every knot inside it of a B-spline
+/// pcurve of any use: a B-spline is smooth only within a knot span, and at
+/// a knot of a polyline it turns a corner the chords must keep.
+[[nodiscard]] std::vector<double> BreaksOf(const std::vector<Curve2d>& pcurves,
+                                           const Interval& range)
 {
-    double rate = 0.0; // sup over the uses of |(S o p)''|
+    std::vector<double> breaks{range.GetLower(), range.GetUpper()};
+    for (const Curve2d& pcurve : pcurves) {
+        if (const BSplineCurve2d* b = pcurve.Target<BSplineCurve2d>()) {
+            for (const double knot : b->Knots) {
+                if (knot > range.GetLower() && knot < range.GetUpper()) {
+                    breaks.push_back(knot);
+                }
+            }
+        }
+    }
+    std::ranges::sort(breaks);
+    breaks.erase(std::ranges::unique(breaks).begin(), breaks.end());
+    return breaks;
+}
+
+/// The sup over the edge's uses of |(S o p)''| (PcurveRates), and their
+/// pcurves. NotSupported for a pcurve or surface outside the prototype's.
+[[nodiscard]] Result<std::pair<double, std::vector<Curve2d>>> RateOf(const Shape& shape,
+                                                                     const EdgeId edge)
+{
+    double rate = 0.0;
+    std::vector<Curve2d> pcurves;
     STEREON_TRY(const RadialCoedgeRange uses, RadialCoedgesOf(shape, edge));
     for (const CoedgeId use : uses) {
         const std::optional<Curve2d> pcurve = PCurveOf(shape, use);
@@ -221,10 +249,44 @@ struct PcurveRates {
         }
         rate = std::max(rate, scale->Radius * rates->Turn * rates->Turn +
                                   scale->Lipschitz() * rates->Curving);
+        pcurves.push_back(*pcurve);
     }
-    const double width = Width(RangeOf(shape, edge));
-    const double segments = std::ceil(width * std::sqrt(rate / (8.0 * target)));
-    return std::max<std::size_t>(1, static_cast<std::size_t>(std::min(segments, MaxSegments)));
+    return std::pair{rate, std::move(pcurves)};
+}
+
+/// The edge's samples, the same for every use so the faces agree on the
+/// points: every break (BreaksOf), and within each piece between breaks,
+/// where every pcurve is smooth, enough uniform samples that a chord of
+/// length h stays within h^2 rate / 8 <= target of S(p(t)). When the pieces
+/// together would need more than MaxSegments, each takes its share of them
+/// and the Deviation reports what that achieves, so the bound stays true.
+[[nodiscard]] Result<Sampling> SamplingOf(const Shape& shape, const EdgeId edge,
+                                          const double target)
+{
+    STEREON_TRY(const auto rated, RateOf(shape, edge));
+    const auto& [rate, pcurves] = rated;
+    const std::vector<double> breaks = BreaksOf(pcurves, RangeOf(shape, edge));
+    std::vector<double> wanted; // segments each piece asks for
+    double total = 0.0;
+    for (std::size_t i = 0; i + 1 < breaks.size(); ++i) {
+        const double width = breaks[i + 1] - breaks[i];
+        wanted.push_back(std::max(1.0, std::ceil(width * std::sqrt(rate / (8.0 * target)))));
+        total += wanted.back();
+    }
+    const double share = std::min(1.0, MaxSegments / total);
+    Sampling sampling;
+    for (std::size_t i = 0; i < wanted.size(); ++i) {
+        const double width = breaks[i + 1] - breaks[i];
+        const double n = std::max(1.0, std::floor(wanted[i] * share));
+        const double h = width / n;
+        sampling.Deviation = std::max(sampling.Deviation, h * h * rate / 8.0);
+        const auto count = static_cast<std::size_t>(n);
+        for (std::size_t k = 0; k < count; ++k) {
+            sampling.Parameters.push_back(breaks[i] + width * static_cast<double>(k) / n);
+        }
+    }
+    sampling.Parameters.push_back(breaks.back());
+    return sampling;
 }
 
 /// The use of the edge every face takes its points along the edge from: the
@@ -252,10 +314,12 @@ struct PcurveRates {
 /// use's surface at its pcurve, so that every face sharing the edge places
 /// the same points and the triangles close up. Raises `tolerance` to the
 /// edge's and the vertex's, which is how far those positions may lie from
-/// this face's own boundary. Returns where the coedge ends in the face's
-/// parameter space, for the loop's continuity check.
-[[nodiscard]] Result<Point2> AppendCoedge(Polyline& polygon, double& tolerance, const Shape& shape,
-                                          const CoedgeId coedge, const double target)
+/// this face's own boundary, and `deviation` to the chords' (SamplingOf).
+/// Returns where the coedge ends in the face's parameter space, for the
+/// loop's continuity check.
+[[nodiscard]] Result<Point2> AppendCoedge(Polyline& polygon, double& tolerance, double& deviation,
+                                          const Shape& shape, const CoedgeId coedge,
+                                          const double target)
 {
     const EdgeId edge = EdgeOf(shape, coedge);
     const std::optional<Curve2d> own = PCurveOf(shape, coedge);
@@ -264,21 +328,21 @@ struct PcurveRates {
                     "WindingNumber: " + std::string(Describe(shape, edge)) +
                         " has a use without a pcurve");
     }
-    STEREON_TRY(const std::size_t segments, SegmentsOf(shape, edge, target));
+    STEREON_TRY(const Sampling sampling, SamplingOf(shape, edge, target));
     STEREON_TRY(const CoedgeId agreed, AgreedUseOf(shape, edge));
     const Surface agreedSurface = SurfaceOf(shape, FaceOf(shape, LoopOf(shape, agreed)));
-    const Curve2d agreedPcurve = *PCurveOf(shape, agreed); // SegmentsOf saw every use has one
+    const Curve2d agreedPcurve = *PCurveOf(shape, agreed); // SamplingOf saw every use has one
     const bool forward = StoredEdgeUseSense(shape, coedge) == EdgeUseSense::Same;
     const VertexId start = forward ? StartOf(shape, edge) : EndOf(shape, edge);
     const Interval range = RangeOf(shape, edge);
     tolerance = std::max({tolerance, ToleranceOf(shape, edge), ToleranceOf(shape, start)});
+    deviation = std::max(deviation, sampling.Deviation);
+    // The parameters run from the range's lower end to its upper end, both
+    // exactly: a pcurve's domain may end where the edge's does.
+    const std::vector<double>& ts = sampling.Parameters;
+    const std::size_t segments = ts.size() - 1;
     for (std::size_t k = 0; k < segments; ++k) {
-        const std::size_t index = forward ? k : segments - k;
-        // The ends exactly: a pcurve's domain may end where the edge's does.
-        const double t = index == segments
-                             ? range.GetUpper()
-                             : range.GetLower() + Width(range) * static_cast<double>(index) /
-                                                      static_cast<double>(segments);
+        const double t = ts[forward ? k : segments - k];
         const Point3 position =
             k == 0 ? PositionOf(shape, start) : Eval(agreedSurface, Eval(agreedPcurve, t));
         polygon.push_back({Eval(*own, t), position});
@@ -286,12 +350,14 @@ struct PcurveRates {
     return Eval(*own, forward ? range.GetUpper() : range.GetLower());
 }
 
-/// A face's loops as polygons, their parameter box, and how far the
-/// corners' positions may lie from the face's own boundary.
+/// A face's loops as polygons, their parameter box, how far the corners'
+/// positions may lie from the face's own boundary, and how far the chords
+/// between them may lie from its true edges.
 struct FacePolygon {
     std::vector<Polyline> Loops;
     Box2 Box = Box2::Empty();
     double Tolerance = 0.0;
+    double Deviation = 0.0;
 };
 
 /// Consecutive coedges of a loop must meet in the face's parameter space:
@@ -329,8 +395,8 @@ struct FacePolygon {
         STEREON_TRY(const CoedgeRange coedges, CoedgesOf(shape, loop));
         for (const CoedgeId coedge : coedges) {
             const std::size_t first = boundary.size();
-            STEREON_TRY(const Point2 end,
-                        AppendCoedge(boundary, polygon.Tolerance, shape, coedge, target));
+            STEREON_TRY(const Point2 end, AppendCoedge(boundary, polygon.Tolerance,
+                                                       polygon.Deviation, shape, coedge, target));
             if (previous) {
                 STEREON_TRY_VOID(CheckMeeting(shape, face, previous->first, previous->second,
                                               EdgeOf(shape, coedge), boundary[first].Uv,
@@ -474,7 +540,8 @@ struct FaceFrame {
     SurfaceScale Scale;
     double Tolerance = 0.0;
     double Target = 0.0;
-    double Sign = 1.0; // -1 for a face oriented against its surface
+    double Chords = 0.0; // how far the boundary's chords lie from the edges
+    double Sign = 1.0;   // -1 for a face oriented against its surface
     Point3 Point;
 };
 
@@ -483,12 +550,13 @@ struct FaceFrame {
 /// surface over its parameters by its corners' offsets and the sagitta of
 /// its turn (taken three times, for the chord interpolation on a triangle
 /// rather than a segment, with room to spare), the true boundary from the
-/// chords by this round's target (SegmentsOf), and the positions from this
-/// face's own boundary by the tolerances, at both ends of a chord and once
-/// more for a cut.
+/// chords by what the sampling achieved (SamplingOf: the target, or more
+/// where MaxSegments capped it), and the positions from this face's own
+/// boundary by the tolerances, at both ends of a chord and once more for a
+/// cut.
 [[nodiscard]] double DeviationOf(const FaceFrame& f, const double du, const double off)
 {
-    return off + 3.0 * Sagitta(f.Scale.Radius, du) + f.Target + 4.0 * f.Tolerance;
+    return off + 3.0 * Sagitta(f.Scale.Radius, du) + f.Chords + 4.0 * f.Tolerance;
 }
 
 /// The fans of all the loops together, and their corners' largest offset.
@@ -589,8 +657,13 @@ void Accumulate(Tally& tally, const FaceFrame& f, const Box2& cell,
     STEREON_TRY(const FacePolygon polygon, PolygonOf(body, face, *scale, target));
     // A loop runs counter-clockwise about Su x Sv; a face oriented against
     // its surface has its material on the other side.
-    const FaceFrame frame{
-        surface, *scale, polygon.Tolerance, target, IsReversed(body, face) ? -1.0 : 1.0, point};
+    const FaceFrame frame{surface,
+                          *scale,
+                          polygon.Tolerance,
+                          target,
+                          polygon.Deviation,
+                          IsReversed(body, face) ? -1.0 : 1.0,
+                          point};
     Accumulate(tally, frame, polygon.Box, polygon.Loops, 0);
     return {};
 }
@@ -628,6 +701,12 @@ void Accumulate(Tally& tally, const FaceFrame& f, const Box2& cell,
 }
 
 } // namespace
+
+Result<Detail::EdgeSampling> Detail::WindingSamplingOf(const Shape& shape, const EdgeId edge,
+                                                       const double target)
+{
+    return SamplingOf(shape, edge, target);
+}
 
 bool WindingNumber::IsDecided() const noexcept
 {

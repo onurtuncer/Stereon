@@ -16,6 +16,7 @@ module;
 #include <charconv>
 #include <cmath>
 #include <cstddef>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -135,11 +136,12 @@ Rulings(const Frame& a, const Frame& b, const Vec3& across, const double distanc
                                    const ExactScalar<2>& radiiDifference,
                                    const ExactScalar<96>& scale, const double tolerance)
 {
+    const bool negative = SignOf(radiiDifference) == Sign::Negative;
     const ExactScalar<3> margin{
         Interval{tolerance} - Hull(radiiDifference.Hull, -radiiDifference.Hull),
-        Difference(Expansion<1>(tolerance), SignOf(radiiDifference) == Sign::Negative
-                                                ? Negated(radiiDifference.Value)
-                                                : radiiDifference.Value)};
+        [tolerance, negative, d = radiiDifference.Value] {
+            return Difference(Expansion<1>(tolerance), negative ? Negated(d()) : d());
+        }};
     return SignOf(margin) != Sign::Negative &&
            Compare(squaredDistance, margin, scale) != Sign::Positive;
 }

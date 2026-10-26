@@ -8,6 +8,7 @@
 module;
 
 #include <cstddef>
+#include <vector>
 
 export module Stereon.Boolean:Winding;
 
@@ -69,3 +70,20 @@ struct WindingNumber {
                                                     int refinements, const Context& ctx);
 
 } // namespace Stereon
+
+export namespace Stereon::Detail {
+
+/// Where WindingNumberOf samples an edge for a deviation target, from one
+/// end of its range to the other, and how far the chords between the
+/// samples may lie from the edge on any face using it: the target, or more
+/// where the sample count is capped. Every knot of a B-spline pcurve inside
+/// the range is a sample. Exposed for the tests.
+struct EdgeSampling {
+    std::vector<double> Parameters;
+    double Deviation = 0.0;
+};
+
+[[nodiscard]] Result<EdgeSampling> WindingSamplingOf(const Shape& shape, EdgeId edge,
+                                                     double target);
+
+} // namespace Stereon::Detail

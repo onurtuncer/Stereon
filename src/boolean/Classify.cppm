@@ -90,3 +90,19 @@ struct Classification {
                                               const ClassifyBudget& budget);
 
 } // namespace Stereon
+
+export namespace Stereon::Detail {
+
+/// The parameters a region's seed is cast from on the face: a point
+/// strictly inside its loops, the widest found first; nothing when no probe
+/// is. Exposed for the tests.
+[[nodiscard]] Result<std::optional<Point2>> SeedPointIn(const Shape& shape, FaceId face,
+                                                        const Context& ctx);
+
+/// Where the line origin + s d meets the surface, as a seed's ray sees it:
+/// the parameters, or nothing when the meeting is ambiguous, a graze or a
+/// sign the certified filter does not settle. Exposed for the tests.
+[[nodiscard]] std::optional<std::vector<double>> RayMeets(const Surface& surface,
+                                                          const Point3& origin, const Vec3& d);
+
+} // namespace Stereon::Detail
