@@ -118,6 +118,14 @@ struct SharedPair {
 };
 
 struct Work {
+    // A constructor rather than aggregate initialisation, which names every
+    // member or meets -Wmissing-field-initializers.
+    Work(const ImprintedBodies& bodies, const Context& ctx)
+        : Bodies(bodies)
+        , Ctx(ctx)
+        , Origin{Origins(bodies.A), Origins(bodies.B)}
+    {}
+
     const ImprintedBodies& Bodies;
     const Context& Ctx;
     std::array<Origins, 2> Origin;
@@ -719,7 +727,7 @@ Result<OperationResult> Boolean(const Shape& a, const Shape& b, const BooleanOpe
 {
     STEREON_TRY(const ImprintedBodies bodies, ImprintBodies(a, b, ctx));
     STEREON_TRY(const Classification classes, Classify(bodies, ctx));
-    Work w{bodies, ctx, {Origins(bodies.A), Origins(bodies.B)}};
+    Work w(bodies, ctx);
     w.Reversed = {false, operation == BooleanOperation::Cut};
     w.Kept = {KeptFaces(classes.A, operation, BodyA), KeptFaces(classes.B, operation, BodyB)};
     STEREON_TRY_VOID(PairPieces(w));
