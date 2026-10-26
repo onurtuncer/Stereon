@@ -169,6 +169,90 @@ TEST_CASE("bodies apart: two solids, nothing in common, the cut unchanged", "[bo
     REQUIRE(Inside(cut.Shape, Point3{5.0, 5.0, 5.0}));
 }
 
+namespace {
+
+Shape BoxFrom(const Point3& lo, const Point3& hi)
+{
+    const auto box = MakeBoxSolid(Box3::FromCorners(lo, hi), ctx);
+    REQUIRE(box.has_value());
+    return box->Shape;
+}
+
+} // namespace
+
+TEST_CASE("boxes face to face: the coincident faces OnOpposite", "[boolean][assemble][coincident]")
+{
+    // B against A's face x = 10, the whole face: the faces coincide with
+    // opposite normals, their edges paired.
+    const Shape a = Box();
+    const Shape b = BoxFrom(Point3{10.0, 0.0, 0.0}, Point3{20.0, 10.0, 10.0});
+
+    const OperationResult united = Run(a, b, BooleanOperation::Union);
+    REQUIRE(CountOf<EntityKind::Face>(united.Shape) == 10); // the shared face gone from both
+    REQUIRE(CountOf<EntityKind::Solid>(united.Shape) == 1);
+    REQUIRE(Inside(united.Shape, Point3{5.0, 5.0, 5.0}));
+    REQUIRE(Inside(united.Shape, Point3{15.0, 5.0, 5.0}));
+    REQUIRE_FALSE(Inside(united.Shape, Point3{25.0, 5.0, 5.0}));
+
+    // Touching is no common volume: an empty result.
+    const OperationResult common = Run(a, b, BooleanOperation::Common);
+    REQUIRE(CountOf<EntityKind::Face>(common.Shape) == 0);
+
+    const OperationResult cut = Run(a, b, BooleanOperation::Cut);
+    REQUIRE(CountOf<EntityKind::Face>(cut.Shape) == 6); // A, its face against B kept
+    REQUIRE(Inside(cut.Shape, Point3{5.0, 5.0, 5.0}));
+    REQUIRE_FALSE(Inside(cut.Shape, Point3{15.0, 5.0, 5.0}));
+}
+
+TEST_CASE("a smaller box against a box's face: part of the face coincides",
+          "[boolean][assemble][coincident]")
+{
+    // B's face x = 10 lies inside A's: A's face is cut into a frame and the
+    // square B covers.
+    const Shape a = Box();
+    const Shape b = BoxFrom(Point3{10.0, 2.0, 2.0}, Point3{20.0, 8.0, 8.0});
+
+    const OperationResult united = Run(a, b, BooleanOperation::Union);
+    REQUIRE(CountOf<EntityKind::Face>(united.Shape) == 11); // A's 5, the frame, B's 5
+    REQUIRE(Inside(united.Shape, Point3{5.0, 5.0, 5.0}));
+    REQUIRE(Inside(united.Shape, Point3{15.0, 5.0, 5.0}));
+    REQUIRE_FALSE(Inside(united.Shape, Point3{15.0, 1.0, 5.0}));
+
+    const OperationResult cut = Run(a, b, BooleanOperation::Cut);
+    REQUIRE(CountOf<EntityKind::Face>(cut.Shape) == 7); // A's 5, the frame and the square
+    REQUIRE(Inside(cut.Shape, Point3{5.0, 5.0, 5.0}));
+    REQUIRE_FALSE(Inside(cut.Shape, Point3{15.0, 5.0, 5.0}));
+}
+
+TEST_CASE("boxes overlapping with coincident sides: the shared parts OnSame",
+          "[boolean][assemble][coincident]")
+{
+    // B = [5, 15] x [0, 10]^2: four of its faces share their planes with A's,
+    // with the same normals, over [5, 10].
+    const Shape a = Box();
+    const Shape b = BoxFrom(Point3{5.0, 0.0, 0.0}, Point3{15.0, 10.0, 10.0});
+
+    const OperationResult united = Run(a, b, BooleanOperation::Union);
+    // A's x = 0 face, its four sides each in two parts, B's x = 15 face and
+    // B's four sides beyond A.
+    REQUIRE(CountOf<EntityKind::Face>(united.Shape) == 14);
+    REQUIRE(CountOf<EntityKind::Solid>(united.Shape) == 1);
+    REQUIRE(Inside(united.Shape, Point3{2.0, 5.0, 5.0}));
+    REQUIRE(Inside(united.Shape, Point3{12.0, 5.0, 5.0}));
+    REQUIRE_FALSE(Inside(united.Shape, Point3{17.0, 5.0, 5.0}));
+
+    const OperationResult common = Run(a, b, BooleanOperation::Common);
+    REQUIRE(CountOf<EntityKind::Face>(common.Shape) == 6);
+    REQUIRE(Inside(common.Shape, Point3{7.0, 5.0, 5.0}));
+    REQUIRE_FALSE(Inside(common.Shape, Point3{2.0, 5.0, 5.0}));
+    REQUIRE_FALSE(Inside(common.Shape, Point3{12.0, 5.0, 5.0}));
+
+    const OperationResult cut = Run(a, b, BooleanOperation::Cut);
+    REQUIRE(CountOf<EntityKind::Face>(cut.Shape) == 6);
+    REQUIRE(Inside(cut.Shape, Point3{2.0, 5.0, 5.0}));
+    REQUIRE_FALSE(Inside(cut.Shape, Point3{7.0, 5.0, 5.0}));
+}
+
 TEST_CASE("a Boolean's History accounts for both operands", "[boolean][assemble][history]")
 {
     const Shape a = Box();

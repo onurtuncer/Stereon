@@ -12,11 +12,14 @@ module;
 #include <Stereon/Core/Try.hpp>
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -162,6 +165,47 @@ private:
     std::vector<FaceNetwork> m_Networks;
 };
 
+/// Whether a stretch of a branch over `range` is a loop: all of the branch,
+/// with no crossing at either end, and the branch a closed curve, its ends
+/// within `tolerance` of each other. A coincident face's straight side lying
+/// wholly inside the other face covers all of its branch with no crossing
+/// too, and is no loop.
+[[nodiscard]] bool IsLoop(const IntersectionBranch& branch, const Interval& range,
+                          const FacePiece& piece, const double tolerance)
+{
+    return range == branch.Range && !piece.Start && !piece.End &&
+           Distance(Eval(branch.Curve3d, branch.Range.GetLower()),
+                    Eval(branch.Curve3d, branch.Range.GetUpper())) <= tolerance;
+}
+
+/// A stretch of a branch inside one face only, added to that face's network:
+/// its ends are the clip's crossings where it ends at one, junctions
+/// otherwise. A coincident face's boundary imprinted on the other body's
+/// face is one: the other body already has the edge.
+void AddOneSided(Networks& networks, const Shape& shape, const FaceData& face,
+                 const IntersectionBranch& branch, const FaceClip& clip, const FacePiece& piece,
+                 const Context& ctx)
+{
+    const double tolerance =
+        std::max(ctx.GetResolution(), branch.IsCertified() ? branch.Bound : 0.0);
+    const auto end = [&](const std::optional<std::size_t>& at) {
+        return at ? std::optional<LoopCrossing>{clip.Crossings[*at]} : std::nullopt;
+    };
+    const auto senseOf = [&](const std::optional<LoopCrossing>& crossing) {
+        return crossing ? std::optional{StoredEdgeUseSense(shape, crossing->Coedge)} : std::nullopt;
+    };
+    const std::optional<LoopCrossing> atStart = end(piece.Start);
+    const std::optional<LoopCrossing> atEnd = end(piece.End);
+    const std::size_t start =
+        networks.VertexOf(face.Face, branch, atStart, piece.Range.GetLower(), tolerance);
+    const bool closed = IsLoop(branch, piece.Range, piece, tolerance);
+    const std::size_t stop =
+        closed ? start
+               : networks.VertexOf(face.Face, branch, atEnd, piece.Range.GetUpper(), tolerance);
+    networks.AddEdge(face.Face, {branch.Curve3d, branch.OnA, piece.Range, branch.Bound, start, stop,
+                                 senseOf(atStart), senseOf(atEnd)});
+}
+
 /// A piece of the intersection: its edge in each body's networks, and the
 /// branch's side transition.
 struct SharedPiece {
@@ -196,7 +240,7 @@ void AddPiece(Networks& a, Networks& b, const Shape& sa, const Shape& sb, const 
         const std::optional<LoopCrossing> atStart = endOf(clip, piece, range.GetLower(), true);
         const std::optional<LoopCrossing> atEnd = endOf(clip, piece, range.GetUpper(), false);
         const std::size_t start = n.VertexOf(f.Face, branch, atStart, range.GetLower(), tolerance);
-        const bool closed = range == branch.Range && !piece.Start && !piece.End;
+        const bool closed = IsLoop(branch, range, piece, tolerance);
         const std::size_t end =
             closed ? start : n.VertexOf(f.Face, branch, atEnd, range.GetUpper(), tolerance);
         return n.AddEdge(f.Face, {branch.Curve3d, pcurve, range, branch.Bound, start, end,
@@ -230,9 +274,120 @@ void AddPiece(Networks& a, Networks& b, const Shape& sa, const Shape& sb, const 
     return {};
 }
 
+// --- Coincident faces ------------------------------------------------------------------
+
+/// The parameters of a point of the plane: its offsets along the axes, the
+/// plane's own Eval inverted (the axes orthonormal within FrameAllowance).
+[[nodiscard]] Point2 OnPlane(const Plane& plane, const Point3& p)
+{
+    const Vec3 d = p - plane.Origin;
+    return {Dot(d, plane.XAxis), Dot(d, plane.YAxis)};
+}
+
+[[nodiscard]] Vec2 AlongPlane(const Plane& plane, const Vec3& v)
+{
+    return {Dot(v, plane.XAxis), Dot(v, plane.YAxis)};
+}
+
+/// The pcurve on `plane` of a 3D line, circle or ellipse lying in it, on the
+/// curve's own parameter: the curve's frame expressed in the plane's.
+/// Nothing for any other curve.
+[[nodiscard]] std::optional<Curve2d> PCurveIn(const Plane& plane, const Curve& curve)
+{
+    if (const Line* l = curve.Target<Line>()) {
+        return Curve2d(Line2d{OnPlane(plane, l->Origin), AlongPlane(plane, l->Direction)});
+    }
+    if (const Circle* c = curve.Target<Circle>()) {
+        return Curve2d(Circle2d{OnPlane(plane, c->Center), c->Radius, AlongPlane(plane, c->XAxis),
+                                AlongPlane(plane, c->YAxis)});
+    }
+    if (const Ellipse* e = curve.Target<Ellipse>()) {
+        return Curve2d(Ellipse2d{OnPlane(plane, e->Center), e->MajorRadius, e->MinorRadius,
+                                 AlongPlane(plane, e->XAxis), AlongPlane(plane, e->YAxis)});
+    }
+    return std::nullopt;
+}
+
+/// The branch an edge of one face makes on a coincident face of the other
+/// body: its own curve, its pcurve on the coincident plane, the edge's own
+/// pcurve as the second, over the edge's range, its bound the edge's
+/// tolerance and the planes' distance. NotSupported for an edge without a
+/// line, circle or ellipse of its own.
+[[nodiscard]] Result<IntersectionBranch> BoundaryBranch(const Shape& shape, const CoedgeId coedge,
+                                                        const Plane& onto, const double distance)
+{
+    const EdgeId edge = EdgeOf(shape, coedge);
+    const std::optional<Curve> curve = CurveOf(shape, edge);
+    const std::optional<Curve2d> mapped = curve ? PCurveIn(onto, *curve) : std::nullopt;
+    const std::optional<Curve2d> own = PCurveOf(shape, coedge);
+    if (!mapped || !own) {
+        return Fail(ErrorCode::NotSupported,
+                    "ImprintBodies: a coincident face is bounded by " +
+                        std::string(Describe(shape, edge)) +
+                        ", which has no line, circle or ellipse of its own to imprint");
+    }
+    IntersectionBranch branch;
+    branch.Curve3d = *curve;
+    branch.OnA = *mapped;
+    branch.OnB = *own;
+    branch.Range = RangeOf(shape, edge);
+    branch.Contact = ContactType::Overlap;
+    branch.Transition = SideTransition::Unresolved;
+    branch.Bound = ToleranceOf(shape, edge) + distance;
+    return branch;
+}
+
+/// Imprints the boundary of `from`, a face of `source`, onto `onto`, the
+/// coincident face of `target` (a plane): every edge of every loop as a
+/// branch, clipped to the face; the stretches inside it join the face's
+/// network, the stretches along its own edges are left to the pairing.
+[[nodiscard]] Result<void> ImprintBoundary(Networks& networks, const Shape& target,
+                                           const FaceData& onto, const Shape& source,
+                                           const FaceId from, const double distance,
+                                           const Context& ctx)
+{
+    const Plane* plane = onto.Surface.Target<Plane>();
+    STEREON_TRY(const LoopRange loops, LoopsOf(source, from));
+    for (const LoopId loop : loops) {
+        STEREON_TRY(const CoedgeRange coedges, CoedgesOf(source, loop));
+        for (const CoedgeId coedge : coedges) {
+            STEREON_TRY(const IntersectionBranch branch,
+                        BoundaryBranch(source, coedge, *plane, distance));
+            STEREON_TRY(const FaceClip clip,
+                        ClipToFace(target, onto.Face, branch, BranchSide::A, ctx));
+            for (const FacePiece& piece : clip.Inside) {
+                AddOneSided(networks, target, onto, branch, clip, piece, ctx);
+            }
+        }
+    }
+    return {};
+}
+
+/// A coincidence of two faces: NotSupported unless both are planes (the
+/// prototype imprints coincident planar faces; coincident cylinders wait),
+/// otherwise each face's boundary imprinted onto the other.
+[[nodiscard]] Result<void> AddCoincidence(Networks& a, Networks& b, const Shape& sa,
+                                          const Shape& sb, const FaceData& fa, const FaceData& fb,
+                                          const OverlapRegion& overlap, std::vector<Plane>& planes,
+                                          const Context& ctx)
+{
+    const Plane* pa = fa.Surface.Target<Plane>();
+    if (pa == nullptr || fb.Surface.Target<Plane>() == nullptr) {
+        return Fail(ErrorCode::NotSupported,
+                    "ImprintBodies: coincident curved faces are not handled yet: " +
+                        std::string(Describe(sa, fa.Face)) + " and " +
+                        std::string(Describe(sb, fb.Face)));
+    }
+    STEREON_TRY_VOID(ImprintBoundary(a, sa, fa, sb, fb.Face, overlap.Distance, ctx));
+    STEREON_TRY_VOID(ImprintBoundary(b, sb, fb, sa, fa.Face, overlap.Distance, ctx));
+    planes.push_back(*pa);
+    return {};
+}
+
 /// Intersects every candidate face pair and gathers the networks.
 [[nodiscard]] Result<void> Gather(Networks& a, Networks& b, const Shape& sa, const Shape& sb,
-                                  std::vector<SharedPiece>& shared, const Context& ctx)
+                                  std::vector<SharedPiece>& shared, std::vector<Plane>& planes,
+                                  const Context& ctx)
 {
     STEREON_TRY(const std::vector<FaceData> facesA, FacesOf(sa, ctx));
     STEREON_TRY(const std::vector<FaceData> facesB, FacesOf(sb, ctx));
@@ -244,15 +399,19 @@ void AddPiece(Networks& a, Networks& b, const Shape& sa, const Shape& sb, const 
             STEREON_TRY(const SurfaceSurfaceIntersection meeting,
                         Intersect(fa.Surface, fa.Parameters, fb.Surface, fb.Parameters,
                                   ctx.GetResolution(), ctx));
-            if (!meeting.Overlaps.empty()) {
-                return Fail(ErrorCode::NotSupported,
-                            "ImprintBodies: coincident faces (an overlap) wait for the assembly "
-                            "of M8: " +
-                                std::string(Describe(sa, fa.Face)) + " and " +
-                                std::string(Describe(sb, fb.Face)));
+            // A coincidence's own boundary branches bound the faces' parameter
+            // boxes, not the faces: the faces' boundaries imprinted on each
+            // other take their place.
+            std::set<std::size_t> bounding;
+            for (const OverlapRegion& overlap : meeting.Overlaps) {
+                STEREON_TRY_VOID(AddCoincidence(a, b, sa, sb, fa, fb, overlap, planes, ctx));
+                bounding.insert(overlap.Boundary.begin(), overlap.Boundary.end());
             }
-            for (const IntersectionBranch& branch : meeting.Branches) {
-                STEREON_TRY_VOID(AddBranch(a, b, sa, sb, fa, fb, branch, shared, ctx));
+            for (std::size_t i = 0; i < meeting.Branches.size(); ++i) {
+                if (!bounding.contains(i)) {
+                    STEREON_TRY_VOID(
+                        AddBranch(a, b, sa, sb, fa, fb, meeting.Branches[i], shared, ctx));
+                }
             }
         }
     }
@@ -294,6 +453,113 @@ struct Imprinted {
     return {};
 }
 
+/// The point of the edge at parameter t: on its own curve, or for a kind
+/// that evaluates through a surface, on its primary side.
+[[nodiscard]] std::optional<Point3> EdgePoint(const Shape& shape, const EdgeId edge, const double t)
+{
+    if (const std::optional<Curve> curve = CurveOf(shape, edge)) {
+        return Eval(*curve, t);
+    }
+    const CoedgeId primary = PrimaryCoedgeOf(shape, edge);
+    const std::optional<Curve2d> pcurve =
+        primary.IsValid() ? PCurveOf(shape, primary) : std::nullopt;
+    if (!pcurve) {
+        return std::nullopt;
+    }
+    return Eval(SurfaceOf(shape, FaceOf(shape, LoopOf(shape, primary))), Eval(*pcurve, t));
+}
+
+/// An edge as the pairing sees it: its ends and middle in space, and its
+/// tolerance.
+struct EdgeTrace {
+    EdgeId Edge;
+    Point3 Start;
+    Point3 Middle;
+    Point3 End;
+    double Tolerance = 0.0;
+};
+
+[[nodiscard]] std::optional<EdgeTrace> TraceOf(const Shape& shape, const EdgeId edge)
+{
+    const std::optional<Point3> middle = EdgePoint(shape, edge, Midpoint(RangeOf(shape, edge)));
+    if (!middle) {
+        return std::nullopt;
+    }
+    return EdgeTrace{edge, PositionOf(shape, StartOf(shape, edge)), *middle,
+                     PositionOf(shape, EndOf(shape, edge)), ToleranceOf(shape, edge)};
+}
+
+/// Whether the trace lies on the plane: its ends and middle within its
+/// tolerance of it.
+[[nodiscard]] bool OnPlane(const EdgeTrace& trace, const Plane& plane)
+{
+    const Vec3 n = Normalized(Cross(plane.XAxis, plane.YAxis));
+    return std::ranges::all_of(
+        std::array{trace.Start, trace.Middle, trace.End},
+        [&](const Point3& p) { return std::abs(Dot(p - plane.Origin, n)) <= trace.Tolerance; });
+}
+
+/// The edges of the body that lie on one of the coincident planes, but for
+/// those a piece of the intersection already pairs.
+[[nodiscard]] Result<std::vector<EdgeTrace>> OnPlanes(const Shape& shape,
+                                                      const std::vector<Plane>& planes,
+                                                      const std::set<std::uint32_t>& paired)
+{
+    std::vector<EdgeTrace> traces;
+    STEREON_TRY(const auto edges, AllEntities<EntityKind::Edge>(shape));
+    for (const EdgeId edge : edges) {
+        const std::optional<EdgeTrace> trace =
+            paired.contains(edge.GetIndex()) ? std::nullopt : TraceOf(shape, edge);
+        if (trace &&
+            std::ranges::any_of(planes, [&](const Plane& p) { return OnPlane(*trace, p); })) {
+            traces.push_back(*trace);
+        }
+    }
+    return traces;
+}
+
+/// Whether two traces are one edge: ends together, either way round, and
+/// middles together, within the larger tolerance.
+[[nodiscard]] bool SameEdge(const EdgeTrace& a, const EdgeTrace& b)
+{
+    const double tolerance = std::max(a.Tolerance, b.Tolerance);
+    const auto near = [&](const Point3& p, const Point3& q) { return Distance(p, q) <= tolerance; };
+    const bool along = near(a.Start, b.Start) && near(a.End, b.End);
+    const bool against = near(a.Start, b.End) && near(a.End, b.Start);
+    return (along || against) && near(a.Middle, b.Middle);
+}
+
+/// Pairs the edges of the two imprinted bodies that coincide on the planes
+/// of coincident faces: each such edge of A with the first edge of B that is
+/// the same edge. Their transition is Unresolved: an overlap's boundary
+/// separates regions without saying which side they are on.
+[[nodiscard]] Result<void> PairCoincidentEdges(const Shape& a, const Shape& b,
+                                               const std::vector<Plane>& planes,
+                                               std::vector<SharedEdge>& shared)
+{
+    if (planes.empty()) {
+        return {};
+    }
+    std::set<std::uint32_t> pairedA;
+    std::set<std::uint32_t> pairedB;
+    for (const SharedEdge& s : shared) {
+        pairedA.insert(s.A.GetIndex());
+        pairedB.insert(s.B.GetIndex());
+    }
+    STEREON_TRY(const std::vector<EdgeTrace> inA, OnPlanes(a, planes, pairedA));
+    STEREON_TRY(const std::vector<EdgeTrace> inB, OnPlanes(b, planes, pairedB));
+    for (const EdgeTrace& ea : inA) {
+        for (const EdgeTrace& eb : inB) {
+            if (!pairedB.contains(eb.Edge.GetIndex()) && SameEdge(ea, eb)) {
+                shared.push_back({ea.Edge, eb.Edge, SideTransition::Unresolved});
+                pairedB.insert(eb.Edge.GetIndex());
+                break;
+            }
+        }
+    }
+    return {};
+}
+
 } // namespace
 
 Result<ImprintedBodies> ImprintBodies(const Shape& a, const Shape& b, const Context& ctx)
@@ -301,7 +567,8 @@ Result<ImprintedBodies> ImprintBodies(const Shape& a, const Shape& b, const Cont
     Networks networksA(a);
     Networks networksB(b);
     std::vector<SharedPiece> shared;
-    STEREON_TRY_VOID(Gather(networksA, networksB, a, b, shared, ctx));
+    std::vector<Plane> planes; // the planes of coincident faces
+    STEREON_TRY_VOID(Gather(networksA, networksB, a, b, shared, planes, ctx));
     STEREON_TRY(const Imprinted bodyA, ImprintBody(a, networksA, ctx));
     STEREON_TRY(const Imprinted bodyB, ImprintBody(b, networksB, ctx));
     ImprintedBodies result{bodyA.Result, bodyB.Result, {}};
@@ -309,6 +576,7 @@ Result<ImprintedBodies> ImprintBodies(const Shape& a, const Shape& b, const Cont
         result.Shared.push_back({EdgeOfPiece(bodyA, piece.FaceA, piece.EdgeA),
                                  EdgeOfPiece(bodyB, piece.FaceB, piece.EdgeB), piece.Transition});
     }
+    STEREON_TRY_VOID(PairCoincidentEdges(result.A.Shape, result.B.Shape, planes, result.Shared));
     return result;
 }
 
