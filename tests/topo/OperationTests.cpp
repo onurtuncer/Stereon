@@ -17,6 +17,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -333,6 +334,206 @@ TEST_CASE("a new body is all Generated, checked and published together", "[topo]
         REQUIRE(entry.Source == Stereon::NoEntity);
         REQUIRE(entry.Target != Stereon::NoEntity);
     }
+}
+
+namespace {
+
+/// Entries carrying every live entity of `shape` (input `input`) to the
+/// same index of the result with `relation`, or deleting each.
+template <EntityKind K>
+void AddEach(std::vector<HistoryEntry>& entries, const Shape& shape, const std::uint8_t input,
+             const HistoryRelation relation)
+{
+    for (const auto id : Must(Stereon::AllEntities<K>(shape))) {
+        HistoryEntry e;
+        e.Kind = K;
+        e.Relation = relation;
+        e.Input = input;
+        e.Source = id.GetIndex();
+        e.Target = relation == HistoryRelation::Deleted ? Stereon::NoEntity : id.GetIndex();
+        entries.push_back(e);
+    }
+}
+
+void AddAll(std::vector<HistoryEntry>& entries, const Shape& shape, const std::uint8_t input,
+            const HistoryRelation relation)
+{
+    AddEach<EntityKind::Vertex>(entries, shape, input, relation);
+    AddEach<EntityKind::Edge>(entries, shape, input, relation);
+    AddEach<EntityKind::Coedge>(entries, shape, input, relation);
+    AddEach<EntityKind::Loop>(entries, shape, input, relation);
+    AddEach<EntityKind::Face>(entries, shape, input, relation);
+    AddEach<EntityKind::Shell>(entries, shape, input, relation);
+    AddEach<EntityKind::Solid>(entries, shape, input, relation);
+}
+
+/// Commits a fresh square sheet, the copy of input 0, with the History
+/// given, against inputs 0 (a square sheet) and 1 (a sheet with a hole).
+Stereon::Result<OperationResult> CommitCopy(std::vector<HistoryEntry> entries)
+{
+    const std::array inputs{std::move(MakeSquareSheet()).Freeze(),
+                            std::move(MakeHoleSheet()).Freeze()};
+    Body copy = MakeSquareSheet();
+    return Commit(std::move(copy.Builder), Context::Default(), Stereon::History(std::move(entries)),
+                  inputs);
+}
+
+HistoryEntry EntryOf(const EntityKind kind, const HistoryRelation relation,
+                     const std::uint8_t input, const std::uint32_t source,
+                     const std::uint32_t target)
+{
+    HistoryEntry e;
+    e.Kind = kind;
+    e.Relation = relation;
+    e.Input = input;
+    e.Source = source;
+    e.Target = target;
+    return e;
+}
+
+std::string MessageOf(const Stereon::Result<OperationResult>& result)
+{
+    return result ? std::string() : std::string(result.error().GetMessage());
+}
+
+} // namespace
+
+TEST_CASE("a two-input History is published once it accounts for both inputs",
+          "[topo][operation][history]")
+{
+    const Shape square = std::move(MakeSquareSheet()).Freeze();
+    const Shape holed = std::move(MakeHoleSheet()).Freeze();
+    std::vector<HistoryEntry> entries;
+    AddAll(entries, square, 0, HistoryRelation::Unchanged);
+    AddAll(entries, holed, 1, HistoryRelation::Deleted);
+    const auto result = CommitCopy(entries);
+    INFO(MessageOf(result));
+    REQUIRE(result.has_value());
+    REQUIRE(result->History.GetEntries().size() == entries.size());
+    // Each input's entities are asked for by their own ordinal.
+    REQUIRE(result->History.OfSource(EntityKind::Face, 0, 1).front().Relation ==
+            HistoryRelation::Deleted);
+    REQUIRE(result->History.OfSource(EntityKind::Face, 0).front().Relation ==
+            HistoryRelation::Unchanged);
+    REQUIRE(result->Checked == Stereon::ValidityLevel::Geometric);
+}
+
+TEST_CASE("a two-input History that misses an entity or names a dead one is refused",
+          "[topo][operation][history]")
+{
+    const Shape square = std::move(MakeSquareSheet()).Freeze();
+    const Shape holed = std::move(MakeHoleSheet()).Freeze();
+    std::vector<HistoryEntry> sound;
+    AddAll(sound, square, 0, HistoryRelation::Unchanged);
+    AddAll(sound, holed, 1, HistoryRelation::Deleted);
+
+    // The second input's face with no disposition.
+    std::vector<HistoryEntry> missing;
+    for (const HistoryEntry& e : sound) {
+        if (!(e.Input == 1 && e.Kind == EntityKind::Face)) {
+            missing.push_back(e);
+        }
+    }
+    const auto unaccounted = CommitCopy(missing);
+    REQUIRE_FALSE(unaccounted.has_value());
+    REQUIRE(unaccounted.error().GetCode() == ErrorCode::InvalidResult);
+    REQUIRE(MessageOf(unaccounted).find("face 0 of input 1 has no disposition") !=
+            std::string::npos);
+
+    // A result entity with no provenance.
+    std::vector<HistoryEntry> orphan;
+    for (const HistoryEntry& e : sound) {
+        if (!(e.Input == 0 && e.Kind == EntityKind::Loop)) {
+            orphan.push_back(e);
+        }
+    }
+    orphan.push_back(EntryOf(EntityKind::Loop, HistoryRelation::Deleted, 0, 0, Stereon::NoEntity));
+    REQUIRE(MessageOf(CommitCopy(orphan)).find("loop 0 of the result has no provenance") !=
+            std::string::npos);
+
+    // An entry naming an entity no input has, or an input that does not exist.
+    std::vector<HistoryEntry> dead = sound;
+    dead.push_back(EntryOf(EntityKind::Vertex, HistoryRelation::Modified, 1, 999, 0));
+    REQUIRE(MessageOf(CommitCopy(dead)).find("not live") != std::string::npos);
+    std::vector<HistoryEntry> third = sound;
+    third.push_back(EntryOf(EntityKind::Vertex, HistoryRelation::Deleted, 2, 0, Stereon::NoEntity));
+    REQUIRE(MessageOf(CommitCopy(third)).find("input 2 of 2") != std::string::npos);
+}
+
+TEST_CASE("split and merge groups, and generators, in a two-input History",
+          "[topo][operation][history]")
+{
+    const Shape square = std::move(MakeSquareSheet()).Freeze();
+    const Shape holed = std::move(MakeHoleSheet()).Freeze();
+    std::vector<HistoryEntry> base;
+    AddAll(base, square, 0, HistoryRelation::Unchanged);
+    AddAll(base, holed, 1, HistoryRelation::Deleted);
+    const auto without = [&](const EntityKind kind, const std::uint8_t input) {
+        std::vector<HistoryEntry> kept;
+        for (const HistoryEntry& e : base) {
+            if (!(e.Kind == kind && e.Input == input)) {
+                kept.push_back(e);
+            }
+        }
+        return kept;
+    };
+
+    // A split, the first input's vertex 0 continued by the result's vertices
+    // 0 and 1, and a merge, the second input's vertices 0 and 1 continued by
+    // the result's vertex 2.
+    std::vector<HistoryEntry> grouped = without(EntityKind::Vertex, 0);
+    for (HistoryEntry& e : grouped) {
+        if (e.Kind == EntityKind::Vertex && e.Input == 1 && e.Source < 2) {
+            e.Relation = HistoryRelation::Modified;
+            e.Target = 2;
+            e.Group = 8;
+        }
+    }
+    for (const std::uint32_t target : {0U, 1U}) {
+        HistoryEntry split = EntryOf(EntityKind::Vertex, HistoryRelation::Modified, 0, 0, target);
+        split.Group = 7;
+        grouped.push_back(split);
+    }
+    grouped.push_back(
+        EntryOf(EntityKind::Vertex, HistoryRelation::Deleted, 0, 1, Stereon::NoEntity));
+    grouped.push_back(EntryOf(EntityKind::Vertex, HistoryRelation::Unchanged, 0, 2, 2));
+    grouped.push_back(EntryOf(EntityKind::Vertex, HistoryRelation::Unchanged, 0, 3, 3));
+    const auto split = CommitCopy(grouped);
+    INFO(MessageOf(split));
+    REQUIRE(split.has_value());
+    REQUIRE(split->History.OfSource(EntityKind::Vertex, 0).size() == 2);
+    REQUIRE(split->History.OfTarget(EntityKind::Vertex, 2).size() == 3);
+
+    // A group of one entry is neither a split nor a merge.
+    std::vector<HistoryEntry> lone = base;
+    lone.front().Relation = HistoryRelation::Modified;
+    lone.front().Group = 3;
+    REQUIRE(MessageOf(CommitCopy(lone)).find("neither a split nor a merge") != std::string::npos);
+
+    // An edge generated by a face of each input: provenance for the edge,
+    // and no disposition of the faces, which still need their own.
+    std::vector<HistoryEntry> generated = without(EntityKind::Edge, 0);
+    for (const auto id : Must(Stereon::AllEntities<EntityKind::Edge>(square))) {
+        for (const std::uint8_t input : {std::uint8_t{0}, std::uint8_t{1}}) {
+            HistoryEntry g =
+                EntryOf(EntityKind::Edge, HistoryRelation::Generated, input, 0, id.GetIndex());
+            g.SourceKind = EntityKind::Face;
+            generated.push_back(g);
+        }
+        generated.push_back(EntryOf(EntityKind::Edge, HistoryRelation::Deleted, 0, id.GetIndex(),
+                                    Stereon::NoEntity));
+    }
+    const auto byFaces = CommitCopy(generated);
+    INFO(MessageOf(byFaces));
+    REQUIRE(byFaces.has_value());
+    REQUIRE(byFaces->History.OfTarget(EntityKind::Edge, 0).size() == 2);
+    REQUIRE(byFaces->History.OfSource(EntityKind::Face, 0, 1).size() == 1); // its own deletion
+    // A generator that names no live entity of its kind is refused.
+    generated.back().Relation = HistoryRelation::Generated;
+    generated.back().Source = 5;
+    generated.back().SourceKind = EntityKind::Face;
+    generated.back().Target = 0;
+    REQUIRE(MessageOf(CommitCopy(generated)).find("not live") != std::string::npos);
 }
 
 TEST_CASE("an edit's History: deleted, modified, unchanged and generated", "[topo][operation]")

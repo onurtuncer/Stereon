@@ -12,6 +12,7 @@ module;
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <span>
 #include <string>
@@ -289,14 +290,23 @@ ShapeBuilder::MergeVerticesImpl(const std::span<const BuilderVertexId> vertices,
         const auto& member = m_Tables.Vertices[vertex.GetIndex()];
         bool assigned = false;
         for (auto& cluster : clusters) {
+            // ADR-0001, rule 3: within the pair tolerance of the
+            // representative, never of another member, and within the
+            // healing budget (the ceiling) of it, which bounds the cluster's
+            // radius. With the pair tolerance the larger of the two (decision
+            // D2 of the Boolean plan) the second test follows from the first
+            // for published tolerances; it is kept so that the rule holds if
+            // that choice changes.
             const auto& representative = m_Tables.Vertices[cluster.front().GetIndex()];
             const auto comparison =
                 CompareDistance(member.Position, representative.Position,
                                 std::max(member.Tolerance, representative.Tolerance));
-            if (!comparison.Supported) {
+            const auto budget = CompareDistance(member.Position, representative.Position,
+                                                context.GetToleranceCeiling());
+            if (!comparison.Supported || !budget.Supported) {
                 return Refuse("MergeVertices", "unsupported predicate domain");
             }
-            if (comparison.Value != Sign::Positive) {
+            if (comparison.Value != Sign::Positive && budget.Value != Sign::Positive) {
                 cluster.push_back(vertex);
                 assigned = true;
                 break;
@@ -322,6 +332,31 @@ ShapeBuilder::MergeVerticesImpl(const std::span<const BuilderVertexId> vertices,
     return result;
 }
 
+namespace {
+
+/// ADR-0001, rule 4: the merged vertex takes the representative's (the
+/// cluster's first) position and the largest of the members' tolerances and
+/// the cluster's radius, at least the resolution. The radius is rounded up a
+/// step, so the tolerance covers every member's position whatever the
+/// rounding of the distance.
+[[nodiscard]] double MergedTolerance(const Detail::TopologyTables& tables,
+                                     const std::vector<BuilderVertexId>& cluster,
+                                     const double resolution)
+{
+    const Point3 at = tables.Vertices[cluster.front().GetIndex()].Position;
+    double tolerance = resolution;
+    for (const auto vertex : cluster) {
+        const auto& member = tables.Vertices[vertex.GetIndex()];
+        const double radius =
+            std::nextafter(Distance(member.Position, at), std::numeric_limits<double>::infinity());
+        tolerance = std::max(
+            {tolerance, member.Tolerance, vertex == cluster.front() ? member.Tolerance : radius});
+    }
+    return tolerance;
+}
+
+} // namespace
+
 Result<void> ShapeBuilder::MergeVertexCluster(const std::vector<BuilderVertexId>& cluster,
                                               const Context& context)
 {
@@ -330,10 +365,7 @@ Result<void> ShapeBuilder::MergeVertexCluster(const std::vector<BuilderVertexId>
     }
     const auto kept = cluster.front();
     const auto original = m_Tables.Vertices[kept.GetIndex()];
-    double tolerance = std::max(original.Tolerance, context.GetResolution());
-    for (const auto vertex : cluster) {
-        tolerance = std::max(tolerance, m_Tables.Vertices[vertex.GetIndex()].Tolerance);
-    }
+    const double tolerance = MergedTolerance(m_Tables, cluster, context.GetResolution());
     if (tolerance > context.GetToleranceCeiling() ||
         (tolerance > original.Tolerance &&
          context.GetToleranceGrowthPolicy() == ToleranceGrowth::Fail)) {

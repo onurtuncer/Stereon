@@ -158,6 +158,8 @@ class TopologyFaults;
 class Compacted;
 [[nodiscard]] Result<Compacted> Compact(const Shape& shape);
 [[nodiscard]] Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context);
+[[nodiscard]] Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context,
+                                             History history, std::span<const Shape> inputs);
 
 class ShapeBuilder {
 public:
@@ -476,6 +478,8 @@ public:
 private:
     friend Result<Shape> Freeze(ShapeBuilder&& builder);
     friend Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context);
+    friend Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context,
+                                          History history, std::span<const Shape> inputs);
     friend class Testing::TopologyFaults;
 
     /// What CacheEdgeCurve proves about a cache (ADR-0009, section 4).
@@ -705,6 +709,20 @@ public:
 /// which run when the Context's validity level asks for them and always in
 /// checked builds. The builder is consumed either way.
 [[nodiscard]] Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context);
+
+/// Commit() for an operation of several inputs, a Boolean's two operands
+/// say, which records its own History (ADR-0030): the builder's result is
+/// published as above, with `history` in place of the one Commit() derives
+/// from the shape the builder was opened on. Entries name their input by
+/// its ordinal in `inputs`, the shapes the operation read, in order.
+/// InvalidResult naming the first problem when the History is incomplete or
+/// malformed (Detail::HistoryProblem): an entity of the result without
+/// provenance, an entity of an input without a disposition, an entry naming
+/// a dead entity or an input that does not exist, or a group that is
+/// neither one split nor one merge. Otherwise as Commit(), and the builder
+/// is consumed either way.
+[[nodiscard]] Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context,
+                                             History history, std::span<const Shape> inputs);
 
 /// Compact() as a shape-producing operation: the compacted shape with a
 /// History in which every live entity continues Unchanged at its new index

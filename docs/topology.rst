@@ -382,13 +382,20 @@ Everything is published together, and only after validation.
 context)`` return one. ``Freeze`` and ``Compact`` remain their building
 blocks.
 
-The History (ADR-0011, ADR-0030) covers one input. An entity of the input
-continues ``Unchanged`` or ``Modified`` at one index of the result, or is
-``Deleted``. An entity of the result with no source is ``Generated``: the
-operation's creation root. Each entry carries the input's ordinal, the
-kind and both indices. The entries are ordered by kind, input, source and
-target, so two runs give the same History. ``History::OfSource`` and
-``OfTarget`` look an entity up.
+The History (ADR-0011, ADR-0030) relates the entities of an operation's
+inputs to those of its result. An entity of an input continues
+``Unchanged`` or ``Modified`` at an index of the result, or is ``Deleted``.
+An entity of the result with no source is ``Generated``: the operation's
+creation root. A ``Generated`` entry may instead name a generator of
+another kind, ``SourceKind``, such as each of the two faces whose
+intersection an edge is. A split is one source continued, ``Modified``, by
+several targets, and a merge several sources continued by one target; the
+entries of one such event share a ``Group``, so the event is explicit.
+Each entry carries the input's ordinal, the kind and both indices. The
+entries are ordered by kind, input, source, target, relation and group, so
+two runs give the same History. ``History::OfSource(kind, index, input)``
+and ``OfTarget`` look an entity up; a generator is found through its
+target.
 
 For ``Commit`` the History compares the result with the shape the builder
 was opened on; a new builder's entities are all ``Generated``. An edit
@@ -397,8 +404,17 @@ when the entity's own fields and what it bounds are as they were, and
 ``Modified`` otherwise. The links that only chain siblings in a parent's
 list don't count, so a face is not modified because its neighbour was
 deleted, but its shell is. ``CompactShape`` composes the remap: every
-live entity continues ``Unchanged`` at its new index. Split and merge
-events join with the Euler operators that make them.
+live entity continues ``Unchanged`` at its new index.
+
+An operation of several inputs, a Boolean's two operands, records its own
+History and publishes it with ``Commit(builder, ctx, history, inputs)``,
+which runs every check of publication the plain ``Commit`` does and then
+refuses the History, with ``InvalidResult`` naming the first problem,
+unless it is complete and well formed (``Detail::HistoryProblem``): every
+live entity of the result has provenance, every live entity of every input
+a disposition, every entry names live entities of an input that exists, a
+generator names a live entity of its kind, and every group is one split or
+one merge.
 
 ``builder.SetTolerance(entity, value, reason)`` is the explicit operation
 through which ADR-0001 lets a local tolerance change. ``Commit`` reports
