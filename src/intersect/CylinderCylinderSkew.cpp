@@ -18,6 +18,7 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <numbers>
@@ -127,11 +128,11 @@ struct ExactNormal {
     return FilteredSign(estimate, [&] {
         DynamicExpansion norm;
         for (const auto& component : e.Normal.Value) {
-            const DynamicExpansion c{component};
+            const DynamicExpansion c{component()};
             norm = Sum(norm, Product(c, c));
         }
-        const DynamicExpansion s{e.Offset.Value};
-        const DynamicExpansion factor{k.Value};
+        const DynamicExpansion s{e.Offset.Value()};
+        const DynamicExpansion factor{k.Value()};
         return Difference(Product(s, s), Product(Product(factor, factor), norm)).GetSign();
     });
 }

@@ -171,6 +171,35 @@ TEST_CASE("a capped sampling reports the deviation it reaches, not the target",
     REQUIRE(easy->Deviation <= 1e-3);
 }
 
+TEST_CASE("a seed's ray takes no sign the certified filter does not settle", "[boolean][classify]")
+{
+    // A cylinder of radius 0.1 about z, and rays along x at heights about
+    // 0.1. At exactly 0.1 the line is tangent in the input doubles, but
+    // |w|^2 - r^2 rounds, so a discriminant formed in doubles may come out
+    // negative and be read as a certain miss; the enclosure straddles zero
+    // and the ray is ambiguous instead, so another direction is tried.
+    const Stereon::Surface drill{
+        Stereon::Cylinder{Point3{0, 0, 0}, 0.1, Stereon::Vec3{1, 0, 0}, Stereon::Vec3{0, 1, 0}}};
+    const Stereon::Vec3 along{1, 0, 0};
+    REQUIRE_FALSE(Stereon::Detail::RayMeets(drill, Point3{-5, 0.1, 0}, along).has_value());
+    // Clear of the tangent the filter decides: two crossings, or none.
+    const auto through = Stereon::Detail::RayMeets(drill, Point3{-5, 0.05, 0}, along);
+    REQUIRE(through.has_value());
+    REQUIRE(through->size() == 2);
+    const auto past = Stereon::Detail::RayMeets(drill, Point3{-5, 0.2, 0}, along);
+    REQUIRE(past.has_value());
+    REQUIRE(past->empty());
+    // Along the axis, and parallel to a plane: ambiguous.
+    REQUIRE_FALSE(
+        Stereon::Detail::RayMeets(drill, Point3{0.5, 0, 0}, Stereon::Vec3{0, 0, 1}).has_value());
+    const Stereon::Surface floor{
+        Stereon::Plane{Point3{0, 0, 0}, Stereon::Vec3{1, 0, 0}, Stereon::Vec3{0, 1, 0}}};
+    REQUIRE_FALSE(Stereon::Detail::RayMeets(floor, Point3{0, 0, 1}, along).has_value());
+    const auto down = Stereon::Detail::RayMeets(floor, Point3{0, 0, 1}, Stereon::Vec3{0, 0, -1});
+    REQUIRE(down.has_value());
+    REQUIRE(down->size() == 1);
+}
+
 TEST_CASE("a narrow region gets a seed strictly inside it", "[boolean][classify]")
 {
     // A square annulus between +-1 and +-0.99: a hundredth wide, against an

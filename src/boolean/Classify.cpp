@@ -12,6 +12,7 @@ module;
 #include <Stereon/Core/Try.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -27,6 +28,7 @@ module;
 module Stereon.Boolean;
 
 import :Classify;
+import Stereon.Robust;
 
 namespace Stereon {
 
@@ -171,38 +173,120 @@ struct Hit {
     double Parameter;
 };
 
+/// A vector of outward-rounded intervals, for the ray's decisions.
+using IVec3 = std::array<Interval, 3>;
+
+[[nodiscard]] IVec3 Enclosed(const Vec3& v)
+{
+    return {Interval{v.X}, Interval{v.Y}, Interval{v.Z}};
+}
+
+/// p - q, enclosed.
+[[nodiscard]] IVec3 Between(const Point3& p, const Point3& q)
+{
+    return {Interval{p.X} - Interval{q.X}, Interval{p.Y} - Interval{q.Y},
+            Interval{p.Z} - Interval{q.Z}};
+}
+
+[[nodiscard]] Interval DotOf(const IVec3& a, const IVec3& b)
+{
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+[[nodiscard]] IVec3 CrossOf(const IVec3& a, const IVec3& b)
+{
+    return {a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]};
+}
+
+/// Whether the interval is certainly positive, or certainly nonzero.
+[[nodiscard]] bool Positive(const Interval& i)
+{
+    return SignOf(i) == Sign::Positive;
+}
+
+[[nodiscard]] bool NonZero(const Interval& i)
+{
+    const std::optional<Sign> sign = SignOf(i);
+    return sign && *sign != Sign::Zero;
+}
+
+/// The parameters at which the line meets the plane, or nothing when the
+/// line may run along it: d . (X x Y) is decided in Interval arithmetic on
+/// the input doubles, and a sign the interval does not settle makes the ray
+/// ambiguous, so another direction is tried; the parameter itself is a
+/// construction, and FaceContains judges the hit within the tolerances.
+[[nodiscard]] std::optional<std::vector<double>> MeetPlane(const Plane& plane, const Point3& origin,
+                                                           const Vec3& d)
+{
+    const Interval along =
+        DotOf(Enclosed(d), CrossOf(Enclosed(plane.XAxis), Enclosed(plane.YAxis)));
+    if (!NonZero(along)) {
+        return std::nullopt;
+    }
+    const Vec3 n = Cross(plane.XAxis, plane.YAxis);
+    return std::vector<double>{Dot(plane.Origin - origin, n) / Dot(d, n)};
+}
+
+/// The parameters at which the line meets the cylinder, up to two, or
+/// nothing when the line may run along the axis or graze the surface. With
+/// A = X x Y, q = A . A and w = origin - O, the line o + s d meets the
+/// cylinder where q |(w + s d)|^2 - ((w + s d) . A)^2 = q r^2, the quadratic
+/// a s^2 + 2 b s + c = 0 of
+///     a = q |d|^2 - (d . A)^2, b = q (w . d) - (w . A)(d . A),
+///     c = q (|w|^2 - r^2) - (w . A)^2,
+/// whose coefficients and discriminant b^2 - a c are enclosed in Interval
+/// arithmetic straight from the input doubles, not from rounded values: a
+/// certain negative discriminant is a miss, a certain positive one two
+/// crossings, and anything the intervals do not settle is ambiguous.
+[[nodiscard]] std::optional<std::vector<double>> MeetCylinder(const Cylinder& cylinder,
+                                                              const Point3& origin, const Vec3& d)
+{
+    const IVec3 axis = CrossOf(Enclosed(cylinder.XAxis), Enclosed(cylinder.YAxis));
+    const IVec3 dd = Enclosed(d);
+    const IVec3 w = Between(origin, cylinder.Origin);
+    const Interval q = DotOf(axis, axis);
+    const Interval dA = DotOf(dd, axis);
+    const Interval wA = DotOf(w, axis);
+    const Interval radius{cylinder.Radius};
+    const Interval a = q * DotOf(dd, dd) - Squared(dA);
+    const Interval b = q * DotOf(w, dd) - wA * dA;
+    const Interval c = q * (DotOf(w, w) - Squared(radius)) - Squared(wA);
+    if (!Positive(a)) {
+        return std::nullopt; // Along the axis, or not certainly off it.
+    }
+    const std::optional<Sign> discriminant = SignOf(Squared(b) - a * c);
+    if (discriminant == Sign::Negative) {
+        return std::vector<double>{}; // The line certainly misses the cylinder.
+    }
+    if (discriminant != Sign::Positive) {
+        return std::nullopt; // A graze, or not certainly a crossing.
+    }
+    // The crossings' parameters, constructed in doubles; FaceContains then
+    // judges each hit within the tolerances.
+    const Vec3 unit = Normalized(Axis(cylinder));
+    const Vec3 wv = origin - cylinder.Origin;
+    const Vec3 dp = d - Dot(d, unit) * unit;
+    const Vec3 wp = wv - Dot(wv, unit) * unit;
+    const double qa = Dot(dp, dp);
+    const double qb = Dot(dp, wp);
+    const double qc = Dot(wp, wp) - cylinder.Radius * cylinder.Radius;
+    const double root = std::sqrt(std::max(qb * qb - qa * qc, 0.0));
+    return std::vector<double>{(-qb - root) / qa, (-qb + root) / qa};
+}
+
 /// The parameters at which the line meets the surface: a plane once, a
-/// cylinder up to twice; nothing when the line runs along the surface or
-/// touches it (a vanishing discriminant, decided in doubles: a graze is
-/// ambiguous and another direction is tried).
+/// cylinder up to twice; nothing when a meeting is ambiguous, the line
+/// running along the surface or touching it, or a sign the certified filter
+/// does not settle, so that another direction is tried. A sign is never
+/// taken from rounded doubles.
 [[nodiscard]] std::optional<std::vector<double>> MeetSurface(const Surface& surface,
                                                              const Point3& origin, const Vec3& d)
 {
     if (const Plane* plane = surface.Target<Plane>()) {
-        const Vec3 n = Cross(plane->XAxis, plane->YAxis);
-        const double along = Dot(d, n);
-        if (along == 0.0) { // STEREON-LINT-ALLOW(epsilon): a sign test
-            return std::nullopt;
-        }
-        return std::vector<double>{Dot(plane->Origin - origin, n) / along};
+        return MeetPlane(*plane, origin, d);
     }
     if (const Cylinder* cylinder = surface.Target<Cylinder>()) {
-        const Vec3 axis = Normalized(Axis(*cylinder));
-        const Vec3 w = origin - cylinder->Origin;
-        const Vec3 dp = d - Dot(d, axis) * axis;
-        const Vec3 wp = w - Dot(w, axis) * axis;
-        const double a = Dot(dp, dp);
-        const double b = Dot(dp, wp);
-        const double c = Dot(wp, wp) - cylinder->Radius * cylinder->Radius;
-        const double discriminant = b * b - a * c;
-        if (discriminant < 0.0) {         // STEREON-LINT-ALLOW(epsilon): a sign test
-            return std::vector<double>{}; // The line misses the cylinder.
-        }
-        if (a == 0.0 || discriminant == 0.0) { // STEREON-LINT-ALLOW(epsilon): a sign test
-            return std::nullopt;               // Along the axis, or a graze.
-        }
-        const double root = std::sqrt(discriminant);
-        return std::vector<double>{(-b - root) / a, (-b + root) / a};
+        return MeetCylinder(*cylinder, origin, d);
     }
     return std::nullopt;
 }
@@ -371,6 +455,12 @@ Result<std::optional<Point2>> Detail::SeedPointIn(const Shape& shape, const Face
                                                   const Context& ctx)
 {
     return SeedIn(shape, face, ctx);
+}
+
+std::optional<std::vector<double>> Detail::RayMeets(const Surface& surface, const Point3& origin,
+                                                    const Vec3& d)
+{
+    return MeetSurface(surface, origin, d);
 }
 
 Result<Classification> Classify(const ImprintedBodies& bodies, const Context& ctx)

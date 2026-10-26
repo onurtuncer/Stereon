@@ -99,4 +99,10 @@ export namespace Stereon::Detail {
 [[nodiscard]] Result<std::optional<Point2>> SeedPointIn(const Shape& shape, FaceId face,
                                                         const Context& ctx);
 
+/// Where the line origin + s d meets the surface, as a seed's ray sees it:
+/// the parameters, or nothing when the meeting is ambiguous, a graze or a
+/// sign the certified filter does not settle. Exposed for the tests.
+[[nodiscard]] std::optional<std::vector<double>> RayMeets(const Surface& surface,
+                                                          const Point3& origin, const Vec3& d);
+
 } // namespace Stereon::Detail
