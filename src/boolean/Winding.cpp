@@ -541,7 +541,6 @@ struct FaceFrame {
     double Tolerance = 0.0;
     double Target = 0.0;
     double Chords = 0.0; // how far the boundary's chords lie from the edges
-    double Sign = 1.0;   // -1 for a face oriented against its surface
     Point3 Point;
 };
 
@@ -631,7 +630,7 @@ void Accumulate(Tally& tally, const FaceFrame& f, const Box2& cell,
     const bool separated = all.Fans.Distance > DeviationOf(f, du, all.Off);
     const bool smallest = f.Scale.Lipschitz() * std::max(du, dv) <= f.Target || depth >= MaxDepth;
     if (separated || smallest) {
-        tally.SolidAngle += f.Sign * all.Fans.SolidAngle;
+        tally.SolidAngle += all.Fans.SolidAngle;
         tally.Triangles += all.Fans.Triangles;
         tally.Unseparated += separated ? 0 : 1;
         return;
@@ -655,15 +654,11 @@ void Accumulate(Tally& tally, const FaceFrame& f, const Box2& cell,
                         " lies on a surface outside the prototype's planes and cylinders");
     }
     STEREON_TRY(const FacePolygon polygon, PolygonOf(body, face, *scale, target));
-    // A loop runs counter-clockwise about Su x Sv; a face oriented against
-    // its surface has its material on the other side.
-    const FaceFrame frame{surface,
-                          *scale,
-                          polygon.Tolerance,
-                          target,
-                          polygon.Deviation,
-                          IsReversed(body, face) ? -1.0 : 1.0,
-                          point};
+    // A loop runs counter-clockwise about the face's own normal, reversed or
+    // not, so its triangles, made from its corners in space, face the way
+    // the face does: the orientation is in the corners' order, and no sign
+    // for a face oriented against its surface may be applied on top of it.
+    const FaceFrame frame{surface, *scale, polygon.Tolerance, target, polygon.Deviation, point};
     Accumulate(tally, frame, polygon.Box, polygon.Loops, 0);
     return {};
 }

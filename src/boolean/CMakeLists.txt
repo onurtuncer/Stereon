@@ -7,6 +7,7 @@
 
 stereon_add_library(boolean
     MODULES
+        Assemble.cppm
         Bodies.cppm
         Boolean.cppm
         Classify.cppm
@@ -14,6 +15,7 @@ stereon_add_library(boolean
         Imprint.cppm
         Winding.cppm
     SOURCES
+        Assemble.cpp
         Bodies.cpp
         Classify.cpp
         Clip.cpp
