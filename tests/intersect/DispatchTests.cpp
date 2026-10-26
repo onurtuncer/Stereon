@@ -106,8 +106,9 @@ TEST_CASE("every built-in pair has a handler that names both types", "[intersect
         }
     }
 
-    // Stubs until the analytic handlers of ADR-0010 land: NotImplemented,
-    // ordered as called.
+    // Line-line is implemented; the remaining 3D curve pairs still name
+    // their types in NotImplemented diagnostics, ordered as called.
+    REQUIRE(Intersect(SomeLine(), SomeLine(), ctx).has_value());
     const auto lineCircle = Intersect(SomeLine(), SomeCircle(), ctx);
     REQUIRE_FALSE(lineCircle.has_value());
     REQUIRE(lineCircle.error().GetCode() == ErrorCode::NotImplemented);

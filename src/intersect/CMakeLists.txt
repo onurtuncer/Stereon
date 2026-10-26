@@ -14,6 +14,7 @@ stereon_add_library(intersect
         CylinderCylinder.cpp
         CylinderCylinderSkew.cpp
         Dispatch.cpp
+        LineLine.cpp
         PlanarConics.cpp
         PlanarLines.cpp
         PlanarSpline.cpp
@@ -21,3 +22,4 @@ stereon_add_library(intersect
         PlanePlane.cpp
     DEPENDS
         surface)
+
