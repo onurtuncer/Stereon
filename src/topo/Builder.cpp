@@ -22,6 +22,8 @@ module;
 #include <format>
 #include <limits>
 #include <memory>
+#include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -1264,18 +1266,36 @@ namespace {
 
 } // namespace
 
-Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context)
+namespace {
+
+/// What both Commit()s publish but the History: the frozen shape, its
+/// tolerance changes and warnings, the builder's events, the snapshot it was
+/// opened on (null for a new builder) and the level the result was checked
+/// at.
+struct Prepared {
+    Shape Frozen;
+    std::vector<ToleranceChange> Changes;
+    std::vector<Diagnostic> Warnings;
+    std::vector<TopologyEvent> Events;
+    std::shared_ptr<const TopologySnapshot> Source;
+    bool Geometric = false;
+};
+
+/// Runs every check of publication but the History's on a builder the
+/// Commit() has consumed and taken its source, its tolerance calls and its
+/// events from: the source's structure in checked builds, Freeze(), the
+/// tolerances against the Context, and the Geometric level when it runs.
+[[nodiscard]] Result<Prepared> Prepare(ShapeBuilder&& consumed,
+                                       std::shared_ptr<const TopologySnapshot> source,
+                                       std::vector<ToleranceChange> calls,
+                                       std::vector<TopologyEvent> events, const Context& context)
 {
-    STEREON_PROFILE_SCOPE("topo.Commit");
-    STEREON_TRY_VOID(builder.RequireToken("Commit"));
-    // Consumed whatever happens, as Freeze() consumes it (ADR-0027).
-    ShapeBuilder consumed(std::move(builder));
-    const std::shared_ptr<const TopologySnapshot> source = consumed.m_Source;
-    std::vector<ToleranceChange> calls = std::move(consumed.m_ToleranceChanges);
-    std::vector<TopologyEvent> events = std::move(consumed.m_Events);
+    Prepared prepared;
+    prepared.Source = std::move(source);
+    prepared.Events = std::move(events);
     if constexpr (STEREON_CHECKED_HANDLES) {
-        if (source != nullptr) {
-            const ValidityReport report = Detail::ValidateStructure(source->GetTables());
+        if (prepared.Source != nullptr) {
+            const ValidityReport report = Detail::ValidateStructure(prepared.Source->GetTables());
             if (!report.IsValid()) {
                 return Fail(ErrorCode::InvalidInput,
                             "Commit: the shape the builder was opened on is not structurally "
@@ -1290,34 +1310,91 @@ Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context)
                     "Commit: " + std::string(frozen.error().GetMessage()));
     }
     const Detail::TopologyTables& result = frozen->GetSnapshot()->GetTables();
-    const Detail::TopologyTables* before = source != nullptr ? &source->GetTables() : nullptr;
     std::vector<ToleranceChange> changes = Coalesced(std::move(calls), result);
     STEREON_TRY_VOID(CheckTolerances(changes, context, *frozen));
     STEREON_TRY_VOID(CheckToleranceBounds(result, context, *frozen, "Commit"));
     // A result that fails the Geometric level is a kernel bug or a caller's
     // inconsistent geometry; either way it is not published (ADR-0006).
-    const bool geometric = ChecksGeometry(context);
-    if (geometric) {
+    prepared.Geometric = ChecksGeometry(context);
+    if (prepared.Geometric) {
         const ValidityReport report = Detail::ValidateGeometry(result);
         if (!report.IsValid()) {
             return Fail(ErrorCode::InvalidResult,
                         "Commit: the result is not geometrically valid:\n" + report.ToText());
         }
     }
+    const Detail::TopologyTables* before =
+        prepared.Source != nullptr ? &prepared.Source->GetTables() : nullptr;
+    prepared.Warnings = WarningsOf(changes, before, *frozen);
+    prepared.Changes = std::move(changes);
+    prepared.Frozen = *std::move(frozen);
+    return prepared;
+}
+
+[[nodiscard]] OperationResult Published(Prepared&& prepared, History history)
+{
+    OperationResult published;
+    published.TopologyEvents = std::move(prepared.Events);
+    published.Warnings = std::move(prepared.Warnings);
+    published.ToleranceChanges = std::move(prepared.Changes);
+    published.History = std::move(history);
+    published.Shape = std::move(prepared.Frozen);
+    published.Checked = prepared.Geometric ? ValidityLevel::Geometric : ValidityLevel::Structural;
+    return published;
+}
+
+} // namespace
+
+Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context)
+{
+    STEREON_PROFILE_SCOPE("topo.Commit");
+    STEREON_TRY_VOID(builder.RequireToken("Commit"));
+    // Consumed whatever happens, as Freeze() consumes it (ADR-0027).
+    ShapeBuilder consumed(std::move(builder));
+    std::shared_ptr<const TopologySnapshot> source = consumed.m_Source;
+    std::vector<ToleranceChange> calls = std::move(consumed.m_ToleranceChanges);
+    std::vector<TopologyEvent> events = std::move(consumed.m_Events);
+    STEREON_TRY(Prepared prepared, Prepare(std::move(consumed), std::move(source), std::move(calls),
+                                           std::move(events), context));
+    const Detail::TopologyTables& result = prepared.Frozen.GetSnapshot()->GetTables();
+    const Detail::TopologyTables* before =
+        prepared.Source != nullptr ? &prepared.Source->GetTables() : nullptr;
     History history = Detail::HistoryBetween(before, result);
     // ADR-0030: missing history fails the operation before publication.
     if (!Detail::HistoryIsComplete(history, before, result)) {
         return Fail(ErrorCode::InvalidResult,
                     "Commit: the History does not account for every entity (a kernel bug)");
     }
-    OperationResult published;
-    published.TopologyEvents = std::move(events);
-    published.Warnings = WarningsOf(changes, before, *frozen);
-    published.ToleranceChanges = std::move(changes);
-    published.History = std::move(history);
-    published.Shape = *std::move(frozen);
-    published.Checked = geometric ? ValidityLevel::Geometric : ValidityLevel::Structural;
-    return published;
+    return Published(std::move(prepared), std::move(history));
+}
+
+Result<OperationResult> Commit(ShapeBuilder&& builder, const Context& context, History history,
+                               const std::span<const Shape> inputs)
+{
+    STEREON_PROFILE_SCOPE("topo.Commit");
+    STEREON_TRY_VOID(builder.RequireToken("Commit"));
+    // Consumed whatever happens, as Freeze() consumes it (ADR-0027).
+    ShapeBuilder consumed(std::move(builder));
+    std::shared_ptr<const TopologySnapshot> source = consumed.m_Source;
+    std::vector<ToleranceChange> calls = std::move(consumed.m_ToleranceChanges);
+    std::vector<TopologyEvent> events = std::move(consumed.m_Events);
+    STEREON_TRY(Prepared prepared, Prepare(std::move(consumed), std::move(source), std::move(calls),
+                                           std::move(events), context));
+    std::vector<const Detail::TopologyTables*> tables;
+    for (const Shape& input : inputs) {
+        if (input.IsEmpty()) {
+            return Fail(ErrorCode::InvalidInput, "Commit: an input shape is empty");
+        }
+        tables.push_back(&input.GetSnapshot()->GetTables());
+    }
+    // ADR-0030: missing or malformed history fails the operation before
+    // publication.
+    if (const std::optional<std::string> problem =
+            Detail::HistoryProblem(history, tables, prepared.Frozen.GetSnapshot()->GetTables())) {
+        return Fail(ErrorCode::InvalidResult,
+                    "Commit: the History is incomplete or malformed: " + *problem);
+    }
+    return Published(std::move(prepared), std::move(history));
 }
 
 Result<OperationResult> CompactShape(const Shape& shape, const Context& context)

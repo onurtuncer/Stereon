@@ -13,6 +13,14 @@ module;
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <format>
+#include <iterator>
+#include <map>
+#include <optional>
+#include <set>
+#include <span>
+#include <string>
+#include <string_view>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -26,9 +34,9 @@ namespace {
 [[nodiscard]] bool Before(const HistoryEntry& a, const HistoryEntry& b) noexcept
 {
     return std::tuple(static_cast<int>(a.Kind), a.Input, a.Source, a.Target,
-                      static_cast<int>(a.Relation)) < std::tuple(static_cast<int>(b.Kind), b.Input,
-                                                                 b.Source, b.Target,
-                                                                 static_cast<int>(b.Relation));
+                      static_cast<int>(a.Relation), a.Group, static_cast<int>(a.SourceKind)) <
+           std::tuple(static_cast<int>(b.Kind), b.Input, b.Source, b.Target,
+                      static_cast<int>(b.Relation), b.Group, static_cast<int>(b.SourceKind));
 }
 
 } // namespace
@@ -39,11 +47,14 @@ History::History(std::vector<HistoryEntry> entries)
     std::ranges::sort(m_Entries, Before);
 }
 
-std::vector<HistoryEntry> History::OfSource(const EntityKind kind, const std::uint32_t source) const
+std::vector<HistoryEntry> History::OfSource(const EntityKind kind, const std::uint32_t source,
+                                            const std::uint8_t input) const
 {
     std::vector<HistoryEntry> found;
     for (const HistoryEntry& e : m_Entries) {
-        if (e.Kind == kind && e.Input == 0 && e.Source == source && source != NoEntity) {
+        const bool generator = e.Relation == HistoryRelation::Generated;
+        if (e.Kind == kind && !generator && e.Input == input && e.Source == source &&
+            source != NoEntity) {
             found.push_back(e);
         }
     }
@@ -271,6 +282,202 @@ bool HistoryIsComplete(const History& history, const TopologyTables* source,
            KindIsComplete<EntityKind::Face>(history, source, result) &&
            KindIsComplete<EntityKind::Shell>(history, source, result) &&
            KindIsComplete<EntityKind::Solid>(history, source, result);
+}
+
+namespace {
+
+[[nodiscard]] std::string_view KindName(const EntityKind kind) noexcept
+{
+    constexpr std::string_view names[] = {"vertex", "edge",  "coedge", "loop",
+                                          "face",   "shell", "solid"};
+    const auto i = static_cast<std::size_t>(kind);
+    return i < std::size(names) ? names[i] : "entity";
+}
+
+/// Whether slot i of the table of `kind` is live, the kind chosen at run time.
+[[nodiscard]] bool LiveIn(const TopologyTables& t, const EntityKind kind, const std::uint32_t i)
+{
+    switch (kind) {
+    case EntityKind::Vertex:
+        return t.IsLive<EntityKind::Vertex>(i);
+    case EntityKind::Edge:
+        return t.IsLive<EntityKind::Edge>(i);
+    case EntityKind::Coedge:
+        return t.IsLive<EntityKind::Coedge>(i);
+    case EntityKind::Loop:
+        return t.IsLive<EntityKind::Loop>(i);
+    case EntityKind::Face:
+        return t.IsLive<EntityKind::Face>(i);
+    case EntityKind::Shell:
+        return t.IsLive<EntityKind::Shell>(i);
+    case EntityKind::Solid:
+        return t.IsLive<EntityKind::Solid>(i);
+    }
+    return false;
+}
+
+/// The slots of the table of `kind`, the kind chosen at run time.
+[[nodiscard]] std::uint32_t SizeOf(const TopologyTables& t, const EntityKind kind)
+{
+    switch (kind) {
+    case EntityKind::Vertex:
+        return static_cast<std::uint32_t>(t.Vertices.GetSize());
+    case EntityKind::Edge:
+        return static_cast<std::uint32_t>(t.Edges.GetSize());
+    case EntityKind::Coedge:
+        return static_cast<std::uint32_t>(t.Coedges.GetSize());
+    case EntityKind::Loop:
+        return static_cast<std::uint32_t>(t.Loops.GetSize());
+    case EntityKind::Face:
+        return static_cast<std::uint32_t>(t.Faces.GetSize());
+    case EntityKind::Shell:
+        return static_cast<std::uint32_t>(t.Shells.GetSize());
+    case EntityKind::Solid:
+        return static_cast<std::uint32_t>(t.Solids.GetSize());
+    }
+    return 0;
+}
+
+constexpr EntityKind AllKinds[] = {EntityKind::Vertex, EntityKind::Edge, EntityKind::Coedge,
+                                   EntityKind::Loop,   EntityKind::Face, EntityKind::Shell,
+                                   EntityKind::Solid};
+
+/// What the entries account for: the result's entities they target, and
+/// each input's entities they dispose of.
+struct Accounted {
+    std::set<std::pair<int, std::uint32_t>> Targeted;
+    std::set<std::tuple<int, int, std::uint32_t>> Disposed;
+};
+
+/// The entry's target: live in the result unless the entry is a deletion,
+/// which has none.
+[[nodiscard]] std::optional<std::string> TargetProblem(const HistoryEntry& e,
+                                                       const TopologyTables& result)
+{
+    const bool deleted = e.Relation == HistoryRelation::Deleted;
+    if (deleted != (e.Target == NoEntity)) {
+        return std::format("a {} entry with{} a target", ToString(e.Relation),
+                           deleted ? "" : "out");
+    }
+    if (!deleted && !LiveIn(result, e.Kind, e.Target)) {
+        return std::format("an entry names {} {} of the result, which is not live",
+                           KindName(e.Kind), e.Target);
+    }
+    return std::nullopt;
+}
+
+/// The entry's source: live in its input, of the generator's kind for a
+/// Generated entry; only a Generated entry may have none, a creation root.
+[[nodiscard]] std::optional<std::string> SourceProblem(const HistoryEntry& e,
+                                                       const TopologyTables& input)
+{
+    const bool generated = e.Relation == HistoryRelation::Generated;
+    if (!generated && e.Source == NoEntity) {
+        return std::format("a {} entry without a source", ToString(e.Relation));
+    }
+    const EntityKind kind = generated ? e.SourceKind : e.Kind;
+    if (e.Source != NoEntity && !LiveIn(input, kind, e.Source)) {
+        return std::format("an entry names {} {} of input {}, which is not live", KindName(kind),
+                           e.Source, e.Input);
+    }
+    return std::nullopt;
+}
+
+/// One entry checked (TargetProblem, SourceProblem), and what it accounts
+/// for marked.
+[[nodiscard]] std::optional<std::string> EntryProblem(const HistoryEntry& e,
+                                                      std::span<const TopologyTables* const> inputs,
+                                                      const TopologyTables& result, Accounted& seen)
+{
+    if (e.Input >= inputs.size() || inputs[e.Input] == nullptr) {
+        return std::format("an entry names input {} of {}", e.Input, inputs.size());
+    }
+    if (std::optional<std::string> problem = TargetProblem(e, result)) {
+        return problem;
+    }
+    if (std::optional<std::string> problem = SourceProblem(e, *inputs[e.Input])) {
+        return problem;
+    }
+    if (e.Relation != HistoryRelation::Deleted) {
+        seen.Targeted.insert({static_cast<int>(e.Kind), e.Target});
+    }
+    if (e.Relation != HistoryRelation::Generated) {
+        seen.Disposed.insert({e.Input, static_cast<int>(e.Kind), e.Source});
+    }
+    return std::nullopt;
+}
+
+/// A Group's entries: one source continued by several targets (a split),
+/// or several sources continued by one target (a merge), all Modified and
+/// of one kind.
+[[nodiscard]] std::optional<std::string> GroupProblem(const std::vector<HistoryEntry>& members)
+{
+    std::set<std::pair<int, std::uint32_t>> sources;
+    std::set<std::uint32_t> targets;
+    for (const HistoryEntry& e : members) {
+        if (e.Relation != HistoryRelation::Modified || e.Kind != members.front().Kind) {
+            return std::string("a split or merge group mixes kinds or has an entry that is not "
+                               "Modified");
+        }
+        sources.insert({e.Input, e.Source});
+        targets.insert(e.Target);
+    }
+    const bool split = sources.size() == 1 && targets.size() >= 2;
+    const bool merge = targets.size() == 1 && sources.size() >= 2;
+    if (!split && !merge) {
+        return std::format("a group of {} sources and {} targets is neither a split nor a merge",
+                           sources.size(), targets.size());
+    }
+    return std::nullopt;
+}
+
+/// Every live entity of the result targeted, every live entity of every
+/// input disposed of.
+[[nodiscard]] std::optional<std::string>
+CoverageProblem(std::span<const TopologyTables* const> inputs, const TopologyTables& result,
+                const Accounted& seen)
+{
+    for (const EntityKind kind : AllKinds) {
+        for (std::uint32_t i = 0; i < SizeOf(result, kind); ++i) {
+            if (LiveIn(result, kind, i) && !seen.Targeted.contains({static_cast<int>(kind), i})) {
+                return std::format("{} {} of the result has no provenance", KindName(kind), i);
+            }
+        }
+        for (std::size_t n = 0; n < inputs.size(); ++n) {
+            for (std::uint32_t i = 0; i < SizeOf(*inputs[n], kind); ++i) {
+                if (LiveIn(*inputs[n], kind, i) &&
+                    !seen.Disposed.contains({static_cast<int>(n), static_cast<int>(kind), i})) {
+                    return std::format("{} {} of input {} has no disposition", KindName(kind), i,
+                                       n);
+                }
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+} // namespace
+
+std::optional<std::string> HistoryProblem(const History& history,
+                                          const std::span<const TopologyTables* const> inputs,
+                                          const TopologyTables& result)
+{
+    Accounted seen;
+    std::map<std::uint32_t, std::vector<HistoryEntry>> groups;
+    for (const HistoryEntry& e : history.GetEntries()) {
+        if (std::optional<std::string> problem = EntryProblem(e, inputs, result, seen)) {
+            return problem;
+        }
+        if (e.Group != NoGroup) {
+            groups[e.Group].push_back(e);
+        }
+    }
+    for (const auto& [group, members] : groups) {
+        if (std::optional<std::string> problem = GroupProblem(members)) {
+            return problem;
+        }
+    }
+    return CoverageProblem(inputs, result, seen);
 }
 
 } // namespace Stereon::Detail
