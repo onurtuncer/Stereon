@@ -254,6 +254,39 @@ and ``OnSame`` in a cut leave nothing. Coincident curved faces, two
 cylinders on one axis and radius, are still refused with ``NotSupported``.
 :doc:`imprinting` gives every step in detail.
 
+Loose operands
+~~~~~~~~~~~~~~
+
+Every coincidence decision of a Boolean is made at the *pair tolerance*,
+the larger of the two faces' (ADR-0001, decision D2 of the plan). A face
+carries no tolerance of its own: its tolerance is the largest of its
+boundary's edges and vertices, and at least the resolution. Two exactly
+parallel planar faces within the pair tolerance of each other are declared
+coincident, with their distance, nothing moved (ADR-0029, section 6); and a
+region's seed is on the other body's coincident face when it lies within
+the pair tolerance of that face's plane, so the decision reads the same
+from either face. Beyond the pair tolerance the faces are two.
+
+Where the result identifies a vertex of B with one of A, it keeps A's
+position and takes the larger of the two tolerances (ADR-0001, rule 4);
+an edge identified with the other body's takes the larger edge tolerance.
+Every such growth is a ``ToleranceChange`` with its reason and a
+``ToleranceGrown`` warning; under ``ToleranceGrowth::Fail`` it fails the
+operation with ``ToleranceExceeded``, as does any tolerance above the
+Context's ceiling. A caller whose inputs reach the default ceiling of
+0.01 mm raises it in the Context (decision D5).
+
+``tests/boolean/ToleranceTests.cpp`` is ADR-0001's verification for the
+prototype (M9): union, cut and common on boxes and cylinders loosened to
+1e-4, 1e-3 and 1e-2 mm give the results the exact inputs do, every result
+valid at the Geometric level and every growth logged; faces 0.8 times the
+pair tolerance apart are one face and 1.2 times apart are two; growth is
+refused under the Fail policy and above the ceiling. The merge-policy test
+puts vertices in chains at 0.8 times the pair tolerance and checks that they
+cluster about the representative by rules 1 to 4 exactly, byte-identically
+across 1, 2, 8 and 32 threads and repeated runs, and that creating them in
+the other order moves the clusters only as rule 1 predicts.
+
 Related design decisions
 ------------------------
 
