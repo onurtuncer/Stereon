@@ -12,18 +12,55 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <memory>
+#include <mutex>
 #include <thread>
 
 namespace Stereon::Detail {
 
-void ParallelFor(const std::size_t count, const unsigned threads, const bool serial,
-                 void* const context, const ParallelBody body)
+class WorkerPool {
+public:
+    explicit WorkerPool(const unsigned workers)
+        : Pool(workers)
+    {}
+
+    Exec::static_thread_pool Pool;
+};
+
+namespace {
+
+[[nodiscard]] unsigned WorkersFor(const unsigned threads) noexcept
 {
-    ParallelFor(count, ParallelGrain, threads, serial, context, body);
+    return threads != 0 ? threads : std::max(1U, std::thread::hardware_concurrency());
 }
 
-void ParallelFor(const std::size_t count, const std::size_t grain, const unsigned threads,
-                 const bool serial, void* const context, const ParallelBody body)
+} // namespace
+
+PoolHandle::PoolHandle(const unsigned threads) noexcept
+    : m_Threads(threads)
+{}
+
+PoolHandle::~PoolHandle() = default;
+
+WorkerPool& PoolHandle::Get()
+{
+    std::call_once(m_Started,
+                   [this] { m_Pool = std::make_unique<WorkerPool>(WorkersFor(m_Threads)); });
+    return *m_Pool;
+}
+
+unsigned PoolHandle::GetWorkerCount() const noexcept
+{
+    return WorkersFor(m_Threads);
+}
+
+std::shared_ptr<PoolHandle> MakePoolHandle(const unsigned threads)
+{
+    return std::make_shared<PoolHandle>(threads);
+}
+
+void ParallelFor(const std::size_t count, const std::size_t grain, WorkerPool* const pool,
+                 void* const context, const ParallelBody body)
 {
     const std::size_t step = std::max<std::size_t>(1, grain);
     const std::size_t chunks = (count + step - 1) / step;
@@ -34,19 +71,20 @@ void ParallelFor(const std::size_t count, const std::size_t grain, const unsigne
     if (chunks == 0) {
         return;
     }
-    if (serial) {
+    if (pool == nullptr) {
         for (std::size_t chunk = 0; chunk < chunks; ++chunk) {
             run(chunk);
         }
         return;
     }
-    // A pool of exactly the Context's thread count, one worker included, so
-    // that a run at one thread goes through the same sender graph as one at
-    // 32 and differs from the serial reference only in where it runs.
-    const unsigned workers =
-        threads != 0 ? threads : std::max(1U, std::thread::hardware_concurrency());
-    Exec::static_thread_pool pool(workers);
-    Exec::sync_wait(Exec::schedule(pool.get_scheduler()) | Exec::bulk(Exec::par, chunks, run));
+    Exec::sync_wait(Exec::schedule(pool->Pool.get_scheduler()) |
+                    Exec::bulk(Exec::par, chunks, run));
+}
+
+void ParallelFor(const std::size_t count, WorkerPool* const pool, void* const context,
+                 const ParallelBody body)
+{
+    ParallelFor(count, ParallelGrain, pool, context, body);
 }
 
 } // namespace Stereon::Detail
