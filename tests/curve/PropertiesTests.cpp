@@ -85,6 +85,23 @@ Interval Domain(const Helix& /*helix*/)
     return {0.0, 4.0 * Pi};
 }
 
+// A straight curve with nonconstant speed; its second derivative is
+// nonzero but parallel to its tangent. Analytic derivatives avoid making
+// this regression depend on the spline evaluator's rounding.
+struct StraightQuadratic {};
+
+Point3 Eval(const StraightQuadratic&, const double t)
+{
+    const double x = 2.0 * t + t * t;
+    return {x, x, x};
+}
+
+Vec3 Deriv(const StraightQuadratic&, const double t, const int n)
+{
+    const double d = n == 1 ? 2.0 + 2.0 * t : (n == 2 ? 2.0 : 0.0);
+    return {d, d, d};
+}
+
 Circle TiltedCircle()
 {
     const double s = std::numbers::sqrt2 / 2.0;
@@ -124,6 +141,20 @@ TEST_CASE("a line has no curvature and no osculating plane", "[curve][properties
     CHECK(Torsion(line, 2.0).error().GetCode() == ErrorCode::DegenerateResult);
     CHECK(CenterOfCurvature(line, 2.0).error().GetCode() == ErrorCode::DegenerateResult);
     CHECK(FrenetFrame(line, 2.0).error().GetCode() == ErrorCode::DegenerateResult);
+}
+
+TEST_CASE("a nonuniform straight curve has no principal normal", "[curve][properties]")
+{
+    const StraightQuadratic curve;
+    for (const double t : {0.1, 0.2, 0.7}) {
+        const auto normal = PrincipalNormal(curve, t);
+        REQUIRE_FALSE(normal.has_value());
+        CHECK(normal.error().GetCode() == ErrorCode::DegenerateResult);
+        CHECK(*Curvature(curve, t) == 0.0);
+        const auto frame = FrenetFrame(curve, t);
+        REQUIRE_FALSE(frame.has_value());
+        CHECK(frame.error().GetCode() == ErrorCode::DegenerateResult);
+    }
 }
 
 TEST_CASE("a helix has constant curvature and torsion", "[curve][properties]")
@@ -245,5 +276,34 @@ TEST_CASE("the parameter at a length inverts arc length", "[curve][properties][a
             const double t = *ParameterAtArcLength(curve, a, b >= a ? length : -length);
             RC_ASSERT(std::abs(t - b) <= 1e-9);
         });
+    }
+}
+
+TEST_CASE("arc length inversion reports unmet residual targets", "[curve][properties][arclength]")
+{
+    const Line line{Point3{0.0, 0.0, 0.0}, Vec3{1.0, 0.0, 0.0}};
+    SECTION("adjacent parameters cannot represent the requested displacement")
+    {
+        for (const double length : {0x1p-60, -0x1p-60}) {
+            const auto result = ParameterAtArcLength(line, 1.0, length);
+            REQUIRE_FALSE(result.has_value());
+            CHECK(result.error().GetCode() == ErrorCode::Unresolved);
+        }
+    }
+    SECTION("the iteration budget runs out before the bracket stagnates")
+    {
+        // The first unit bracket needs more than 60 halvings to reach
+        // this start after the rounded Newton step fails to advance.
+        const auto result = ParameterAtArcLength(line, 0x1p-100, 0x1p-160);
+        REQUIRE_FALSE(result.has_value());
+        CHECK(result.error().GetCode() == ErrorCode::Unresolved);
+    }
+    SECTION("small representable displacements and zero still succeed")
+    {
+        for (const double length : {0.0, 0x1p-40, -0x1p-40}) {
+            const auto result = ParameterAtArcLength(line, 1.0, length);
+            REQUIRE(result.has_value());
+            CHECK(*result == 1.0 + length);
+        }
     }
 }

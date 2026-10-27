@@ -55,8 +55,11 @@ part of :math:`\mathbf C''` perpendicular to :math:`\mathbf C'`,
    \mathbf N \parallel \mathbf C'' -
    \frac{\mathbf C'' \cdot \mathbf C'}{\mathbf C' \cdot \mathbf C'}\, \mathbf C',
 
-which is how ``PrincipalNormal`` computes it: one projection and one
-normalisation, with no division by the curvature. With the *binormal*
+but subtracting that projection can leave roundoff even for a straight
+curve with nonconstant speed. ``PrincipalNormal`` instead checks the cross
+product of the first two derivatives and constructs the normal as
+:math:`\mathbf B \times \mathbf T`, consistently with ``FrenetFrame``.
+A zero cross product returns ``DegenerateResult``. With the *binormal*
 :math:`\mathbf B = \mathbf T \times \mathbf N`, the three vectors form the
 Frenet frame, and the *torsion* :math:`\tau` measures how fast the
 osculating plane, spanned by :math:`\mathbf T` and :math:`\mathbf N`, turns
@@ -195,7 +198,9 @@ bisects instead. The first bracket ends at the domain end in the direction
 of travel; a periodic curve, or one with an unbounded domain, is followed
 as far as the length needs, so a circle can be walked round several times.
 Where the curve stops along a whole stretch, :math:`s` is constant there
-and any parameter of the stretch is an answer.
+and any parameter of the stretch is an answer. Stagnation and exhaustion
+of the iteration budget return ``Unresolved`` unless the relative length
+residual target has been met; a small parameter step alone is not success.
 
 Each Newton step integrates the length afresh, so a station costs a few
 arc-length evaluations. Placing many stations, a common task for meshing
