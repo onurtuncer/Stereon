@@ -342,7 +342,11 @@ TEST_CASE("degree elevation agrees with Geom_BSplineCurve::IncreaseDegree",
     for (const BSplineCurve& curve : SomeBSplineCurves()) {
         for (const int degree : {curve.Degree + 1, curve.Degree + 3}) {
             const BSplineCurve ours = *Stereon::ElevatedDegree(curve, degree);
-            const occ::handle<Geom_BSplineCurve> occt = ToOcct(curve);
+            // OCCT is given the clamped form, the same curve on the same
+            // domain: on the unclamped fixture its IncreaseDegree disagrees
+            // with ours, while ours reproduces the input (checked below and
+            // by the property tests of tests/curve/BSplineOperationsTests.cpp).
+            const occ::handle<Geom_BSplineCurve> occt = ToOcct(Stereon::Clamped(curve));
             occt->IncreaseDegree(degree);
             REQUIRE(occt->Degree() == ours.Degree);
             const Stereon::Interval domain = Domain(ours);
@@ -350,12 +354,12 @@ TEST_CASE("degree elevation agrees with Geom_BSplineCurve::IncreaseDegree",
                 const double t = domain.GetLower() +
                                  i * (domain.GetUpper() - domain.GetLower()) / (SampleCount - 1);
                 REQUIRE(AgreeRebuilt(Eval(ours, t), occt->Value(t)));
+                REQUIRE(Distance(Eval(ours, t), Eval(curve, t)) <=
+                        1e-11 * (1.0 + Length(Stereon::ToVec(Eval(curve, t)))));
             }
-            // Both keep the elevated curve minimal: the same number of poles
-            // once the knot vectors agree, which they do for a clamped curve.
-            if (curve.Knots.front() == Domain(curve).GetLower()) {
-                REQUIRE(occt->NbPoles() == static_cast<int>(ours.Poles.size()));
-            }
+            // Both keep the elevated curve minimal: the same number of poles,
+            // since both start from the clamped form.
+            REQUIRE(occt->NbPoles() == static_cast<int>(ours.Poles.size()));
         }
     }
 }
@@ -427,8 +431,10 @@ TEST_CASE("concatenation agrees with GeomConvert_CompCurveToBSplineCurve",
             pole = pole + (end - start);
         }
         const BSplineCurve ours = *Stereon::Concatenated(first, second, 1e-9);
-        GeomConvert_CompCurveToBSplineCurve compound(ToOcct(first));
-        REQUIRE(compound.Add(ToOcct(second), 1e-9, true, false, 0));
+        // OCCT's composite builder throws on an unclamped knot vector ("BSpline
+        // curve: # Poles and degree mismatch"); give it the clamped forms.
+        GeomConvert_CompCurveToBSplineCurve compound(ToOcct(Stereon::Clamped(first)));
+        REQUIRE(compound.Add(ToOcct(Stereon::Clamped(second)), 1e-9, true, false, 0));
         const occ::handle<Geom_BSplineCurve> occt = compound.BSplineCurve();
         REQUIRE(occt->Degree() == ours.Degree);
         // The same point set: every sample of ours lies on OCCT's curve, and
