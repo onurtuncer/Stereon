@@ -72,6 +72,11 @@ jobs:
         run: |
           python tools/check_corpus.py --self-test
           python tools/check_corpus.py
+      - name: Regression cases of the base branch are all kept (corpus/README.md)
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --depth=1 origin "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+          python tools/check_corpus.py --base "origin/${{ github.base_ref }}"
       - name: Benchmark report renderer (self-test; occt-reference.yml uses it)
         run: python tools/bench_report.py --self-test
       - name: Benchmark trend recorder (self-test; bench.yml uses it)
