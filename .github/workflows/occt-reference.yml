@@ -30,6 +30,7 @@ on:
     paths:
       - bench/occt/**
       - bench/TopoBench.cpp
+      - bench/BooleanBench.cpp
       - bench/Memory.*
       - bench/CMakeLists.txt
       - tools/bench_report.py
@@ -100,7 +101,7 @@ jobs:
           cmake --preset bench -DSTEREON_WARNINGS_AS_ERRORS=ON
           -DSTEREON_WITH_OCCT=ON -DCMAKE_PREFIX_PATH="$OCCT_PREFIX"
       - name: Build
-        run: cmake --build --preset bench --target stereon_occt_bench
+        run: cmake --build --preset bench --target stereon_occt_bench stereon_bench
       # The run's files go under the workspace: the upload step executes in
       # the container, and GitHub maps the host path of ${{ runner.temp }}
       # into it for the first line of a multi-line input only, so an upload
@@ -144,6 +145,38 @@ jobs:
           --benchmark_display_aggregates_only=true
           --benchmark_filter="${FILTER:-^(B0\.[345]|ADR-)}"
           --benchmark_out=build/reference/results-topology.json --benchmark_out_format=json
+      # ADR-0007's speed-up: the drilled slab's cut (over 1 000 faces) on the
+      # serial scheduler and on the runner's 4 cores, interleaved, the ratio
+      # of the medians reported against the 3x the ADR asks for.
+      - name: Run the Boolean speed-up (M10, ADR-0007)
+        env:
+          REPETITIONS: ${{ inputs.topology_repetitions || 5 }}
+        run: |
+          ./build/bench/bench/stereon_bench \
+            --benchmark_repetitions="$REPETITIONS" \
+            --benchmark_enable_random_interleaving=true \
+            --benchmark_display_aggregates_only=true \
+            --benchmark_filter='^M10/' \
+            --benchmark_out=build/reference/results-speedup.json --benchmark_out_format=json
+          python3 - <<'EOF' | tee -a "$GITHUB_STEP_SUMMARY"
+          import json
+          rows = json.load(open("build/reference/results-speedup.json"))["benchmarks"]
+          # Run names carry Google Benchmark's suffixes ("/iterations:1/real_time"):
+          # each row is found by the scheduler's part of its name.
+          def find(aggregate, scheduler):
+              return next(r for r in rows if r.get("aggregate_name") == aggregate
+                          and r["run_name"].startswith(f"M10/DrilledSlabCut/{scheduler}"))
+          median = {s: find("median", s)["real_time"] for s in ("serial", "threads:4")}
+          spread = {s: find("cv", s)["real_time"] for s in ("serial", "threads:4")}
+          ratio = median["serial"] / median["threads:4"]
+          print("## Boolean speed-up (ADR-0007)\n")
+          print("The slab drilled with 20 x 20 holes (1 206 faces in the operands), cut; medians of interleaved repetitions.\n")
+          print("| Scheduler | Median | CV |")
+          print("| --- | --- | --- |")
+          for s in ("serial", "threads:4"):
+              print(f"| {s} | {median[s]:.0f} ms | {100 * spread[s]:.1f} % |")
+          print(f"\nSpeed-up on 4 threads: **{ratio:.2f}x** (ADR-0007 asks for at least 3x): {'met' if ratio >= 3 else 'NOT met'}.")
+          EOF
       - name: Render the report
         run: |
           python3 tools/bench_report.py build/reference/results.json build/reference/results-topology.json \

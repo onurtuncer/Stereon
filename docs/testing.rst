@@ -157,7 +157,10 @@ and started on first use, so no operation makes threads of its own. Each
 chunk writes only its own indices' slots, so nothing depends on which
 thread ran what or when. The operations built on it so far are
 ``ProjectAll`` onto B-spline curves and surfaces and, in the Booleans, the
-face pairs' intersections and clips and the regions' seeds.
+face pairs' intersections and clips and the regions' seeds. The Booleans'
+fixtures are ``tests/support/BooleanCases.hpp``: union, cut and common of
+boxes overlapping at a corner, of a box and a cylinder through it and of a
+loosened box against a box's face, and a slab drilled with a grid of holes.
 
 They are checked at three levels:
 
@@ -168,15 +171,29 @@ They are checked at three levels:
   2, 8 and 32 threads give the same bytes``. The TSan job runs both, so a
   data race shows up there too.
 - The ``Nightly`` workflow runs ``stereon_determinism`` once per
-  configuration, each in its own process and twice, on 200 000 points. It
-  compares the files byte for byte, puts their SHA-256 digests in the run's
-  summary, and fails if any two differ. It also runs the full test suite on
-  the debug and release presets.
+  configuration, each in its own process and twice, on 200 000 points and
+  the Booleans' fixtures. It compares the files byte for byte, puts their
+  SHA-256 digests in the run's summary, and fails if any two differ. It also
+  runs the full test suite on the debug and release presets.
 - A new parallel operation adds its case to
-  ``tests/support/DeterminismCases.hpp``, so that both checks cover it.
+  ``tests/support/DeterminismCases.hpp`` or ``BooleanCases.hpp``, so that
+  both checks cover it.
 
-The cross-platform comparison (G2, Linux against Windows within tolerance)
-is not run yet.
+The cross-platform comparison (G2) is the ``G2 cross-platform`` workflow,
+nightly and on every push to main: the GCC 16 release builds on Linux and
+on Windows (MSYS2 UCRT64) each run ``stereon_determinism --report``, which
+writes every Boolean's entity counts and vertices, and
+``tools/compare_g2.py`` compares the two. They agree when every count is
+equal and every vertex lies within the larger of its two tolerances of the
+other's; how many results are bit-identical is reported and never fails the
+run, since G1 promises identical bits on one executable and one machine.
+Volumes and areas join the comparison when the kernel computes them.
+
+The speed-up ADR-0007 asks for, at least 3x on 4 cores on a body of more
+than 1 000 faces, is ``M10/DrilledSlabCut`` in ``stereon_bench``: the slab
+drilled with 20 x 20 holes, cut serially and on 4 threads. The OCCT
+reference workflow runs both with interleaved repetitions on its runner and
+puts the ratio of their medians in its summary.
 
 .. todo::
 
