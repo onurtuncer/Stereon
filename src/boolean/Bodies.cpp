@@ -98,7 +98,28 @@ struct FaceData {
     Stereon::Surface Surface;
     Box3 Box;
     Box2 Parameters;
+    /// The face's tolerance: the largest of its boundary's edges and
+    /// vertices, and at least the resolution. A face carries no tolerance of
+    /// its own (ADR-0001); its boundary says how loosely it was made.
+    double Tolerance = 0.0;
 };
+
+[[nodiscard]] Result<double> ToleranceOfFace(const Shape& shape, const FaceId face,
+                                             const Context& ctx)
+{
+    double tolerance = ctx.GetResolution();
+    STEREON_TRY(const LoopRange loops, LoopsOf(shape, face));
+    for (const LoopId loop : loops) {
+        STEREON_TRY(const CoedgeRange coedges, CoedgesOf(shape, loop));
+        for (const CoedgeId coedge : coedges) {
+            const EdgeId edge = EdgeOf(shape, coedge);
+            tolerance = std::max({tolerance, ToleranceOf(shape, edge),
+                                  ToleranceOf(shape, StartOf(shape, edge)),
+                                  ToleranceOf(shape, EndOf(shape, edge))});
+        }
+    }
+    return tolerance;
+}
 
 [[nodiscard]] Result<std::vector<FaceData>> FacesOf(const Shape& shape, const Context& ctx)
 {
@@ -107,7 +128,8 @@ struct FaceData {
     for (const FaceId face : all) {
         STEREON_TRY(const Box3 box, BoxOf(shape, face));
         STEREON_TRY(const Box2 parameters, ParameterBoxOf(shape, face, ctx));
-        faces.push_back({face, SurfaceOf(shape, face), box, parameters});
+        STEREON_TRY(const double tolerance, ToleranceOfFace(shape, face, ctx));
+        faces.push_back({face, SurfaceOf(shape, face), box, parameters, tolerance});
     }
     return faces;
 }
@@ -396,9 +418,12 @@ void AddPiece(Networks& a, Networks& b, const Shape& sa, const Shape& sb, const 
             if (!Intersects(fa.Box, fb.Box)) {
                 continue;
             }
+            // The pair tolerance is the larger of the two faces' (ADR-0001,
+            // decision D2): within it, exactly parallel faces are declared
+            // coincident.
             STEREON_TRY(const SurfaceSurfaceIntersection meeting,
                         Intersect(fa.Surface, fa.Parameters, fb.Surface, fb.Parameters,
-                                  ctx.GetResolution(), ctx));
+                                  std::max(fa.Tolerance, fb.Tolerance), ctx));
             // A coincidence's own boundary branches bound the faces' parameter
             // boxes, not the faces: the faces' boundaries imprinted on each
             // other take their place.

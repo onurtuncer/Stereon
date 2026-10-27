@@ -466,14 +466,19 @@ MeetSurface(const Surface& surface, const Point3& origin, const Vec3& d, const C
     return tolerance;
 }
 
-/// Whether the seed lies on the other body's planar face: within the
-/// face's tolerance of its plane and strictly inside its loops.
+/// Whether the seed lies on the other body's planar face: within the pair
+/// tolerance of its plane, the larger of the two faces' (ADR-0001, decision
+/// D2), as the imprint declared them coincident, and strictly inside its
+/// loops. The other face's tolerance alone would make the decision
+/// one-sided: a loose face 0.8 t from a tight one is on it seen from the
+/// tight face and off it seen from the loose one.
 [[nodiscard]] Result<bool> OnFace(const Shape& other, const FaceId face, const Point3& seed,
-                                  const Context& ctx)
+                                  const double ownTolerance, const Context& ctx)
 {
     const Surface surface = SurfaceOf(other, face); // Target points into it
     const Plane* plane = surface.Target<Plane>();
-    STEREON_TRY(const double tolerance, FaceTolerance(other, face, ctx));
+    STEREON_TRY(const double theirs, FaceTolerance(other, face, ctx));
+    const double tolerance = std::max(ownTolerance, theirs);
     const Vec3 n = Normalized(Cross(plane->XAxis, plane->YAxis));
     if (std::abs(Dot(seed - plane->Origin, n)) > tolerance) {
         return false;
@@ -496,13 +501,14 @@ MeetSurface(const Surface& surface, const Point3& origin, const Vec3& d, const C
     if (!normal) {
         return std::optional<Side>{};
     }
+    STEREON_TRY(const double ownTolerance, FaceTolerance(own, face, ctx));
     STEREON_TRY(const auto faces, AllEntities<EntityKind::Face>(other));
     for (const FaceId candidate : faces) {
         const std::optional<Vec3> theirs = PlaneNormal(other, candidate);
         if (!theirs) {
             continue;
         }
-        STEREON_TRY(const bool on, OnFace(other, candidate, seed, ctx));
+        STEREON_TRY(const bool on, OnFace(other, candidate, seed, ownTolerance, ctx));
         if (on) {
             // The normals are parallel: the sign of their product says which way.
             const bool same = Dot(*normal, *theirs) > 0.0; // STEREON-LINT-ALLOW(epsilon): a sign
