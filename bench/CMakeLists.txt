@@ -10,8 +10,10 @@
 file(GLOB sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
 add_executable(stereon_bench ${sources})
 target_link_libraries(stereon_bench
-    PRIVATE stereon::core stereon::robust stereon::surface stereon::topo stereon_options
-            benchmark::benchmark_main $<$<PLATFORM_ID:Windows>:psapi>)
+    PRIVATE stereon::core stereon::robust stereon::surface stereon::topo stereon::boolean
+            stereon_options benchmark::benchmark_main $<$<PLATFORM_ID:Windows>:psapi>)
+# The Boolean benchmark shares its fixture with the tests (BooleanCases.hpp).
+target_include_directories(stereon_bench PRIVATE "${PROJECT_SOURCE_DIR}/tests/support")
 stereon_anchor_contracts(stereon_bench)
 
 # The comparison with OpenCASCADE (docs/benchmarks.md, B0.3-B0.5 and

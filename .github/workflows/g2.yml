@@ -1,0 +1,111 @@
+# SPDX-FileCopyrightText: 2026 Onur Tuncer and Stereon contributors
+# SPDX-License-Identifier: MPL-2.0
+#
+# The G2 comparison of ADR-0007 (Verification): the Booleans of
+# tests/support/BooleanCases.hpp run with the GCC 16 release builds on Linux
+# (the gcc:16.2 container) and on Windows (MSYS2 UCRT64), each writing its
+# results' entity counts and vertices (stereon_determinism --report), and a
+# third job comparing the two within the vertices' tolerances
+# (tools/compare_g2.py). Results that differ beyond tolerance fail the run;
+# how many are bit-identical is reported in the summary and never fails it,
+# since G1's promise of identical bits holds on one executable and one
+# machine. Nightly, on pushes to main, and by hand.
+
+name: G2 cross-platform
+
+on:
+  schedule:
+    - cron: "41 3 * * *"
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - src/boolean/**
+      - tests/support/BooleanCases.hpp
+      - tests/determinism/**
+      - tools/compare_g2.py
+      - .github/workflows/g2.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CMAKE_BUILD_PARALLEL_LEVEL: "4"
+
+jobs:
+  linux:
+    name: G2 records, Linux GCC 16 (gcc16-release)
+    runs-on: ubuntu-24.04
+    container: gcc:16.2
+    timeout-minutes: 90
+    steps:
+      - name: Install CMake and Ninja
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends cmake ninja-build
+      - uses: actions/checkout@v7
+      - name: Configure
+        run: cmake --preset gcc16-release -DSTEREON_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build --preset gcc16-release --target stereon_determinism
+      - name: Write the records
+        run: |
+          mkdir -p g2
+          ./build/gcc16-release/tests/stereon_determinism --report g2/linux.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: g2-linux
+          path: g2/linux.json
+          if-no-files-found: error
+
+  windows:
+    name: G2 records, Windows GCC 16 (MSYS2 UCRT64, gcc16-windows)
+    runs-on: windows-2025
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            git
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+      - uses: actions/checkout@v7
+      - name: Configure
+        run: cmake --preset gcc16-windows -DSTEREON_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build --preset gcc16-windows --target stereon_determinism
+      - name: Write the records
+        run: |
+          mkdir -p g2
+          ./build/gcc16-windows/tests/stereon_determinism.exe --report g2/windows.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: g2-windows
+          path: g2/windows.json
+          if-no-files-found: error
+
+  compare:
+    name: G2 comparison, Linux against Windows
+    needs: [linux, windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: g2-*
+          merge-multiple: true
+          path: g2
+      - name: Compare
+        run: python3 tools/compare_g2.py g2/linux.json g2/windows.json --summary "$GITHUB_STEP_SUMMARY"
