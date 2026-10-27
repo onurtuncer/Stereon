@@ -58,6 +58,9 @@ inline Stereon::Shape Slab(const int n)
 /// balanced tree of unions, so that making it costs n^2 log n, not n^4.
 inline Stereon::Shape Drills(const int n)
 {
+    if (n < 1) {
+        throw std::runtime_error("Drills: a grid needs at least one hole");
+    }
     std::vector<Stereon::Shape> level;
     for (int k = 0; k < n * n; ++k) {
         level.push_back(
@@ -80,7 +83,13 @@ inline Stereon::Shape Drills(const int n)
         }
         level = std::move(next);
     }
-    return std::move(level.front());
+    // Checked again where the move happens: GCC at -O3 cannot see that the
+    // loop above leaves one shape, and warns of a null shared pointer.
+    if (level.size() != 1) {
+        throw std::runtime_error("Drills: the unions did not leave one operand");
+    }
+    Stereon::Shape all = std::move(level[0]);
+    return all;
 }
 
 /// One Boolean of the fixtures: its name, its operands and its operation.
@@ -175,16 +184,17 @@ inline std::string Record(const std::string& name, const Stereon::OperationResul
     using Stereon::EntityKind;
     const Stereon::Shape& shape = result.Shape;
     std::string out = "{\"name\": \"" + name + "\", \"counts\": {";
-    char buffer[128];
-    std::snprintf(buffer, sizeof buffer,
-                  "\"vertex\": %zu, \"edge\": %zu, \"coedge\": %zu, \"loop\": %zu, \"face\": %zu, "
-                  "\"shell\": %zu, \"solid\": %zu",
-                  CountOf<EntityKind::Vertex>(shape), CountOf<EntityKind::Edge>(shape),
-                  CountOf<EntityKind::Coedge>(shape), CountOf<EntityKind::Loop>(shape),
-                  CountOf<EntityKind::Face>(shape), CountOf<EntityKind::Shell>(shape),
-                  CountOf<EntityKind::Solid>(shape));
-    out += buffer;
+    out += "\"vertex\": " + std::to_string(CountOf<EntityKind::Vertex>(shape));
+    out += ", \"edge\": " + std::to_string(CountOf<EntityKind::Edge>(shape));
+    out += ", \"coedge\": " + std::to_string(CountOf<EntityKind::Coedge>(shape));
+    out += ", \"loop\": " + std::to_string(CountOf<EntityKind::Loop>(shape));
+    out += ", \"face\": " + std::to_string(CountOf<EntityKind::Face>(shape));
+    out += ", \"shell\": " + std::to_string(CountOf<EntityKind::Shell>(shape));
+    out += ", \"solid\": " + std::to_string(CountOf<EntityKind::Solid>(shape));
     out += "}, \"vertices\": [";
+    // Four doubles at 17 significant digits and their exponents: room for
+    // all, so that -O3's -Wformat-truncation has nothing to prove.
+    char buffer[256];
     bool first = true;
     for (const Stereon::VertexId v : *AllEntities<EntityKind::Vertex>(shape)) {
         const Stereon::Point3 p = PositionOf(shape, v);

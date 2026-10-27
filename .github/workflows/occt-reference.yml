@@ -117,6 +117,7 @@ jobs:
             echo "runner=GitHub Actions ubuntu-24.04 (${{ runner.os }}, ${{ runner.arch }}), container gcc:16.2"
             echo "cpu=$(sed -n 's/^model name[[:space:]]*: //p' /proc/cpuinfo | head -1)"
             echo "cpus=$(nproc)"
+            echo "topology=$(lscpu 2>/dev/null | sed -n 's/^Thread(s) per core:[[:space:]]*/threads per core /p; s/^Core(s) per socket:[[:space:]]*/cores per socket /p; s/^Socket(s):[[:space:]]*/sockets /p' | paste -sd ',' -)"
             echo "memory=$(awk '/MemTotal/ {printf "%.1f GB", $2 / 1048576}' /proc/meminfo)"
             echo "kernel=$(uname -sr)"
             echo "compiler=$(g++ --version | head -1)"
@@ -146,8 +147,10 @@ jobs:
           --benchmark_filter="${FILTER:-^(B0\.[345]|ADR-)}"
           --benchmark_out=build/reference/results-topology.json --benchmark_out_format=json
       # ADR-0007's speed-up: the drilled slab's cut (over 1 000 faces) on the
-      # serial scheduler and on the runner's 4 cores, interleaved, the ratio
-      # of the medians reported against the 3x the ADR asks for.
+      # serial scheduler and on the runner's 4 threads, interleaved, the ratio
+      # of the medians reported against the 3x the ADR asks for, beside the
+      # control (batch projection, parallel through and through), whose ratio
+      # is what the runner's 4 threads give any work.
       - name: Run the Boolean speed-up (M10, ADR-0007)
         env:
           REPETITIONS: ${{ inputs.topology_repetitions || 5 }}
@@ -161,21 +164,27 @@ jobs:
           python3 - <<'EOF' | tee -a "$GITHUB_STEP_SUMMARY"
           import json
           rows = json.load(open("build/reference/results-speedup.json"))["benchmarks"]
+          machine = dict(line.split("=", 1) for line in open("build/reference/machine.txt").read().splitlines() if "=" in line)
           # Run names carry Google Benchmark's suffixes ("/iterations:1/real_time"):
-          # each row is found by the scheduler's part of its name.
-          def find(aggregate, scheduler):
+          # each row is found by its benchmark and scheduler.
+          def find(aggregate, bench, scheduler):
               return next(r for r in rows if r.get("aggregate_name") == aggregate
-                          and r["run_name"].startswith(f"M10/DrilledSlabCut/{scheduler}"))
-          median = {s: find("median", s)["real_time"] for s in ("serial", "threads:4")}
-          spread = {s: find("cv", s)["real_time"] for s in ("serial", "threads:4")}
-          ratio = median["serial"] / median["threads:4"]
+                          and r["run_name"].startswith(f"M10/{bench}/{scheduler}"))
           print("## Boolean speed-up (ADR-0007)\n")
-          print("The slab drilled with 20 x 20 holes (1 206 faces in the operands), cut; medians of interleaved repetitions.\n")
-          print("| Scheduler | Median | CV |")
-          print("| --- | --- | --- |")
-          for s in ("serial", "threads:4"):
-              print(f"| {s} | {median[s]:.0f} ms | {100 * spread[s]:.1f} % |")
-          print(f"\nSpeed-up on 4 threads: **{ratio:.2f}x** (ADR-0007 asks for at least 3x): {'met' if ratio >= 3 else 'NOT met'}.")
+          print("The slab drilled with 20 x 20 holes (1 206 faces in the operands), cut; and the control, batch projection of 200 000 points, parallel through and through. Medians of interleaved repetitions.\n")
+          print(f"Runner: {machine.get('cpu', '?')}, {machine.get('cpus', '?')} CPUs ({machine.get('topology', 'topology not recorded')}).\n")
+          print("| Benchmark | Serial | 4 threads | Speed-up | CV serial, 4 threads |")
+          print("| --- | --- | --- | --- | --- |")
+          ratios = {}
+          for bench in ("DrilledSlabCut", "Control"):
+              median = {s: find("median", bench, s)["real_time"] for s in ("serial", "threads:4")}
+              spread = {s: find("cv", bench, s)["real_time"] for s in ("serial", "threads:4")}
+              ratios[bench] = median["serial"] / median["threads:4"]
+              print(f"| {bench} | {median['serial']:.0f} ms | {median['threads:4']:.0f} ms | {ratios[bench]:.2f}x "
+                    f"| {100 * spread['serial']:.1f} %, {100 * spread['threads:4']:.1f} % |")
+          ratio = ratios["DrilledSlabCut"]
+          print(f"\nSpeed-up on 4 threads: **{ratio:.2f}x** (ADR-0007 asks for at least 3x): {'met' if ratio >= 3 else 'NOT met'}; "
+                f"{100 * ratio / ratios['Control']:.0f} % of the control's {ratios['Control']:.2f}x, what the runner's 4 threads give work with no serial part.")
           EOF
       - name: Render the report
         run: |

@@ -12,12 +12,20 @@
 // The OCCT reference workflow runs both with interleaved repetitions and
 // reports the ratio of their medians; ADR-0007 asks for at least 3.
 // The fixture is tests/support/BooleanCases.hpp's, made once.
+//
+// The control: batch projection of 200 000 points onto the determinism
+// checks' rational bicubic surface (tests/support/DeterminismCases.hpp), the
+// same way, serially and on 4 threads. It is parallel through and through,
+// no serial part and no merge, so its ratio is what the machine's 4 threads
+// can give any work: the ceiling the Boolean's ratio is read against.
 
 #include <benchmark/benchmark.h>
 
 #include <bit>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -25,6 +33,7 @@
 import Stereon.Boolean;
 
 #include "BooleanCases.hpp"
+#include "DeterminismCases.hpp"
 
 namespace {
 
@@ -72,7 +81,42 @@ void BM_DrilledSlabCutParallel(benchmark::State& state)
     Cut(state, parallel);
 }
 
+/// The control's points, made once.
+constexpr std::size_t ControlPoints = 200'000;
+
+void Project(benchmark::State& state, const Stereon::Context& context)
+{
+    static const std::vector<Stereon::Point3> points = DeterminismTest::Points(ControlPoints);
+    static const Stereon::SurfaceProjector projector(DeterminismTest::Surface());
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(ProjectAll(projector, points, context));
+    }
+}
+
+void BM_ControlSerial(benchmark::State& state)
+{
+    Project(state, Stereon::Context::Default().WithScheduler(Stereon::Scheduler::Serial));
+}
+
+void BM_ControlParallel(benchmark::State& state)
+{
+    static const Stereon::Context parallel =
+        Stereon::Context::Default().WithScheduler(Stereon::Scheduler::Parallel).WithThreadCount(4);
+    Project(state, parallel);
+}
+
 } // namespace
+
+BENCHMARK(BM_ControlSerial)
+    ->Name("M10/Control/serial")
+    ->Unit(benchmark::kMillisecond)
+    ->UseRealTime()
+    ->Iterations(1);
+BENCHMARK(BM_ControlParallel)
+    ->Name("M10/Control/threads:4")
+    ->Unit(benchmark::kMillisecond)
+    ->UseRealTime()
+    ->Iterations(1);
 
 BENCHMARK(BM_DrilledSlabCutSerial)
     ->Name("M10/DrilledSlabCut/serial")
