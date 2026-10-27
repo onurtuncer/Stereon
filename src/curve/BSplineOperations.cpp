@@ -12,6 +12,7 @@ module;
 #include <Stereon/Core/Contracts.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <limits>
@@ -217,7 +218,10 @@ template <std::size_t D>
     const std::size_t first = r - p;
     const std::size_t last = r - s;
     const std::size_t off = first - 1;
-    std::vector<HPoint<D>> temp(last + 2 - off);
+    // The p - s + 3 poles of the inversion, at most BSplineMaxDegree + 2:
+    // on the stack, which also spares GCC's -O3 a heap array it cannot prove
+    // non-empty (-Wnull-dereference).
+    std::array<HPoint<D>, static_cast<std::size_t>(BSplineMaxDegree) + 2> temp{};
     temp[0] = h.Poles[off];
     temp[last + 1 - off] = h.Poles[last + 1];
     std::size_t i = first;
