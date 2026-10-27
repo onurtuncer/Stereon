@@ -8,9 +8,11 @@
 module;
 
 #include <Stereon/Core/Contracts.hpp>
+#include <Stereon/Core/Parallel.hpp>
 
 #include <cmath>
 #include <cstdint>
+#include <memory>
 #include <string_view>
 #include <utility>
 
@@ -138,16 +140,34 @@ public:
     /// count. The determinism tests run the same input at 1, 2, 8 and 32.
     [[nodiscard]] unsigned GetThreadCount() const noexcept { return m_ThreadCount; }
 
+    /// The pool the parallel scheduler runs on, its threads started on the
+    /// first call; nothing for the serial scheduler, so that work runs on the
+    /// calling thread (Detail::ParallelFor). The Context owns the pool
+    /// (ADR-0007): its copies share it, its threads are joined when the last
+    /// of them is destroyed, and no operation makes threads of its own. A body
+    /// running on the pool must not wait on it: work nested in a parallel
+    /// loop runs with a serial copy of the Context.
+    [[nodiscard]] Detail::WorkerPool* GetWorkerPool() const
+    {
+        return m_Scheduler == Scheduler::Serial ? nullptr : &m_Pool->Get();
+    }
+
+    /// Keeps the pool: the scheduler only says whether to use it.
     [[nodiscard]] Context WithScheduler(const Scheduler scheduler) const
     {
         Context c = *this;
         c.m_Scheduler = scheduler;
         return c;
     }
+    /// A different count is a different pool, not yet started; the same count
+    /// keeps the pool.
     [[nodiscard]] Context WithThreadCount(const unsigned count) const
     {
         Context c = *this;
-        c.m_ThreadCount = count;
+        if (count != m_ThreadCount) {
+            c.m_ThreadCount = count;
+            c.m_Pool = Detail::MakePoolHandle(count);
+        }
         return c;
     }
 
@@ -230,6 +250,8 @@ private:
     ToleranceGrowth m_ToleranceGrowth = ToleranceGrowth::Allow;
     Scheduler m_Scheduler = Scheduler::Parallel;
     unsigned m_ThreadCount = 0;
+    /// The handle of the pool for m_ThreadCount, shared by copies (ADR-0007).
+    std::shared_ptr<Detail::PoolHandle> m_Pool = Detail::MakePoolHandle(0);
     ValidityLevel m_ValidityLevel = ValidityLevel::Geometric;
     LogLevel m_LogLevel = LogLevel::Info;
     LogSink m_LogSink;
