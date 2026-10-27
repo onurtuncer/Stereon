@@ -328,6 +328,14 @@ TEST_CASE("B-spline projections agree with GeomAPI_ProjectPointOnCurve", "[occt]
     }
 }
 
+/// Agreement after an operation that rebuilds the poles (elevation,
+/// concatenation): each kernel rounds its own sequence of convex
+/// combinations, so a relative 1e-11 rather than Agree's few ulps.
+bool AgreeRebuilt(const Point3& a, const gp_Pnt& b)
+{
+    return Distance(a, Point3{b.X(), b.Y(), b.Z()}) <= 1e-11 * (1.0 + Length(Stereon::ToVec(a)));
+}
+
 TEST_CASE("degree elevation agrees with Geom_BSplineCurve::IncreaseDegree",
           "[occt][curve][bspline][operations]")
 {
@@ -341,7 +349,7 @@ TEST_CASE("degree elevation agrees with Geom_BSplineCurve::IncreaseDegree",
             for (int i = 0; i < SampleCount; ++i) {
                 const double t = domain.GetLower() +
                                  i * (domain.GetUpper() - domain.GetLower()) / (SampleCount - 1);
-                REQUIRE(Agree(Eval(ours, t), occt->Value(t)));
+                REQUIRE(AgreeRebuilt(Eval(ours, t), occt->Value(t)));
             }
             // Both keep the elevated curve minimal: the same number of poles
             // once the knot vectors agree, which they do for a clamped curve.
@@ -356,15 +364,18 @@ TEST_CASE("knot removal agrees with Geom_BSplineCurve::RemoveKnot",
           "[occt][curve][bspline][operations]")
 {
     for (const BSplineCurve& curve : SomeBSplineCurves()) {
-        // A knot inserted at 1.3 is exactly removable; both kernels must remove
+        // A knot inserted 43% of the way along the domain, on no existing
+        // knot of any fixture, is exactly removable; both kernels must remove
         // it and give the same poles back.
-        const BSplineCurve refined = *Stereon::InsertKnot(curve, 1.3);
-        const Stereon::KnotRemoval ours = *Stereon::RemoveKnot(refined, 1.3, 1, 1e-9);
+        const Stereon::Interval domain = Domain(curve);
+        const double inserted = domain.GetLower() + 0.43 * (domain.GetUpper() - domain.GetLower());
+        const BSplineCurve refined = *Stereon::InsertKnot(curve, inserted);
+        const Stereon::KnotRemoval ours = *Stereon::RemoveKnot(refined, inserted, 1, 1e-9);
         REQUIRE(ours.Removed == 1);
         const occ::handle<Geom_BSplineCurve> occt = ToOcct(refined);
         int index = 0;
         for (int k = 1; k <= occt->NbKnots(); ++k) {
-            if (occt->Knot(k) == 1.3) {
+            if (occt->Knot(k) == inserted) {
                 index = k;
             }
         }
@@ -378,7 +389,6 @@ TEST_CASE("knot removal agrees with Geom_BSplineCurve::RemoveKnot",
         // A knot that is not removable: both refuse it within the tolerance.
         const std::vector<double> inside = [&] {
             std::vector<double> values;
-            const Stereon::Interval domain = Domain(curve);
             for (const double u : curve.Knots) {
                 if (u > domain.GetLower() && u < domain.GetUpper() &&
                     (values.empty() || values.back() != u)) {
@@ -425,8 +435,8 @@ TEST_CASE("concatenation agrees with GeomConvert_CompCurveToBSplineCurve",
         // the ends agree. (OCCT keeps its own parametrisation of the second
         // piece, so the parameters are not compared.)
         const Stereon::Interval domain = Domain(ours);
-        REQUIRE(Agree(Eval(ours, domain.GetLower()), occt->Value(occt->FirstParameter())));
-        REQUIRE(Agree(Eval(ours, domain.GetUpper()), occt->Value(occt->LastParameter())));
+        REQUIRE(AgreeRebuilt(Eval(ours, domain.GetLower()), occt->Value(occt->FirstParameter())));
+        REQUIRE(AgreeRebuilt(Eval(ours, domain.GetUpper()), occt->Value(occt->LastParameter())));
         for (int k = 0; k < SampleCount; ++k) {
             const double t =
                 domain.GetLower() + k * (domain.GetUpper() - domain.GetLower()) / (SampleCount - 1);
@@ -436,11 +446,13 @@ TEST_CASE("concatenation agrees with GeomConvert_CompCurveToBSplineCurve",
             if (projection.NbPoints() > 0) {
                 distance = projection.LowerDistance();
             }
-            const gp_Pnt first = occt->StartPoint();
-            const gp_Pnt last = occt->EndPoint();
-            distance = std::min({distance, Distance(p, Point3{first.X(), first.Y(), first.Z()}),
-                                 Distance(p, Point3{last.X(), last.Y(), last.Z()})});
-            REQUIRE(distance <= 1e-9);
+            const gp_Pnt occtStart = occt->StartPoint();
+            const gp_Pnt occtEnd = occt->EndPoint();
+            distance = std::min({distance,
+                                 Distance(p, Point3{occtStart.X(), occtStart.Y(), occtStart.Z()}),
+                                 Distance(p, Point3{occtEnd.X(), occtEnd.Y(), occtEnd.Z()})});
+            // The projection converges to about 1e-9 itself; allow it that.
+            REQUIRE(distance <= 1e-8 * (1.0 + Length(Stereon::ToVec(p))));
         }
     }
 }
