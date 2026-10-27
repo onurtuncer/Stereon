@@ -213,6 +213,10 @@ knot to multiplicity :math:`p`; Stereon walks the knots once and updates
 only the current segment's poles (A5.6), :math:`O(n\, p^2 d)` in total,
 rather than inserting knot by knot into the whole array, which would move
 :math:`O(n)` poles each time.
+Degree elevation (A5.9) decomposes into Bezier segments the same way,
+raises each by convex combinations and removes the breakpoint knots back to
+their raised multiplicities, which is exact, so the result is minimal
+without a tolerance test (:doc:`nurbs`).
 
 Local properties (B1.6)
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -438,8 +442,9 @@ derivatives (1.33) and interpolation (1.34) were below parity on that run
 too and have the kernels described under *Evaluation* and *Fitting*.
 
 Not yet measured: the SIMD batch evaluation of B1.1, grid evaluation
-(B1.2), B1.3's convergence rate over a corpus, and degree elevation (B1.5),
-which Stereon does not have yet. The reference host varies between runs by
+(B1.2) and B1.3's convergence rate over a corpus. Degree elevation (B1.5)
+runs in the reference workflow since it landed; its first reference result
+is next. The reference host varies between runs by
 up to about 1.5× in absolute time on both sides, so a ratio is read within
 one run, and one within a few percent of 1 is parity.
 

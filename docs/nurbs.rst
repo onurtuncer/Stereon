@@ -221,6 +221,78 @@ the domain :math:`[a, b]`, and reverses the poles and weights.
 ``Reparametrized`` maps the knots affinely onto a new domain, keeping the
 domain's end knots exact so that a clamped curve stays clamped.
 
+Degree elevation, knot removal and the other rearrangements
+-----------------------------------------------------------
+
+The remaining chapter-5 operations live in ``BSplineOperations.cppm``. All of
+them work in homogeneous coordinates, so the rational case costs nothing
+extra, and all but knot removal leave the point set unchanged up to
+rounding.
+
+- **Clamping.** ``Clamped`` inserts the two domain ends up to multiplicity
+  :math:`p` and drops the knots and poles beyond them: on the first
+  non-empty span the basis functions depend only on the knots from the
+  second copy of :math:`a` on, so the knot before it may be set to
+  :math:`a` and everything earlier discarded, and likewise at :math:`b`. The
+  result starts at its first pole and ends at its last, on the same domain,
+  without any new arithmetic beyond the insertions. The periodic fits of
+  :doc:`fitting` produce unclamped curves; this is how to hand them to code
+  that expects end poles on the curve.
+- **The periodic form.** Stereon has no periodic flag; a closed curve is
+  periodic by its data. ``IsPeriodic`` recognises the form: with
+  :math:`n + p` poles, the last :math:`p` repeat the first :math:`p`, and the
+  knots repeat with the width :math:`T` of the domain,
+  :math:`u_{i+n} = u_i + T` up to a few units of rounding. ``AsPeriodic``
+  builds it from any closed curve: the curve is clamped, its end poles,
+  which must lie within the given tolerance, are merged at their midpoint,
+  the seam knot takes multiplicity :math:`p` and the poles are rotated by
+  :math:`p - 1` so that the seam falls where the clamped curve began. The
+  curve on the domain is unchanged except for the merge, which moves it by
+  at most half the gap. A clamped closed curve is :math:`C^0` at its seam
+  and so is its periodic form; the fits produce seams of multiplicity 1,
+  :math:`C^{p-1}`, which ``RemoveKnot`` at the seam would recover where the
+  curve allows. A rational curve needs equal weights at its two ends;
+  scaling one side's weights by a constant changes no point.
+- **Degree elevation** (A5.9). ``ElevatedDegree`` splits the clamped curve
+  into its Bezier segments, raises each by the convex combination
+  :math:`Q_i = \tfrac{i}{q+1} P_{i-1} + (1 - \tfrac{i}{q+1}) P_i` one degree
+  at a time, joins the segments with every breakpoint at the new degree's
+  multiplicity and then removes each interior knot :math:`p - s` times,
+  where :math:`s` was its multiplicity: the elevated curve is as smooth
+  there as the original, so these removals are exact and the result has as
+  few poles as the elevated curve allows. Every interior multiplicity grows
+  by the degree increase; ``Continuity`` is unchanged.
+- **Knot removal** (A5.8). Inserting a knot is a convex combination of the
+  poles; removing one inverts it. ``RemoveKnot`` runs the inversion from
+  both ends of the :math:`p - s + 1` poles the knot touches towards the
+  middle, where the two sides must agree; how far they disagree is the
+  distance by which one pole of the re-inserted curve would miss the
+  original, and the curve moves by at most that much (for a rational
+  curve, scaled by :math:`(1 + \max |P|) / \min w`, since
+  :math:`\mathbf C = \mathbf A / w`). The removal is kept while the running
+  sum of those bounds stays within the caller's tolerance; the result
+  reports how many copies went and the bound ``Deviation``, so that a
+  caller can log the change as :doc:`tolerances` asks. A tolerance of 0
+  removes only what rounding allows, which is how the degree elevation
+  above uses it internally.
+- **Concatenation.** ``Concatenated`` clamps both curves, elevates the one
+  of lower degree, shifts the second's knots so that its domain starts
+  where the first's ends, scales the second's weights so that the two
+  junction poles carry the same weight, merges those poles at their
+  midpoint (the two ends must lie within the tolerance) and joins the knot
+  vectors with the junction at multiplicity :math:`p`, so the parametrisation
+  of each piece is kept and the join is :math:`C^0`. Where the pieces are
+  in fact smoother, ``RemoveKnot`` at the junction with a tolerance lets
+  the extra copies go; splitting a curve and concatenating the halves,
+  then removing the junction knot, gives the original back.
+
+Two queries read the structure rather than change it. ``Continuity`` is
+the order of continuity the knots guarantee, :math:`p - s` for the largest
+interior multiplicity :math:`s` (the degree for a single span), at one
+parameter or over the whole curve; OCCT's ``IsCN(n)`` is
+``Continuity(c) >= n``. ``IsClosed`` compares the points at the two ends
+within a tolerance.
+
 Global projection
 -----------------
 
@@ -603,11 +675,15 @@ Current limits
 
 - Periodic B-splines have no periodic flag; they are represented by their
   unclamped equivalent, which is what the periodic fits of :doc:`fitting`
-  produce, and are not ``PeriodicCurve``\ s or ``PeriodicSurface``\ s.
+  produce and ``AsPeriodic`` builds, and ``IsPeriodic`` recognises. They are
+  not ``PeriodicCurve``\ s or ``PeriodicSurface``\ s: evaluation is
+  confined to the domain, and ``InsertKnot`` on the form inserts into one
+  period only, so the result is the same curve on the domain but no longer
+  in the form.
 - Surface projection is not certified inside its final sub-patches (see
   *Surface projection*).
-- Degree elevation, knot removal and curve fitting are not yet implemented;
-  fitting is planned for v0.1.
+- Degree elevation, knot removal, clamping and concatenation exist for
+  curves only; surfaces have knot insertion alone.
 - The SIMD batch evaluation and grid evaluation of benchmarks B1.1 and B1.2
   are not implemented; single-point evaluation is measured against OCCT in
   ``bench/reports/phase1-2026-10-15.md``.
