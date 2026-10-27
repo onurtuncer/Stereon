@@ -19,10 +19,17 @@ namespace Stereon::Detail {
 void ParallelFor(const std::size_t count, const unsigned threads, const bool serial,
                  void* const context, const ParallelBody body)
 {
-    const std::size_t chunks = (count + ParallelGrain - 1) / ParallelGrain;
+    ParallelFor(count, ParallelGrain, threads, serial, context, body);
+}
+
+void ParallelFor(const std::size_t count, const std::size_t grain, const unsigned threads,
+                 const bool serial, void* const context, const ParallelBody body)
+{
+    const std::size_t step = std::max<std::size_t>(1, grain);
+    const std::size_t chunks = (count + step - 1) / step;
     const auto run = [&](const std::size_t chunk) {
-        const std::size_t begin = chunk * ParallelGrain;
-        body(context, begin, std::min(count, begin + ParallelGrain));
+        const std::size_t begin = chunk * step;
+        body(context, begin, std::min(count, begin + step));
     };
     if (chunks == 0) {
         return;

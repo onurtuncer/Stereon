@@ -9,6 +9,7 @@ module;
 
 // The contract anchor (docs/toolchain/gcc16-feature-probe.md).
 #include <Stereon/Core/Contracts.hpp>
+#include <Stereon/Core/Parallel.hpp>
 #include <Stereon/Core/Try.hpp>
 
 #include <algorithm>
@@ -16,6 +17,7 @@ module;
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <format>
 #include <map>
 #include <numbers>
@@ -602,6 +604,70 @@ MeetSurface(const Surface& surface, const Point3& origin, const Vec3& d, const C
     return {};
 }
 
+/// A log record kept to be passed on later, in the regions' order.
+struct KeptLog {
+    LogLevel Level;
+    std::string Message;
+    SourceLocation Location;
+};
+
+/// What the parallel loop reads, and a slot per region: its outcome and
+/// what it logged.
+struct Seeding {
+    std::vector<Region>* Regions;
+    const Shape* Own;
+    const Shape* Other;
+    const ClassifyBudget* Budget;
+    const Context* Ctx;
+    std::vector<Result<void>>* Outcomes;
+    std::vector<std::vector<KeptLog>>* Logs;
+};
+
+/// The parallel loop's body: each region of the chunk seeded on its own,
+/// with a Context that runs serially and keeps its log records. It must not
+/// throw: anything thrown is the region's failure.
+void SeedChunk(void* state, const std::size_t begin, const std::size_t end)
+{
+    const Seeding& s = *static_cast<const Seeding*>(state);
+    for (std::size_t k = begin; k < end; ++k) {
+        std::vector<KeptLog>& logs = (*s.Logs)[k];
+        try {
+            const Context own = s.Ctx->WithScheduler(Scheduler::Serial)
+                                    .WithLogSink([&logs](const LogRecord& record) {
+                                        logs.push_back({record.Level, std::string(record.Message),
+                                                        record.Location});
+                                    });
+            (*s.Outcomes)[k] = SeedRegion((*s.Regions)[k], *s.Own, *s.Other, *s.Budget, own);
+        } catch (const std::exception& e) {
+            (*s.Outcomes)[k] = Fail(ErrorCode::IntersectionFailed,
+                                    std::string("Classify: a region's seed threw: ") + e.what());
+        }
+    }
+}
+
+/// Every region seeded on the Context's scheduler (ADR-0007): each reads the
+/// two shapes and writes only its own Region, one region per chunk since
+/// their rays and winding numbers cost unevenly; then, in region order,
+/// their log records passed on and the first failure returned, so that
+/// nothing depends on the thread count.
+[[nodiscard]] Result<void> SeedRegions(std::vector<Region>& regions, const Shape& own,
+                                       const Shape& other, const ClassifyBudget& budget,
+                                       const Context& ctx)
+{
+    std::vector<Result<void>> outcomes(regions.size());
+    std::vector<std::vector<KeptLog>> logs(regions.size());
+    Seeding seeding{&regions, &own, &other, &budget, &ctx, &outcomes, &logs};
+    Detail::ParallelFor(regions.size(), 1, ctx.GetThreadCount(),
+                        ctx.GetScheduler() == Scheduler::Serial, &seeding, &SeedChunk);
+    for (std::size_t k = 0; k < regions.size(); ++k) {
+        for (const KeptLog& log : logs[k]) {
+            ctx.Log(log.Level, log.Message, log.Location);
+        }
+        STEREON_TRY_VOID(std::move(outcomes[k]));
+    }
+    return {};
+}
+
 [[nodiscard]] Result<std::vector<Region>>
 ClassifyBody(const Shape& own, const Shape& other,
              const std::vector<std::pair<EdgeId, SideTransition>>& edges,
@@ -612,9 +678,7 @@ ClassifyBody(const Shape& own, const Shape& other,
         imprinted.insert(edge.GetIndex());
     }
     STEREON_TRY(std::vector<Region> regions, RegionsOf(own, imprinted));
-    for (Region& region : regions) {
-        STEREON_TRY_VOID(SeedRegion(region, own, other, budget, ctx));
-    }
+    STEREON_TRY_VOID(SeedRegions(regions, own, other, budget, ctx));
     STEREON_TRY_VOID(CrossCheck(own, regions, edges));
     return regions;
 }

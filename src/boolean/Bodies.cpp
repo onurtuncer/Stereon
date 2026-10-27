@@ -9,6 +9,7 @@ module;
 
 // The contract anchor (docs/toolchain/gcc16-feature-probe.md).
 #include <Stereon/Core/Contracts.hpp>
+#include <Stereon/Core/Parallel.hpp>
 #include <Stereon/Core/Try.hpp>
 
 #include <algorithm>
@@ -16,6 +17,7 @@ module;
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <limits>
 #include <map>
 #include <optional>
@@ -275,13 +277,10 @@ void AddPiece(Networks& a, Networks& b, const Shape& sa, const Shape& sb, const 
 
 /// Every piece of the branch inside both faces: the common stretches of the
 /// two clips' inside pieces.
-[[nodiscard]] Result<void> AddBranch(Networks& a, Networks& b, const Shape& sa, const Shape& sb,
-                                     const FaceData& fa, const FaceData& fb,
-                                     const IntersectionBranch& branch,
-                                     std::vector<SharedPiece>& shared, const Context& ctx)
+void AddBranch(Networks& a, Networks& b, const Shape& sa, const Shape& sb, const FaceData& fa,
+               const FaceData& fb, const IntersectionBranch& branch, const FaceClip& clipA,
+               const FaceClip& clipB, std::vector<SharedPiece>& shared, const Context& ctx)
 {
-    STEREON_TRY(const FaceClip clipA, ClipToFace(sa, fa.Face, branch, BranchSide::A, ctx));
-    STEREON_TRY(const FaceClip clipB, ClipToFace(sb, fb.Face, branch, BranchSide::B, ctx));
     const double sliver =
         1e-9 * Width(branch.Range); // STEREON-LINT-ALLOW(epsilon): a parameter gap
     for (const FacePiece& pa : clipA.Inside) {
@@ -293,7 +292,6 @@ void AddPiece(Networks& a, Networks& b, const Shape& sa, const Shape& sb, const 
             AddPiece(a, b, sa, sb, fa, fb, branch, clipA, clipB, pa, pb, common, shared, ctx);
         }
     }
-    return {};
 }
 
 // --- Coincident faces ------------------------------------------------------------------
@@ -406,38 +404,155 @@ void AddPiece(Networks& a, Networks& b, const Shape& sa, const Shape& sb, const 
     return {};
 }
 
-/// Intersects every candidate face pair and gathers the networks.
+// --- Gathering, in parallel ----------------------------------------------------------
+
+/// A candidate face pair, by its faces' places in the two bodies' lists, in
+/// input order (pipeline step 1).
+struct Candidate {
+    std::size_t A;
+    std::size_t B;
+};
+
+/// A log record kept to be passed on later, in the pair's order.
+struct KeptLog {
+    LogLevel Level;
+    std::string Message;
+    SourceLocation Location;
+};
+
+/// What a pair's own work found, written only by the chunk of its index
+/// (ADR-0007, G1): the surface intersection, both clips of each branch that
+/// bounds no coincidence, and what the pair logged.
+struct PairWork {
+    Result<SurfaceSurfaceIntersection> Meeting;
+    std::set<std::size_t> Bounding;
+    std::vector<std::optional<Result<std::pair<FaceClip, FaceClip>>>> Clips;
+    std::vector<KeptLog> Logs;
+};
+
+/// The candidate pairs: the faces whose boxes meet, A's faces in order and
+/// B's within each.
+[[nodiscard]] std::vector<Candidate> CandidatesOf(const std::vector<FaceData>& facesA,
+                                                  const std::vector<FaceData>& facesB)
+{
+    std::vector<Candidate> candidates;
+    for (std::size_t i = 0; i < facesA.size(); ++i) {
+        for (std::size_t j = 0; j < facesB.size(); ++j) {
+            if (Intersects(facesA[i].Box, facesB[j].Box)) {
+                candidates.push_back({i, j});
+            }
+        }
+    }
+    return candidates;
+}
+
+/// Both clips of a branch.
+[[nodiscard]] Result<std::pair<FaceClip, FaceClip>> ClipsOf(const Shape& sa, const Shape& sb,
+                                                            const FaceData& fa, const FaceData& fb,
+                                                            const IntersectionBranch& branch,
+                                                            const Context& ctx)
+{
+    STEREON_TRY(FaceClip clipA, ClipToFace(sa, fa.Face, branch, BranchSide::A, ctx));
+    STEREON_TRY(FaceClip clipB, ClipToFace(sb, fb.Face, branch, BranchSide::B, ctx));
+    return std::pair{std::move(clipA), std::move(clipB)};
+}
+
+/// One pair's work: the intersection at the pair tolerance, the larger of
+/// the two faces' (ADR-0001, decision D2), within which exactly parallel
+/// faces are declared coincident, and the clips of the branches that bound
+/// no coincidence (a coincidence's own boundary branches bound the faces'
+/// parameter boxes, not the faces: the faces' boundaries imprinted on each
+/// other take their place, after, in order). It reads the two frozen shapes
+/// only.
+void WorkOnPair(PairWork& work, const Shape& sa, const Shape& sb, const FaceData& fa,
+                const FaceData& fb, const Context& ctx)
+{
+    work.Meeting = Intersect(fa.Surface, fa.Parameters, fb.Surface, fb.Parameters,
+                             std::max(fa.Tolerance, fb.Tolerance), ctx);
+    if (!work.Meeting) {
+        return;
+    }
+    for (const OverlapRegion& overlap : work.Meeting->Overlaps) {
+        work.Bounding.insert(overlap.Boundary.begin(), overlap.Boundary.end());
+    }
+    for (std::size_t i = 0; i < work.Meeting->Branches.size(); ++i) {
+        work.Clips.emplace_back();
+        if (!work.Bounding.contains(i)) {
+            work.Clips.back() = ClipsOf(sa, sb, fa, fb, work.Meeting->Branches[i], ctx);
+        }
+    }
+}
+
+/// What the parallel loop reads, and the slots it writes.
+struct Gathering {
+    const Shape* A;
+    const Shape* B;
+    const std::vector<FaceData>* FacesA;
+    const std::vector<FaceData>* FacesB;
+    const std::vector<Candidate>* Candidates;
+    const Context* Ctx;
+    std::vector<PairWork>* Work;
+};
+
+/// The parallel loop's body: the pairs of one chunk, each with a Context of
+/// its own that runs serially, nothing nested in the pool, and keeps its log
+/// records. It must not throw: anything thrown is the pair's failure.
+void WorkOnChunk(void* state, const std::size_t begin, const std::size_t end)
+{
+    const Gathering& g = *static_cast<const Gathering*>(state);
+    for (std::size_t k = begin; k < end; ++k) {
+        PairWork& work = (*g.Work)[k];
+        try {
+            const Context own =
+                g.Ctx->WithScheduler(Scheduler::Serial)
+                    .WithLogSink([&work](const LogRecord& record) {
+                        work.Logs.push_back(
+                            {record.Level, std::string(record.Message), record.Location});
+                    });
+            const Candidate& c = (*g.Candidates)[k];
+            WorkOnPair(work, *g.A, *g.B, (*g.FacesA)[c.A], (*g.FacesB)[c.B], own);
+        } catch (const std::exception& e) {
+            work.Meeting =
+                Fail(ErrorCode::IntersectionFailed,
+                     std::string("ImprintBodies: a face pair's work threw: ") + e.what());
+        }
+    }
+}
+
+/// Intersects every candidate face pair and gathers the networks: each
+/// pair's intersection and clips on the Context's scheduler (ADR-0007), one
+/// pair per chunk since their work is large and uneven; then, in pair
+/// order, its log records passed on, its failure returned, or its
+/// coincidences and branches added to the networks, so that nothing depends
+/// on the thread count.
 [[nodiscard]] Result<void> Gather(Networks& a, Networks& b, const Shape& sa, const Shape& sb,
                                   std::vector<SharedPiece>& shared, std::vector<Plane>& planes,
                                   const Context& ctx)
 {
     STEREON_TRY(const std::vector<FaceData> facesA, FacesOf(sa, ctx));
     STEREON_TRY(const std::vector<FaceData> facesB, FacesOf(sb, ctx));
-    for (const FaceData& fa : facesA) {
-        for (const FaceData& fb : facesB) {
-            if (!Intersects(fa.Box, fb.Box)) {
+    const std::vector<Candidate> candidates = CandidatesOf(facesA, facesB);
+    std::vector<PairWork> work(candidates.size());
+    Gathering gathering{&sa, &sb, &facesA, &facesB, &candidates, &ctx, &work};
+    Detail::ParallelFor(candidates.size(), 1, ctx.GetThreadCount(),
+                        ctx.GetScheduler() == Scheduler::Serial, &gathering, &WorkOnChunk);
+    for (std::size_t k = 0; k < candidates.size(); ++k) {
+        for (const KeptLog& log : work[k].Logs) {
+            ctx.Log(log.Level, log.Message, log.Location);
+        }
+        STEREON_TRY(const SurfaceSurfaceIntersection& meeting, std::move(work[k].Meeting));
+        const FaceData& fa = facesA[candidates[k].A];
+        const FaceData& fb = facesB[candidates[k].B];
+        for (const OverlapRegion& overlap : meeting.Overlaps) {
+            STEREON_TRY_VOID(AddCoincidence(a, b, sa, sb, fa, fb, overlap, planes, ctx));
+        }
+        for (std::size_t i = 0; i < meeting.Branches.size(); ++i) {
+            if (work[k].Bounding.contains(i)) {
                 continue;
             }
-            // The pair tolerance is the larger of the two faces' (ADR-0001,
-            // decision D2): within it, exactly parallel faces are declared
-            // coincident.
-            STEREON_TRY(const SurfaceSurfaceIntersection meeting,
-                        Intersect(fa.Surface, fa.Parameters, fb.Surface, fb.Parameters,
-                                  std::max(fa.Tolerance, fb.Tolerance), ctx));
-            // A coincidence's own boundary branches bound the faces' parameter
-            // boxes, not the faces: the faces' boundaries imprinted on each
-            // other take their place.
-            std::set<std::size_t> bounding;
-            for (const OverlapRegion& overlap : meeting.Overlaps) {
-                STEREON_TRY_VOID(AddCoincidence(a, b, sa, sb, fa, fb, overlap, planes, ctx));
-                bounding.insert(overlap.Boundary.begin(), overlap.Boundary.end());
-            }
-            for (std::size_t i = 0; i < meeting.Branches.size(); ++i) {
-                if (!bounding.contains(i)) {
-                    STEREON_TRY_VOID(
-                        AddBranch(a, b, sa, sb, fa, fb, meeting.Branches[i], shared, ctx));
-                }
-            }
+            STEREON_TRY(const auto& clips, std::move(*work[k].Clips[i]));
+            AddBranch(a, b, sa, sb, fa, fb, meeting.Branches[i], clips.first, clips.second, shared,
+                      ctx);
         }
     }
     return {};

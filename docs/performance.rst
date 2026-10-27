@@ -711,6 +711,51 @@ measured. It needs the Euler operators of ADR-0027, which do not exist yet.
 The run of 2026-10-20 predates the cached-curve fields of the edge record;
 the measurement above includes them.
 
+Booleans on the pool (M10)
+--------------------------
+
+A Boolean spends nearly all its time on its candidate face pairs: each
+pair's surface intersection and the clip of every branch to both faces.
+That work reads the two frozen operands only, so it runs on the Context's
+scheduler, one pair per chunk since pairs cost unevenly, each writing its
+own slot with a serial Context of its own that keeps its log records; the
+networks are then built from the slots in pair order, the records passed on
+and the first failure returned, so that the result does not depend on the
+thread count (ADR-0007). The seeds of the classification's regions run the
+same way, one region per chunk. ``Detail::ParallelFor`` takes the grain for
+this: the chunks are cut by the count and the grain alone.
+
+The fixture is the plan's: a slab of 10 x 10 cells per hole, 10 mm thick,
+cut by one operand made of a cylinder of radius 2 through every cell
+(``tests/boolean/SpeedupTests.cpp``, hidden behind ``[speedup]``). On a
+6-core, 12-thread development machine, the debug build, the serial
+scheduler against 8 threads:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Holes
+     - Serial
+     - 8 threads
+     - Speed-up
+   * - 25
+     - 7.58 s
+     - 1.54 s
+     - 4.9x
+   * - 49
+     - 16.07 s
+     - 2.93 s
+     - 5.5x
+   * - 100
+     - 32.53 s
+     - 6.16 s
+     - 5.3x
+
+These are a development machine's figures, not the measurement of record:
+ADR-0007 asks for at least 3x on the 4 cores of the OCCT reference
+workflow's runner, on a body of more than 1 000 faces, measured as that
+workflow measures.
+
 Reproducing the numbers
 -----------------------
 

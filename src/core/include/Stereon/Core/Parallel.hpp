@@ -43,4 +43,11 @@ inline constexpr std::size_t ParallelGrain = 64;
 void ParallelFor(std::size_t count, unsigned threads, bool serial, void* context,
                  ParallelBody body);
 
+/// As above, in chunks of `grain` indices (at least one): for elements whose
+/// work is large and uneven, a face pair's intersection say, where chunks of
+/// ParallelGrain would leave the pool idle. The cut still depends on nothing
+/// but the count and the grain.
+void ParallelFor(std::size_t count, std::size_t grain, unsigned threads, bool serial, void* context,
+                 ParallelBody body);
+
 } // namespace Stereon::Detail
