@@ -149,12 +149,15 @@ ADR-0007 promises bit-identical results for any scheduler and thread count
 on one executable and one machine (G1), and says every parallel algorithm
 needs a determinism test. Parallel work runs through
 ``Detail::ParallelFor`` (``Stereon/Core/Parallel.hpp``). It cuts the index
-range into chunks of fixed size whatever the thread count, runs them on the
-calling thread for the serial scheduler, and otherwise on a pool of exactly
-the ``Context``'s thread count (stdexec's ``static_thread_pool``). Each
+range into chunks of a fixed grain whatever the thread count, runs them on
+the calling thread for the serial scheduler, and otherwise on the pool the
+``Context`` owns (``GetWorkerPool``): one pool per ``Context``, of exactly
+its thread count (stdexec's ``static_thread_pool``), shared by its copies
+and started on first use, so no operation makes threads of its own. Each
 chunk writes only its own indices' slots, so nothing depends on which
 thread ran what or when. The operations built on it so far are
-``ProjectAll`` onto B-spline curves and surfaces.
+``ProjectAll`` onto B-spline curves and surfaces and, in the Booleans, the
+face pairs' intersections and clips and the regions' seeds.
 
 They are checked at three levels:
 

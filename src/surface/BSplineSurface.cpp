@@ -1110,8 +1110,7 @@ std::vector<Point2> ProjectAll(const SurfaceProjector& projector,
         const Point3* Points;
         Point2* Parameters;
     } work{&projector, points.data(), parameters.data()};
-    Detail::ParallelFor(points.size(), context.GetThreadCount(),
-                        context.GetScheduler() == Scheduler::Serial, &work,
+    Detail::ParallelFor(points.size(), context.GetWorkerPool(), &work,
                         [](void* state, const std::size_t begin, const std::size_t end) {
                             const Work& w = *static_cast<const Work*>(state);
                             for (std::size_t i = begin; i < end; ++i) {
