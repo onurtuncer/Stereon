@@ -120,7 +120,7 @@ struct Work {
     const Shape& Frozen;
     std::vector<BuilderFaceId> Faces;
     std::vector<bool> Done;
-    std::vector<BuilderEdgeId> Helpers;
+    std::vector<EdgeVertex> Helpers; // the struts hung, with their uses
 };
 
 /// The geometry of a piece's edge: Exact with the branch's curve, or Trim
@@ -307,7 +307,7 @@ void NearerUse(const Work& w, const CoedgeId coedge, const LoopCrossing& crossin
     STEREON_TRY(const EdgeVertex made,
                 w.Builder.MakeEdgeVertex(at, to.Position, to.Tolerance, strut));
     w.Made.Vertices[vertex] = made.Vertex;
-    w.Helpers.push_back(made.Edge);
+    w.Helpers.push_back(made);
     return {};
 }
 
@@ -391,33 +391,80 @@ void NearerUse(const Work& w, const CoedgeId coedge, const LoopCrossing& crossin
     return 0.5 * twice;
 }
 
-/// A ring a closed component leaves in the original face must be a hole: it
-/// runs clockwise about Su x Sv in a face oriented with its surface, and the
-/// disc cut off runs the other way. The MakeEdgeFace that closed the
-/// component, from a coedge to itself for a single closed piece or between
-/// two struts for several pieces, has no loop order to take that from and
-/// may leave the disc's loop in the original face; when the ring turns the
-/// wrong way the two loops change faces, the disc's into the original face
-/// (KFMRH) and the ring's out into a new face (MFKRH), which then is the
-/// face of the piece that closed the component.
-[[nodiscard]] Result<void> OrientRing(Work& w, const BuilderLoopId ring)
+/// A component's ring: the loop of its pieces, and its turn (TurnOf).
+struct Ring {
+    BuilderLoopId Loop;
+    double Turn = 0.0;
+};
+
+/// The component's ring among the two loops KEMR leaves when the helper
+/// goes, the one made of this network's pieces. KEMR keeps the helper's
+/// anchor side in the original loop and returns the other, and which side
+/// the component lay on depends on the way the strut was hung, so either
+/// loop may be the ring; before this was settled the face's own boundary
+/// was taken for the ring, and a ring on a reversed face kept the turn of
+/// an outer loop.
+[[nodiscard]] std::optional<Ring> RingAmong(const Work& w, const BuilderLoopId made,
+                                            const BuilderLoopId kept)
 {
-    const std::vector<BuilderCoedgeId> uses = w.Builder.CoedgesOf(ring);
+    for (const BuilderLoopId loop : {made, kept}) {
+        if (const std::optional<double> turn = TurnOf(w, w.Builder.CoedgesOf(loop))) {
+            return Ring{loop, *turn};
+        }
+    }
+    return std::nullopt;
+}
+
+/// The network's face whose loops include the loop.
+[[nodiscard]] BuilderFaceId FaceHolding(const Work& w, const BuilderLoopId loop)
+{
+    for (const BuilderFaceId face : w.Faces) {
+        if (std::ranges::contains(w.Builder.LoopsOf(face), loop)) {
+            return face;
+        }
+    }
+    return {};
+}
+
+/// A ring a closed component leaves in the original face must be a hole: it
+/// runs clockwise about Su x Sv in a face oriented with its surface, the
+/// other way in a reversed face, and the disc cut off runs against it. The
+/// MakeEdgeFace that closed the component, from a coedge to itself for a
+/// single closed piece or between two struts for several pieces, has no
+/// loop order to take that from and may leave the disc's loop in the
+/// original face; when the ring turns the wrong way the two loops change
+/// faces, the disc's into the original face (KFMRH) and the ring's out into
+/// a new face (MFKRH), which then is the face of the piece that closed the
+/// component. `made` and `kept` are the loops KEMR left (RingAmong).
+[[nodiscard]] Result<void> OrientRing(Work& w, const BuilderLoopId made, const BuilderLoopId kept)
+{
+    const std::optional<Ring> ring = RingAmong(w, made, kept);
+    if (!ring) {
+        return {};
+    }
+    const std::vector<BuilderCoedgeId> uses = w.Builder.CoedgesOf(ring->Loop);
     const auto closer = std::ranges::find_if(w.Made.Pieces, [&](const ImprintedPiece& p) {
         return p.Face.IsValid() && std::ranges::any_of(uses, [&](const BuilderCoedgeId use) {
                    return w.Builder.EdgeOf(use) == p.Edge;
                });
     });
-    const std::optional<double> turn = TurnOf(w, uses);
-    if (closer == w.Made.Pieces.end() || !turn) {
+    if (closer == w.Made.Pieces.end()) {
         return {};
     }
     const bool reversed = IsReversed(w.Frozen, w.Network.Face);
-    if (reversed ? *turn > 0.0 : *turn < 0.0) { // STEREON-LINT-ALLOW(epsilon): the turn's sense
+    if (reversed ? ring->Turn > 0.0 : ring->Turn < 0.0) { // STEREON-LINT-ALLOW(epsilon): a sense
         return {};
     }
-    STEREON_TRY_VOID(w.Builder.KillFaceMakeRingHole(closer->Face, w.Faces.front()));
-    STEREON_TRY(closer->Face, w.Builder.MakeFaceKillRingHole(ring));
+    // The ring's face, the original one or the closer's, keeps the outer
+    // boundary and takes the disc's loop as its hole; the disc's face goes,
+    // and the ring's loop makes the new face of the piece that closed it.
+    const BuilderFaceId ringFace = FaceHolding(w, ring->Loop);
+    const BuilderFaceId discFace = ringFace == closer->Face ? w.Faces.front() : closer->Face;
+    STEREON_TRY_VOID(w.Builder.KillFaceMakeRingHole(discFace, ringFace));
+    STEREON_TRY(closer->Face, w.Builder.MakeFaceKillRingHole(ring->Loop));
+    std::erase(w.Faces, discFace);
+    std::erase(w.Faces, ringFace);
+    w.Faces.insert(w.Faces.begin(), ringFace); // the outer boundary's face, where HangHelper looks
     w.Faces.push_back(closer->Face);
     return {};
 }
@@ -446,9 +493,10 @@ void NearerUse(const Work& w, const CoedgeId coedge, const LoopCrossing& crossin
         }
         STEREON_TRY_VOID(HangHelper(w, *start));
     }
-    for (const BuilderEdgeId helper : w.Helpers) {
-        STEREON_TRY(const BuilderLoopId ring, builder.KillEdgeMakeRing(helper));
-        STEREON_TRY_VOID(OrientRing(w, ring));
+    for (const EdgeVertex& helper : w.Helpers) {
+        const BuilderLoopId kept = builder.LoopOf(helper.Out);
+        STEREON_TRY(const BuilderLoopId freed, builder.KillEdgeMakeRing(helper.Edge));
+        STEREON_TRY_VOID(OrientRing(w, freed, kept));
     }
     return {};
 }

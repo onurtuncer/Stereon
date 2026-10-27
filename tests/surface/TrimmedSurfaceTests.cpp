@@ -326,6 +326,38 @@ TEST_CASE("a trimmed surface converts, moves and bounds as its patch", "[surface
             }
         }
     }
+    SECTION("scaled: the range follows the parameters the similarity rescales")
+    {
+        // A plane's parameters are distances along its axes, which its
+        // Transformed renormalises: the unit patch scaled by two is the
+        // patch over [0, 2]^2, its far corner at (2, 2, 0), not (1, 1, 0).
+        // A cylinder's u is an angle and its v a distance along the axis: v
+        // follows the scale, u does not. A sphere's are both angles.
+        const Transform scaling = Stereon::MakeScaling(Point3{}, 2.0);
+        const TrimmedSurface unit = *Stereon::MakeTrimmedSurface(
+            Surface(Plane{Point3{}, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}}),
+            Box2{Interval{0.0, 1.0}, Interval{0.0, 1.0}});
+        const TrimmedSurface plane = Transformed(unit, scaling);
+        REQUIRE(plane.GetRange() == Box2{Interval{0.0, 2.0}, Interval{0.0, 2.0}});
+        REQUIRE(Near(Eval(plane, Point2{2.0, 2.0}), Point3{2.0, 2.0, 0.0}));
+        REQUIRE(Near(Eval(plane, Point2{2.0, 2.0}),
+                     Transformed(Eval(unit, Point2{1.0, 1.0}), scaling)));
+        const Box2 box{Interval{0.5, 2.5}, Interval{-1.0, 1.0}};
+        const TrimmedSurface t = *Stereon::MakeTrimmedSurface(Surface(SomeCylinder()), box);
+        const TrimmedSurface drum = Transformed(t, scaling);
+        REQUIRE(drum.GetRange() == Box2{box.X, Interval{-2.0, 2.0}});
+        for (const double u : {0.5, 1.7, 2.5}) {
+            for (const double v : {-1.0, 0.4, 1.0}) {
+                REQUIRE(Near(Eval(drum, Point2{u, 2.0 * v}),
+                             Transformed(Eval(t, Point2{u, v}), scaling)));
+            }
+        }
+        const TrimmedSurface ball = Transformed(
+            *Stereon::MakeTrimmedSurface(
+                Surface(Sphere{Point3{}, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}}), box),
+            scaling);
+        REQUIRE(ball.GetRange() == box);
+    }
 }
 
 TEST_CASE("a user's basis type projects approximately and does not convert", "[surface][trimmed]")

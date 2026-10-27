@@ -13,8 +13,11 @@ module;
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <format>
+#include <limits>
 #include <map>
 #include <numeric>
 #include <optional>
@@ -540,30 +543,267 @@ void RecordShell(Work& w, const std::vector<std::size_t>& faces, const BuilderSh
     return {};
 }
 
-/// The shells: a component made only of a reversed body's faces is a void
-/// of the one solid the others bound; every other component bounds a solid
-/// of its own.
+/// How far off a face a component is probed from, as a share of the
+/// operands' extent: an irrational-looking share, so that the point does
+/// not land on another face of a body laid out in round numbers.
+constexpr double ProbeReachShare = 0.37;
+/// How far a probe's ray is tilted off the way back to its face when that
+/// way is ambiguous, as a share of the classifier's direction added.
+constexpr double RayTilt = 0.1;
+
+/// The diagonal of both operands' vertices' bounding box.
+[[nodiscard]] Result<double> ExtentOf(const Work& w)
+{
+    Box3 box = Box3::Empty();
+    for (const std::uint8_t body : {BodyA, BodyB}) {
+        const Shape& shape = w.ShapeOf(body);
+        STEREON_TRY(const auto vertices, AllEntities<EntityKind::Vertex>(shape));
+        for (const VertexId vertex : vertices) {
+            box = Hull(box, PositionOf(shape, vertex));
+        }
+    }
+    return Length(Diagonal(box));
+}
+
+/// What a ray from a point says of a component: the parameters of its
+/// crossings of the component's faces ahead of the point, in order, so that
+/// the point is inside what the component bounds when there is an odd
+/// number of them; and whether at the nearest crossing the ray leaves the
+/// material (the crossed face's normal, as the result orients it, along the
+/// ray).
+struct RayReading {
+    Vec3 Direction;
+    std::vector<double> Crossings;
+    bool Leaving = false;
+
+    [[nodiscard]] bool IsInside() const noexcept { return Crossings.size() % 2 == 1; }
+    [[nodiscard]] bool Misses() const noexcept { return Crossings.empty(); }
+};
+
+/// The ray read against the component's faces through their bodies'
+/// imprinted shapes, as the classifier's rays are (Detail::FaceCrossingsOf);
+/// nothing when a meeting is ambiguous.
+[[nodiscard]] Result<std::optional<RayReading>> ReadRay(const Work& w,
+                                                        const std::vector<std::size_t>& component,
+                                                        const Point3& origin, const Vec3& d)
+{
+    RayReading reading{d, {}, false};
+    double nearest = std::numeric_limits<double>::infinity();
+    for (const std::size_t f : component) {
+        const auto [body, face] = w.Copied[f];
+        const Shape& shape = w.ShapeOf(body);
+        STEREON_TRY(const auto crossings, Detail::FaceCrossingsOf(shape, face, origin, d, w.Ctx));
+        if (!crossings) {
+            return std::optional<RayReading>{};
+        }
+        // The result's normal is the surface's, turned round once for a
+        // reversed face and once more for a reversed body.
+        const bool turned = IsReversed(shape, face) != w.Reversed[body];
+        for (const Detail::FaceCrossing& crossing : *crossings) {
+            reading.Crossings.push_back(crossing.Parameter);
+            if (crossing.Parameter < nearest) {
+                nearest = crossing.Parameter;
+                reading.Leaving = crossing.Entering == turned;
+            }
+        }
+    }
+    std::ranges::sort(reading.Crossings);
+    return std::optional<RayReading>{std::move(reading)};
+}
+
+/// The ways a probe's rays go: back to its face first, which is known to
+/// meet the component, then that way tilted by the classifier's directions.
+[[nodiscard]] Vec3 WayOf(const Vec3& towards, const int k)
+{
+    return k == 0 ? towards : Normalized(towards + RayTilt * Detail::RayDirection(k));
+}
+
+/// The first reading of the component from a point that is unambiguous and
+/// meets it.
+[[nodiscard]] Result<std::optional<RayReading>> ReadFrom(const Work& w,
+                                                         const std::vector<std::size_t>& component,
+                                                         const Point3& point, const Vec3& towards)
+{
+    for (int k = 0; k < ClassifyBudget{}.Rays; ++k) {
+        STEREON_TRY(const std::optional<RayReading> reading,
+                    ReadRay(w, component, point, WayOf(towards, k)));
+        if (reading && !reading->Misses()) {
+            return reading;
+        }
+    }
+    return std::optional<RayReading>{};
+}
+
+/// Where a component is probed from: a point off one of its faces, stepped
+/// along the face's normal, and the way back to the face, which a ray from
+/// the point is known to meet strictly inside its loops.
+struct Probe {
+    Point3 At;
+    Vec3 Towards;
+};
+
+/// The probe off one of the result's faces; nothing for a face too narrow
+/// to seed.
+[[nodiscard]] Result<std::optional<Probe>> ProbeOf(const Work& w, const std::size_t f,
+                                                   const double reach)
+{
+    const auto [body, face] = w.Copied[f];
+    const Shape& shape = w.ShapeOf(body);
+    STEREON_TRY(const std::optional<Point2> uv, Detail::SeedPointIn(shape, face, w.Ctx));
+    if (!uv) {
+        return std::optional<Probe>{};
+    }
+    const Surface surface = SurfaceOf(shape, face);
+    STEREON_TRY(const Vec3 normal, UnitNormal(surface, *uv));
+    return std::optional<Probe>{Probe{Eval(surface, *uv) + reach * normal, -normal}};
+}
+
+/// A placed component: its faces, whether it is a void, and the probe it
+/// was placed from.
+struct Placed {
+    std::vector<std::size_t> Faces;
+    bool Void = false;
+    Probe From;
+};
+
+/// The component placed by the reading of a ray from a point off one of its
+/// faces: its faces point outward, a solid, when the point is inside and
+/// the ray leaves the material or the point is outside and the ray enters
+/// it; inward, a void, otherwise.
+[[nodiscard]] Result<Placed> PlacementOf(const Work& w, std::vector<std::size_t> component,
+                                         const double extent)
+{
+    for (const std::size_t f : component) {
+        STEREON_TRY(const std::optional<Probe> probe, ProbeOf(w, f, ProbeReachShare * extent));
+        if (!probe) {
+            continue;
+        }
+        STEREON_TRY(const std::optional<RayReading> reading,
+                    ReadFrom(w, component, probe->At, probe->Towards));
+        if (reading) {
+            return Placed{std::move(component), reading->IsInside() != reading->Leaving, *probe};
+        }
+    }
+    return Fail(ErrorCode::Unresolved,
+                std::format("Boolean: whether the shell of {} faces bounds a solid or a void is "
+                            "not settled from any of them",
+                            component.size()));
+}
+
+/// The first slab of the ray inside what a reading's component bounds: from
+/// the origin to the first crossing when the origin is inside, between the
+/// first two crossings otherwise. The reading meets the component.
+[[nodiscard]] Interval FirstSlab(const RayReading& reading)
+{
+    return reading.IsInside() ? Interval{0.0, reading.Crossings[0]}
+                              : Interval{reading.Crossings[0], reading.Crossings[1]};
+}
+
+/// The slab of the ray inside what a reading's component bounds that holds
+/// `slab`, or nothing when none does.
+[[nodiscard]] std::optional<Interval> SlabAround(const RayReading& reading, const Interval& slab)
+{
+    std::vector<double> edges = reading.Crossings;
+    if (reading.IsInside()) {
+        edges.insert(edges.begin(), 0.0);
+    }
+    for (std::size_t i = 0; i + 1 < edges.size(); i += 2) {
+        if (edges[i] <= slab.GetLower() && slab.GetUpper() <= edges[i + 1]) {
+            return Interval{edges[i], edges[i + 1]};
+        }
+    }
+    return std::nullopt;
+}
+
+/// The lumps around a slab of a ray: the one whose own slab around it starts
+/// last, the innermost of nested solids, or none; ambiguous when a lump's
+/// reading along the ray is.
+struct Enclosure {
+    bool Ambiguous = false;
+    std::optional<std::size_t> Lump;
+};
+
+[[nodiscard]] Result<Enclosure> EnclosureOf(const Work& w, const std::vector<Placed>& lumps,
+                                            const Point3& origin, const Vec3& d,
+                                            const Interval& slab)
+{
+    Enclosure found;
+    double start = -std::numeric_limits<double>::infinity();
+    for (std::size_t i = 0; i < lumps.size(); ++i) {
+        STEREON_TRY(const std::optional<RayReading> reading, ReadRay(w, lumps[i].Faces, origin, d));
+        if (!reading) {
+            found.Ambiguous = true;
+            return found;
+        }
+        const std::optional<Interval> around = SlabAround(*reading, slab);
+        if (around && around->GetLower() > start) {
+            start = around->GetLower();
+            found.Lump = i;
+        }
+    }
+    return found;
+}
+
+/// The solid a void lies in: along a ray from the void's probe, read against
+/// the void and every lump alike, the lump whose material lies closest
+/// around the void's first slab. A solid floating in the cavity, whose slab
+/// lies within the void's, is not around it. The only lump when there is
+/// one.
+[[nodiscard]] Result<std::size_t> ContainerOf(const Work& w, const std::vector<Placed>& lumps,
+                                              const Placed& hollow)
+{
+    if (lumps.empty()) {
+        return Fail(ErrorCode::InvalidResult, "Boolean: a void and no solid around it");
+    }
+    if (lumps.size() == 1) {
+        return std::size_t{0};
+    }
+    for (int k = 0; k < ClassifyBudget{}.Rays; ++k) {
+        const Vec3 d = WayOf(hollow.From.Towards, k);
+        STEREON_TRY(const std::optional<RayReading> own,
+                    ReadRay(w, hollow.Faces, hollow.From.At, d));
+        if (!own || own->Misses()) {
+            continue;
+        }
+        STEREON_TRY(const Enclosure found,
+                    EnclosureOf(w, lumps, hollow.From.At, d, FirstSlab(*own)));
+        if (found.Ambiguous) {
+            continue;
+        }
+        if (found.Lump) {
+            return *found.Lump;
+        }
+        return Fail(ErrorCode::Unresolved, "Boolean: a void inside none of the result's solids");
+    }
+    return Fail(
+        ErrorCode::Unresolved,
+        std::format("Boolean: the solid around a void of {} faces is not settled by any ray",
+                    hollow.Faces.size()));
+}
+
+/// The shells: each component bounds a solid of its own or is a void of
+/// the solid it lies in, told apart by a ray from a point off one of its
+/// faces (PlacementOf), whichever operand its faces came from: an operand's
+/// own cavity stays a void, and a tool's reversed shell inside the other
+/// becomes one.
 [[nodiscard]] Result<void> MakeShells(Work& w)
 {
-    std::vector<std::vector<std::size_t>> lumps;
-    std::vector<std::vector<std::size_t>> voids;
+    STEREON_TRY(const double extent, ExtentOf(w));
+    std::vector<Placed> lumps;
+    std::vector<Placed> voids;
     for (std::vector<std::size_t>& component : Components(w)) {
-        const bool hollow = std::ranges::all_of(
-            component, [&](const std::size_t f) { return w.Reversed[w.Copied[f].first]; });
-        (hollow ? voids : lumps).push_back(std::move(component));
-    }
-    if (!voids.empty() && lumps.size() != 1) {
-        return Fail(ErrorCode::NotSupported,
-                    "Boolean: a void among several solids, which the prototype does not place");
+        STEREON_TRY(Placed placed, PlacementOf(w, std::move(component), extent));
+        (placed.Void ? voids : lumps).push_back(std::move(placed));
     }
     std::vector<BuilderSolidId> solids;
-    for (const std::vector<std::size_t>& lump : lumps) {
+    for (const Placed& lump : lumps) {
         STEREON_TRY(const BuilderSolidId solid, w.Builder.AddSolid());
-        STEREON_TRY_VOID(AddShellOf(w, lump, solid));
+        STEREON_TRY_VOID(AddShellOf(w, lump.Faces, solid));
         solids.push_back(solid);
     }
-    for (const std::vector<std::size_t>& hollow : voids) {
-        STEREON_TRY_VOID(AddShellOf(w, hollow, solids.front()));
+    for (const Placed& hollow : voids) {
+        STEREON_TRY(const std::size_t owner, ContainerOf(w, lumps, hollow));
+        STEREON_TRY_VOID(AddShellOf(w, hollow.Faces, solids[owner]));
     }
     return {};
 }

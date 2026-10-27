@@ -225,9 +225,17 @@ Transformation and conversion
 -----------------------------
 
 A rigid motion or similarity :math:`x` commutes with restriction:
-:math:`x(C)` restricted to :math:`[a, b]` is :math:`x` applied to
-:math:`C_T`, at the same parameters. ``Transformed`` therefore moves the
-basis, keeps the range and the sense, and rebuilds the piece.
+:math:`x(C)` restricted to the image of :math:`[a, b]` is :math:`x` applied
+to :math:`C_T`. The image of the range is the range itself for a parameter
+the basis's ``Transformed`` keeps, an angle or a knot, and the range scaled
+by the similarity's scale :math:`s` for a parameter that is a distance along
+a renormalised axis: a parabola's :math:`t`, a plane's :math:`u` and
+:math:`v`, a cylinder's or cone's :math:`v`, and a sweep's along its
+profile. ``Transformed`` therefore moves the basis, rescales the range
+accordingly (``Detail::ParameterScaleOf``), keeps the sense, and rebuilds
+the piece, so that the unit patch of a plane scaled by two is the patch over
+:math:`[0, 2]^2` with its far corner at :math:`(2, 2, 0)`. A user's basis
+type is taken to keep its parameters.
 
 ``ToBSpline`` returns the piece's NURBS form. For a reversed curve it
 returns the form reversed with its knots reflected,
