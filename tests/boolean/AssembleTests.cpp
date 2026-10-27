@@ -282,3 +282,75 @@ TEST_CASE("a Boolean's History accounts for both operands", "[boolean][assemble]
     }
     REQUIRE(boxFacesKept == 6);
 }
+
+namespace {
+
+/// A box with a box-shaped cavity: Box() less the box from 3 to 7.
+Shape Hollow()
+{
+    return Run(Box(), BoxFrom(Point3{3.0, 3.0, 3.0}, Point3{7.0, 7.0, 7.0}), BooleanOperation::Cut)
+        .Shape;
+}
+
+} // namespace
+
+TEST_CASE("a box pocketed by a box through one face", "[boolean][assemble]")
+{
+    // The tool's four sides leave a ring of four pieces in the box's bottom
+    // face, a hole, and the pocket's floor is the tool's top.
+    const OperationResult pocket =
+        Run(Box(), BoxFrom(Point3{4.0, 4.0, -2.0}, Point3{6.0, 6.0, 5.0}), BooleanOperation::Cut);
+    REQUIRE(CountOf<EntityKind::Solid>(pocket.Shape) == 1);
+    REQUIRE(CountOf<EntityKind::Shell>(pocket.Shape) == 1);
+    REQUIRE(CountOf<EntityKind::Face>(pocket.Shape) == 11);
+    REQUIRE(Inside(pocket.Shape, Point3{1.0, 1.0, 1.0}));
+    REQUIRE(Inside(pocket.Shape, Point3{5.0, 5.0, 7.0}));
+    REQUIRE_FALSE(Inside(pocket.Shape, Point3{5.0, 5.0, 1.0}));
+}
+
+TEST_CASE("a hollow solid keeps its cavity through further Booleans", "[boolean][assemble][cavity]")
+{
+    const Shape hollow = Hollow();
+    REQUIRE(CountOf<EntityKind::Solid>(hollow) == 1);
+    REQUIRE(CountOf<EntityKind::Shell>(hollow) == 2);
+    REQUIRE(Inside(hollow, Point3{1.0, 1.0, 1.0}));
+    REQUIRE_FALSE(Inside(hollow, Point3{5.0, 5.0, 5.0}));
+
+    // Cut by a box apart from it: the hollow solid, its cavity still a void
+    // of the one solid and not a solid of its own.
+    const OperationResult apart = Run(
+        hollow, BoxFrom(Point3{20.0, 20.0, 20.0}, Point3{25.0, 25.0, 25.0}), BooleanOperation::Cut);
+    REQUIRE(CountOf<EntityKind::Solid>(apart.Shape) == 1);
+    REQUIRE(CountOf<EntityKind::Shell>(apart.Shape) == 2);
+    REQUIRE(Inside(apart.Shape, Point3{1.0, 1.0, 1.0}));
+    REQUIRE_FALSE(Inside(apart.Shape, Point3{5.0, 5.0, 5.0}));
+
+    // Common with a box around everything: the hollow solid itself.
+    const OperationResult common =
+        Run(hollow, BoxFrom(Point3{-5.0, -5.0, -5.0}, Point3{15.0, 15.0, 15.0}),
+            BooleanOperation::Common);
+    REQUIRE(CountOf<EntityKind::Solid>(common.Shape) == 1);
+    REQUIRE(CountOf<EntityKind::Shell>(common.Shape) == 2);
+    REQUIRE(Inside(common.Shape, Point3{1.0, 1.0, 1.0}));
+    REQUIRE_FALSE(Inside(common.Shape, Point3{5.0, 5.0, 5.0}));
+
+    // Union with a box floating in the cavity: a solid of its own, and the
+    // cavity's shell stays with the solid around it.
+    const OperationResult floating =
+        Run(hollow, BoxFrom(Point3{4.0, 4.0, 4.0}, Point3{6.0, 6.0, 6.0}), BooleanOperation::Union);
+    REQUIRE(CountOf<EntityKind::Solid>(floating.Shape) == 2);
+    REQUIRE(CountOf<EntityKind::Shell>(floating.Shape) == 3);
+    REQUIRE(Inside(floating.Shape, Point3{1.0, 1.0, 1.0}));
+    REQUIRE(Inside(floating.Shape, Point3{5.0, 5.0, 5.0}));
+    REQUIRE_FALSE(Inside(floating.Shape, Point3{3.5, 3.5, 3.5}));
+
+    // Cut by a box reaching from below into the cavity: one shell, the
+    // cavity opened to the outside.
+    const OperationResult opened =
+        Run(hollow, BoxFrom(Point3{4.0, 4.0, -2.0}, Point3{6.0, 6.0, 5.0}), BooleanOperation::Cut);
+    REQUIRE(CountOf<EntityKind::Solid>(opened.Shape) == 1);
+    REQUIRE(CountOf<EntityKind::Shell>(opened.Shape) == 1);
+    REQUIRE(Inside(opened.Shape, Point3{1.0, 1.0, 1.0}));
+    REQUIRE_FALSE(Inside(opened.Shape, Point3{5.0, 5.0, 1.0}));
+    REQUIRE_FALSE(Inside(opened.Shape, Point3{5.0, 5.0, 6.0}));
+}

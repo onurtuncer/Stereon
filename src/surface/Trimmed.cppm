@@ -136,7 +136,10 @@ private:
 /// (ADR-0007).
 [[nodiscard]] Point2 Project(const TrimmedSurface& surface, const Point3& p);
 [[nodiscard]] TrimmedSurface Reversed(const TrimmedSurface& surface);
-/// The trimmed surface moved: the basis transformed, the same range.
+/// The trimmed surface moved: the basis transformed, and the range rescaled
+/// as the basis's Transformed rescales its parameters under a similarity (a
+/// plane's both, a cylinder's or cone's v, a sweep's as its profile's), so
+/// that the patch is the image of the patch.
 [[nodiscard]] TrimmedSurface Transformed(const TrimmedSurface& surface, const Transform& x);
 /// The exact NURBS form of the whole patch, with the normal of the trimmed
 /// surface. NotSupported for a user's basis type.

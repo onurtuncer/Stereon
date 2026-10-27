@@ -400,10 +400,13 @@ makes an edge from a coedge to itself, and for several pieces it joins two
 struts. It may leave the disc's loop in the original face and the hole's
 in the new one.
 
-``OrientRing`` checks every ring after its helper is removed. It samples
-the pcurves of the ring's uses, in the order and direction the loop runs
-(64 samples each), and takes the polygon's signed area in the face's
-parameter space,
+``OrientRing`` checks every ring after its helper is removed. KEMR keeps
+the helper's anchor side in the original loop and returns the other, and
+which side the component lay on depends on the way the strut was hung, so
+either of the two loops it leaves may be the ring: the ring is the one made
+of the network's pieces (``RingAmong``). ``OrientRing`` samples the pcurves
+of the ring's uses, in the order and direction the loop runs (64 samples
+each), and takes the polygon's signed area in the face's parameter space,
 
 .. math::
 
@@ -411,9 +414,12 @@ parameter space,
 
 positive when the ring turns counter-clockwise. When the ring turns the
 wrong way for the face, the loops change faces: the disc's loop moves into
-the original face (KFMRH, ``KillFaceMakeRingHole``) and the ring moves out
-into a new face (MFKRH, ``MakeFaceKillRingHole``), which then is the face of
-the piece that closed the component.
+the ring's face (KFMRH, ``KillFaceMakeRingHole``), which keeps the outer
+boundary whether it is the original face or the one MEF made, and the ring
+moves out into a new face (MFKRH, ``MakeFaceKillRingHole``), which then is
+the face of the piece that closed the component. Before the ring was told
+from the face's own boundary this check never ran, and a ring imprinted on
+a reversed face, a cavity's, kept the turn of an outer loop.
 
 Seams
 ~~~~~

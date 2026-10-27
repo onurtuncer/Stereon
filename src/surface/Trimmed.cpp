@@ -23,8 +23,12 @@ module;
 module Stereon.Surface;
 
 import :BSplineSurface;
+import :Cone;
 import :Conversion;
+import :Cylinder;
 import :Erased;
+import :Plane;
+import :Swept;
 import :Trimmed;
 import :Visit;
 
@@ -200,9 +204,47 @@ TrimmedSurface Reversed(const TrimmedSurface& surface)
     return surface.Reversed();
 }
 
+namespace {
+
+/// The factors by which a similarity of the scale rescales the basis's
+/// parameters, as the basis's own Transformed does: a plane's both, each a
+/// distance along an axis; a cylinder's and a cone's v, a distance along
+/// the axis; an extrusion's u and a revolution's v as their profiles'; a
+/// trimmed basis's as its own basis's; angles, knots and every other
+/// builtin's not at all. A user's type is taken to keep its parameters.
+[[nodiscard]] Vec2 ParameterScalesOf(const Surface& basis, const double scale)
+{
+    if (basis.Target<Plane>() != nullptr) {
+        return {scale, scale};
+    }
+    if (basis.Target<Cylinder>() != nullptr || basis.Target<Cone>() != nullptr) {
+        return {1.0, scale};
+    }
+    if (const ExtrusionSurface* extrusion = basis.Target<ExtrusionSurface>()) {
+        return {Detail::ParameterScaleOf(extrusion->GetProfile(), scale), 1.0};
+    }
+    if (const RevolutionSurface* revolution = basis.Target<RevolutionSurface>()) {
+        return {1.0, Detail::ParameterScaleOf(revolution->GetProfile(), scale)};
+    }
+    if (const TrimmedSurface* trimmed = basis.Target<TrimmedSurface>()) {
+        return ParameterScalesOf(trimmed->GetBasis(), scale);
+    }
+    return {1.0, 1.0};
+}
+
+[[nodiscard]] Interval Scaled(const Interval& range, const double k)
+{
+    return {k * range.GetLower(), k * range.GetUpper()};
+}
+
+} // namespace
+
 TrimmedSurface Transformed(const TrimmedSurface& surface, const Transform& x)
 {
-    return {Transformed(surface.GetBasis(), x), surface.GetRange(), surface.IsReversed()};
+    const Vec2 k = ParameterScalesOf(surface.GetBasis(), Detail::SimilarityScaleOf(x));
+    const Box2 range = surface.GetRange();
+    return {Transformed(surface.GetBasis(), x), Box2{Scaled(range.X, k.X), Scaled(range.Y, k.Y)},
+            surface.IsReversed()};
 }
 
 Result<BSplineSurface> ToBSpline(const TrimmedSurface& surface)

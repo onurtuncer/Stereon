@@ -24,6 +24,7 @@ module;
 #include <iterator>
 #include <optional>
 #include <ostream>
+#include <random>
 #include <span>
 #include <string>
 #include <string_view>
@@ -937,18 +938,55 @@ Result<LoadedGeometry> ReadGeometry(const std::span<const std::byte> bytes)
     return loaded;
 }
 
+namespace {
+
+/// How many names a save tries for its partial file before giving up.
+constexpr int PartialNameAttempts = 8;
+
+/// A file beside the target that no other save has: the target's name,
+/// ".partial-" and 64 random bits, taken only when no file of that name
+/// exists, so that two saves racing for one target, from two threads or
+/// two processes, never write into one file and neither can publish the
+/// other's half-written bytes. std::ios::noreplace would make the creation
+/// exclusive, but libstdc++ 16.2 on MinGW cannot open a
+/// std::filesystem::path with it (its wide fopen loses the flag), and a
+/// name of 64 random bits that does not exist is as good. Not open when
+/// every attempt failed, for a directory that is missing or unwritable
+/// among other causes. The bits name a file and nothing of the result, so
+/// the kernel stays deterministic (ADR-0007).
+[[nodiscard]] std::ofstream OpenPartial(const std::filesystem::path& path,
+                                        std::filesystem::path& partial)
+{
+    std::random_device random;
+    std::error_code ignored;
+    for (int attempt = 0; attempt < PartialNameAttempts; ++attempt) {
+        partial = path;
+        partial += std::format(".partial-{:08x}{:08x}", random(), random());
+        if (std::filesystem::exists(partial, ignored)) {
+            continue;
+        }
+        std::ofstream file(partial, std::ios::binary | std::ios::trunc);
+        if (file.is_open()) {
+            return file;
+        }
+    }
+    return {};
+}
+
+} // namespace
+
 Result<void> SaveGeometry(const std::filesystem::path& path, const GeometryArchive& archive)
 {
     STEREON_TRY(const std::vector<std::byte> bytes, WriteGeometry(archive));
-    // Written beside the target and renamed over it only once complete and
-    // closed: a failed save leaves an existing file as it was, and an error
-    // the stream reports only when it flushes (a full disk) is reported
-    // rather than lost in its destructor.
-    std::filesystem::path partial = path;
-    partial += ".partial";
+    // Written beside the target, in a file of this save alone, and renamed
+    // over the target only once complete and closed: a failed save leaves
+    // an existing file as it was, an error the stream reports only when it
+    // flushes (a full disk) is reported rather than lost in its destructor,
+    // and saves racing for one target each publish a whole archive.
+    std::filesystem::path partial;
     std::error_code ignored;
     {
-        std::ofstream file(partial, std::ios::binary | std::ios::trunc);
+        std::ofstream file = OpenPartial(path, partial);
         if (!file.is_open()) {
             // Nothing was created, so nothing is removed.
             return Fail(ErrorCode::InvalidInput,

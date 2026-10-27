@@ -54,6 +54,19 @@ struct TrimmedPiece;
 [[nodiscard]] std::shared_ptr<const TrimmedPiece> MakePiece(const Curve& basis, Interval range);
 [[nodiscard]] std::shared_ptr<const TrimmedPiece> MakePiece(const Curve2d& basis, Interval range);
 
+/// The scale of a similarity, the factor by which it multiplies lengths:
+/// the cube root of its determinant's magnitude.
+[[nodiscard]] double SimilarityScaleOf(const Transform& x);
+
+/// The factor by which a similarity of the scale rescales the basis's
+/// parameter, as the basis's own Transformed does: a parabola's, a distance
+/// along its axis, by the scale; a trimmed basis's as its own basis's;
+/// every other builtin's not at all, an angle, a knot, or a line's distance
+/// along a direction that is carried unscaled. A user's type is taken to
+/// keep its parameter. For Transformed(TrimmedCurve) and the trimmed
+/// surfaces swept from a profile.
+[[nodiscard]] double ParameterScaleOf(const Curve& basis, double scale);
+
 } // namespace Stereon::Detail
 
 export namespace Stereon {
@@ -167,7 +180,9 @@ template <std::size_t D>
 [[nodiscard]] double Project(const TrimmedCurve& curve, const Point3& p);
 [[nodiscard]] double Project(const TrimmedCurve2d& curve, const Point2& p);
 
-/// The trimmed curve moved: the basis transformed, the same range.
+/// The trimmed curve moved: the basis transformed, and the range rescaled
+/// as the basis's Transformed rescales its parameter under a similarity
+/// (Detail::ParameterScaleOf), so that the piece is the image of the piece.
 [[nodiscard]] TrimmedCurve Transformed(const TrimmedCurve& curve, const Transform& x);
 
 /// The exact NURBS form of the piece, run as the trimmed curve runs.
