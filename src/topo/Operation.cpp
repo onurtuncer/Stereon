@@ -342,14 +342,28 @@ constexpr EntityKind AllKinds[] = {EntityKind::Vertex, EntityKind::Edge, EntityK
                                    EntityKind::Loop,   EntityKind::Face, EntityKind::Shell,
                                    EntityKind::Solid};
 
+/// What the entries say of one entity: the relations read of it, and how
+/// many entries read it.
+struct Readings {
+    std::set<HistoryRelation> Relations;
+    int Entries = 0;
+
+    void Add(const HistoryRelation relation)
+    {
+        Relations.insert(relation);
+        ++Entries;
+    }
+};
+
 /// What the entries say of each entity: the relations read of every result
 /// entity they target, and of every input entity they dispose of. One
 /// entity bears one relation, repeated only by Modified continuations (a
-/// split, a merge or a many-to-many change): a Deleted or Unchanged entity
-/// has no other entry, and a Generated one continues nothing.
+/// split, a merge or a many-to-many change) or by the sources of a
+/// Generated entity: a Deleted or Unchanged entity has one entry and no
+/// other.
 struct Accounted {
-    std::map<std::pair<int, std::uint32_t>, std::set<HistoryRelation>> Targeted;
-    std::map<std::tuple<int, int, std::uint32_t>, std::set<HistoryRelation>> Disposed;
+    std::map<std::pair<int, std::uint32_t>, Readings> Targeted;
+    std::map<std::tuple<int, int, std::uint32_t>, Readings> Disposed;
 };
 
 /// The entry's target: live in the result unless the entry is a deletion,
@@ -402,10 +416,10 @@ struct Accounted {
         return problem;
     }
     if (e.Relation != HistoryRelation::Deleted) {
-        seen.Targeted[{static_cast<int>(e.Kind), e.Target}].insert(e.Relation);
+        seen.Targeted[{static_cast<int>(e.Kind), e.Target}].Add(e.Relation);
     }
     if (e.Relation != HistoryRelation::Generated) {
-        seen.Disposed[{e.Input, static_cast<int>(e.Kind), e.Source}].insert(e.Relation);
+        seen.Disposed[{e.Input, static_cast<int>(e.Kind), e.Source}].Add(e.Relation);
     }
     return std::nullopt;
 }
@@ -421,24 +435,38 @@ struct Accounted {
     return out;
 }
 
+/// How the entity's readings contradict each other, if they do: two
+/// relations at once, or one that admits a single entry read twice (an
+/// Unchanged entity continued to two targets, or from two sources).
+[[nodiscard]] std::optional<std::string> Contradiction(const Readings& readings)
+{
+    if (readings.Relations.size() > 1) {
+        return Listed(readings.Relations) + " at once";
+    }
+    const bool single = readings.Relations.contains(HistoryRelation::Unchanged) ||
+                        readings.Relations.contains(HistoryRelation::Deleted);
+    if (single && readings.Entries > 1) {
+        return std::string(ToString(*readings.Relations.begin())) + " twice";
+    }
+    return std::nullopt;
+}
+
 /// Every entity read with one relation (Accounted): an input entity deleted
 /// and also continued, or continued unchanged and also otherwise, or a
 /// result entity generated and also a continuation, is contradictory.
 [[nodiscard]] std::optional<std::string> ReadingProblem(const Accounted& seen)
 {
-    for (const auto& [key, relations] : seen.Disposed) {
-        if (relations.size() > 1) {
+    for (const auto& [key, readings] : seen.Disposed) {
+        if (const std::optional<std::string> problem = Contradiction(readings)) {
             const auto& [input, kind, source] = key;
-            return std::format("{} {} of input {} is {} at once",
-                               KindName(static_cast<EntityKind>(kind)), source, input,
-                               Listed(relations));
+            return std::format("{} {} of input {} is {}", KindName(static_cast<EntityKind>(kind)),
+                               source, input, *problem);
         }
     }
-    for (const auto& [key, relations] : seen.Targeted) {
-        if (relations.size() > 1) {
-            return std::format("{} {} of the result is {} at once",
-                               KindName(static_cast<EntityKind>(key.first)), key.second,
-                               Listed(relations));
+    for (const auto& [key, readings] : seen.Targeted) {
+        if (const std::optional<std::string> problem = Contradiction(readings)) {
+            return std::format("{} {} of the result is {}",
+                               KindName(static_cast<EntityKind>(key.first)), key.second, *problem);
         }
     }
     return std::nullopt;

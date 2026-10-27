@@ -601,6 +601,23 @@ TEST_CASE("a History that reads an entity two ways is refused", "[topo][operatio
     // An entry repeated.
     REQUIRE(MessageOf(CommitCopy(With(sound, sound.front()))).find("an entry twice") !=
             std::string::npos);
+
+    // One relation, two entries: the first input's vertex 0 continued
+    // unchanged to the result's vertex 0 and to its vertex 1 as well.
+    REQUIRE(MessageOf(CommitCopy(With(
+                          sound, EntryOf(EntityKind::Vertex, HistoryRelation::Unchanged, 0, 0, 1))))
+                .find("vertex 0 of input 0 is Unchanged twice") != std::string::npos);
+
+    // And the other way: the result's vertex 0 unchanged from the first
+    // input's vertices 0 and 1 both.
+    std::vector<HistoryEntry> doubled = sound;
+    for (HistoryEntry& e : doubled) {
+        if (e.Input == 0 && e.Kind == EntityKind::Vertex && e.Source == 1) {
+            e.Target = 0;
+        }
+    }
+    REQUIRE(MessageOf(CommitCopy(doubled)).find("vertex 0 of the result is Unchanged twice") !=
+            std::string::npos);
 }
 
 TEST_CASE("an edit's History: deleted, modified, unchanged and generated", "[topo][operation]")
