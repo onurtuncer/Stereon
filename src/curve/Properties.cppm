@@ -126,13 +126,16 @@ template <typename C>
     if (!(LengthSquared(d[1]) > 0.0)) {
         return Fail(ErrorCode::DegenerateResult, "PrincipalNormal: the curve has zero speed here");
     }
-    const Vec3 normal = Detail::NormalPart(d[1], d[2]);
-    const double length = Length(normal);
-    if (!(length > 0.0)) {
+    const Vec3 binormal = Cross(d[1], d[2]);
+    const double bend = Length(binormal);
+    if (!(bend > 0.0)) {
         return Fail(ErrorCode::DegenerateResult,
                     "PrincipalNormal: the curve does not bend here (zero curvature)");
     }
-    return normal / length;
+    // The subtraction in NormalPart can leave roundoff parallel to the
+    // tangent even when the derivatives are collinear. Use the same
+    // curvature test and orthogonal construction as FrenetFrame.
+    return Cross(binormal / bend, d[1] / Length(d[1]));
 }
 
 /// The torsion of a curve in space, (C' x C'') . C''' / |C' x C''|^2:
@@ -372,7 +375,8 @@ template <typename C>
 /// in the domain (any finite start for a periodic curve) and the curve is
 /// long enough in that direction. Where the curve stops along a whole
 /// stretch, the parameter is not unique and any one of the stretch may be
-/// returned.
+/// returned. Unresolved when floating-point stagnation or the iteration
+/// budget prevents meeting the relative length residual target.
 template <typename C>
 [[nodiscard]] Result<double> ParameterAtArcLength(const C& curve, const double start,
                                                   const double length);
@@ -494,12 +498,20 @@ Result<double> ParameterAtArcLength(const C& curve, const double start, const do
             next = 0.5 * (low + high);
         }
         if (next == t) {
-            return t; // the bracket has shrunk to adjacent doubles
+            return Fail(
+                ErrorCode::Unresolved,
+                "ParameterAtArcLength: parameter stagnated before meeting the length target");
         }
         reached += Detail::SignedLength(curve, t, next);
         t = next;
     }
-    return t;
+    // The final update has not yet had its residual tested.
+    if (std::abs(reached - length) <= Detail::ArcLengthResidualTarget * std::abs(length)) {
+        return t;
+    }
+    return Fail(
+        ErrorCode::Unresolved,
+        "ParameterAtArcLength: iteration budget exhausted before meeting the length target");
 }
 
 } // namespace Stereon
