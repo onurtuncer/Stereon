@@ -151,6 +151,57 @@ product for the rounding reason of the general path. That is what OCCT's
 partial that ``Derivatives(s, uv, 1, 1, out)`` also gives is not part of
 either.
 
+Batches and grids (B1.1, B1.2)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+B1.1's batch row and B1.2 compare ``EvalAll`` and ``EvalGrid``
+(:doc:`nurbs`, *Batch and grid evaluation*) with OCCT's batch evaluators,
+``GeomGridEval_BSplineCurve`` and ``GeomGridEval_BSplineSurface``, which
+group the parameters by span and evaluate each span's polynomial form from
+a cache. Each call allocates its output on both sides. The batch target is
+B1.1's: at least twice OCCT.
+
+The batch costs the scalar arithmetic divided among the lanes, plus a span
+check per parameter; the grid removes the basis triangles from the
+per-point cost altogether, leaving
+
+.. math::
+
+   \mathrm{cost}_{\text{grid point}} \approx
+   \frac{(p + 1)(q + 1)(2 + 2d + 1)}{W}
+
+for :math:`W` lanes. Against ``Eval`` in a loop on the benchmark geometry,
+``bench/BatchBench.cpp`` measures on a laptop with two lanes (Windows,
+GCC 16.2, informative only):
+
+.. list-table::
+   :header-rows: 1
+
+   * - Row
+     - ``Eval`` in a loop
+     - Batch or grid
+     - Speed-up
+   * - Curve D0, 4096 parameters, cubic
+     - 103 µs
+     - 53 µs
+     - 1.9×
+   * - Curve D0, 4096 parameters, rational cubic
+     - 112 µs
+     - 60 µs
+     - 1.9×
+   * - Grid 256 × 256, bicubic
+     - 4.77 ms
+     - 0.59 ms
+     - 8.0×
+   * - Grid 256 × 256, rational bicubic
+     - 5.07 ms
+     - 0.73 ms
+     - 6.9×
+
+The OCCT ratios come from the reference workflow; the first reference run
+with these rows is next. The builds target baseline x86-64, two lanes; a
+build for AVX2 would double the lanes without changing a result.
+
 Projection (B1.3)
 ~~~~~~~~~~~~~~~~~
 
@@ -441,10 +492,10 @@ farther from the right answer is not on offer at any speed. Surface first
 derivatives (1.33) and interpolation (1.34) were below parity on that run
 too and have the kernels described under *Evaluation* and *Fitting*.
 
-Not yet measured: the SIMD batch evaluation of B1.1, grid evaluation
-(B1.2) and B1.3's convergence rate over a corpus. Degree elevation (B1.5)
-runs in the reference workflow since it landed; its first reference result
-is next. The reference host varies between runs by
+Not yet measured: B1.3's convergence rate over a corpus. B1.1's batch
+row, grid evaluation (B1.2) and degree elevation (B1.5) run in the
+reference workflow since they landed; their first reference results are
+next. The reference host varies between runs by
 up to about 1.5× in absolute time on both sides, so a ratio is read within
 one run, and one within a few percent of 1 is parity.
 
