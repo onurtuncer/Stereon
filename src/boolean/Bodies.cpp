@@ -534,8 +534,7 @@ void WorkOnChunk(void* state, const std::size_t begin, const std::size_t end)
     const std::vector<Candidate> candidates = CandidatesOf(facesA, facesB);
     std::vector<PairWork> work(candidates.size());
     Gathering gathering{&sa, &sb, &facesA, &facesB, &candidates, &ctx, &work};
-    Detail::ParallelFor(candidates.size(), 1, ctx.GetThreadCount(),
-                        ctx.GetScheduler() == Scheduler::Serial, &gathering, &WorkOnChunk);
+    Detail::ParallelFor(candidates.size(), 1, ctx.GetWorkerPool(), &gathering, &WorkOnChunk);
     for (std::size_t k = 0; k < candidates.size(); ++k) {
         for (const KeptLog& log : work[k].Logs) {
             ctx.Log(log.Level, log.Message, log.Location);

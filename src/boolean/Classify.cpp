@@ -657,8 +657,7 @@ void SeedChunk(void* state, const std::size_t begin, const std::size_t end)
     std::vector<Result<void>> outcomes(regions.size());
     std::vector<std::vector<KeptLog>> logs(regions.size());
     Seeding seeding{&regions, &own, &other, &budget, &ctx, &outcomes, &logs};
-    Detail::ParallelFor(regions.size(), 1, ctx.GetThreadCount(),
-                        ctx.GetScheduler() == Scheduler::Serial, &seeding, &SeedChunk);
+    Detail::ParallelFor(regions.size(), 1, ctx.GetWorkerPool(), &seeding, &SeedChunk);
     for (std::size_t k = 0; k < regions.size(); ++k) {
         for (const KeptLog& log : logs[k]) {
             ctx.Log(log.Level, log.Message, log.Location);

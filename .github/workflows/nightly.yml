@@ -13,9 +13,10 @@
 # Determinism (ADR-0007, G1): for the same executable, hardware and Context
 # settings, results are bit-identical for any thread count and scheduler.
 # The operations that run in parallel today, batch projection onto B-spline
-# curves and surfaces, are run on the serial scheduler and at 1, 2, 8 and 32
-# threads, each in its own process and twice, and the files they write are
-# compared byte for byte. Every pull request runs the same comparison within
+# curves and surfaces and the Booleans' union, cut and common
+# (tests/support/BooleanCases.hpp), are run on the serial scheduler and at
+# 1, 2, 8 and 32 threads, each in its own process and twice, and the files
+# they write are compared byte for byte. Every pull request runs the same comparison within
 # one process on fewer points (CTest, "determinism:" and "[determinism]").
 
 name: Nightly
@@ -120,12 +121,14 @@ jobs:
             done
           done
       - name: Compare the bytes
+        env:
+          POINTS: ${{ inputs.points || 200000 }}
         run: |
           cd build/determinism
           {
             echo "## Determinism (ADR-0007, G1)"
             echo
-            echo "Batch projection of $(( $(stat -c %s serial-1.bin) / 24 )) points onto a rational cubic curve and a rational bicubic surface; each configuration in its own process, twice."
+            echo "Batch projection of $POINTS points onto a rational cubic curve and a rational bicubic surface, and the Booleans of tests/support/BooleanCases.hpp; each configuration in its own process, twice."
             echo
             echo "| Configuration | Run | SHA-256 |"
             echo "| --- | --- | --- |"
