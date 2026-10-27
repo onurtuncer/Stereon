@@ -69,6 +69,7 @@ ROWS: dict[str, tuple[str, str]] = {
     "B1.4/Interpolation/1000": ("Interpolation, 1000 points, cubic", "≥ parity"),
     "B1.4/Approximation/1000": ("Approximation, 1000 points, 1e-3 mm", "≥ parity at equal tolerance"),
     "B1.5/KnotInsertion/100": ("100 knot insertions", "≥ parity"),
+    "B1.5/DegreeElevation": ("Degree elevation, cubic to quintic, 21 segments", "≥ parity"),
     "B1.5/BezierDecomposition": ("Bezier decomposition, 21 segments", "≥ parity"),
     "B1.6/CurveProperties/rational-cubic": ("Frenet frame and curvature, rational cubic", "≥ parity"),
     "B1.6/SurfaceProperties/bicubic": ("Principal curvatures and directions, bicubic", "≥ parity"),

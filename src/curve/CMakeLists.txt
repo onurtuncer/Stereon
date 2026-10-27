@@ -9,6 +9,7 @@ stereon_add_library(curve
     MODULES
         BSplineBasis.cppm
         BSplineCurve.cppm
+        BSplineOperations.cppm
         Capabilities.cppm
         Circle.cppm
         Concepts.cppm
@@ -17,6 +18,7 @@ stereon_add_library(curve
         Ellipse.cppm
         Erased.cppm
         Fitting.cppm
+        Homogeneous.cppm
         Hyperbola.cppm
         Interchange.cppm
         Line.cppm
@@ -26,6 +28,7 @@ stereon_add_library(curve
     SOURCES
         BSplineBasis.cpp
         BSplineCurve.cpp
+        BSplineOperations.cpp
         Conics.cpp
         Conversion.cpp
         Factories.cpp

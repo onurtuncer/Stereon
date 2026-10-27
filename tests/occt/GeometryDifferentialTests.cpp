@@ -21,6 +21,7 @@
 
 #include <GeomAPI_ProjectPointOnCurve.hxx>
 #include <GeomAPI_ProjectPointOnSurf.hxx>
+#include <GeomConvert_CompCurveToBSplineCurve.hxx>
 #include <Geom_BSplineCurve.hxx>
 #include <Geom_BSplineSurface.hxx>
 #include <Geom_Circle.hxx>
@@ -47,7 +48,10 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <limits>
 #include <numbers>
 #include <vector>
 
@@ -320,6 +324,141 @@ TEST_CASE("B-spline projections agree with GeomAPI_ProjectPointOnCurve", "[occt]
                     REQUIRE(SameDistance(ours, reference));
                 }
             }
+        }
+    }
+}
+
+/// Agreement after an operation that rebuilds the poles (elevation,
+/// concatenation): each kernel rounds its own sequence of convex
+/// combinations, so a relative 1e-11 rather than Agree's few ulps.
+bool AgreeRebuilt(const Point3& a, const gp_Pnt& b)
+{
+    return Distance(a, Point3{b.X(), b.Y(), b.Z()}) <= 1e-11 * (1.0 + Length(Stereon::ToVec(a)));
+}
+
+TEST_CASE("degree elevation agrees with Geom_BSplineCurve::IncreaseDegree",
+          "[occt][curve][bspline][operations]")
+{
+    for (const BSplineCurve& curve : SomeBSplineCurves()) {
+        for (const int degree : {curve.Degree + 1, curve.Degree + 3}) {
+            const BSplineCurve ours = *Stereon::ElevatedDegree(curve, degree);
+            // OCCT is given the clamped form, the same curve on the same
+            // domain: on the unclamped fixture its IncreaseDegree disagrees
+            // with ours, while ours reproduces the input (checked below and
+            // by the property tests of tests/curve/BSplineOperationsTests.cpp).
+            const occ::handle<Geom_BSplineCurve> occt = ToOcct(Stereon::Clamped(curve));
+            occt->IncreaseDegree(degree);
+            REQUIRE(occt->Degree() == ours.Degree);
+            const Stereon::Interval domain = Domain(ours);
+            for (int i = 0; i < SampleCount; ++i) {
+                const double t = domain.GetLower() +
+                                 i * (domain.GetUpper() - domain.GetLower()) / (SampleCount - 1);
+                REQUIRE(AgreeRebuilt(Eval(ours, t), occt->Value(t)));
+                REQUIRE(Distance(Eval(ours, t), Eval(curve, t)) <=
+                        1e-11 * (1.0 + Length(Stereon::ToVec(Eval(curve, t)))));
+            }
+            // Both keep the elevated curve minimal: the same number of poles,
+            // since both start from the clamped form.
+            REQUIRE(occt->NbPoles() == static_cast<int>(ours.Poles.size()));
+        }
+    }
+}
+
+TEST_CASE("knot removal agrees with Geom_BSplineCurve::RemoveKnot",
+          "[occt][curve][bspline][operations]")
+{
+    for (const BSplineCurve& curve : SomeBSplineCurves()) {
+        // A knot inserted 43% of the way along the domain, on no existing
+        // knot of any fixture, is exactly removable; both kernels must remove
+        // it and give the same poles back.
+        const Stereon::Interval domain = Domain(curve);
+        const double inserted = domain.GetLower() + 0.43 * (domain.GetUpper() - domain.GetLower());
+        const BSplineCurve refined = *Stereon::InsertKnot(curve, inserted);
+        const Stereon::KnotRemoval ours = *Stereon::RemoveKnot(refined, inserted, 1, 1e-9);
+        REQUIRE(ours.Removed == 1);
+        const occ::handle<Geom_BSplineCurve> occt = ToOcct(refined);
+        int index = 0;
+        for (int k = 1; k <= occt->NbKnots(); ++k) {
+            if (occt->Knot(k) == inserted) {
+                index = k;
+            }
+        }
+        REQUIRE(index > 0);
+        REQUIRE(occt->RemoveKnot(index, 0, 1e-9));
+        REQUIRE(occt->NbPoles() == static_cast<int>(ours.Curve.Poles.size()));
+        for (std::size_t i = 0; i < ours.Curve.Poles.size(); ++i) {
+            const gp_Pnt pole = occt->Pole(static_cast<int>(i) + 1);
+            REQUIRE(Distance(ours.Curve.Poles[i], Point3{pole.X(), pole.Y(), pole.Z()}) <= 1e-9);
+        }
+        // A knot that is not removable: both refuse it within the tolerance.
+        const std::vector<double> inside = [&] {
+            std::vector<double> values;
+            for (const double u : curve.Knots) {
+                if (u > domain.GetLower() && u < domain.GetUpper() &&
+                    (values.empty() || values.back() != u)) {
+                    values.push_back(u);
+                }
+            }
+            return values;
+        }();
+        for (const double u : inside) {
+            const auto times = static_cast<int>(Stereon::KnotMultiplicity(curve.Knots, u));
+            const Stereon::KnotRemoval tried = *Stereon::RemoveKnot(curve, u, times, 1e-9);
+            const occ::handle<Geom_BSplineCurve> reference = ToOcct(curve);
+            int at = 0;
+            for (int k = 1; k <= reference->NbKnots(); ++k) {
+                if (reference->Knot(k) == u) {
+                    at = k;
+                }
+            }
+            const bool occtRemoved = reference->RemoveKnot(at, times - 1, 1e-9);
+            REQUIRE((tried.Removed > 0) == occtRemoved);
+        }
+    }
+}
+
+TEST_CASE("concatenation agrees with GeomConvert_CompCurveToBSplineCurve",
+          "[occt][curve][bspline][operations]")
+{
+    const std::vector<BSplineCurve> curves = SomeBSplineCurves();
+    for (std::size_t i = 0; i + 1 < curves.size(); ++i) {
+        // Move the second curve so that it starts where the first ends: a corner.
+        const BSplineCurve& first = curves[i];
+        const Point3 end = Eval(first, Domain(first).GetUpper());
+        BSplineCurve second = curves[i + 1];
+        const Point3 start = Eval(second, Domain(second).GetLower());
+        for (Point3& pole : second.Poles) {
+            pole = pole + (end - start);
+        }
+        const BSplineCurve ours = *Stereon::Concatenated(first, second, 1e-9);
+        // OCCT's composite builder throws on an unclamped knot vector ("BSpline
+        // curve: # Poles and degree mismatch"); give it the clamped forms.
+        GeomConvert_CompCurveToBSplineCurve compound(ToOcct(Stereon::Clamped(first)));
+        REQUIRE(compound.Add(ToOcct(Stereon::Clamped(second)), 1e-9, true, false, 0));
+        const occ::handle<Geom_BSplineCurve> occt = compound.BSplineCurve();
+        REQUIRE(occt->Degree() == ours.Degree);
+        // The same point set: every sample of ours lies on OCCT's curve, and
+        // the ends agree. (OCCT keeps its own parametrisation of the second
+        // piece, so the parameters are not compared.)
+        const Stereon::Interval domain = Domain(ours);
+        REQUIRE(AgreeRebuilt(Eval(ours, domain.GetLower()), occt->Value(occt->FirstParameter())));
+        REQUIRE(AgreeRebuilt(Eval(ours, domain.GetUpper()), occt->Value(occt->LastParameter())));
+        for (int k = 0; k < SampleCount; ++k) {
+            const double t =
+                domain.GetLower() + k * (domain.GetUpper() - domain.GetLower()) / (SampleCount - 1);
+            const Point3 p = Eval(ours, t);
+            GeomAPI_ProjectPointOnCurve projection(ToOcct(p), occt);
+            double distance = std::numeric_limits<double>::infinity();
+            if (projection.NbPoints() > 0) {
+                distance = projection.LowerDistance();
+            }
+            const gp_Pnt occtStart = occt->StartPoint();
+            const gp_Pnt occtEnd = occt->EndPoint();
+            distance = std::min({distance,
+                                 Distance(p, Point3{occtStart.X(), occtStart.Y(), occtStart.Z()}),
+                                 Distance(p, Point3{occtEnd.X(), occtEnd.Y(), occtEnd.Z()})});
+            // The projection converges to about 1e-9 itself; allow it that.
+            REQUIRE(distance <= 1e-8 * (1.0 + Length(Stereon::ToVec(p))));
         }
     }
 }

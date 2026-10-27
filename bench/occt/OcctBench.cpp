@@ -12,7 +12,7 @@
 //   B1.1  B-spline curve and surface evaluation, D0 to D2
 //   B1.3  point projection onto B-spline curves and surfaces
 //   B1.4  curve interpolation and approximation
-//   B1.5  knot insertion and Bezier decomposition
+//   B1.5  knot insertion, degree elevation and Bezier decomposition
 //   B1.6  local differential properties and arc length
 //
 // Each Stereon benchmark has an OCCT twin with the same name after the
@@ -721,6 +721,27 @@ void OcctKnotInsertion(benchmark::State& state)
     Items(state, 100);
 }
 
+void DegreeElevation(benchmark::State& state)
+{
+    const BSplineCurve c = SomeCurve(3, true);
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(*Stereon::ElevatedDegree(c, 5));
+    }
+    Items(state, 1);
+}
+
+void OcctDegreeElevation(benchmark::State& state)
+{
+    const BSplineCurve c = SomeCurve(3, true);
+    const occ::handle<Geom_BSplineCurve> occt = ToOcct(c);
+    for (auto _ : state) {
+        occ::handle<Geom_BSplineCurve> raised = occ::down_cast<Geom_BSplineCurve>(occt->Copy());
+        raised->IncreaseDegree(5);
+        benchmark::DoNotOptimize(raised);
+    }
+    Items(state, 1);
+}
+
 void BezierDecomposition(benchmark::State& state)
 {
     const BSplineCurve c = SomeCurve(3, true);
@@ -950,6 +971,8 @@ BENCHMARK(Approximation)->Name("B1.4/Approximation/1000/Stereon");
 BENCHMARK(OcctApproximation)->Name("B1.4/Approximation/1000/OCCT");
 BENCHMARK(KnotInsertion)->Name("B1.5/KnotInsertion/100/Stereon");
 BENCHMARK(OcctKnotInsertion)->Name("B1.5/KnotInsertion/100/OCCT");
+BENCHMARK(DegreeElevation)->Name("B1.5/DegreeElevation/Stereon");
+BENCHMARK(OcctDegreeElevation)->Name("B1.5/DegreeElevation/OCCT");
 BENCHMARK(BezierDecomposition)->Name("B1.5/BezierDecomposition/Stereon");
 BENCHMARK(OcctBezierDecomposition)->Name("B1.5/BezierDecomposition/OCCT");
 BENCHMARK(CurveProperties)->Name("B1.6/CurveProperties/rational-cubic/Stereon");
