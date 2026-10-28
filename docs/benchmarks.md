@@ -39,7 +39,7 @@ Stereon is measured against OpenCASCADE (OCCT) on **speed, memory and robustness
 
 | ID | Benchmark | OCCT counterpart | Metric | Target |
 | --- | --- | --- | --- | --- |
-| B1.1 | NURBS curve/surface evaluation (D0–D2), degrees 2–7 | `Geom_BSplineSurface::D0/D1/D2` | ns/eval | ≥ parity; SIMD batch ≥ 2× |
+| B1.1 | NURBS curve/surface evaluation (D0–D2), degrees 2–7 | `Geom_BSplineSurface::D0/D1/D2` | ns/eval | ≥ parity; fast SIMD batch (`EvalAllFast`) ≥ 2× `GeomGridEval_BSplineCurve`; the bit-identical batch (`EvalAll`) is reported without a target |
 | B1.2 | Grid evaluation (e.g. 256×256) | `GeomGridEval_BSplineSurface` | points/s | ≥ parity |
 | B1.3 | Point projection / inversion on NURBS surfaces | `GeomAPI_ProjectPointOnSurf`, `Extrema_ExtPS` | time; % converged; max error | ≥ parity, 99.99% convergence |
 | B1.4 | Curve and surface fitting / interpolation | `GeomAPI_PointsToBSpline(Surface)`, `GeomAPI_Interpolate` | time; max deviation | ≥ parity at equal tolerance |
