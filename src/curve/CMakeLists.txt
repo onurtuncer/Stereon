@@ -29,6 +29,7 @@ stereon_add_library(curve
         Visit.cppm
     SOURCES
         BatchEvaluation.cpp
+        FastBatchEvaluation.cpp
         BSplineBasis.cpp
         BSplineCurve.cpp
         BSplineOperations.cpp
