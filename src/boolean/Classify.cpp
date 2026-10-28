@@ -19,6 +19,7 @@ module;
 #include <cstdint>
 #include <exception>
 #include <format>
+#include <inplace_vector>
 #include <map>
 #include <numbers>
 #include <optional>
@@ -220,13 +221,17 @@ using IVec3 = std::array<Interval, 3>;
     return sign && *sign != Sign::Zero;
 }
 
+/// The parameters at which a ray meets a surface: a plane once, a cylinder
+/// up to twice. Inline, so that the classifier's thousands of casts allocate
+/// nothing; the public RayMeets copies them into a vector for the tests.
+using Hits = std::inplace_vector<double, 2>;
+
 /// The parameters at which the line meets the plane, or nothing when the
 /// line may run along it: d . (X x Y) is decided in Interval arithmetic on
 /// the input doubles, and a sign the interval does not settle makes the ray
 /// ambiguous, so another direction is tried; the parameter itself is a
 /// construction, which Refined then checks.
-[[nodiscard]] std::optional<std::vector<double>> MeetPlane(const Plane& plane, const Point3& origin,
-                                                           const Vec3& d)
+[[nodiscard]] std::optional<Hits> MeetPlane(const Plane& plane, const Point3& origin, const Vec3& d)
 {
     const Interval along =
         DotOf(Enclosed(d), CrossOf(Enclosed(plane.XAxis), Enclosed(plane.YAxis)));
@@ -234,7 +239,7 @@ using IVec3 = std::array<Interval, 3>;
         return std::nullopt;
     }
     const Vec3 n = Cross(plane.XAxis, plane.YAxis);
-    return std::vector<double>{Dot(plane.Origin - origin, n) / Dot(d, n)};
+    return Hits{Dot(plane.Origin - origin, n) / Dot(d, n)};
 }
 
 /// The parameters at which the line meets the cylinder, up to two, or
@@ -248,8 +253,8 @@ using IVec3 = std::array<Interval, 3>;
 /// arithmetic straight from the input doubles, not from rounded values: a
 /// certain negative discriminant is a miss, a certain positive one two
 /// crossings, and anything the intervals do not settle is ambiguous.
-[[nodiscard]] std::optional<std::vector<double>> MeetCylinder(const Cylinder& cylinder,
-                                                              const Point3& origin, const Vec3& d)
+[[nodiscard]] std::optional<Hits> MeetCylinder(const Cylinder& cylinder, const Point3& origin,
+                                               const Vec3& d)
 {
     const IVec3 axis = CrossOf(Enclosed(cylinder.XAxis), Enclosed(cylinder.YAxis));
     const IVec3 dd = Enclosed(d);
@@ -266,7 +271,7 @@ using IVec3 = std::array<Interval, 3>;
     }
     const std::optional<Sign> discriminant = SignOf(Squared(b) - a * c);
     if (discriminant == Sign::Negative) {
-        return std::vector<double>{}; // The line certainly misses the cylinder.
+        return Hits{}; // The line certainly misses the cylinder.
     }
     if (discriminant != Sign::Positive) {
         return std::nullopt; // A graze, or not certainly a crossing.
@@ -286,7 +291,7 @@ using IVec3 = std::array<Interval, 3>;
     if (far == 0.0) { // STEREON-LINT-ALLOW(epsilon): a division guard
         return std::nullopt;
     }
-    return std::vector<double>{far / qa, qc / far};
+    return Hits{far / qa, qc / far};
 }
 
 /// The surface's signed residual at a point, its distance off the surface
@@ -340,9 +345,9 @@ template <typename G>
 
 /// The meetings with every hit refined, or nothing when one cannot be.
 template <typename G>
-[[nodiscard]] std::optional<std::vector<double>>
-Checked(const G& geometry, std::optional<std::vector<double>> hits, const Point3& origin,
-        const Vec3& d, const double resolution)
+[[nodiscard]] std::optional<Hits> Checked(const G& geometry, std::optional<Hits> hits,
+                                          const Point3& origin, const Vec3& d,
+                                          const double resolution)
 {
     if (!hits) {
         return std::nullopt;
@@ -363,8 +368,8 @@ Checked(const G& geometry, std::optional<std::vector<double>> hits, const Point3
 /// does not settle, so that another direction is tried, or a hit whose
 /// position Refined cannot vouch for. A sign is never taken from rounded
 /// doubles.
-[[nodiscard]] std::optional<std::vector<double>>
-MeetSurface(const Surface& surface, const Point3& origin, const Vec3& d, const Context& ctx)
+[[nodiscard]] std::optional<Hits> MeetSurface(const Surface& surface, const Point3& origin,
+                                              const Vec3& d, const Context& ctx)
 {
     if (const Plane* plane = surface.Target<Plane>()) {
         return Checked(*plane, MeetPlane(*plane, origin, d), origin, d, ctx.GetResolution());
@@ -406,7 +411,7 @@ MeetSurface(const Surface& surface, const Point3& origin, const Vec3& d, const C
     STEREON_TRY(const auto faces, AllEntities<EntityKind::Face>(body));
     for (const FaceId face : faces) {
         const Surface surface = SurfaceOf(body, face);
-        const std::optional<std::vector<double>> hits = MeetSurface(surface, origin, d, ctx);
+        const std::optional<Hits> hits = MeetSurface(surface, origin, d, ctx);
         if (!hits) {
             return std::optional<int>{};
         }
@@ -706,7 +711,11 @@ Result<std::optional<Point2>> Detail::SeedPointIn(const Shape& shape, const Face
 std::optional<std::vector<double>> Detail::RayMeets(const Surface& surface, const Point3& origin,
                                                     const Vec3& d, const Context& ctx)
 {
-    return MeetSurface(surface, origin, d, ctx);
+    const std::optional<Hits> hits = MeetSurface(surface, origin, d, ctx);
+    if (!hits) {
+        return std::nullopt;
+    }
+    return std::vector<double>(hits->begin(), hits->end());
 }
 
 Vec3 Detail::RayDirection(const int k)
@@ -719,7 +728,7 @@ Detail::FaceCrossingsOf(const Shape& shape, const FaceId face, const Point3& ori
                         const Context& ctx)
 {
     const Surface surface = SurfaceOf(shape, face);
-    const std::optional<std::vector<double>> hits = MeetSurface(surface, origin, d, ctx);
+    const std::optional<Hits> hits = MeetSurface(surface, origin, d, ctx);
     if (!hits) {
         return std::optional<std::vector<FaceCrossing>>{};
     }

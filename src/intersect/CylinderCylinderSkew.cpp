@@ -19,6 +19,7 @@ module;
 #include <cstdint>
 #include <expected>
 #include <functional>
+#include <inplace_vector>
 #include <limits>
 #include <memory>
 #include <numbers>
@@ -506,7 +507,11 @@ template <Scalar T>
 
 // --- The tracks of a configuration --------------------------------------
 
-[[nodiscard]] std::vector<Track> TracksOf(const Configuration& c, const Pair& p)
+/// The tracks of a configuration: at most four, the half-ellipses of
+/// Meeting::Ellipses.
+using Tracks = std::inplace_vector<Track, 4>;
+
+[[nodiscard]] Tracks TracksOf(const Configuration& c, const Pair& p)
 {
     using Shape = Track::Shape;
     const double angleLow = std::acos(c.CosLow);
@@ -747,10 +752,14 @@ void ClipSpan(const Pair& p, const Configuration& c, const Track& k, const Inter
 
 // --- Cuts at the seams --------------------------------------------------
 
+/// The parameters at which a track takes a value: at most six, a loop's
+/// two per period over three periods.
+using Parameters = std::inplace_vector<double, 6>;
+
 /// The parameters of a fold-to-fold loop at which σ takes the value
 /// `target`, over a period of t on either side of the range: where
 /// cos t = x, or at the fold alone where the loop only touches the value.
-[[nodiscard]] std::vector<double> LoopParametersAt(const Track& k, const double target)
+[[nodiscard]] Parameters LoopParametersAt(const Track& k, const double target)
 {
     const double x = (k.Center - k.Mirror * target) / k.Half;
     if (!(std::abs(x) <= 1.0)) {
@@ -758,7 +767,7 @@ void ClipSpan(const Pair& p, const Configuration& c, const Track& k, const Inter
     }
     const bool touches = std::abs(x) >= 1.0 - FoldTouch;
     const double t0 = touches ? (x > 0.0 ? 0.0 : Pi) : std::acos(x);
-    std::vector<double> roots;
+    Parameters roots;
     for (const double shift : {-CirclePeriod, 0.0, CirclePeriod}) {
         roots.push_back(t0 + shift);
         if (!touches) {
@@ -770,7 +779,7 @@ void ClipSpan(const Pair& p, const Configuration& c, const Track& k, const Inter
 
 /// The parameters of a lobe at which σ takes the value `target`: where
 /// 1 - t² = target / (Mirror Fold), or the fold alone where it is touched.
-[[nodiscard]] std::vector<double> LobeParametersAt(const Track& k, const double target)
+[[nodiscard]] Parameters LobeParametersAt(const Track& k, const double target)
 {
     const double squared = 1.0 - target / (k.Mirror * k.Fold);
     if (!(squared >= 0.0 && squared <= 1.0)) {
@@ -784,7 +793,7 @@ void ClipSpan(const Pair& p, const Configuration& c, const Track& k, const Inter
 
 /// The parameters at which σ(t) takes the value `target`; a turn's are its
 /// caller's, since there t is the angle itself.
-[[nodiscard]] std::vector<double> ParametersAt(const Track& k, const double target)
+[[nodiscard]] Parameters ParametersAt(const Track& k, const double target)
 {
     switch (k.Kind) {
     case Track::Shape::FoldLoop:
