@@ -44,19 +44,20 @@ inline constexpr OperationCapability BooleanCatalogue[] = {
     Declare("NetworkOf", {Dependency::InputGeometry, Dependency::Topology},
             {TrackingConvention::MovingTrimCoordinates},
             "as ClipToFace: the pieces and their junctions stay the same"),
-    Declare("ImprintClip",
-            {Dependency::InputGeometry, Dependency::Topology, Dependency::Tolerances},
-            {TrackingConvention::FixedSurfaceCoordinates, TrackingConvention::MovingTrimCoordinates},
-            "as ClipToFace, and the edges split by the clip are split at moving parameters"),
-    Declare("ImprintNetwork",
-            {Dependency::InputGeometry, Dependency::Topology, Dependency::Tolerances},
-            {TrackingConvention::FixedSurfaceCoordinates, TrackingConvention::MovingTrimCoordinates},
-            "as ImprintClip, for one network"),
-    Declare("ImprintNetworks",
-            {Dependency::InputGeometry, Dependency::Topology, Dependency::Tolerances},
-            {TrackingConvention::FixedSurfaceCoordinates, TrackingConvention::MovingTrimCoordinates},
-            "as ImprintNetwork for each network; an edge two networks split stays split at the "
-            "same vertex"),
+    Declare(
+        "ImprintClip", {Dependency::InputGeometry, Dependency::Topology, Dependency::Tolerances},
+        {TrackingConvention::FixedSurfaceCoordinates, TrackingConvention::MovingTrimCoordinates},
+        "as ClipToFace, and the edges split by the clip are split at moving parameters"),
+    Declare(
+        "ImprintNetwork", {Dependency::InputGeometry, Dependency::Topology, Dependency::Tolerances},
+        {TrackingConvention::FixedSurfaceCoordinates, TrackingConvention::MovingTrimCoordinates},
+        "as ImprintClip, for one network"),
+    Declare(
+        "ImprintNetworks",
+        {Dependency::InputGeometry, Dependency::Topology, Dependency::Tolerances},
+        {TrackingConvention::FixedSurfaceCoordinates, TrackingConvention::MovingTrimCoordinates},
+        "as ImprintNetwork for each network; an edge two networks split stays split at the "
+        "same vertex"),
 };
 
 /// The Boolean library's declarations.
