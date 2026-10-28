@@ -3,7 +3,7 @@
 - **Status:** Proposed
 - **Date:** 2026-10-28
 - **Owner:** Onur Tuncer
-- **Phase:** 3–5 (staged; see Verification)
+- **Phase:** 3–5, roadmap milestone M7 (analytic solids in v0.3, trimmed B-splines in v0.5, B5.7 gate in v0.7)
 - **Related:** ADR-0001 (tolerances), ADR-0002 (robustness), ADR-0003 (capability tiers), ADR-0006 (errors), ADR-0007 (threading and determinism), ADR-0009 (pcurves), ADR-0010 (SSI), ADR-0013 (classification), ADR-0018 (validity), ADR-0021 (shape derivatives), ADR-0028 (purpose-specific tolerances), ADR-0029 (intersection outcomes), ADR-0033 (modular SDK), ADR-0043 (benchmarks)
 
 ## Context
