@@ -19,6 +19,8 @@ option(STEREON_BUILD_DOCS "Build the Sphinx manual and Doxygen API reference" OF
 option(STEREON_ENABLE_PROFILING "Enable private Tracy instrumentation (ADR-0043)" OFF)
 option(STEREON_WITH_OCCT
     "Build the differential tests against a pinned OpenCASCADE (tools/occt/build_occt.sh)" OFF)
+option(STEREON_WITH_CPPAD
+    "Build the CppAD integration tests of the AD backend (ADR-0045; EPL-2.0, optional adapter)" OFF)
 option(STEREON_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 option(STEREON_COVERAGE "Instrument Stereon libraries and tests for gcov coverage (GCC)" OFF)
 option(STEREON_CHECKED_HANDLES
