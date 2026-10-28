@@ -60,7 +60,7 @@ NOT_OPERATIONS: dict[str, str] = {
     # Evaluators and differential properties.
     **dict.fromkeys(
         (
-            "EvalAll", "EvalGrid", "Deriv", "Derivatives", "TotalDerivatives", "Curvature", "UnitTangent",
+            "EvalAll", "EvalAllFast", "EvalGrid", "Deriv", "Derivatives", "TotalDerivatives", "Curvature", "UnitTangent",
             "FundamentalForms", "GaussianCurvature", "MeanCurvature", "PrincipalCurvatures",
             "UnitNormal", "ImplicitResidual", "RadialTurned", "Mapped",
         ),
@@ -71,7 +71,7 @@ NOT_OPERATIONS: dict[str, str] = {
         (
             "BoundingBox", "Domain", "Period", "Periods", "IsRational", "PoleCountU", "PoleCountV",
             "Continuity", "IsClosed", "IsPeriodic",
-            "Apex", "Axis", "GeometryNameOf", "BuiltinIndexOf", "VisitBuiltin", "CertifyDeviation",
+            "Apex", "Axis", "ToSpanPolynomials", "GeometryNameOf", "BuiltinIndexOf", "VisitBuiltin", "CertifyDeviation",
         ),
         _QUERY,
     ),

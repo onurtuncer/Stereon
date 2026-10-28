@@ -115,6 +115,27 @@ void CurveBatch(benchmark::State& state)
     state.SetItemsProcessed(state.iterations() * static_cast<std::int64_t>(t.size()));
 }
 
+/// EvalAllFast, converting the curve in every iteration (Convert) or once
+/// before the loop.
+template <bool Rational, bool Convert>
+void CurveBatchFast(benchmark::State& state)
+{
+    const BSplineCurve c = SomeCurve(3, Rational);
+    const std::vector<double> t = Spread(Domain(c), ParameterCount);
+    const Stereon::SpanPolynomials polynomials = Stereon::ToSpanPolynomials(c);
+    std::vector<Point3> points(t.size());
+    for (auto _ : state) {
+        if constexpr (Convert) {
+            Stereon::EvalAllFast(c, t, points);
+        } else {
+            Stereon::EvalAllFast(polynomials, t, points);
+        }
+        benchmark::DoNotOptimize(points.data());
+        benchmark::ClobberMemory();
+    }
+    state.SetItemsProcessed(state.iterations() * static_cast<std::int64_t>(t.size()));
+}
+
 template <bool Rational>
 void SurfacePointByPoint(benchmark::State& state)
 {
@@ -157,6 +178,10 @@ BENCHMARK(CurvePointByPoint<false>)->Name("Batch/CurveD0/cubic/PointByPoint");
 BENCHMARK(CurveBatch<false>)->Name("Batch/CurveD0/cubic/EvalAll");
 BENCHMARK(CurvePointByPoint<true>)->Name("Batch/CurveD0/cubic-rational/PointByPoint");
 BENCHMARK(CurveBatch<true>)->Name("Batch/CurveD0/cubic-rational/EvalAll");
+BENCHMARK(CurveBatchFast<false, true>)->Name("Batch/CurveD0/cubic/EvalAllFast");
+BENCHMARK(CurveBatchFast<false, false>)->Name("Batch/CurveD0/cubic/EvalAllFastPrepared");
+BENCHMARK(CurveBatchFast<true, true>)->Name("Batch/CurveD0/cubic-rational/EvalAllFast");
+BENCHMARK(CurveBatchFast<true, false>)->Name("Batch/CurveD0/cubic-rational/EvalAllFastPrepared");
 BENCHMARK(SurfacePointByPoint<false>)->Name("Batch/SurfaceGrid/256/bicubic/PointByPoint");
 BENCHMARK(SurfaceGrid<false>)->Name("Batch/SurfaceGrid/256/bicubic/EvalGrid");
 BENCHMARK(SurfacePointByPoint<true>)->Name("Batch/SurfaceGrid/256/bicubic-rational/PointByPoint");

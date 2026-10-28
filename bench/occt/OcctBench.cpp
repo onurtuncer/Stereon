@@ -603,6 +603,22 @@ void CurveD0Batch(benchmark::State& state)
     Items(state, t.size());
 }
 
+/// EvalAllFast, with the conversion to span polynomials inside the timed
+/// loop: the cost a caller pays who converts for every call.
+template <bool Rational>
+void CurveD0BatchFast(benchmark::State& state)
+{
+    const BSplineCurve c = SomeCurve(3, Rational);
+    const std::vector<double> t = CurveParameters(c);
+    for (auto _ : state) {
+        std::vector<Point3> points(t.size());
+        Stereon::EvalAllFast(c, t, points);
+        benchmark::DoNotOptimize(points.data());
+        benchmark::ClobberMemory();
+    }
+    Items(state, t.size());
+}
+
 template <bool Rational>
 void OcctCurveD0Batch(benchmark::State& state)
 {
@@ -1061,6 +1077,10 @@ BENCHMARK(CurveD0Batch<false>)->Name("B1.1/CurveD0Batch/cubic/Stereon");
 BENCHMARK(OcctCurveD0Batch<false>)->Name("B1.1/CurveD0Batch/cubic/OCCT");
 BENCHMARK(CurveD0Batch<true>)->Name("B1.1/CurveD0Batch/cubic-rational/Stereon");
 BENCHMARK(OcctCurveD0Batch<true>)->Name("B1.1/CurveD0Batch/cubic-rational/OCCT");
+BENCHMARK(CurveD0BatchFast<false>)->Name("B1.1/CurveD0BatchFast/cubic/Stereon");
+BENCHMARK(OcctCurveD0Batch<false>)->Name("B1.1/CurveD0BatchFast/cubic/OCCT");
+BENCHMARK(CurveD0BatchFast<true>)->Name("B1.1/CurveD0BatchFast/cubic-rational/Stereon");
+BENCHMARK(OcctCurveD0Batch<true>)->Name("B1.1/CurveD0BatchFast/cubic-rational/OCCT");
 BENCHMARK(SurfaceGrid<false>)->Name("B1.2/SurfaceGrid/256/bicubic/Stereon");
 BENCHMARK(OcctSurfaceGrid<false>)->Name("B1.2/SurfaceGrid/256/bicubic/OCCT");
 BENCHMARK(SurfaceGrid<true>)->Name("B1.2/SurfaceGrid/256/bicubic-rational/Stereon");
