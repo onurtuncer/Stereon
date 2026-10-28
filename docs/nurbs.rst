@@ -293,6 +293,49 @@ parameter or over the whole curve; OCCT's ``IsCN(n)`` is
 ``Continuity(c) >= n``. ``IsClosed`` compares the points at the two ends
 within a tolerance.
 
+Batch and grid evaluation
+-------------------------
+
+``EvalAll(curve, parameters, points)`` evaluates a curve at many
+parameters, and ``EvalGrid(surface, u, v, points)`` a surface at every pair
+of a list of :math:`u` and a list of :math:`v`, row by row along
+:math:`u`. Both return, bit for bit, the points ``Eval`` returns one at a
+time. That is the whole contract: no tolerance, nothing that depends on the
+SIMD width of the machine, the order of the parameters, or a thread count,
+so a batch can replace a loop anywhere without changing a result
+(ADR-0007).
+
+They get there by doing the same arithmetic in fewer and wider steps.
+
+- **Lanes.** A vector of :math:`W` doubles (``Simd::Width<double>``: 2 on
+  the baseline x86-64 and arm64 builds, 4 with AVX2) holds :math:`W`
+  consecutive parameters. When they share a knot span, the knots of the
+  basis recurrence (A2.2) and the poles are the same for every lane and are
+  broadcast, while each lane runs the recurrence and the weighted sum of
+  ``Eval`` on its own parameter, in ``Eval``'s order. IEEE arithmetic gives
+  the same result in a lane as in a scalar, and the build does not contract
+  a multiply and an add into one rounding (``-ffp-contract=off``), so every
+  lane reproduces ``Eval``. A run that straddles a span, and the last
+  :math:`n \bmod W` parameters, go through ``Eval`` itself. Sorted
+  parameters share spans and so take the vector path almost always.
+- **Shared bases.** On a grid the span and the :math:`q + 1` basis functions
+  of each :math:`v` depend on :math:`v` alone, and those of each :math:`u`
+  on :math:`u` alone. ``EvalGrid`` computes them once per column and once
+  per row, :math:`O(p^2 n_u + q^2 n_v)` in all instead of
+  :math:`O((p^2 + q^2)\, n_u n_v)`, and leaves only the
+  :math:`(p + 1)(q + 1)` weighted sum per point, run in lanes along
+  :math:`v` with each column's basis functions stored contiguously. The
+  sum keeps ``Eval``'s order, the product :math:`N_r(u) N_s(v)` formed
+  first and then weighted, which is what makes the points identical.
+
+Faster schemes exist that give up the identity: converting each span to a
+polynomial once and evaluating it by Horner's rule, as OCCT's grid
+evaluators do, costs fewer operations per point but rounds differently from
+the de Boor form. ``tests/curve/BatchEvaluationTests.cpp`` and
+``tests/surface/GridEvaluationTests.cpp`` check the identity with ``==`` on
+random curves and surfaces of degrees 1 to 7, polynomial and rational,
+clamped and not, over sorted, shuffled and degenerate parameter lists.
+
 Global projection
 -----------------
 
@@ -684,9 +727,8 @@ Current limits
   *Surface projection*).
 - Degree elevation, knot removal, clamping and concatenation exist for
   curves only; surfaces have knot insertion alone.
-- The SIMD batch evaluation and grid evaluation of benchmarks B1.1 and B1.2
-  are not implemented; single-point evaluation is measured against OCCT in
-  ``bench/reports/phase1-2026-10-15.md``.
+- Batch and grid evaluation give points only; derivatives are evaluated a
+  point at a time.
 
 Related design decisions
 ------------------------

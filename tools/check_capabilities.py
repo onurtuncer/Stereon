@@ -60,7 +60,7 @@ NOT_OPERATIONS: dict[str, str] = {
     # Evaluators and differential properties.
     **dict.fromkeys(
         (
-            "Deriv", "Derivatives", "TotalDerivatives", "Curvature", "UnitTangent",
+            "EvalAll", "EvalGrid", "Deriv", "Derivatives", "TotalDerivatives", "Curvature", "UnitTangent",
             "FundamentalForms", "GaussianCurvature", "MeanCurvature", "PrincipalCurvatures",
             "UnitNormal", "ImplicitResidual", "RadialTurned", "Mapped",
         ),

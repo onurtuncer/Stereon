@@ -13,6 +13,7 @@ export module Stereon.Curve;
 
 export import Stereon.Robust;
 
+export import :BatchEvaluation;
 export import :BSplineBasis;
 export import :BSplineCurve;
 export import :BSplineOperations;

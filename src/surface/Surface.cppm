@@ -21,6 +21,7 @@ export import :Conversion;
 export import :Cylinder;
 export import :Erased;
 export import :Fitting;
+export import :GridEvaluation;
 export import :Plane;
 export import :Properties;
 export import :Sphere;

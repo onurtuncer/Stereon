@@ -57,6 +57,18 @@ TEST_CASE("Simd operations match scalar code lane by lane", "[core][simd][proper
         RC_ASSERT(Stored(Simd::Load(lanes.data())) == lanes);
     });
 
+    rc::prop("load and store take addresses off the vector alignment", [] {
+        // One double past a heap block's start is never aligned for more
+        // than one lane.
+        auto buffer = RandomLanes();
+        buffer.insert(buffer.begin(), 0.0);
+        const std::vector<double> lanes(buffer.begin() + 1, buffer.end());
+        RC_ASSERT(Stored(Simd::Load(buffer.data() + 1)) == lanes);
+        std::vector<double> out(Lanes + 1);
+        Simd::Store(Simd::Load(lanes.data()), out.data() + 1);
+        RC_ASSERT(std::vector<double>(out.begin() + 1, out.end()) == lanes);
+    });
+
     rc::prop("broadcast fills every lane", [] {
         const double value = *DyadicDouble();
         RC_ASSERT(Stored(Simd::Broadcast(value)) == std::vector<double>(Lanes, value));
