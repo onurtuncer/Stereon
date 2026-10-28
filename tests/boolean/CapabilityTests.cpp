@@ -14,7 +14,7 @@
 #include <string_view>
 #include <vector>
 
-import Stereon.Topo;
+import Stereon.Boolean;
 
 using Stereon::DerivativeProduct;
 using Stereon::DerivativeStatus;
@@ -45,11 +45,12 @@ const OperationCapability& Declared(const std::span<const OperationCapability> c
 
 } // namespace
 
-TEST_CASE("each library's catalogue declares each operation once", "[topo][sensitivity]")
+TEST_CASE("each library's catalogue declares each operation once", "[boolean][sensitivity]")
 {
     for (const std::span<const OperationCapability> catalogue :
          {Stereon::CurveCapabilities(), Stereon::SurfaceCapabilities(),
-          Stereon::IntersectCapabilities(), Stereon::TopoCapabilities()}) {
+          Stereon::IntersectCapabilities(), Stereon::TopoCapabilities(),
+          Stereon::BuildCapabilities(), Stereon::BooleanCapabilities()}) {
         REQUIRE_FALSE(catalogue.empty());
         std::set<std::string_view> names;
         for (const OperationCapability& capability : catalogue) {
@@ -60,12 +61,13 @@ TEST_CASE("each library's catalogue declares each operation once", "[topo][sensi
     }
 }
 
-TEST_CASE("every declaration states its dependencies and assumptions", "[topo][sensitivity]")
+TEST_CASE("every declaration states its dependencies and assumptions", "[boolean][sensitivity]")
 {
     const std::vector<OperationCapability> all = Stereon::KernelCapabilities();
     REQUIRE(all.size() ==
             Stereon::CurveCapabilities().size() + Stereon::SurfaceCapabilities().size() +
-                Stereon::IntersectCapabilities().size() + Stereon::TopoCapabilities().size());
+                Stereon::IntersectCapabilities().size() + Stereon::TopoCapabilities().size() +
+                Stereon::BuildCapabilities().size() + Stereon::BooleanCapabilities().size());
     for (const OperationCapability& capability : all) {
         INFO(capability.Operation);
         REQUIRE_FALSE(capability.Operation.empty());
@@ -75,7 +77,7 @@ TEST_CASE("every declaration states its dependencies and assumptions", "[topo][s
 }
 
 TEST_CASE("no operation implements a product yet, so each answers NotSupported",
-          "[topo][sensitivity]")
+          "[boolean][sensitivity]")
 {
     // The foundation stage declares and computes nothing: an evaluation asked
     // of any operation is NotSupported and carries no values, never a zero.
@@ -93,7 +95,7 @@ TEST_CASE("no operation implements a product yet, so each answers NotSupported",
     }
 }
 
-TEST_CASE("operations on points declare how their samples correspond", "[topo][sensitivity]")
+TEST_CASE("operations on points declare how their samples correspond", "[boolean][sensitivity]")
 {
     // Projection is the implicit construction of ADR-0021, section 6: its
     // samples are tracked by the unique projection, and only it may say so.
@@ -108,4 +110,16 @@ TEST_CASE("operations on points declare how their samples correspond", "[topo][s
     }
     REQUIRE(Declared(Stereon::TopoCapabilities(), "Freeze")
                 .Dependencies.Contains(Stereon::Dependency::Topology));
+}
+
+TEST_CASE("a Boolean's declaration names the trims that move with its operands",
+          "[boolean][sensitivity]")
+{
+    // The intersection edges a Boolean makes move when its operands do, so
+    // their points are tracked on moving trims, and a tolerance change is a
+    // branch event (ADR-0021, section 8).
+    const OperationCapability& boolean = Declared(Stereon::BooleanCapabilities(), "Boolean");
+    REQUIRE(boolean.Correspondence.Contains(Stereon::TrackingConvention::MovingTrimCoordinates));
+    REQUIRE(boolean.Dependencies.Contains(Stereon::Dependency::InputGeometry));
+    REQUIRE(boolean.Dependencies.Contains(Stereon::Dependency::Tolerances));
 }

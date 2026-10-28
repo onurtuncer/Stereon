@@ -72,8 +72,9 @@ the conventions its samples may be tracked by, the assumptions under which a
 derivative would be valid, and the products it implements (JVP, VJP, dense
 Jacobian; none yet). Each library keeps a catalogue in its ``Capabilities``
 partition: ``CurveCapabilities()``, ``SurfaceCapabilities()``,
-``IntersectCapabilities()`` and ``TopoCapabilities()``, and
-``KernelCapabilities()`` returns them together.
+``IntersectCapabilities()``, ``TopoCapabilities()``, ``BuildCapabilities()``
+and ``BooleanCapabilities()``. ``KernelCapabilities()``, in
+``Stereon.Boolean``, the library above all the others, returns them together.
 
 .. code-block:: cpp
 
@@ -82,10 +83,11 @@ partition: ``CurveCapabilities()``, ``SurfaceCapabilities()``,
    // answer is SensitivityResult::NotSupported(*project, DerivativeProduct::Jvp).
 
 ``tools/check_capabilities.py`` enforces the rule. It reads every function
-exported from ``src/curve``, ``src/surface``, ``src/intersect`` and
-``src/topo`` and fails when one is neither declared in its library's
-catalogue nor listed in the script's ``NOT_OPERATIONS`` with a reason (an
-evaluator, a query, an accessor, a validator); it also fails on declarations
+exported from ``src/curve``, ``src/surface``, ``src/intersect``,
+``src/topo``, ``src/build`` and ``src/boolean`` and fails when one is
+neither declared in its library's catalogue nor listed in the script's
+``NOT_OPERATIONS`` with a reason (an evaluator, a query, an accessor, a
+validator, a classification); it also fails on declarations
 of functions that no longer exist. It runs in the lint workflow and in CTest.
 
 Correspondence
