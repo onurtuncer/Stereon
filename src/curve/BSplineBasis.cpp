@@ -35,7 +35,8 @@ namespace {
 constexpr std::size_t MaxBasis = static_cast<std::size_t>(BSplineMaxDegree) + 1;
 
 /// Work-array capacity for degrees below 8, which covers the curves and
-/// surfaces met in practice.
+/// surfaces met in practice; those degrees also get basis kernels of their
+/// own (BasisFunctions).
 constexpr std::size_t SmallCapacity = 8;
 
 /// "<where>: <problem>", concatenated (see EvaluatorChecks.cpp).
@@ -179,13 +180,21 @@ std::size_t FindSpan(const std::span<const double> knots, const int degree,
     return mid;
 }
 
-void BasisFunctions(const std::span<const double> knots, const int degree, const std::size_t span,
-                    const double t, const std::span<double> values) noexcept
+namespace {
+
+/// A2.2 at degree DegreeOf<Fixed>(degree): Fixed, when it is not 0, so
+/// that the compiler unrolls both loops and keeps the work arrays in
+/// registers; otherwise the run-time degree. The operations are the same
+/// in either case, so the results are too.
+template <std::size_t Fixed>
+void BasisFunctionsAt(const std::span<const double> knots, const std::size_t degree,
+                      const std::size_t span, const double t, double* values) noexcept
 {
-    const auto p = static_cast<std::size_t>(degree);
+    const std::size_t p = Fixed != 0 ? Fixed : degree;
+    constexpr std::size_t Size = Fixed != 0 ? Fixed + 1 : MaxBasis;
     // Written before read, so not zeroed: these run in every evaluation.
-    std::array<double, MaxBasis> left;
-    std::array<double, MaxBasis> right;
+    std::array<double, Size> left;
+    std::array<double, Size> right;
     values[0] = 1.0;
     for (std::size_t j = 1; j <= p; ++j) {
         left[j] = t - knots[span + 1 - j];
@@ -198,6 +207,18 @@ void BasisFunctions(const std::span<const double> knots, const int degree, const
         }
         values[j] = saved;
     }
+}
+
+} // namespace
+
+void BasisFunctions(const std::span<const double> knots, const int degree, const std::size_t span,
+                    const double t, const std::span<double> values) noexcept
+{
+    // A kernel per degree below SmallCapacity; higher degrees share the
+    // run-time one.
+    const auto p = static_cast<std::size_t>(degree);
+    Detail::DispatchFixed<SmallCapacity>(
+        p, [&]<std::size_t Fixed>() { BasisFunctionsAt<Fixed>(knots, p, span, t, values.data()); });
 }
 
 void BasisFunctionsOfAllDegrees(const std::span<const double> knots, const int degree,

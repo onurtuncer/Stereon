@@ -834,6 +834,108 @@ workflow measures.
 These speed-ups compare Stereon with itself. How fast Stereon's Boolean is
 next to OCCT's ``BRepAlgoAPI`` is benchmark B4.1–B4.3, which has not run.
 
+C++26 features for speed
+------------------------
+
+GCC 16.2 and libstdc++ 16 provide some of C++26's speed-related features
+and not others (``docs/toolchain/gcc16-feature-probe.md``).
+
+- **Not available:** ``std::simd`` and ``std::execution``, the two with the
+  largest effect at run time, are not in libstdc++ 16. Stereon gets both
+  through polyfills, xsimd behind ``Stereon::Simd`` and stdexec behind
+  ``Detail::ParallelFor``, and switches to the standard library when it
+  defines ``__cpp_lib_simd`` and ``__cpp_lib_senders``.
+- **Already free in release builds:** contracts, whose ``ignore``
+  semantic compiles them out.
+- **Compile time only:** reflection, which generates serialisation and
+  bindings.
+
+Of the rest, three changes measurably speed up hot paths:
+
+- **Kernels per degree, from an expansion statement.**
+  ``Detail::DispatchFixed<N>(value, kernel)`` calls ``kernel`` with the
+  value as a template argument when it is below ``N``, and with 0, meaning
+  "run time", otherwise. It generates the kernels with ``template for``
+  (P1306). The loops of a kernel then have constant trip counts, which the
+  compiler unrolls, and its work arrays fit in registers. Three paths use
+  it:
+
+  - ``BasisFunctions``, for degrees 1 to 7. ``Eval`` and every evaluator
+    built on it inherit this kernel.
+  - ``EvalGrid``, per degree in :math:`v` and rationality.
+  - ``EvalAllFast``, the fast batch evaluator, for its Horner loop.
+
+  Each kernel performs the operations of the general code in the same
+  order, so no result changes. ``EvalAll`` and ``EvalGrid`` still return
+  ``Eval``'s points bit for bit, and their tests check that with ``==``.
+- **``std::inplace_vector`` for bounded temporaries.** Curve projection
+  isolates the roots of a stationarity polynomial of degree at most
+  :math:`3p - 1` by Bernstein subdivision. It evaluates the polynomial by
+  value tens of times per root, during bisection, and makes two halves at
+  every subdivision. These temporaries now live on the stack, in an
+  ``inplace_vector`` sized for the largest degree, 75 coefficients. The
+  polynomials a projector stores stay ``std::vector``, so a projector stays
+  compact.
+- **Shared deferred exact values instead of ``std::function``.** The
+  analytic intersection handlers carry each quantity as an interval and a
+  deferred exact construction (``src/intersect/Exact.hpp``). Each deferred
+  value captured copies of its operands' ``std::function`` objects, so every
+  composition deep-copied and reallocated the whole expression tree beneath
+  it. That happened even when the interval settled the decision and the
+  tree was never evaluated. ``Deferred<N>`` shares immutable nodes instead,
+  so a copy costs a reference count. ``std::function_ref``, which was
+  considered first, does not fit here: it does not own its target, and these
+  values outlive the expressions that build them.
+
+Measured with ``bench/HotPathBench.cpp`` on a 6-core development laptop,
+in release builds, as medians of 7 repetitions. Each before-and-after
+pair was measured in one session, since the laptop's absolute speed
+changes between sessions:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Path
+     - Before
+     - After
+     - Change
+   * - Basis functions, degree 2 / 3 / 5
+     - 15.5 / 12.2 / 7.3 M/s
+     - 21.0 / 16.3 / 8.8 M/s
+     - +36 / +34 / +20 %
+   * - Curve ``Eval``, degree 1 / 3 / 7
+     - 13.0 / 8.6 / 4.0 M/s
+     - 18.2 / 10.6 / 4.7 M/s
+     - +40 / +23 / +17 %
+   * - Curve ``Eval``, rational cubic
+     - 7.3 M/s
+     - 9.6 M/s
+     - +31 %
+   * - Surface ``Eval``, bicubic
+     - 3.3 M/s
+     - 4.5 M/s
+     - +35 %
+   * - ``EvalGrid`` 256 × 256, bicubic / rational
+     - 27.9 / 19.7 M/s
+     - 32.6 / 25.8 M/s
+     - +17 / +31 %
+   * - Curve projection, rational cubic, prepared projector
+     - 46–48 k/s
+     - 79–85 k/s
+     - +75 %
+   * - ``Intersect``, plane and plane
+     - 8.4 µs
+     - 6.9 µs
+     - −18 %
+   * - ``Intersect``, parallel cylinders
+     - 28.2 µs
+     - 15.9 µs
+     - −44 %
+
+These figures come from a development machine, not the reference runner,
+so they are not a measurement of record. The OCCT ratios that count are
+those of the reference workflow.
+
 Reproducing the numbers
 -----------------------
 

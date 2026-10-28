@@ -69,12 +69,21 @@ struct Row {
     std::array<double, Detail::SurfaceBasisCount> Basis;
 };
 
+/// The degree along v a kernel runs at: Q when it is not 0, so that the
+/// compiler unrolls the inner sum, otherwise the surface's.
+template <std::size_t Q>
+[[nodiscard]] std::size_t DegreeV(const BSplineSurface& surface)
+{
+    return Q != 0 ? Q : static_cast<std::size_t>(surface.DegreeV);
+}
+
 /// The point at column k of the row, by Eval's sum.
+template <std::size_t Q, bool Rational>
 [[nodiscard]] Point3 PointAt(const BSplineSurface& surface, const Row& row, const Bases& v,
                              const std::size_t k)
 {
     const auto p = static_cast<std::size_t>(surface.DegreeU);
-    const auto q = static_cast<std::size_t>(surface.DegreeV);
+    const std::size_t q = DegreeV<Q>(surface);
     const std::size_t countV = PoleCountV(surface);
     const std::size_t spanV = v.Spans[k];
     Vec3 numerator{};
@@ -88,16 +97,17 @@ struct Row {
             denominator = denominator + weighted;
         }
     }
-    return IsRational(surface) ? ToPoint(numerator / denominator) : ToPoint(numerator);
+    return Rational ? ToPoint(numerator / denominator) : ToPoint(numerator);
 }
 
 /// The points at columns k, ..., k + LaneCount - 1 of the row, which share
 /// the span `spanV`, by Eval's sum in every lane.
+template <std::size_t Q, bool Rational>
 void PointsInLanes(const BSplineSurface& surface, const Row& row, const Bases& v,
                    const std::size_t k, const std::size_t spanV, Point3* points)
 {
     const auto p = static_cast<std::size_t>(surface.DegreeU);
-    const auto q = static_cast<std::size_t>(surface.DegreeV);
+    const std::size_t q = DegreeV<Q>(surface);
     const std::size_t countV = PoleCountV(surface);
     std::array<Lanes, 3> numerator;
     numerator.fill(Simd::Broadcast(0.0));
@@ -117,7 +127,7 @@ void PointsInLanes(const BSplineSurface& surface, const Row& row, const Bases& v
     }
     std::array<std::array<double, LaneCount>, 3> coordinates; // filled by Store
     for (std::size_t d = 0; d < 3; ++d) {
-        const Lanes value = IsRational(surface) ? numerator[d] / denominator : numerator[d];
+        const Lanes value = Rational ? numerator[d] / denominator : numerator[d];
         Simd::Store(value, coordinates[d].data());
     }
     for (std::size_t lane = 0; lane < LaneCount; ++lane) {
@@ -152,13 +162,11 @@ void CheckGrid(const BSplineSurface& surface, const std::span<const double> u,
     }
 }
 
-} // namespace
-
-void EvalGrid(const BSplineSurface& surface, const std::span<const double> u,
-              const std::span<const double> v, const std::span<Point3> points)
+/// Every row of the grid, with the kernels for degree Q along v.
+template <std::size_t Q, bool Rational>
+void EvalRows(const BSplineSurface& surface, const std::span<const double> u,
+              const std::span<const double> v, const Bases& columns, const std::span<Point3> points)
 {
-    CheckGrid(surface, u, v, points);
-    const Bases columns = BasesOf(surface.KnotsV, surface.DegreeV, PoleCountV(surface), v);
     const auto p = static_cast<std::size_t>(surface.DegreeU);
     for (std::size_t i = 0; i < u.size(); ++i) {
         Row row{FindSpan(surface.KnotsU, surface.DegreeU, PoleCountU(surface), u[i]), {}};
@@ -168,17 +176,37 @@ void EvalGrid(const BSplineSurface& surface, const std::span<const double> u,
         std::size_t k = 0;
         for (; k + LaneCount <= v.size(); k += LaneCount) {
             if (SharesSpan(columns, k)) {
-                PointsInLanes(surface, row, columns, k, columns.Spans[k], out + k);
+                PointsInLanes<Q, Rational>(surface, row, columns, k, columns.Spans[k], out + k);
                 continue;
             }
             for (std::size_t lane = 0; lane < LaneCount; ++lane) {
-                out[k + lane] = PointAt(surface, row, columns, k + lane);
+                out[k + lane] = PointAt<Q, Rational>(surface, row, columns, k + lane);
             }
         }
         for (; k < v.size(); ++k) {
-            out[k] = PointAt(surface, row, columns, k);
+            out[k] = PointAt<Q, Rational>(surface, row, columns, k);
         }
     }
+}
+
+} // namespace
+
+void EvalGrid(const BSplineSurface& surface, const std::span<const double> u,
+              const std::span<const double> v, const std::span<Point3> points)
+{
+    CheckGrid(surface, u, v, points);
+    const Bases columns = BasesOf(surface.KnotsV, surface.DegreeV, PoleCountV(surface), v);
+    // A kernel per degree along v below 8; higher degrees share the
+    // run-time one. Every kernel keeps Eval's sum, so the points stay
+    // Eval's bit for bit.
+    const bool rational = IsRational(surface);
+    Detail::DispatchFixed<8>(static_cast<std::size_t>(surface.DegreeV), [&]<std::size_t Fixed>() {
+        if (rational) {
+            EvalRows<Fixed, true>(surface, u, v, columns, points);
+        } else {
+            EvalRows<Fixed, false>(surface, u, v, columns, points);
+        }
+    });
 }
 
 } // namespace Stereon

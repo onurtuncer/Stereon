@@ -20,6 +20,7 @@ module;
 #include <cmath>
 #include <cstddef>
 #include <expected>
+#include <inplace_vector>
 #include <limits>
 #include <memory>
 #include <span>
@@ -47,7 +48,19 @@ namespace {
 // ---------------------------------------------------------------------------
 // Bernstein polynomials on [0, 1], for the projection
 
-using Bernstein = std::vector<double>;
+/// The coefficients of a Bernstein polynomial as a projector stores them,
+/// compactly, and as the setup of a projector computes them.
+using Polynomial = std::vector<double>;
+
+/// The most coefficients a stationarity polynomial has: degree 3p - 1 for
+/// the largest degree p (see Stationary).
+constexpr std::size_t BernsteinCapacity = 3 * static_cast<std::size_t>(BSplineMaxDegree);
+
+/// A Bernstein polynomial of the root isolation, on the stack
+/// (std::inplace_vector, C++26): the bisection evaluates one by value tens
+/// of times per root, and each subdivision makes two halves, none of which
+/// may cost a heap allocation.
+using Bernstein = std::inplace_vector<double, BernsteinCapacity>;
 
 [[nodiscard]] double Binomial(const std::size_t n, const std::size_t k)
 {
@@ -61,11 +74,11 @@ using Bernstein = std::vector<double>;
 /// The product of two Bernstein polynomials of degrees m and n, in the
 /// Bernstein basis of degree m + n: c_k = sum_{i+j=k} C(m,i) C(n,j) / C(m+n,k)
 /// a_i b_j.
-[[nodiscard]] Bernstein Product(const Bernstein& a, const Bernstein& b)
+[[nodiscard]] Polynomial Product(const Polynomial& a, const Polynomial& b)
 {
     const std::size_t m = a.size() - 1;
     const std::size_t n = b.size() - 1;
-    Bernstein c(m + n + 1, 0.0);
+    Polynomial c(m + n + 1, 0.0);
     std::vector<double> rm(m + 1, 1.0);
     std::vector<double> rn(n + 1, 1.0);
     for (std::size_t i = 1; i <= m; ++i) {
@@ -89,10 +102,10 @@ using Bernstein = std::vector<double>;
 
 /// The derivative, in the Bernstein basis one degree lower:
 /// m (a_{i+1} - a_i).
-[[nodiscard]] Bernstein Derivative(const Bernstein& a)
+[[nodiscard]] Polynomial Derivative(const Polynomial& a)
 {
     const std::size_t m = a.size() - 1;
-    Bernstein d(m, 0.0);
+    Polynomial d(m, 0.0);
     for (std::size_t i = 0; i < m; ++i) {
         d[i] = static_cast<double>(m) * (a[i + 1] - a[i]);
     }
@@ -100,7 +113,8 @@ using Bernstein = std::vector<double>;
 }
 
 /// The value at s by de Casteljau's algorithm.
-[[nodiscard]] double BernsteinValue(Bernstein a, const double s)
+template <typename B>
+[[nodiscard]] double BernsteinValue(B a, const double s)
 {
     if (a.empty()) {
         return 0.0; // never called so; tells the optimiser the data exists
@@ -117,7 +131,8 @@ using Bernstein = std::vector<double>;
 /// The coefficients of the two halves [0, 1/2] and [1/2, 1], rescaled to
 /// [0, 1], read off the sides of de Casteljau's triangle; returns the value
 /// at 1/2.
-double Halves(Bernstein a, Bernstein& left, Bernstein& right)
+template <typename B>
+double Halves(B a, B& left, B& right)
 {
     if (a.empty()) {
         return 0.0; // as in BernsteinValue
@@ -140,7 +155,8 @@ double Halves(Bernstein a, Bernstein& left, Bernstein& right)
 /// Sign changes among the non-zero coefficients: an upper bound on the
 /// number of roots in (0, 1), of the same parity (Descartes' rule of signs
 /// in the Bernstein basis).
-[[nodiscard]] std::size_t SignChanges(const Bernstein& a)
+template <typename B>
+[[nodiscard]] std::size_t SignChanges(const B& a)
 {
     std::size_t changes = 0;
     double previous = 0.0;
@@ -164,7 +180,8 @@ constexpr int SubdivisionDepth = std::numeric_limits<double>::digits;
 
 /// The root in (0, 1) of a polynomial whose end values a(0), a(1) have
 /// opposite signs, by bisection to adjacent doubles.
-[[nodiscard]] double BisectRoot(const Bernstein& a)
+template <typename B>
+[[nodiscard]] double BisectRoot(const B& a)
 {
     double low = 0.0;
     double high = 1.0;
@@ -192,7 +209,8 @@ constexpr int SubdivisionDepth = std::numeric_limits<double>::digits;
 /// change with opposite end values: exactly one, found by bisection.
 /// Otherwise the interval is halved; a root at the midpoint is recorded
 /// there, since neither half would see it as an interior sign change.
-void IsolateRoots(const Bernstein& a, const double low, const double high, const int depth,
+template <typename B>
+void IsolateRoots(const B& a, const double low, const double high, const int depth,
                   std::vector<double>& roots)
 {
     const std::size_t changes = SignChanges(a);
@@ -208,8 +226,8 @@ void IsolateRoots(const Bernstein& a, const double low, const double high, const
         roots.push_back(mid);
         return;
     }
-    Bernstein left;
-    Bernstein right;
+    B left;
+    B right;
     if (Halves(a, left, right) == 0.0) {
         roots.push_back(mid);
     }
@@ -225,10 +243,10 @@ void IsolateRoots(const Bernstein& a, const double low, const double high, const
 /// polynomial h = L(g), of degree 3p - 1, is a combination of four
 /// point-independent polynomials per segment with the point's coordinates as
 /// weights. CurveProjector computes those once.
-[[nodiscard]] Bernstein Stationary(const Bernstein& x, const Bernstein& w, const Bernstein& dw)
+[[nodiscard]] Polynomial Stationary(const Polynomial& x, const Polynomial& w, const Polynomial& dw)
 {
-    Bernstein h = Product(Derivative(x), w);
-    const Bernstein correction = Product(x, dw);
+    Polynomial h = Product(Derivative(x), w);
+    const Polynomial correction = Product(x, dw);
     for (std::size_t k = 0; k < h.size(); ++k) {
         h[k] -= 2.0 * correction[k];
     }
@@ -249,9 +267,9 @@ struct ProjectionSegment {
     double End = 0.0;
     std::array<double, 3> Low{};
     std::array<double, 3> High{};
-    Bernstein Constant;              // L(sum_d A_d^2)
-    std::array<Bernstein, 3> Linear; // L(A_d w)
-    Bernstein Quadratic;             // L(w^2)
+    Polynomial Constant;              // L(sum_d A_d^2)
+    std::array<Polynomial, 3> Linear; // L(A_d w)
+    Polynomial Quadratic;             // L(w^2)
 };
 
 struct CurveProjectorData {
@@ -268,8 +286,8 @@ namespace {
 [[nodiscard]] Detail::ProjectionSegment Prepared(const Segment<3>& segment)
 {
     const std::size_t count = segment.Poles.size();
-    Bernstein w(count);
-    std::array<Bernstein, 3> a{Bernstein(count), Bernstein(count), Bernstein(count)};
+    Polynomial w(count);
+    std::array<Polynomial, 3> a{Polynomial(count), Polynomial(count), Polynomial(count)};
     Detail::ProjectionSegment prepared{segment.Start, segment.End, {}, {}, {}, {}, {}};
     prepared.Low.fill(std::numeric_limits<double>::infinity());
     prepared.High.fill(-std::numeric_limits<double>::infinity());
@@ -282,10 +300,10 @@ namespace {
             prepared.High[d] = std::max(prepared.High[d], q[d] / q[3]);
         }
     }
-    const Bernstein dw = Derivative(w);
-    Bernstein squares = Product(a[0], a[0]);
+    const Polynomial dw = Derivative(w);
+    Polynomial squares = Product(a[0], a[0]);
     for (std::size_t d = 1; d < 3; ++d) {
-        const Bernstein square = Product(a[d], a[d]);
+        const Polynomial square = Product(a[d], a[d]);
         for (std::size_t k = 0; k < squares.size(); ++k) {
             squares[k] += square[k];
         }
@@ -313,7 +331,7 @@ namespace {
 /// The stationarity polynomial of the segment for the point p.
 [[nodiscard]] Bernstein StationarityFor(const Detail::ProjectionSegment& segment, const Point3& p)
 {
-    Bernstein h = segment.Constant;
+    Bernstein h(segment.Constant.begin(), segment.Constant.end());
     const double square = p.X * p.X + p.Y * p.Y + p.Z * p.Z;
     for (std::size_t k = 0; k < h.size(); ++k) {
         h[k] += square * segment.Quadratic[k] -
@@ -498,14 +516,16 @@ std::vector<double> PolynomialRoots(const std::span<const double> coefficients,
                           std::pow(h, static_cast<double>(j));
         }
     }
-    Bernstein bernstein(n + 1, 0.0);
+    Polynomial bernstein(n + 1, 0.0);
     for (std::size_t i = 0; i <= n; ++i) {
         for (std::size_t j = 0; j <= i; ++j) {
             bernstein[i] += Binomial(i, j) / Binomial(n, j) * shifted[j];
         }
     }
     std::vector<double> local;
-    if (n > 0) {
+    if (n > 0 && bernstein.size() <= BernsteinCapacity) {
+        IsolateRoots(Bernstein(bernstein.begin(), bernstein.end()), 0.0, 1.0, 0, local);
+    } else if (n > 0) {
         IsolateRoots(bernstein, 0.0, 1.0, 0, local);
     }
     std::vector<double> roots;
