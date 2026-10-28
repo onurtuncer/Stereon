@@ -64,6 +64,10 @@ ROWS: dict[str, tuple[str, str]] = {
     "B1.1/SurfaceD0/bicubic": ("Surface D0, bicubic 12 × 12", "≥ parity"),
     "B1.1/SurfaceD0/bicubic-rational": ("Surface D0, rational bicubic", "≥ parity"),
     "B1.1/SurfaceD1/bicubic": ("Surface D0–D1, bicubic", "≥ parity"),
+    "B1.1/CurveD0Batch/cubic": ("Curve D0, batch of 4096, cubic", "≥ 2×"),
+    "B1.1/CurveD0Batch/cubic-rational": ("Curve D0, batch of 4096, rational cubic", "≥ 2×"),
+    "B1.2/SurfaceGrid/256/bicubic": ("Grid 256 × 256, bicubic", "≥ parity"),
+    "B1.2/SurfaceGrid/256/bicubic-rational": ("Grid 256 × 256, rational bicubic", "≥ parity"),
     "B1.3/CurveProjection": ("Curve projection, rational cubic", "≥ parity"),
     "B1.3/SurfaceProjection": ("Surface projection, bicubic", "≥ parity"),
     "B1.4/Interpolation/1000": ("Interpolation, 1000 points, cubic", "≥ parity"),
@@ -114,6 +118,9 @@ for _size, _faces in TOPOLOGY_SIZES.items():
 # Rows whose target is a ratio of their own rather than parity: OCCT / Stereon
 # must reach it (docs/benchmarks.md, B0.3: adjacency at least 5x faster).
 MIN_RATIO = {
+    # B1.1: the SIMD batch at least twice OCCT's own batch evaluator.
+    "B1.1/CurveD0Batch/cubic": 2.0,
+    "B1.1/CurveD0Batch/cubic-rational": 2.0,
     f"B0.3/FacesOfEdges/{GATE_SIZE}": 5.0,
     f"B0.3/EdgesOfVertices/{GATE_SIZE}": 5.0,
 }

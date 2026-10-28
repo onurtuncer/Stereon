@@ -7,6 +7,7 @@
 
 stereon_add_library(curve
     MODULES
+        BatchEvaluation.cppm
         BSplineBasis.cppm
         BSplineCurve.cppm
         BSplineOperations.cppm
@@ -26,6 +27,7 @@ stereon_add_library(curve
         Trimmed.cppm
         Visit.cppm
     SOURCES
+        BatchEvaluation.cpp
         BSplineBasis.cpp
         BSplineCurve.cpp
         BSplineOperations.cpp

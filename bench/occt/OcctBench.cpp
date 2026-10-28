@@ -9,7 +9,8 @@
 // OpenCASCADE on the same geometry:
 //
 //   B0.2  curve dispatch, 10^8 evaluations of a line, a circle and a cubic B-spline
-//   B1.1  B-spline curve and surface evaluation, D0 to D2
+//   B1.1  B-spline curve and surface evaluation, D0 to D2, and a batch of curve points
+//   B1.2  grid evaluation of a B-spline surface
 //   B1.3  point projection onto B-spline curves and surfaces
 //   B1.4  curve interpolation and approximation
 //   B1.5  knot insertion, degree elevation and Bezier decomposition
@@ -35,6 +36,8 @@
 #include <GeomAPI_ProjectPointOnSurf.hxx>
 #include <GeomAdaptor_Curve.hxx>
 #include <GeomConvert_BSplineCurveToBezierCurve.hxx>
+#include <GeomGridEval_BSplineCurve.hxx>
+#include <GeomGridEval_BSplineSurface.hxx>
 #include <GeomLProp_CLProps.hxx>
 #include <GeomLProp_SLProps.hxx>
 #include <Geom_BSplineCurve.hxx>
@@ -557,6 +560,99 @@ void OcctSurfaceD1(benchmark::State& state)
 }
 
 // ---------------------------------------------------------------------------
+// B1.1 batch and B1.2 grid: many points in one call
+//
+// OCCT's GeomGridEval returns a new array per call, whose gp_Pnt elements
+// are zeroed on construction; Stereon's evaluators write into a span, so
+// its side allocates the same zeroed array per iteration too.
+
+/// The parameters of CurveParameters as OCCT's 1-based array.
+NCollection_Array1<double> ToOcctArray(const std::vector<double>& values)
+{
+    NCollection_Array1<double> array(1, static_cast<int>(values.size()));
+    for (std::size_t k = 0; k < values.size(); ++k) {
+        array(static_cast<int>(k) + 1) = values[k];
+    }
+    return array;
+}
+
+/// n parameters of the interval at the midpoints of n equal steps.
+std::vector<double> GridParameters(const Stereon::Interval& d, const int n)
+{
+    std::vector<double> t(static_cast<std::size_t>(n));
+    for (int i = 0; i < n; ++i) {
+        t[static_cast<std::size_t>(i)] =
+            d.GetLower() + (d.GetUpper() - d.GetLower()) * (i + 0.5) / n;
+    }
+    return t;
+}
+
+constexpr int GridSide = 256;
+
+template <bool Rational>
+void CurveD0Batch(benchmark::State& state)
+{
+    const BSplineCurve c = SomeCurve(3, Rational);
+    const std::vector<double> t = CurveParameters(c);
+    for (auto _ : state) {
+        std::vector<Point3> points(t.size());
+        Stereon::EvalAll(c, t, points);
+        benchmark::DoNotOptimize(points.data());
+        benchmark::ClobberMemory();
+    }
+    Items(state, t.size());
+}
+
+template <bool Rational>
+void OcctCurveD0Batch(benchmark::State& state)
+{
+    const BSplineCurve c = SomeCurve(3, Rational);
+    const occ::handle<Geom_BSplineCurve> occt = ToOcct(c);
+    const std::vector<double> t = CurveParameters(c);
+    const NCollection_Array1<double> parameters = ToOcctArray(t);
+    const GeomGridEval_BSplineCurve evaluator(occt);
+    for (auto _ : state) {
+        const NCollection_Array1<gp_Pnt> points = evaluator.EvaluateGrid(parameters);
+        benchmark::DoNotOptimize(&points.First());
+        benchmark::ClobberMemory();
+    }
+    Items(state, t.size());
+}
+
+template <bool Rational>
+void SurfaceGrid(benchmark::State& state)
+{
+    const BSplineSurface s = SomeSurface(Rational);
+    const Stereon::Box2 d = Domain(s);
+    const std::vector<double> u = GridParameters(d.X, GridSide);
+    const std::vector<double> v = GridParameters(d.Y, GridSide);
+    for (auto _ : state) {
+        std::vector<Point3> points(u.size() * v.size());
+        Stereon::EvalGrid(s, u, v, points);
+        benchmark::DoNotOptimize(points.data());
+        benchmark::ClobberMemory();
+    }
+    Items(state, u.size() * v.size());
+}
+
+template <bool Rational>
+void OcctSurfaceGrid(benchmark::State& state)
+{
+    const BSplineSurface s = SomeSurface(Rational);
+    const occ::handle<Geom_BSplineSurface> occt = ToOcct(s);
+    const Stereon::Box2 d = Domain(s);
+    const NCollection_Array1<double> u = ToOcctArray(GridParameters(d.X, GridSide));
+    const NCollection_Array1<double> v = ToOcctArray(GridParameters(d.Y, GridSide));
+    const GeomGridEval_BSplineSurface evaluator(occt);
+    for (auto _ : state) {
+        const NCollection_Array2<gp_Pnt> points = evaluator.EvaluateGrid(u, v);
+        benchmark::DoNotOptimize(&points.Value(1, 1));
+        benchmark::ClobberMemory();
+    }
+    Items(state, static_cast<std::size_t>(GridSide) * GridSide);
+}
+
+// ---------------------------------------------------------------------------
 // B1.3: projection
 
 void CurveProjection(benchmark::State& state)
@@ -961,6 +1057,14 @@ BENCHMARK(SurfaceD0<true>)->Name("B1.1/SurfaceD0/bicubic-rational/Stereon");
 BENCHMARK(OcctSurfaceD0<true>)->Name("B1.1/SurfaceD0/bicubic-rational/OCCT");
 BENCHMARK(SurfaceD1<false>)->Name("B1.1/SurfaceD1/bicubic/Stereon");
 BENCHMARK(OcctSurfaceD1<false>)->Name("B1.1/SurfaceD1/bicubic/OCCT");
+BENCHMARK(CurveD0Batch<false>)->Name("B1.1/CurveD0Batch/cubic/Stereon");
+BENCHMARK(OcctCurveD0Batch<false>)->Name("B1.1/CurveD0Batch/cubic/OCCT");
+BENCHMARK(CurveD0Batch<true>)->Name("B1.1/CurveD0Batch/cubic-rational/Stereon");
+BENCHMARK(OcctCurveD0Batch<true>)->Name("B1.1/CurveD0Batch/cubic-rational/OCCT");
+BENCHMARK(SurfaceGrid<false>)->Name("B1.2/SurfaceGrid/256/bicubic/Stereon");
+BENCHMARK(OcctSurfaceGrid<false>)->Name("B1.2/SurfaceGrid/256/bicubic/OCCT");
+BENCHMARK(SurfaceGrid<true>)->Name("B1.2/SurfaceGrid/256/bicubic-rational/Stereon");
+BENCHMARK(OcctSurfaceGrid<true>)->Name("B1.2/SurfaceGrid/256/bicubic-rational/OCCT");
 BENCHMARK(CurveProjection)->Name("B1.3/CurveProjection/Stereon");
 BENCHMARK(OcctCurveProjection)->Name("B1.3/CurveProjection/OCCT");
 BENCHMARK(SurfaceProjection)->Name("B1.3/SurfaceProjection/Stereon");
