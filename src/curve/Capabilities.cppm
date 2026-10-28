@@ -15,8 +15,9 @@ import Stereon.Robust;
 
 /// The derivative capabilities of the curve library's operations (ADR-0021,
 /// section 5): one declaration per public operation, by function name, its
-/// overloads together. None implements a derivative product yet, so each
-/// declares an empty product set and an evaluation asked of it is
+/// overloads together. Eval of a B-spline curve implements the forward and
+/// reverse products in its poles and weights (EvalJvp, EvalVjp); every other
+/// declaration has an empty product set, and an evaluation asked of it is
 /// NotSupported. tools/check_capabilities.py checks that every public
 /// function of the library is declared here or listed there as no
 /// operation (an evaluator, a query, a utility).
@@ -24,6 +25,12 @@ import Stereon.Robust;
 export namespace Stereon {
 
 inline constexpr OperationCapability CurveCatalogue[] = {
+    // Evaluation, differentiated in the defining values (ADR-0021, stage 2).
+    Declare("Eval", {Dependency::DefiningValues}, {TrackingConvention::FixedEdgeParameter},
+            "B-spline curves only, through EvalJvp and EvalVjp: at fixed parameters, knots, "
+            "degree and pole count, smooth in the poles and in weights that stay positive; "
+            "other curve types answer NotSupported",
+            {DerivativeProduct::Jvp, DerivativeProduct::Vjp}),
     // Construction from defining values.
     Declare("MakeLine", {Dependency::DefiningValues}, {TrackingConvention::FixedEdgeParameter},
             "smooth in the origin and direction; the direction stays non-zero"),

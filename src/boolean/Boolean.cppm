@@ -18,6 +18,7 @@ export import Stereon.Intersect;
 
 export import :Assemble;
 export import :Bodies;
+export import :Capabilities;
 export import :Classify;
 export import :Clip;
 export import :Imprint;

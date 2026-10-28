@@ -10,6 +10,7 @@ stereon_add_library(boolean
         Assemble.cppm
         Bodies.cppm
         Boolean.cppm
+        Capabilities.cppm
         Classify.cppm
         Clip.cppm
         Imprint.cppm

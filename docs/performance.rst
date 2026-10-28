@@ -21,6 +21,25 @@ check that values and derivatives agree with OCCT to a relative
 :math:`10^{-13}`, and projections are never farther than OCCT's; the arc
 lengths below agree to :math:`2 \cdot 10^{-14}` relative.
 
+What is claimed
+---------------
+
+A ratio against OCCT is a claim about one benchmark row, at its tolerance,
+on its machine, and nothing wider. In particular:
+
+- Stereon is not claimed to be faster than OCCT in general. Rows at a few
+  percent from 1 are parity (``docs/planning/v0.1-acceptance-ledger.md``),
+  and a row below 1 stays in the report.
+- A speed-up of a Stereon path over another Stereon path (the batch and
+  grid evaluators over ``Eval`` in a loop, eight threads over the serial
+  scheduler) is not a ratio against OCCT.
+- A row whose two sides do different work is labelled so and is never
+  quoted as a speed-up: an approximation whose budgets differ, or a
+  topology query whose OCCT side builds an ancestor map that an application
+  would keep.
+- Booleans (B4.1–B4.6) are not measured against OCCT yet, and nothing
+  here says how they will compare.
+
 Method
 ------
 
@@ -811,6 +830,9 @@ These are a development machine's figures, not the measurement of record:
 ADR-0007 asks for at least 3x on the 4 cores of the OCCT reference
 workflow's runner, on a body of more than 1 000 faces, measured as that
 workflow measures.
+
+These speed-ups compare Stereon with itself. How fast Stereon's Boolean is
+next to OCCT's ``BRepAlgoAPI`` is benchmark B4.1–B4.3, which has not run.
 
 Reproducing the numbers
 -----------------------
