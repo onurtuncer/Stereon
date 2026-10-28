@@ -161,6 +161,18 @@ set_tests_properties("docs: the figure data generator runs"
     PROPERTIES PASS_REGULAR_EXPRESSION "\"surface\":")
 
 # Differential tests against OpenCASCADE (ADR-0015's independent referee).
+# CppAD, the AD backend (ADR-0045), is EPL-2.0: like OCCT it is linked into
+# this test executable only, never into a library (ADR-0008).
+if(STEREON_WITH_CPPAD)
+    add_executable(stereon_cppad_tests ad/CppADTests.cpp)
+    target_link_libraries(stereon_cppad_tests
+        PRIVATE stereon::surface stereon::cppad stereon_options Catch2::Catch2WithMain
+                stereon_rapidcheck_catch)
+    target_include_directories(stereon_cppad_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/support")
+    stereon_anchor_contracts(stereon_cppad_tests)
+    catch_discover_tests(stereon_cppad_tests TEST_PREFIX "ad: " DISCOVERY_MODE PRE_TEST)
+endif()
+
 # OCCT is LGPL-2.1: it is linked into this test executable only, which is
 # built on request and never distributed, and no Stereon library depends on
 # it (ADR-0008). tools/occt/build_occt.sh builds the pinned version; pass its

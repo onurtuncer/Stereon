@@ -25,6 +25,9 @@ libraries. This script checks three things:
    under viewer/ (ADR-0035), and nothing under src/ includes their headers,
    an OpenGL header or anything of viewer/ (ADR-0034: the kernel stays
    headless).
+5. A copyleft dependency admitted as an optional adapter (ADR-0008), today
+   the AD backend CppAD under EPL-2.0 (ADR-0045), is linked only by test
+   executables, and nothing under src/ includes its headers.
 
 Usage: check_dependencies.py [--root <repo>] [--deps-dir <build>/_deps] | --self-test
 """
@@ -55,6 +58,17 @@ ALLOWED = {
 }
 
 # Licence files a dependency may ship, most specific first.
+# Copyleft licences ADR-0008 admits only for optional, separately built
+# adapters, with the text their licence file must contain.
+ADAPTER_ONLY = {
+    "EPL-2.0 OR GPL-2.0-or-later": "Eclipse Public License",
+}
+# The adapter targets and where they may be named: test executables and the
+# file that declares them.
+ADAPTER_TARGETS = re.compile(r"(?<![\w-])(stereon_cppad|stereon::cppad)(?![\w-])")
+ADAPTER_ALLOWED = ("tests/", DEPENDENCY_FILE.as_posix())
+ADAPTER_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]cppad/', re.MULTILINE)
+
 LICENCE_FILES = ("LICENSE", "LICENSE.txt", "LICENSE.md", "LICENCE", "COPYING", "LICENSE_1_0.txt")
 
 # Where OpenCASCADE may be found: test and benchmark executables only.
@@ -98,7 +112,7 @@ def check_declarations(text: str) -> list[str]:
     for name, licence, line in declarations(text):
         if licence is None:
             problems.append(f"{DEPENDENCY_FILE.as_posix()}:{line}: {name} has no '# {MARKER} <SPDX>' line")
-        elif licence not in ALLOWED:
+        elif licence not in ALLOWED and licence not in ADAPTER_ONLY:
             problems.append(f"{DEPENDENCY_FILE.as_posix()}:{line}: {name} is under '{licence}', which is "
                             "not on ADR-0008's allow-list")
     return problems
@@ -117,12 +131,13 @@ def check_fetched(text: str, deps_dir: Path) -> list[str]:
     problems = []
     for name, licence, _ in declarations(text):
         source = deps_dir / f"{name.lower()}-src"
-        if licence not in ALLOWED or not source.is_dir():
+        expected = ALLOWED.get(licence) or ADAPTER_ONLY.get(licence)
+        if expected is None or not source.is_dir():
             continue  # undeclared ones are reported already; unfetched ones are optional
         found = licence_text(source)
         if found is None:
             problems.append(f"{name}: no licence file in {source}")
-        elif ALLOWED[licence].lower() not in " ".join(found.split()).lower():
+        elif expected.lower() not in " ".join(found.split()).lower():
             problems.append(f"{name}: the licence file in {source} does not read as {licence}")
     return problems
 
@@ -167,6 +182,44 @@ def check_viewer_boundary(root: Path) -> list[str]:
     return problems
 
 
+def check_adapter_boundary(root: Path) -> list[str]:
+    """Copyleft adapters stay out of the libraries (ADR-0008, ADR-0045)."""
+    problems = []
+    for path in cmake_files(root):
+        relative = path.relative_to(root).as_posix()
+        if relative.startswith(ADAPTER_ALLOWED):
+            continue
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if ADAPTER_TARGETS.search(line.split("#", 1)[0]):
+                problems.append(f"{relative}:{number}: links a copyleft adapter outside the test "
+                                "executables (ADR-0008)")
+    for path in sorted((root / "src").rglob("*")):
+        if path.suffix in SOURCE_SUFFIXES and path.is_file():
+            text = path.read_text(encoding="utf-8")
+            for match in ADAPTER_INCLUDE.finditer(text):
+                number = text.count("\n", 0, match.start()) + 1
+                problems.append(f"{path.relative_to(root).as_posix()}:{number}: includes CppAD, "
+                                "a copyleft adapter, in a library (ADR-0008, ADR-0045)")
+    return problems
+
+
+def self_test_adapter_boundary() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / "tests").mkdir()
+        (root / "src/curve").mkdir(parents=True)
+        (root / "tests/CMakeLists.txt").write_text(
+            "target_link_libraries(t PRIVATE stereon::cppad)\n", encoding="utf-8")
+        (root / "src/curve/CMakeLists.txt").write_text("# stereon::cppad\n", encoding="utf-8")
+        (root / "src/curve/A.cpp").write_text("#include <vector>\n", encoding="utf-8")
+        assert check_adapter_boundary(root) == [], check_adapter_boundary(root)
+        (root / "src/curve/CMakeLists.txt").write_text(
+            "target_link_libraries(c PRIVATE stereon_cppad)\n", encoding="utf-8")
+        (root / "src/curve/A.cpp").write_text("#include <cppad/cppad.hpp>\n", encoding="utf-8")
+        problems = check_adapter_boundary(root)
+        assert len(problems) == 2, problems
+
+
 def self_test_viewer_boundary() -> None:
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
@@ -190,6 +243,9 @@ def self_test_viewer_boundary() -> None:
 
 def self_test() -> int:
     self_test_viewer_boundary()
+    self_test_adapter_boundary()
+    adapter = "# Dependency licence: EPL-2.0 OR GPL-2.0-or-later\nFetchContent_Declare(cppad)\n"
+    assert check_declarations(adapter) == [], check_declarations(adapter)
     good = ("# Dependency licence: MIT\nFetchContent_Declare(alpha\n    GIT_TAG v1)\n"
             "# Something else\n# Dependency licence: Apache-2.0 WITH LLVM-exception\n"
             "set(X ON)\nFetchContent_Declare(beta\n    GIT_TAG v2)\n")
@@ -227,7 +283,8 @@ def main() -> int:
     if args.self_test:
         return self_test()
     text = (args.root / DEPENDENCY_FILE).read_text(encoding="utf-8")
-    problems = check_declarations(text) + check_occt(args.root) + check_viewer_boundary(args.root)
+    problems = (check_declarations(text) + check_occt(args.root) + check_viewer_boundary(args.root)
+                + check_adapter_boundary(args.root))
     if args.deps_dir:
         problems += check_fetched(text, args.deps_dir)
     for problem in problems:
