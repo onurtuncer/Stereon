@@ -60,7 +60,7 @@ NOT_OPERATIONS: dict[str, str] = {
     # Evaluators and differential properties.
     **dict.fromkeys(
         (
-            "Eval", "EvalAll", "EvalGrid", "Deriv", "Derivatives", "TotalDerivatives", "Curvature", "UnitTangent",
+            "EvalAll", "EvalGrid", "Deriv", "Derivatives", "TotalDerivatives", "Curvature", "UnitTangent",
             "FundamentalForms", "GaussianCurvature", "MeanCurvature", "PrincipalCurvatures",
             "UnitNormal", "ImplicitResidual", "RadialTurned", "Mapped",
         ),
@@ -91,6 +91,10 @@ NOT_OPERATIONS: dict[str, str] = {
             "StoredEdgeUseSense", "SurfaceOf", "ToleranceOf", "HasCachedCurve",
         ),
         _ACCESSOR,
+    ),
+    **dict.fromkeys(
+        ("EvalJvp", "EvalVjp"),
+        "a derivative product of Eval, declared with Eval's capability (ADR-0021, section 7)",
     ),
     "Describe": "a diagnostic text of a shape",
     "ToString": "the name of an enumerator",
