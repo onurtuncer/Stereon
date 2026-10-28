@@ -26,6 +26,7 @@ export import :Fitting;
 export import :Hyperbola;
 export import :Interchange;
 export import :Line;
+export import :PoleSensitivity;
 export import :Properties;
 export import :Trimmed;
 export import :Visit;

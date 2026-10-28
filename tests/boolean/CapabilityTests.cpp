@@ -7,6 +7,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
 #include <cstdlib>
 #include <set>
 #include <span>
@@ -76,15 +77,29 @@ TEST_CASE("every declaration states its dependencies and assumptions", "[boolean
     }
 }
 
-TEST_CASE("no operation implements a product yet, so each answers NotSupported",
+TEST_CASE("only the curve's Eval implements products; the rest answer NotSupported",
           "[boolean][sensitivity]")
 {
-    // The foundation stage declares and computes nothing: an evaluation asked
-    // of any operation is NotSupported and carries no values, never a zero.
-    // The first derivative slice changes this test deliberately.
+    // The first derivative slice (ADR-0021, stage 2): Eval of a B-spline
+    // curve has JVP and VJP. An evaluation asked of any other operation is
+    // NotSupported and carries no values, never a zero. A new slice changes
+    // this test deliberately.
+    const OperationCapability& eval = Declared(Stereon::CurveCapabilities(), "Eval");
+    REQUIRE(eval.Supports(DerivativeProduct::Jvp));
+    REQUIRE(eval.Supports(DerivativeProduct::Vjp));
+    REQUIRE_FALSE(eval.Supports(DerivativeProduct::DenseJacobian));
+    std::size_t implemented = 0;
     for (const OperationCapability& capability : Stereon::KernelCapabilities()) {
         INFO(capability.Operation);
-        REQUIRE(capability.Products.IsEmpty());
+        if (!capability.Products.IsEmpty()) {
+            // KernelCapabilities copies the declarations: the curve's Eval is
+            // the one whose products and correspondence are eval's.
+            REQUIRE(capability.Operation == eval.Operation);
+            REQUIRE(capability.Products == eval.Products);
+            REQUIRE(capability.Correspondence == eval.Correspondence);
+            ++implemented;
+            continue;
+        }
         for (const DerivativeProduct product : Products) {
             REQUIRE_FALSE(capability.Supports(product));
             const auto result = Stereon::SensitivityResult::NotSupported(capability, product);
@@ -93,6 +108,7 @@ TEST_CASE("no operation implements a product yet, so each answers NotSupported",
             REQUIRE(result.GetReason().find(capability.Operation) != std::string_view::npos);
         }
     }
+    REQUIRE(implemented == 1);
 }
 
 TEST_CASE("operations on points declare how their samples correspond", "[boolean][sensitivity]")

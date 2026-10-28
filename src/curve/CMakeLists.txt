@@ -22,6 +22,7 @@ stereon_add_library(curve
         Hyperbola.cppm
         Interchange.cppm
         Line.cppm
+        PoleSensitivity.cppm
         Properties.cppm
         Trimmed.cppm
         Visit.cppm
@@ -35,6 +36,7 @@ stereon_add_library(curve
         Fitting.cpp
         Interchange.cpp
         PeriodicFitting.cpp
+        PoleSensitivity.cpp
         Properties.cpp
         Trimmed.cpp
     DEPENDS
