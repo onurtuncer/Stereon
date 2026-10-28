@@ -14,9 +14,9 @@
 
 **A modern C++26 boundary-representation (B-rep) geometric modeling kernel.**
 
-Stereon is an open-source solid modeling kernel: NURBS and analytic geometry, B-rep topology, robust Boolean operations, STEP data exchange and watertight meshing for analysis. It is built from scratch on C++26 with value semantics, type-erased geometry and thread safety by construction.
+Stereon is an open-source solid modeling kernel: NURBS and analytic geometry, B-rep topology, robust Boolean operations, STEP data exchange, watertight meshing for analysis and certified queries for machining. It is built from scratch on C++26 with value semantics, type-erased geometry and thread safety by construction.
 
-> **Status: pre-alpha, version 0.0.3.** Stereon is finishing Phase 0 (foundations), and the v0.1 geometry gates are implemented. APIs change without notice, and nothing here is ready for production use. See the [roadmap](#roadmap) for what exists today and what comes next.
+> **Status: pre-alpha, version 0.0.4.** Stereon is finishing Phase 0 (foundations), and the v0.1 geometry gates are implemented. APIs change without notice, and nothing here is ready for production use. See the [roadmap](#roadmap) for what exists today and what comes next.
 
 ---
 
@@ -40,6 +40,7 @@ Mature kernels such as OpenCASCADE carry decades of design history: reference-co
 - **A modern, embeddable API.** Value types, no global state, `std::expected` error handling, C++20 modules, and Python bindings.
 - **Parallel and deterministic.** Operations run on a `std::execution` task graph and give bit-identical results regardless of thread count.
 - **Built for engineering analysis.** Watertight surface meshes for CFD/FEA, and (planned) shape sensitivities for design optimisation.
+- **Built for machining (planned).** B-rep to tri-dexel conversion for in-process stock, ray, distance, contact and clearance queries, and tool offsets, each with certified error bounds and explicit unresolved cases ([ADR-0044](docs/adr/0044-brep-to-tri-dexel-conversion.md)). Toolpath strategy and postprocessing stay in applications.
 
 Out of scope for v1.0: parametric feature history, sheet metal, drafting, variable-radius blends.
 
@@ -142,20 +143,20 @@ Each phase ends with an exit gate checked in CI. The [detailed roadmap and versi
 | Phase 0 / 0.0.x | Foundations (M1): build/CI, math, predicates, type erasure, controlled-edit prototype, debug viewer, diagnostics and minimal persistence prototype | 🚧 Exit gate nearly met |
 | v0.1 "Geometry" | Analytic/NURBS evaluation, fitting and projection; geometry persistence and numerical-domain checks (M1/M4) | 🚧 Implemented, awaiting the Phase 0 gate |
 | v0.2 "Intersections" | Curve/curve, curve/surface and surface/surface services; explicit tangency, overlap, coincidence and unresolved outcomes (M2/M4) | Planned |
-| v0.3 "Solids" | Planar construction, sectioning and imprinting (M2); curved/trimmed construction, primitives, extrude/revolve/sweep/loft, sewing, history and native persistence (M4/M6) | Planned |
+| v0.3 "Solids" | Planar construction, sectioning and imprinting (M2); curved/trimmed construction, primitives, extrude/revolve/sweep/loft, sewing, history and native persistence (M4/M6); certified discretisation, ray–face queries and tri-dexel conversion of analytic solids (M7) | Planned |
 | v0.4 "Planar Booleans" | Validated union/cut/common on the declared planar/polyhedral subset, with lineage and tags (M3) | Planned |
-| v0.5 "Curved Booleans" | Bounded analytic/trimmed-spline Boolean integration; seams, poles, tangencies and certificates (M4) | Planned |
+| v0.5 "Curved Booleans" | Bounded analytic/trimmed-spline Boolean integration; seams, poles, tangencies and certificates (M4); tri-dexel conversion and closest-point queries on trimmed B-spline faces (M7) | Planned |
 | v0.6 "Booleans" | Broad declared real-part corpus, robustness, comparison, tolerance-growth and determinism gates (M3/M4) | Planned |
-| v0.7 "Meshing" | Derived display/analysis meshes, tagged engineering workflows, native migrations and usable Python operation calls (M4/M6) | Planned |
+| v0.7 "Meshing" | Derived display/analysis meshes, tagged engineering workflows, native migrations and usable Python operation calls (M4/M6); tri-dexel fields with interval operations, tool-contact and clearance queries, B5.7 gate of ≥ 3× OCCT (M7) | Planned |
 | v0.8 "Exchange" | STEP AP242 with healing, derived watertight meshes, native migrations and usable Python/tagged engineering workflows (M4/M6) | Planned |
-| v0.9 "Finishing" | Bounded fillets, chamfers, shelling/thickening and shape sensitivities; history/tag integration (M5/M6) | Planned |
-| v1.0 "Stable kernel" | Stable public API, compatibility policy and supported-domain release qualification across M1–M6 | Planned |
+| v0.9 "Finishing" | Bounded fillets, chamfers, shelling/thickening and shape sensitivities; history/tag integration (M5/M6); offset surfaces for tool-centre geometry (M7) | Planned |
+| v1.0 "Stable kernel" | Stable public API, compatibility policy and supported-domain release qualification across M1–M7 | Planned |
 
-**Where things stand (0.0.3).** Phase 0's exit gate has two lines left: accepting [ADR-0007](docs/adr/0007-threading-and-determinism.md), whose verification landed with the Boolean prototype's M10, and the OCCT differential tests of the prototype's Booleans (M11). Every blocking CI job is green on Linux, Windows and macOS. The Boolean prototype (union, cut and common of boxes and cylinders, analytic intersections with interval certificates, classification by rays and a bounded winding number, operation history) runs through M10.
+**Where things stand (0.0.4).** Phase 0's exit gate has two lines left: accepting [ADR-0007](docs/adr/0007-threading-and-determinism.md), whose verification landed with the Boolean prototype's M10, and the OCCT differential tests of the prototype's Booleans (M11). Every blocking CI job is green on Linux, Windows and macOS. The Boolean prototype (union, cut and common of boxes and cylinders, analytic intersections with interval certificates, classification by rays and a bounded winding number, operation history) runs through M10.
 
-For v0.1, every gate in the [acceptance ledger](docs/planning/v0.1-acceptance-ledger.md) has its implementation: analytic and NURBS evaluation with derivatives, global projection, exact NURBS conversion, curve and surface fitting, trimmed curves and surfaces, extrusion and revolution surfaces, and `.stn` persistence of the geometry with its numerical policy. The B-spline operations OCCT users expect are also in: knot insertion and removal, degree elevation, clamping, periodic form, concatenation, continuity queries, and SIMD batch and grid evaluation that return the point evaluator's results bit for bit. Every benchmarked row is at or above parity with OCCT on the reference run; the newest rows (batch, grid and degree elevation) wait for their first reference run. The v0.1 tag follows the Phase 0 gate, together with the release report the roadmap requires.
+For v0.1, every gate in the [acceptance ledger](docs/planning/v0.1-acceptance-ledger.md) has its implementation: analytic and NURBS evaluation with derivatives, global projection, exact NURBS conversion, curve and surface fitting, trimmed curves and surfaces, extrusion and revolution surfaces, and `.stn` persistence of the geometry with its numerical policy. The B-spline operations OCCT users expect are also in: knot insertion and removal, degree elevation, clamping, periodic form, concatenation, continuity queries, and SIMD batch and grid evaluation that return the point evaluator's results bit for bit. The first derivative products are in too: forward and reverse products (JVP, VJP) of B-spline curve points with respect to poles and weights (ADR-0021, stage 2), and every public operation of the curve, surface, intersection, topology, construction and Boolean libraries declares its derivative capability. Every benchmarked row is at or above parity with OCCT on the reference run; the newest rows (batch, grid and degree elevation) wait for their first reference run. The v0.1 tag follows the Phase 0 gate, together with the release report the roadmap requires.
 
-v0.2 carries the Phase 2 intersection gate. Phases 4–6 span several minor releases; phase numbers are not product version numbers. Milestones M1–M6 are dependency checkpoints, while the [capability matrix's R0–R5](docs/planning/stereon-capability-matrix.md) track broader long-term coverage. Drafting, variable-radius blends and full parametric history remain post-v1.0. Product, native-format and C ABI versions are separate; a planning change does not bump the current kernel version.
+v0.2 carries the Phase 2 intersection gate. Phases 4–6 span several minor releases; phase numbers are not product version numbers. Milestones M1–M7 are dependency checkpoints (M7, machining services, is Stereon's own; M1–M6 follow Stroud), while the [capability matrix's R0–R5](docs/planning/stereon-capability-matrix.md) track broader long-term coverage. Drafting, variable-radius blends and full parametric history remain post-v1.0. Product, native-format and C ABI versions are separate; a planning change does not bump the current kernel version.
 
 ## Testing philosophy
 

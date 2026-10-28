@@ -85,6 +85,7 @@ Stereon is measured against OpenCASCADE (OCCT) on **speed, memory and robustness
 | B5.4 | STEP export | `STEPControl_Writer` | MB/s; round-trip fidelity | ≥ parity |
 | B5.5 | Healing | `ShapeFix_Shape`, `ShapeUpgrade` | % repaired; tolerance after repair | ≥ parity |
 | B5.6 | Minimum distance between shapes | `BRepExtrema_DistShapeShape` | time; error | ≥ parity |
+| B5.7 | B-rep to tri-dexel conversion (ADR-0044) on identical grids | `IntCurvesFace_ShapeIntersector` per ray; `BRepMesh` + ray casting for information | rays/s at 1 and 8 threads; peak memory; endpoint error; unresolved and silently wrong rays | ≥ 3× at 8 threads at equal endpoint accuracy, 0 silently wrong |
 
 ### Phase 6 — blends and advanced modelling
 

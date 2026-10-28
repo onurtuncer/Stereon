@@ -14,7 +14,7 @@ correspondence and validity assumptions (enforced by a registration check in
 tests)". This is that check.
 
 It reads the public interface of the geometry and topology libraries
-(src/curve, src/surface, src/intersect, src/topo, src/build): every function declared
+(src/curve, src/surface, src/intersect, src/topo, src/build, src/boolean): every function declared
 at namespace scope in an `export namespace Stereon { ... }` block of a module
 interface unit. Each function name must be either
 
@@ -45,7 +45,7 @@ import re
 import sys
 from pathlib import Path
 
-LIBRARIES = ("curve", "surface", "intersect", "topo", "build")
+LIBRARIES = ("curve", "surface", "intersect", "topo", "build", "boolean")
 
 _EVALUATOR = "an evaluator of existing geometry: it makes nothing, and its derivative is the geometry's own"
 _QUERY = "a query of existing geometry or of its representation"
@@ -60,7 +60,7 @@ NOT_OPERATIONS: dict[str, str] = {
     # Evaluators and differential properties.
     **dict.fromkeys(
         (
-            "Eval", "EvalAll", "EvalGrid", "Deriv", "Derivatives", "TotalDerivatives", "Curvature", "UnitTangent",
+            "EvalAll", "EvalGrid", "Deriv", "Derivatives", "TotalDerivatives", "Curvature", "UnitTangent",
             "FundamentalForms", "GaussianCurvature", "MeanCurvature", "PrincipalCurvatures",
             "UnitNormal", "ImplicitResidual", "RadialTurned", "Mapped",
         ),
@@ -92,14 +92,22 @@ NOT_OPERATIONS: dict[str, str] = {
         ),
         _ACCESSOR,
     ),
+    **dict.fromkeys(
+        ("EvalJvp", "EvalVjp"),
+        "a derivative product of Eval, declared with Eval's capability (ADR-0021, section 7)",
+    ),
     "Describe": "a diagnostic text of a shape",
     "ToString": "the name of an enumerator",
     "ValidateTopology": "a validator: it reports on a shape and makes nothing (ADR-0018)",
+    **dict.fromkeys(
+        ("Classify", "FaceContains", "WindingNumberOf"),
+        "a classification: a discrete answer about existing geometry, with no derivative (ADR-0021, section 2)",
+    ),
     "RuleId": "the identifier of a validation rule",
     "RuleName": "the name of a validation rule",
     **dict.fromkeys(
         ("CurveCapabilities", "SurfaceCapabilities", "IntersectCapabilities", "TopoCapabilities",
-         "KernelCapabilities", "BuildCapabilities"),
+         "KernelCapabilities", "BuildCapabilities", "BooleanCapabilities"),
         _CATALOGUE,
     ),
 }

@@ -30,8 +30,8 @@ inline constexpr OperationCapability BuildCatalogue[] = {
             "angle 0 and the radius and height stay positive"),
 };
 
-/// The construction library's declarations. KernelCapabilities() collects
-/// the libraries below it; this one sits above topology.
+/// The construction library's declarations. KernelCapabilities(), in
+/// Stereon.Boolean, collects them with every other library's.
 [[nodiscard]] inline std::span<const OperationCapability> BuildCapabilities() noexcept
 {
     return BuildCatalogue;

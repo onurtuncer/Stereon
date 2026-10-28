@@ -100,5 +100,7 @@ optional adapter under ADR-0008.
    derivative `k × R(x − c)` in the angle and the identity in the offset.
 6. The Jacobian of a rational B-spline surface point in its poles is the
    tensor-product basis `N_i M_j w_ij / W`.
-7. `tools/check_dependencies.py` fails when a library links or includes
+7. The kernel's own `EvalJvp` and `EvalVjp` equal CppAD's forward and
+   reverse modes on the same curves, seeds and adjoints, to 1e-11 relative.
+8. `tools/check_dependencies.py` fails when a library links or includes
    CppAD, and when the fetched licence is not the declared one.

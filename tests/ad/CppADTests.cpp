@@ -17,6 +17,8 @@
 #include <cstddef>
 #include <numbers>
 #include <span>
+#include <string>
+#include <utility>
 #include <vector>
 
 import Stereon.Curve;
@@ -217,6 +219,67 @@ TEST_CASE("CppAD's forward and reverse modes agree with forward-mode duals",
             right += reverse[i] * seed[i];
         }
         RC_ASSERT(std::abs(left - right) <= 1e-12 * (1.0 + scale));
+    });
+}
+
+TEST_CASE("the kernel's EvalJvp and EvalVjp equal CppAD's forward and reverse modes",
+          "[ad][cppad][property]")
+{
+    // One design parameter per variable of the tape, reference 1: parameter
+    // 3i + c moves coordinate c of pole i, parameter 3n + i its weight.
+    rc::prop("for random curves, seeds and adjoints", [] {
+        const BSplineCurve c = RandomCurve(*rc::gen::arbitrary<bool>());
+        const std::vector<double> t = RandomParameters(c);
+        CppAD::ADFun<double> f = TapeCurve(c, t);
+        const std::size_t n = c.Poles.size();
+        Stereon::ParameterSet parameters;
+        std::vector<Stereon::PoleBinding> bindings;
+        constexpr Stereon::PoleComponent Coordinates[] = {
+            Stereon::PoleComponent::X, Stereon::PoleComponent::Y, Stereon::PoleComponent::Z};
+        for (std::size_t i = 0; i < n; ++i) {
+            for (std::size_t d = 0; d < 3; ++d) {
+                const auto id = parameters.Add("p" + std::to_string(3 * i + d),
+                                               Stereon::ParameterQuantity::Length);
+                RC_ASSERT(id.has_value());
+                bindings.push_back({*id, i, Coordinates[d]});
+            }
+        }
+        for (std::size_t i = 0; i < n; ++i) {
+            const auto id =
+                parameters.Add("w" + std::to_string(i), Stereon::ParameterQuantity::Dimensionless);
+            RC_ASSERT(id.has_value());
+            bindings.push_back({*id, i, Stereon::PoleComponent::Weight});
+        }
+        std::vector<double> seed(4 * n);
+        for (double& s : seed) {
+            s = *rc::gen::inRange(-100, 101) / 50.0;
+        }
+        std::vector<double> adjoint(3 * t.size());
+        for (double& a : adjoint) {
+            a = *rc::gen::inRange(-100, 101) / 50.0;
+        }
+        Stereon::SensitivityContext sensitivity(std::move(parameters));
+        RC_ASSERT(sensitivity.SetSeed(seed).has_value());
+        RC_ASSERT(sensitivity.SetAdjoint(adjoint).has_value());
+
+        (void)f.Forward(0, VariablesOf(c));
+        const std::vector<double> forward = f.Forward(1, seed);
+        const auto jvp = Stereon::EvalJvp(c, bindings, t, sensitivity);
+        RC_ASSERT(jvp.has_value());
+        const auto kernelForward = *jvp->GetValues();
+        RC_ASSERT(kernelForward.size() == forward.size());
+        for (std::size_t i = 0; i < forward.size(); ++i) {
+            RC_ASSERT(Near(kernelForward[i], forward[i], 1e-11));
+        }
+
+        const std::vector<double> reverse = f.Reverse(1, adjoint);
+        const auto vjp = Stereon::EvalVjp(c, bindings, t, sensitivity);
+        RC_ASSERT(vjp.has_value());
+        const auto kernelReverse = *vjp->GetValues();
+        RC_ASSERT(kernelReverse.size() == reverse.size());
+        for (std::size_t i = 0; i < reverse.size(); ++i) {
+            RC_ASSERT(Near(kernelReverse[i], reverse[i], 1e-11));
+        }
     });
 }
 

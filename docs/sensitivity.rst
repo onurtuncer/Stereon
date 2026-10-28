@@ -8,10 +8,11 @@
 Shape sensitivities
 ===================
 
-The types derivatives of shapes will be expressed in (ADR-0021, stage 1).
-No operation computes a derivative yet: every one declares what a derivative
-would depend on and answers ``NotSupported``, never a silent zero. Names are
-provisional until the first derivative slice.
+The types derivatives of shapes are expressed in (ADR-0021, stage 1), and
+the first products (stage 2): forward and reverse products of a B-spline
+curve's points in its poles and weights. Every other operation declares what
+a derivative would depend on and answers ``NotSupported``, never a silent
+zero.
 
 Parameters
 ----------
@@ -72,8 +73,9 @@ the conventions its samples may be tracked by, the assumptions under which a
 derivative would be valid, and the products it implements (JVP, VJP, dense
 Jacobian; none yet). Each library keeps a catalogue in its ``Capabilities``
 partition: ``CurveCapabilities()``, ``SurfaceCapabilities()``,
-``IntersectCapabilities()`` and ``TopoCapabilities()``, and
-``KernelCapabilities()`` returns them together.
+``IntersectCapabilities()``, ``TopoCapabilities()``, ``BuildCapabilities()``
+and ``BooleanCapabilities()``. ``KernelCapabilities()``, in
+``Stereon.Boolean``, the library above all the others, returns them together.
 
 .. code-block:: cpp
 
@@ -82,10 +84,11 @@ partition: ``CurveCapabilities()``, ``SurfaceCapabilities()``,
    // answer is SensitivityResult::NotSupported(*project, DerivativeProduct::Jvp).
 
 ``tools/check_capabilities.py`` enforces the rule. It reads every function
-exported from ``src/curve``, ``src/surface``, ``src/intersect`` and
-``src/topo`` and fails when one is neither declared in its library's
-catalogue nor listed in the script's ``NOT_OPERATIONS`` with a reason (an
-evaluator, a query, an accessor, a validator); it also fails on declarations
+exported from ``src/curve``, ``src/surface``, ``src/intersect``,
+``src/topo``, ``src/build`` and ``src/boolean`` and fails when one is
+neither declared in its library's catalogue nor listed in the script's
+``NOT_OPERATIONS`` with a reason (an evaluator, a query, an accessor, a
+validator, a classification); it also fails on declarations
 of functions that no longer exist. It runs in the lint workflow and in CTest.
 
 Correspondence
@@ -107,6 +110,50 @@ the seed of a forward product, the adjoint of a reverse one and solver
 workspace. The caller owns it; it is separate from ``Context`` and never
 stored in a ``Shape``. It cannot be copied, so two contexts share no mutable
 state and evaluations in separate contexts can run concurrently.
+
+Products of B-spline curve evaluation
+-------------------------------------
+
+``EvalJvp`` and ``EvalVjp`` differentiate the points ``Eval`` gives a
+``BSplineCurve`` at fixed parameters with respect to design parameters bound
+to its poles and weights. A ``PoleBinding`` binds a parameter to one
+coordinate of one pole (a ``Length``) or to its weight (``Dimensionless``).
+A parameter may move several components, as a translation moves every pole,
+and a component may be moved by several parameters; contributions add. The
+knots, the degree and the pole count are structural and stay fixed, so the
+map is smooth wherever the weights stay positive and every evaluation is
+``Valid``. A weight bound on a polynomial curve is a weight of 1 that may
+move.
+
+With basis functions :math:`N_i`, :math:`W = \sum_j N_j w_j` and
+:math:`R_i = N_i w_i / W`, the point at :math:`t` moves with a coordinate of
+pole :math:`i` by :math:`R_i(t)` and with its weight by
+:math:`N_i(t) (P_i - C(t)) / W(t)`, each times the parameter's reference.
+
+- ``EvalJvp`` takes the context's seed and returns three values per point
+  (x, y, z), in the order of the parameters given.
+- ``EvalVjp`` takes the context's adjoint, three components per point under
+  the Euclidean pairing, and returns one value per parameter of the set, in
+  its order, accumulated point by point in order (ADR-0007).
+- Both return the same signature, a digest of the degree, pole count,
+  rationality and knots, so two results with different signatures were not
+  computed in one regime.
+
+.. code-block:: cpp
+
+   Stereon::ParameterSet parameters;
+   const auto lift = *parameters.Add("lift", Stereon::ParameterQuantity::Length);
+   const std::vector<Stereon::PoleBinding> bindings{{lift, 2, Stereon::PoleComponent::Z},
+                                                    {lift, 3, Stereon::PoleComponent::Z}};
+   Stereon::SensitivityContext sensitivity(std::move(parameters));
+   (void)sensitivity.SetSeed(std::vector<double>{1.0});
+   const auto velocity = Stereon::EvalJvp(curve, bindings, samples, sensitivity);
+
+The tests compare ``EvalJvp`` with forward-mode dual numbers pushed through
+the scalar-generic ``Eval``, an independent derivative, and check that
+``EvalVjp`` is its transpose. Products of other curve types, of surfaces and
+of batch and grid evaluation are not implemented yet; they answer
+``NotSupported``.
 
 The AD backend: CppAD
 ---------------------
@@ -132,6 +179,6 @@ library links or includes it, and ``tools/check_dependencies.py`` enforces
 that. Configuring with ``-DSTEREON_WITH_CPPAD=ON`` fetches the pinned release
 and builds ``stereon_cppad_tests`` (``tests/ad/CppADTests.cpp``), which checks
 CppAD's Jacobians of curve and surface points and of a composed rigid motion
-against closed forms and against forward-mode duals. An application that
+against closed forms and against forward-mode duals, and checks that
+``EvalJvp`` and ``EvalVjp`` equal CppAD's forward and reverse modes. An application that
 tapes Stereon's evaluators links CppAD itself, under CppAD's licence.
-

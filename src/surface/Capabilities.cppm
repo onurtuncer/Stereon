@@ -20,6 +20,10 @@ import Stereon.Curve;
 export namespace Stereon {
 
 inline constexpr OperationCapability SurfaceCatalogue[] = {
+    // Evaluation, which the curve library differentiates for B-splines; the
+    // surface products are not implemented yet.
+    Declare("Eval", {Dependency::DefiningValues}, {TrackingConvention::FixedSurfaceCoordinates},
+            "at fixed (u, v), knots, degrees and pole counts, smooth in the defining values"),
     // Construction from defining values.
     Declare("MakePlane", {Dependency::DefiningValues},
             {TrackingConvention::FixedSurfaceCoordinates},
