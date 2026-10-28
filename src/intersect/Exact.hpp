@@ -15,14 +15,58 @@
 // round-off, evaluation order or thread count.
 //
 // Included in the purview of the handlers' implementation units, after
-// `import Stereon.Robust;`, with <array> and <cstddef> in their global
-// module fragment. Everything is in an anonymous namespace, so each unit
-// gets its own copy.
+// `import Stereon.Robust;`, with <array>, <cstddef>, <memory>,
+// <type_traits> and <utility> in their global module fragment. Everything
+// is in an anonymous namespace, so each unit gets its own copy.
 
 #pragma once
 
 namespace Stereon::Detail {
 namespace {
+
+/// The deferred construction of an exact value: an immutable node holding
+/// the construction, shared by every value built from it. A quantity is
+/// built from its operands' deferred values, so with std::function, which
+/// copies what it captures, every composition deep-copied and reallocated
+/// the whole tree beneath it, even when the enclosure settled the decision
+/// and nothing was ever evaluated; sharing makes a copy a reference count.
+template <std::size_t N>
+class Deferred {
+public:
+    Deferred() = default;
+
+    template <typename F>
+        requires(!std::is_same_v<std::remove_cvref_t<F>, Deferred>)
+    Deferred(F&& construction) // NOLINT(google-explicit-constructor): built from lambdas
+        : m_Node(
+              std::make_shared<const Node<std::remove_cvref_t<F>>>(std::forward<F>(construction)))
+    {}
+
+    /// Runs the construction.
+    [[nodiscard]] Expansion<N> operator()() const { return m_Node->Value(); }
+
+private:
+    struct Base {
+        Base() = default;
+        Base(const Base&) = delete;
+        Base& operator=(const Base&) = delete;
+        Base(Base&&) = delete;
+        Base& operator=(Base&&) = delete;
+        virtual ~Base() = default;
+        [[nodiscard]] virtual Expansion<N> Value() const = 0;
+    };
+
+    template <typename F>
+    struct Node final : Base {
+        explicit Node(F construction)
+            : Construction(std::move(construction))
+        {}
+        [[nodiscard]] Expansion<N> Value() const override { return Construction(); }
+        F Construction;
+    };
+
+    std::shared_ptr<const Base> m_Node;
+};
 
 /// A scalar given exactly, with a rounded enclosure. The exact value is
 /// built only when asked for: Value() runs the deferred construction, so a
@@ -30,7 +74,7 @@ namespace {
 template <std::size_t N>
 struct ExactScalar {
     Interval Hull;
-    std::function<Expansion<N>()> Value;
+    Deferred<N> Value;
 };
 
 /// A vector given exactly, with a rounded enclosure, each component's exact
@@ -38,7 +82,7 @@ struct ExactScalar {
 template <std::size_t N>
 struct ExactVector {
     std::array<Interval, 3> Hull;
-    std::array<std::function<Expansion<N>()>, 3> Value;
+    std::array<Deferred<N>, 3> Value;
 };
 
 [[nodiscard]] inline ExactScalar<1> Exactly(const double x)
@@ -85,9 +129,9 @@ template <std::size_t N>
 
 /// One component of a cross product: a_i b_j - a_j b_i, deferred.
 template <std::size_t A, std::size_t B>
-[[nodiscard]] inline std::function<Expansion<4 * A * B>()>
-CrossComponent(const ExactVector<A>& a, const ExactVector<B>& b, const std::size_t i,
-               const std::size_t j)
+[[nodiscard]] inline Deferred<4 * A * B> CrossComponent(const ExactVector<A>& a,
+                                                        const ExactVector<B>& b,
+                                                        const std::size_t i, const std::size_t j)
 {
     return [ai = a.Value[i], aj = a.Value[j], bi = b.Value[i], bj = b.Value[j]] {
         return Difference(Product(ai(), bj()), Product(aj(), bi()));

@@ -16,7 +16,9 @@ module;
 #include <cstddef>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <optional>
+#include <type_traits>
 #include <utility>
 
 module Stereon.Intersect;
