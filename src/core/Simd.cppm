@@ -7,6 +7,8 @@
 
 module;
 
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <version>
 
@@ -29,7 +31,7 @@ export module Stereon.Core:Simd;
 ///
 /// Vec<T> holds Width<T> lanes at the native width chosen at compile time.
 /// Arithmetic (+, -, *, /) and comparisons use the operators of the underlying
-/// type. All loads and stores are unaligned.
+/// type. Loads and stores take addresses of any alignment.
 ///
 /// The std::simd branch follows the C++26 working draft but cannot be built
 /// until a standard library defines __cpp_lib_simd (none does as of GCC 16).
@@ -105,16 +107,24 @@ using Vec = xsimd::batch<T>;
 template <class T>
 inline constexpr std::size_t Width = Vec<T>::size;
 
+// Loads and stores go through an aligned buffer: xsimd's unaligned ones rest
+// on types such as __m128d_u, whose __aligned__(1) GCC 16 drops when the
+// function is instantiated in a module importer, so that an unaligned
+// address faults.
 template <class T>
 [[nodiscard]] inline Vec<T> Load(const T* source)
 {
-    return xsimd::load_unaligned(source);
+    alignas(Vec<T>) std::array<T, Width<T>> lanes;
+    std::copy_n(source, Width<T>, lanes.begin());
+    return xsimd::load_aligned(lanes.data());
 }
 
 template <class T>
 inline void Store(const Vec<T>& value, T* destination)
 {
-    value.store_unaligned(destination);
+    alignas(Vec<T>) std::array<T, Width<T>> lanes;
+    value.store_aligned(lanes.data());
+    std::copy_n(lanes.begin(), Width<T>, destination);
 }
 
 template <class T>
