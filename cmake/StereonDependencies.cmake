@@ -107,6 +107,59 @@ if(STEREON_BUILD_TESTS)
     target_link_libraries(stereon_rapidcheck_catch INTERFACE rapidcheck Catch2::Catch2)
 endif()
 
+# --- Automatic differentiation backend (ADR-0045) -----------------------------
+
+if(STEREON_WITH_CPPAD)
+    # CppAD. EPL-2.0 is copyleft, so ADR-0008 admits it only as an optional,
+    # separately built adapter: nothing under src/ includes or links it
+    # (tools/check_dependencies.py). Its own CMake build sets the install
+    # prefix and the global link flags, so it is not added to this build: the
+    # sources are fetched (SOURCE_SUBDIR points at a directory without a
+    # CMakeLists.txt), and CppAD is configured and installed into the build
+    # tree by its own CMake at configure time, which generates
+    # cppad/configure.hpp and builds cppad_lib, a small static library the
+    # headers call into (temporary files for NaN reports).
+    # Dependency licence: EPL-2.0 OR GPL-2.0-or-later
+    FetchContent_Declare(cppad
+        GIT_REPOSITORY https://github.com/coin-or/CppAD.git
+        GIT_TAG        5d51b2aa6d6874c8d561da298a90b3721550d45d # 20260000.0
+        SOURCE_SUBDIR  stereon-headers-only)
+    FetchContent_MakeAvailable(cppad)
+    set(STEREON_CPPAD_PREFIX "${CMAKE_BINARY_DIR}/_deps/cppad-install")
+    set(STEREON_CPPAD_LIBRARY
+        "${STEREON_CPPAD_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}cppad_lib${CMAKE_STATIC_LIBRARY_SUFFIX}")
+    if(NOT EXISTS "${STEREON_CPPAD_LIBRARY}")
+        message(STATUS "Configuring and installing CppAD into ${STEREON_CPPAD_PREFIX}")
+        execute_process(
+            COMMAND "${CMAKE_COMMAND}" -S "${cppad_SOURCE_DIR}"
+                    -B "${CMAKE_BINARY_DIR}/_deps/cppad-build" -G "${CMAKE_GENERATOR}"
+                    "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+                    "-DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}"
+                    -DCMAKE_BUILD_TYPE=Release
+                    "-Dcppad_prefix=${STEREON_CPPAD_PREFIX}"
+                    -Dinclude_doc=false
+                    -Dcmake_install_libdirs=lib
+                    -Dcppad_static_lib=true
+            RESULT_VARIABLE cppad_configured
+            OUTPUT_QUIET)
+        if(NOT cppad_configured EQUAL 0)
+            message(FATAL_ERROR "configuring CppAD failed (${cppad_configured})")
+        endif()
+        execute_process(
+            COMMAND "${CMAKE_COMMAND}" --build "${CMAKE_BINARY_DIR}/_deps/cppad-build"
+                    --target install
+            RESULT_VARIABLE cppad_installed
+            OUTPUT_QUIET)
+        if(NOT cppad_installed EQUAL 0)
+            message(FATAL_ERROR "installing CppAD failed (${cppad_installed})")
+        endif()
+    endif()
+    add_library(stereon_cppad INTERFACE)
+    add_library(stereon::cppad ALIAS stereon_cppad)
+    target_include_directories(stereon_cppad SYSTEM INTERFACE "${STEREON_CPPAD_PREFIX}/include")
+    target_link_libraries(stereon_cppad INTERFACE "${STEREON_CPPAD_LIBRARY}")
+endif()
+
 # --- Benchmarks --------------------------------------------------------------
 
 if(STEREON_BUILD_BENCH)

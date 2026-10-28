@@ -107,3 +107,31 @@ the seed of a forward product, the adjoint of a reverse one and solver
 workspace. The caller owns it; it is separate from ``Context`` and never
 stored in a ``Shape``. It cannot be copied, so two contexts share no mutable
 state and evaluations in separate contexts can run concurrently.
+
+The AD backend: CppAD
+---------------------
+
+CppAD is Stereon's production AD backend (ADR-0045). ``CppAD::AD<double>``
+satisfies ``Stereon::Scalar``, so the scalar-generic evaluators take it
+unchanged: poles, weights and transform parameters become active, while knots
+and parameters stay ``double``. Their branches depend on knots and parameters
+only, so a tape recorded once holds for every value of the active inputs.
+
+.. code-block:: cpp
+
+   std::vector<CppAD::AD<double>> x = /* poles, then weights */;
+   CppAD::Independent(x);
+   Stereon::BasicBSplineCurve<CppAD::AD<double>, 3> active{curve.Degree, curve.Knots, {}, {}};
+   // ... fill active.Poles and active.Weights from x ...
+   std::vector<CppAD::AD<double>> y = /* x, y, z of Eval(active, t) for each t */;
+   CppAD::ADFun<double> f(x, y);
+   const std::vector<double> jacobian = f.Jacobian(x0);
+
+CppAD is EPL-2.0, so under ADR-0008 it is an optional adapter: no kernel
+library links or includes it, and ``tools/check_dependencies.py`` enforces
+that. Configuring with ``-DSTEREON_WITH_CPPAD=ON`` fetches the pinned release
+and builds ``stereon_cppad_tests`` (``tests/ad/CppADTests.cpp``), which checks
+CppAD's Jacobians of curve and surface points and of a composed rigid motion
+against closed forms and against forward-mode duals. An application that
+tapes Stereon's evaluators links CppAD itself, under CppAD's licence.
+

@@ -89,7 +89,7 @@ int main() {
 - CMake 3.30+ and Ninja
 - Python 3.11+ (optional, for bindings and test tooling)
 
-Third-party dependencies are fetched by CMake at pinned versions (see [`cmake/StereonDependencies.cmake`](cmake/StereonDependencies.cmake)): [stdexec](https://github.com/NVIDIA/stdexec) (until the standard library ships `std::execution`) and [xsimd](https://github.com/xtensor-stack/xsimd) (until it ships `std::simd`) always; Catch2 and RapidCheck with the tests; Google Benchmark with `STEREON_BUILD_BENCH`; nanobind with `STEREON_BUILD_PYTHON`.
+Third-party dependencies are fetched by CMake at pinned versions (see [`cmake/StereonDependencies.cmake`](cmake/StereonDependencies.cmake)): [stdexec](https://github.com/NVIDIA/stdexec) (until the standard library ships `std::execution`) and [xsimd](https://github.com/xtensor-stack/xsimd) (until it ships `std::simd`) always; Catch2 and RapidCheck with the tests; Google Benchmark with `STEREON_BUILD_BENCH`; nanobind with `STEREON_BUILD_PYTHON`; [CppAD](https://github.com/coin-or/CppAD), the AD backend, with `STEREON_WITH_CPPAD` for its integration tests only (EPL-2.0, never linked into a library; [ADR-0045](docs/adr/0045-cppad-ad-backend.md)).
 
 ### Build and test
 

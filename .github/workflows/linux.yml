@@ -45,7 +45,7 @@ jobs:
           g++ --version | head -1; cmake --version | head -1; ninja --version
       - uses: actions/checkout@v7
       - name: Configure
-        run: cmake --preset ${{ matrix.preset }} -DSTEREON_WARNINGS_AS_ERRORS=ON
+        run: cmake --preset ${{ matrix.preset }} -DSTEREON_WARNINGS_AS_ERRORS=ON -DSTEREON_WITH_CPPAD=ON
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}
       - name: Test
