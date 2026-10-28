@@ -16,6 +16,7 @@ stereon_add_library(surface
         Cylinder.cppm
         Erased.cppm
         Fitting.cppm
+        GridEvaluation.cppm
         Plane.cppm
         Properties.cppm
         Sphere.cppm
@@ -30,6 +31,7 @@ stereon_add_library(surface
         Conversion.cpp
         Factories.cpp
         Fitting.cpp
+        GridEvaluation.cpp
         Surface.cpp
         Swept.cpp
         Trimmed.cpp
