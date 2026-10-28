@@ -59,3 +59,4 @@ Open questions that have to be researched before they can be decided live in [`d
 | [0041](0041-layered-validation-evidence.md) | Use layered validation with revision-bound evidence | 0 | Proposed |
 | [0042](0042-cpp26-contract-validation-responsibilities.md) | Assign C++26 contracts and kernel validation distinct responsibilities | 0 | Proposed |
 | [0043](0043-optional-performance-instrumentation.md) | Optional performance instrumentation and reproducible benchmarks | 0 | Proposed |
+| [0044](0044-brep-to-tri-dexel-conversion.md) | B-rep to tri-dexel conversion with bounded endpoints and explicit unresolved rays | 3–5 | Proposed |
