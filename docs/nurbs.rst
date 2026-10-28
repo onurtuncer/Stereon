@@ -364,13 +364,87 @@ They get there by doing the same arithmetic in fewer and wider steps.
   sum keeps ``Eval``'s order, the product :math:`N_r(u) N_s(v)` formed
   first and then weighted, which is what makes the points identical.
 
-Faster schemes exist that give up the identity: converting each span to a
-polynomial once and evaluating it by Horner's rule, as OCCT's grid
-evaluators do, costs fewer operations per point but rounds differently from
-the de Boor form. ``tests/curve/BatchEvaluationTests.cpp`` and
+Faster schemes exist that give up the identity; ``EvalAllFast`` below is
+one. ``tests/curve/BatchEvaluationTests.cpp`` and
 ``tests/surface/GridEvaluationTests.cpp`` check the identity with ``==`` on
 random curves and surfaces of degrees 1 to 7, polynomial and rational,
 clamped and not, over sorted, shuffled and degenerate parameter lists.
+
+Fast batch evaluation
+---------------------
+
+``EvalAllFast(curve, parameters, points)`` trades the identity for speed,
+as OCCT's grid evaluators do. ``ToSpanPolynomials(curve)`` converts every
+non-empty knot span :math:`[a, b]` once into a polynomial in the local
+parameter :math:`u = (t - m) / h`, with :math:`m` the span's midpoint and
+:math:`h = b - a`, so :math:`|u| \le 1/2`. Its coefficients are the
+homogeneous curve's derivatives at :math:`m`,
+
+.. math::
+
+   (w\mathbf C, w)(t) = \sum_{k=0}^{p} \mathbf c_k\, u^k, \qquad
+   \mathbf c_k = \frac{h^k}{k!}\, (w\mathbf C, w)^{(k)}(m),
+
+computed by de Boor differencing (A3.3). A point is then :math:`p`
+multiply-adds per coordinate by Horner's rule, and one division for a
+rational curve, against the :math:`O(p^2)` basis recurrence of ``Eval``.
+Parameters that share a span run in the lanes of one vector, by the same
+steps as the scalar fallback, so the result still does not depend on the
+SIMD width, the parameters' order or how they fall into spans. Degrees 1
+to 7 each get a kernel of their own, for polynomial and rational curves, so
+that the compiler unrolls Horner's loop. An expansion statement
+(``template for``, C++26) generates the kernels, and higher degrees share
+one with a run-time degree. All kernels perform the same operations, so the
+choice changes no result. A caller that
+evaluates one curve many times keeps the ``SpanPolynomials`` and calls
+``EvalAllFast(polynomials, parameters, points)``. The curve overload instead
+converts a span when a parameter first lands in it, into a buffer on the
+stack, as OCCT's evaluator rebuilds its span cache. Sorted parameters convert
+each span once. Shuffled ones may convert a span again, which costs time
+but not bits, since both overloads convert with the same function.
+
+**How close it is to Eval.** With :math:`\varepsilon = 2^{-52}` and the
+scale :math:`S = \max_i \lVert P_i \rVert \cdot \max_i w_i / \min_i w_i`
+(the weight ratio is 1 for a polynomial curve), the tests hold
+
+.. math::
+
+   \lVert \texttt{EvalAllFast} - \texttt{Eval} \rVert \le
+   \bigl(8(p + 1) + 2^{p-1}\bigr)\, \varepsilon S
+
+for every degree :math:`p` from 1 to 25. This bound is tested, not proved.
+``tests/curve/FastBatchEvaluationTests.cpp`` checks it on random clamped and
+unclamped, polynomial and rational curves with repeated knots, at sorted
+parameters including every knot and both ends. Its ``[measure]`` case,
+2000 curves per degree up to 12 and 300 above, each at about 200
+parameters, gives these maxima in units of :math:`\varepsilon S`:
+
+=========== ============ ========= ==========
+Degree      Polynomial   Rational  Bound
+=========== ============ ========= ==========
+1           1.4          2.0       17
+2           2.7          1.7       26
+3           3.1          2.4       36
+5           5.2          2.9       64
+7           14           8.3       128
+9           50           29        336
+12          313          131       2 152
+16          2 845        956       32 904
+20          46 252       8 410     524 456
+25          1.4 × 10⁶    2.5 × 10⁵ 1.7 × 10⁷
+=========== ============ ========= ==========
+
+Up to degree 5 the deviation grows like :math:`p + 1`, as Horner's rule
+alone would give. Beyond that it roughly doubles with each degree. That
+growth is the conditioning of the power basis on a span: the coefficients
+:math:`\mathbf c_k` may be up to about :math:`2^p` times the poles and
+cancel in the sum. For a cubic with poles within 100 mm, the deviation is
+at most :math:`3.1\, \varepsilon S \approx 7 \cdot 10^{-14}` mm, far below
+any modelling resolution. At degree 25 it reaches about
+:math:`3 \cdot 10^{-10}` relative to :math:`S`. Use ``EvalAll`` where the
+points must equal ``Eval``'s, such as results compared bit for bit, or
+results that feed a robust predicate. ``EvalAllFast`` suits display,
+sampling and machining-style batches at ordinary degrees.
 
 Global projection
 -----------------
@@ -765,6 +839,8 @@ Current limits
   curves only; surfaces have knot insertion alone.
 - Batch and grid evaluation give points only; derivatives are evaluated a
   point at a time.
+- ``EvalAllFast`` is for curves only; grids keep ``EvalGrid``, which is
+  bit-identical. Its accuracy bound is tested, not proved.
 
 Related design decisions
 ------------------------
