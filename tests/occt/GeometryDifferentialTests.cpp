@@ -364,6 +364,39 @@ TEST_CASE("degree elevation agrees with Geom_BSplineCurve::IncreaseDegree",
     }
 }
 
+TEST_CASE("degree elevation over a tiny knot interval agrees with IncreaseDegree",
+          "[occt][curve][bspline][operations]")
+{
+    // The audit fixture of 2026-10-28 (A1): degree 9, a first interior knot
+    // at 1e-8 and poles inside a 1 x 2 box, which the unchecked knot
+    // removals of the elevation once moved by 3.8e7. The elevated curve must
+    // agree with OCCT's and with the input. OCCT's IncreaseDegree is a global
+    // algorithm and reaches the minimal pole count; ours may keep a knot
+    // copy where a removal would not be exact, so pole counts are not
+    // compared here.
+    std::vector<double> knots(10, 0.0);
+    knots.insert(knots.end(), {1e-8, 0.5, 0.75});
+    knots.insert(knots.end(), 10, 1.0);
+    std::vector<Point3> poles;
+    for (int i = 0; i < 13; ++i) {
+        poles.push_back({static_cast<double>(i % 2), static_cast<double>(i % 3), 0.0});
+    }
+    const BSplineCurve curve = *Stereon::MakeBSplineCurve(9, knots, poles);
+    for (const int degree : {10, 12}) {
+        const auto elevated = Stereon::ElevatedDegree(curve, degree);
+        REQUIRE(elevated.has_value());
+        const occ::handle<Geom_BSplineCurve> occt = ToOcct(curve);
+        occt->IncreaseDegree(degree);
+        REQUIRE(occt->Degree() == elevated->Degree);
+        for (int i = 0; i < SampleCount; ++i) {
+            const double t = i / (SampleCount - 1.0);
+            REQUIRE(AgreeRebuilt(Eval(*elevated, t), occt->Value(t)));
+            REQUIRE(Distance(Eval(*elevated, t), Eval(curve, t)) <= 1e-12);
+        }
+        REQUIRE(Distance(Eval(*elevated, 0.155), Eval(curve, 0.155)) <= 1e-12);
+    }
+}
+
 TEST_CASE("knot removal agrees with Geom_BSplineCurve::RemoveKnot",
           "[occt][curve][bspline][operations]")
 {

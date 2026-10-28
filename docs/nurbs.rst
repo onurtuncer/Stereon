@@ -242,13 +242,20 @@ rounding.
   periodic by its data. ``IsPeriodic`` recognises the form: with
   :math:`n + p` poles, the last :math:`p` repeat the first :math:`p`, and the
   knots repeat with the width :math:`T` of the domain,
-  :math:`u_{i+n} = u_i + T` up to a few units of rounding. ``AsPeriodic``
+  :math:`u_{i+n} = u_i + T` up to a few units of the rounding of doubles
+  of the knots' size. That rounding must stay below :math:`1/256` of the
+  shortest knot interval, or the knots cannot resolve the period: a curve
+  whose knots sit so far from the origin (about :math:`10^{13}` for unit
+  intervals) is not recognised, whatever its values. ``AsPeriodic``
   builds it from any closed curve: the curve is clamped, its end poles,
   which must lie within the given tolerance, are merged at their midpoint,
   the seam knot takes multiplicity :math:`p` and the poles are rotated by
   :math:`p - 1` so that the seam falls where the clamped curve began. The
   curve on the domain is unchanged except for the merge, which moves it by
-  at most half the gap. A clamped closed curve is :math:`C^0` at its seam
+  at most half the gap. The extended knot vector is checked as a factory
+  checks one: when a shifted copy overflows or the width is not finite,
+  ``AsPeriodic`` returns ``NotSupported`` rather than an invalid curve.
+  A clamped closed curve is :math:`C^0` at its seam
   and so is its periodic form; the fits produce seams of multiplicity 1,
   :math:`C^{p-1}`, which ``RemoveKnot`` at the seam would recover where the
   curve allows. A rational curve needs equal weights at its two ends;
@@ -259,9 +266,20 @@ rounding.
   at a time, joins the segments with every breakpoint at the new degree's
   multiplicity and then removes each interior knot :math:`p - s` times,
   where :math:`s` was its multiplicity: the elevated curve is as smooth
-  there as the original, so these removals are exact and the result has as
-  few poles as the elevated curve allows. Every interior multiplicity grows
-  by the degree increase; ``Continuity`` is unchanged.
+  there as the original, so these removals are exact in real arithmetic.
+  In doubles they are not always: a removal inverts knot insertion, and
+  dividing by the ratio of a tiny knot interval to a span magnifies the
+  rounding of the poles by that inverse. A degree-9 curve with its first
+  interior knot at :math:`10^{-8}` and poles inside a :math:`1 \times 2` box
+  moved by :math:`3.8 \cdot 10^7` under the unchecked removals (the audit of
+  2026-10-28, A1). Each removal is therefore kept only while the running
+  bound on the curve's movement, the one ``RemoveKnot`` reports, stays
+  within :math:`2^{-40} (1 + \max |P|)` and the weights stay valid; where it
+  would not, the knot keeps its remaining copies. The result is as small as
+  the arithmetic allows and within that bound of the curve everywhere; with
+  ordinary knot spacings the removals succeed and it is minimal. Every
+  interior multiplicity grows by the degree increase; ``Continuity`` is
+  unchanged.
 - **Knot removal** (A5.8). Inserting a knot is a convex combination of the
   poles; removing one inverts it. ``RemoveKnot`` runs the inversion from
   both ends of the :math:`p - s + 1` poles the knot touches towards the
@@ -284,7 +302,25 @@ rounding.
   of each piece is kept and the join is :math:`C^0`. Where the pieces are
   in fact smoother, ``RemoveKnot`` at the junction with a tolerance lets
   the extra copies go; splitting a curve and concatenating the halves,
-  then removing the junction knot, gives the original back.
+  then removing the junction knot, gives the original back. Two joins have
+  no valid curve, and return ``NotSupported`` instead of one (the audit of
+  2026-10-28, A3 and A4): a second curve whose knot intervals round away
+  when shifted onto the first's knot values, since its parametrisation,
+  not a stretched one, is the contract; and junction weights whose ratio
+  takes the scaled weights outside :math:`[2^{-256}, 2^{256}]`. Before that
+  check the joined weights are rescaled by the common power of two that
+  centres their exponents in the range, which changes no point, so a join
+  like :math:`2^{256}` against :math:`2^{-256}` succeeds.
+
+Every rearrangement that returns a curve publishes it through the checks
+``MakeBSplineCurve`` makes of data from outside the kernel: knots finite,
+non-decreasing and of finite width with the multiplicities the degree
+allows, weights in range, poles finite. An operation on a valid curve can
+still produce knots or weights no valid curve has, as the cases above show,
+and the check turns that into ``NotSupported`` rather than a successful
+invalid curve. ``tests/curve/BSplineOperationsAuditTests.cpp`` holds the
+five audit fixtures and a property over every degree with knots as close
+as :math:`10^{-12}`.
 
 Two queries read the structure rather than change it. ``Continuity`` is
 the order of continuity the knots guarantee, :math:`p - s` for the largest
