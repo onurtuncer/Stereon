@@ -75,6 +75,11 @@ template <Scalar T, std::size_t D>
 /// width T of the domain, u_{i+n} = u_i + T up to rounding, so that the
 /// curve continues across either end of its domain with the continuity the
 /// seam knot's multiplicity gives. Its period is the width of its domain.
+/// The rounding allowed a knot is that of a double of its size, and it must
+/// stay below 1/256 of the shortest knot interval of the domain: knots so
+/// far from the origin that it does not (about 1e13 for unit intervals)
+/// cannot resolve the period, and such a curve is not recognised whatever
+/// its values are.
 [[nodiscard]] bool IsPeriodic(const BSplineCurve& curve);
 [[nodiscard]] bool IsPeriodic(const BSplineCurve2d& curve);
 
@@ -98,7 +103,9 @@ template <Scalar T, std::size_t D>
 /// poles. A curve already in the periodic form is returned unchanged.
 /// InvalidInput unless the tolerance is finite and non-negative, the end
 /// poles are within it and, for a rational curve, the end weights are
-/// equal (scale the weights of one side first otherwise).
+/// equal (scale the weights of one side first otherwise). NotSupported when
+/// no valid curve holds the periodic form: a knot copy shifted by the
+/// period overflows, or the extended knot vector is not of finite width.
 [[nodiscard]] Result<BSplineCurve> AsPeriodic(const BSplineCurve& curve, double tolerance);
 [[nodiscard]] Result<BSplineCurve2d> AsPeriodic(const BSplineCurve2d& curve, double tolerance);
 
@@ -109,10 +116,15 @@ template <Scalar T, std::size_t D>
 /// form is split into its Bezier segments, each is raised by repeated
 /// elevation Q_i = (i / (q + 1)) P_{i-1} + (1 - i / (q + 1)) P_i, and the
 /// segments are joined back with every interior knot at its old
-/// multiplicity plus the degree increase, which is exact, so that the
-/// result has as few poles as the elevated curve allows. The result is
-/// clamped; a curve already of that degree is returned unchanged.
-/// InvalidInput unless curve.Degree <= degree <= BSplineMaxDegree.
+/// multiplicity plus the degree increase. That join is exact in real
+/// arithmetic, but it inverts knot insertion, which closely spaced knots
+/// make ill-conditioned, so each removal is kept only while the bound on
+/// the curve's movement (the one RemoveKnot reports) stays within
+/// 2^-40 (1 + max |P|); otherwise the knot keeps its remaining copies.
+/// The result therefore has as few poles as the arithmetic allows, is
+/// within that bound of the curve everywhere, and is clamped; a curve
+/// already of that degree is returned unchanged. InvalidInput unless
+/// curve.Degree <= degree <= BSplineMaxDegree.
 [[nodiscard]] Result<BSplineCurve> ElevatedDegree(const BSplineCurve& curve, int degree);
 [[nodiscard]] Result<BSplineCurve2d> ElevatedDegree(const BSplineCurve2d& curve, int degree);
 
@@ -162,7 +174,11 @@ using KnotRemoval2d = BasicKnotRemoval<2>;
 /// tolerance, finds whatever continuity the two curves actually have. The
 /// parametrisation of each piece is kept. InvalidInput unless the tolerance
 /// is finite and non-negative and the end of `first` and the start of
-/// `second` are within it.
+/// `second` are within it. NotSupported when no valid curve holds the join:
+/// shifting the second curve's knots onto the first's rounds one of its
+/// intervals away (a large knot origin against a small span), or the scaled
+/// weights leave [MinWeight, MaxWeight] even after both pieces are rescaled
+/// by a common power of two, which changes no point.
 [[nodiscard]] Result<BSplineCurve> Concatenated(const BSplineCurve& first,
                                                 const BSplineCurve& second, double tolerance);
 [[nodiscard]] Result<BSplineCurve2d> Concatenated(const BSplineCurve2d& first,
