@@ -92,8 +92,15 @@ TEST_CASE("a named wrapper's borrow lives as long as the wrapper", "[surface][cu
 
     // An owning copy taken from a temporary is inspected once it is named.
     const Curve reversed = Reversed(Curve{line});
-    REQUIRE(reversed.Target<Line>() != nullptr);
-    REQUIRE(reversed.Target<Line>()->Direction == -line.Direction);
+    const Line* reversedLine = reversed.Target<Line>();
+    REQUIRE(reversedLine != nullptr);
+    // Read through the borrow only where it is known to be one. The model
+    // behind `reversed` comes from a virtual call, so the optimiser cannot
+    // rule out the null branch of Target, and REQUIRE's failure path is
+    // opaque to it: without the guard, -O3 reports a null dereference.
+    if (reversedLine != nullptr) {
+        REQUIRE(reversedLine->Direction == -line.Direction);
+    }
 
     const Surface surface{Cylinder{Point3{}, 2.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}, true}};
     const Surface reversedSurface = Reversed(surface);
