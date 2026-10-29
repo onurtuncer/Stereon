@@ -73,19 +73,28 @@ struct IntervalScalar {
 struct DeviationCertificate {
     /// A bound on sup |c(t) - S(p(t))| over the range, in millimetres.
     double Bound = 0.0;
-    /// How many spans the range was bisected into to prove it.
+    /// How many spans the range was bisected into to prove it; 1 for the
+    /// closed-form certificate, which proves the whole range at once.
     std::size_t Spans = 0;
 
     bool operator==(const DeviationCertificate&) const = default;
 };
 
 /// A proved bound on the deviation of a 3D curve from a surface along a
-/// pcurve, sup over `range` of |c(t) - S(p(t))| (ADR-0009, section 4): the
-/// range is bisected until the enclosure on every span is within `target`,
-/// and the largest enclosure is the bound. The enclosures are mean-value
-/// forms, f(m) + f'(span) (t - m), from the geometry templates evaluated
-/// over IntervalScalar; a B-spline's derivative over a span is the hull of
-/// its derivative curve's poles.
+/// pcurve, sup over `range` of |c(t) - S(p(t))| (ADR-0009, section 4).
+/// When the curve is a line, circle or ellipse and the surface along the
+/// pcurve is of the same form K0 + Kc cos t + Ks sin t + Kt t (a plane with
+/// a line, circle or ellipse pcurve; a cylinder along a ruling or a
+/// unit-speed turn), the bound is |dK0| + |dKc| + |dKs| + |dKt| max|t| over
+/// enclosed coefficient differences, in one step. Otherwise, or when that
+/// bound exceeds the target, the range is cut at every knot of the curve
+/// and the pcurve and bisected until the bound on every span is within
+/// `target`, and the largest is the bound. A span's bound is the smaller of
+/// the mean-value form f(m) + f'(span) (t - m) and a Taylor form of the
+/// third order at the midpoint m with its remainder from the fourth
+/// derivative enclosed over the span, from the geometry templates evaluated
+/// over IntervalScalar; a B-spline's derivatives over a span are the hulls
+/// of its derivative curves' poles, narrowed by mean-value forms.
 ///
 /// Covers lines, circles, ellipses and non-rational B-splines as the curve,
 /// lines, circles, ellipses and non-rational B-splines as the pcurve, and

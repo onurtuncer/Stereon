@@ -194,9 +194,10 @@ TEST_CASE("Surface wraps any surface and answers as the surface does", "[surface
     REQUIRE(BoundingBox(surface) == BoundingBox(cylinder));
     REQUIRE(*surface.Target<Cylinder>() == cylinder);
     REQUIRE(surface.Target<Plane>() == nullptr);
-    REQUIRE(*Reversed(surface).Target<Cylinder>() == Reversed(cylinder));
-    REQUIRE(*Transformed(surface, SomeSimilarity()).Target<Cylinder>() ==
-            Transformed(cylinder, SomeSimilarity()));
+    const Stereon::Surface reversed = Reversed(surface);
+    REQUIRE(*reversed.Target<Cylinder>() == Reversed(cylinder));
+    const Stereon::Surface transformed = Transformed(surface, SomeSimilarity());
+    REQUIRE(*transformed.Target<Cylinder>() == Transformed(cylinder, SomeSimilarity()));
 
     Surface copy = surface;
     REQUIRE(copy.Target<Cylinder>() != surface.Target<Cylinder>()); // small: copied

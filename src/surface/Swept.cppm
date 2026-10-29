@@ -81,7 +81,9 @@ public:
         , m_Projection(Detail::MakeExtrusionProfile(m_Profile, m_Direction))
     {}
 
-    [[nodiscard]] const Curve& GetProfile() const noexcept { return m_Profile; }
+    /// The profile, borrowed from this surface: lvalues only (ADR-0046).
+    [[nodiscard]] const Curve& GetProfile() const& noexcept { return m_Profile; }
+    const Curve& GetProfile() const&& = delete;
     [[nodiscard]] const Vec3& GetDirection() const noexcept { return m_Direction; }
     /// The projection data, or null for a profile without a known NURBS
     /// form over a finite domain.
@@ -125,10 +127,13 @@ public:
         , m_Piece(Detail::MakeRevolvedPiece(m_Profile, m_Origin, m_Axis))
     {}
 
-    [[nodiscard]] const Curve& GetProfile() const noexcept { return m_Profile; }
+    /// The profile, borrowed from this surface: lvalues only (ADR-0046).
+    [[nodiscard]] const Curve& GetProfile() const& noexcept { return m_Profile; }
+    const Curve& GetProfile() const&& = delete;
     [[nodiscard]] const Point3& GetOrigin() const noexcept { return m_Origin; }
     /// Unit length.
-    [[nodiscard]] const Vec3& GetAxis() const noexcept { return m_Axis; }
+    [[nodiscard]] const Vec3& GetAxis() const& noexcept { return m_Axis; }
+    const Vec3& GetAxis() const&& = delete;
     /// The NURBS form of the full turn, or null for a profile without a
     /// known NURBS form over a finite domain.
     [[nodiscard]] const Detail::RevolvedPiece* GetPiece() const noexcept { return m_Piece.get(); }

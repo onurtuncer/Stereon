@@ -263,7 +263,8 @@ TEST_CASE("Curve wraps any curve and answers as the curve does", "[curve][erased
 
     const Curve2d planar(Circle2d{Point2{0.0, 0.0}, 1.0, Vec2{1.0, 0.0}, Vec2{0.0, 1.0}});
     REQUIRE(Eval(planar, 0.0) == Point2{1.0, 0.0});
-    REQUIRE(Reversed(planar).Target<Circle2d>() != nullptr);
+    const Curve2d reversedPlanar = Reversed(planar);
+    REQUIRE(reversedPlanar.Target<Circle2d>() != nullptr);
 }
 
 TEST_CASE("Curve stores small curves in place and shares large ones", "[curve][erased]")

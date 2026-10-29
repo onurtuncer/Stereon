@@ -70,7 +70,31 @@ namespace Stereon::Detail {
 
 } // namespace Stereon::Detail
 
+namespace Stereon::Detail {
+
+template <typename>
+inline constexpr bool IsSpan = false;
+template <typename T, std::size_t Extent>
+inline constexpr bool IsSpan<std::span<T, Extent>> = true;
+template <typename>
+inline constexpr bool IsReferenceWrapper = false;
+template <typename T>
+inline constexpr bool IsReferenceWrapper<std::reference_wrapper<T>> = true;
+
+} // namespace Stereon::Detail
+
 export namespace Stereon {
+
+/// What a controlled-edit callback may return (ADR-0046, section 4): a
+/// value, never a direct borrow that could carry the edit's storage out of
+/// the call. References, pointers, spans, string views and reference
+/// wrappers are rejected, whatever they point at; a value of a user type
+/// that holds one is not, and review must catch it.
+template <typename R>
+concept NonBorrowingResult = !std::is_reference_v<R> && !std::is_pointer_v<std::remove_cv_t<R>> &&
+                             !Detail::IsSpan<std::remove_cv_t<R>> &&
+                             !std::is_same_v<std::remove_cv_t<R>, std::string_view> &&
+                             !Detail::IsReferenceWrapper<std::remove_cv_t<R>>;
 
 /// Entries per page unless a table chooses otherwise (ADR-0005).
 inline constexpr std::size_t DefaultPageSize = 256;
@@ -312,15 +336,15 @@ public:
 
     /// Calls fn(entry) with the entry made writable: its page is copied first
     /// when it is shared, so no other arena sees the write. The reference is
-    /// valid only during the call; fn returns a value, never a reference,
-    /// and must not keep the address. For many entries of one page,
+    /// valid only during the call; fn returns a value (NonBorrowingResult:
+    /// never a reference, pointer, span, view or reference wrapper) and must
+    /// not keep the address, capture it for later or hand it to another
+    /// thread (ADR-0046, section 4). For many entries of one page,
     /// ModifyPage() does the copy-on-write step once.
     template <typename F>
-        requires std::invocable<F&, T&>
+        requires std::invocable<F&, T&> && NonBorrowingResult<std::invoke_result_t<F&, T&>>
     decltype(auto) Modify(const std::size_t index, F&& fn) STEREON_PRE(index < GetSize())
     {
-        static_assert(!std::is_reference_v<std::invoke_result_t<F&, T&>>,
-                      "an arena edit must not return a reference into the arena");
         CheckNotEditing("Modify");
         const EditScope scope(*this);
         return std::invoke(fn, Unshare(PageOf(index))[OffsetOf(index)]);
@@ -330,11 +354,10 @@ public:
     /// page copied first when it is shared; the span is valid only during
     /// the call, as for Modify().
     template <typename F>
-        requires std::invocable<F&, std::span<T>>
+        requires std::invocable<F&, std::span<T>> &&
+                 NonBorrowingResult<std::invoke_result_t<F&, std::span<T>>>
     decltype(auto) ModifyPage(const std::size_t page, F&& fn) STEREON_PRE(page < GetPageCount())
     {
-        static_assert(!std::is_reference_v<std::invoke_result_t<F&, std::span<T>>>,
-                      "an arena edit must not return a reference into the arena");
         CheckNotEditing("ModifyPage");
         const EditScope scope(*this);
         return std::invoke(fn, std::span<T>{Unshare(page).data(), PageLength(page)});
