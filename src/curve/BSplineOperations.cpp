@@ -371,21 +371,22 @@ template <std::size_t D>
 // ---------------------------------------------------------------------------
 // Degree elevation (A5.9)
 
-/// The Bezier poles raised by one degree, from n to n + 1:
-/// Q_i = (i / (n + 1)) P_{i-1} + (1 - i / (n + 1)) P_i.
+/// The most poles a Bezier segment has, at the largest degree.
+constexpr std::size_t MaxPoles = static_cast<std::size_t>(BSplineMaxDegree) + 1;
+
+/// The Bezier poles raised by one degree, from n to n + 1, into `raised`,
+/// which holds n + 2: Q_i = (i / (n + 1)) P_{i-1} + (1 - i / (n + 1)) P_i.
 template <std::size_t D>
-[[nodiscard]] std::vector<HPoint<D>> ElevatedOnce(const std::vector<HPoint<D>>& poles,
-                                                  const bool rational)
+void ElevatedOnce(const std::span<const HPoint<D>> poles, const std::span<HPoint<D>> raised,
+                  const bool rational)
 {
     const std::size_t n = poles.size() - 1;
-    std::vector<HPoint<D>> raised(n + 2);
     raised[0] = poles[0];
     raised[n + 1] = poles[n];
     for (std::size_t i = 1; i <= n; ++i) {
         const double alpha = static_cast<double>(i) / static_cast<double>(n + 1);
         raised[i] = Blend<D>(poles[i - 1], poles[i], alpha, rational);
     }
-    return raised;
 }
 
 /// A distinct knot strictly inside the domain and its multiplicity.
@@ -440,15 +441,25 @@ void ElevateClamped(Homogeneous<D>& h, const int degree)
     const std::vector<Segment<D>> segments = ClampedBezierSegments(h);
     Homogeneous<D> raised{degree, {}, {}, h.Rational};
     raised.Knots.assign(q + 1, segments.front().Start);
+    // Two buffers of the largest degree's poles, alternating: each step of
+    // the elevation reads one and writes the other, with no array per step.
+    std::array<HPoint<D>, MaxPoles> front; // written before read
+    std::array<HPoint<D>, MaxPoles> back;  // likewise
     for (std::size_t k = 0; k < segments.size(); ++k) {
-        std::vector<HPoint<D>> poles = segments[k].Poles;
+        HPoint<D>* from = front.data();
+        HPoint<D>* to = back.data();
+        std::size_t count = segments[k].Poles.size();
+        std::copy(segments[k].Poles.begin(), segments[k].Poles.end(), from);
         for (std::size_t e = p; e < q; ++e) {
-            poles = ElevatedOnce<D>(poles, h.Rational);
+            ElevatedOnce<D>(std::span<const HPoint<D>>{from, count},
+                            std::span<HPoint<D>>{to, count + 1}, h.Rational);
+            std::swap(from, to);
+            ++count;
         }
         if (k > 0) {
             raised.Knots.insert(raised.Knots.end(), q, segments[k].Start);
         }
-        raised.Poles.insert(raised.Poles.end(), poles.begin() + (k > 0 ? 1 : 0), poles.end());
+        raised.Poles.insert(raised.Poles.end(), from + (k > 0 ? 1 : 0), from + count);
     }
     raised.Knots.insert(raised.Knots.end(), q + 1, segments.back().End);
     const double largest = LargestPoleNorm(raised);
