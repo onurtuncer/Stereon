@@ -1065,9 +1065,56 @@ that the one-step bound never falls below the sampled deviation of
 pcurves moved off their curves by known amounts, and agrees with the
 bisection on whether the target is met.
 
-What remains is the bisection itself, on B-spline pcurves: the ellipse's
-cylinder side (about 90 ms) and a transverse skew intersection (about
-290 ms, two branches), each near 4 800 spans per certificate.
+The bisection itself, on B-spline pcurves, had the same weakness: the
+fitted splines of the ellipse's cylinder side and of a transverse skew
+intersection have 63 and 126 knot spans, yet the bisection cut them into
+some 4 400 to 4 850 spans, forty to seventy per knot span. Two changes make
+it about one per knot span. It now starts from the range cut at every knot
+of the curve and the pcurve, so each span lies in one polynomial piece of
+both. And each span's bound is the smaller of the mean-value form and a
+third-order Taylor form at the span's midpoint :math:`m`,
+
+.. math::
+
+   |f(m)| + |f'(m)|\, r + |f''(m)|\, \frac{r^2}{2}
+   + \sup |f'''|\, \frac{r^3}{6},
+
+with :math:`f(t) = c(t) - S(p(t))`, :math:`r` the span's half width, the
+third derivative of :math:`S(p(t))` by the chain rule over the span, and
+the remainder in its integral form, which holds for vectors. The point
+terms are evaluated at :math:`m`, where the curve and the surface along the
+pcurve nearly cancel and their enclosures are tight, so only the cubic
+term is enclosed over the span, and the bound shrinks with the cube of the
+span rather than its square.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Fixture
+     - Before
+     - Closed form
+     - And Taylor within knot spans
+   * - Circle
+     - 87 ms
+     - 0.33 ms
+     - 0.017 ms
+   * - Ellipse
+     - 95 ms
+     - 93 ms
+     - 4.8 ms
+   * - Skew, crossing
+     - —
+     - 382 ms
+     - 11.7 ms
+   * - Skew, tangent (refused)
+     - 307 ms
+     - 307 ms
+     - 76 ms
+
+``tests/intersect/CertificationTests.cpp`` certifies the fitted branches
+and checks every bound against 20 000 samples of the deviation, refutes a
+spline pcurve moved off by more than the target, and checks that the span
+count stays a small multiple of the knot count.
 ``bench/HotPathBench.cpp`` has rows for the circle, the ellipse, a
 transverse skew pair and the tangent pair, the last named as the failure
 path it times.
