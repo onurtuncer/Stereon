@@ -336,8 +336,8 @@ TEST_CASE("SetSurface replaces a face's surface and copies one page", "[topo][ed
     const Shape c = Must(Stereon::Freeze(std::move(b)));
     const Stereon::Surface replaced = SurfaceOf(c, c.Resolve(face));
     REQUIRE(Deref(replaced.Target<Stereon::Plane>()).Origin == Point3{0, 0, 7});
-    REQUIRE(Deref(SurfaceOf(a, a.Resolve(box.Faces[0])).Target<Stereon::Plane>()).Origin ==
-            Point3{0, 0, 0});
+    const Stereon::Surface original = SurfaceOf(a, a.Resolve(box.Faces[0]));
+    REQUIRE(Deref(original.Target<Stereon::Plane>()).Origin == Point3{0, 0, 0});
     const Stereon::Detail::TopologyTables& ta = a.GetSnapshot()->GetTables();
     const Stereon::Detail::TopologyTables& tc = c.GetSnapshot()->GetTables();
     REQUIRE(SharedPageCount(ta.Vertices, tc.Vertices) == ta.Vertices.GetPageCount());

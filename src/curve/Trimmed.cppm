@@ -85,7 +85,9 @@ public:
         , m_Piece(Detail::MakePiece(m_Basis, m_Range))
     {}
 
-    [[nodiscard]] const BasicErasedCurve<D>& GetBasis() const noexcept { return m_Basis; }
+    /// The basis, borrowed from this trimmed curve: lvalues only (ADR-0046).
+    [[nodiscard]] const BasicErasedCurve<D>& GetBasis() const& noexcept { return m_Basis; }
+    const BasicErasedCurve<D>& GetBasis() const&& = delete;
     [[nodiscard]] Interval GetRange() const noexcept { return m_Range; }
     [[nodiscard]] bool IsReversed() const noexcept { return m_Reversed; }
     /// The exact NURBS piece, or null for a user's basis type.

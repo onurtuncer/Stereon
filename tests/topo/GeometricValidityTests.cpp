@@ -60,7 +60,8 @@ std::vector<TopologyRule> RulesOf(const ValidityReport& report)
 ShapeBuilder BoxWithFaceMoved(const Shape& box, const Body& body, const double offset)
 {
     const Stereon::FaceId face = box.Resolve(body.Faces[2]);
-    Stereon::Plane plane = Deref(Stereon::SurfaceOf(box, face).Target<Stereon::Plane>());
+    const Stereon::Surface surface = Stereon::SurfaceOf(box, face);
+    Stereon::Plane plane = Deref(surface.Target<Stereon::Plane>());
     plane.Origin = plane.Origin + offset * Stereon::Cross(plane.XAxis, plane.YAxis);
     ShapeBuilder edit = Must(ShapeBuilder::Open(box));
     const Stereon::SurfaceRef moved = Must(edit.AddSurface(Stereon::Surface(plane)));

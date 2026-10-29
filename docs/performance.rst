@@ -1010,12 +1010,192 @@ development laptop moves between sessions, where untouched rows differed
 by up to 40 %, so they are not quoted; their gain is the allocations
 above, and the reference runner decides the rest.
 
-Two observations from the probe are not allocation problems and are left
-for their own issues: the skew-cylinder intersection takes about 300 ms
-per call and the plane-cylinder one about 140 ms, three to four orders of
-magnitude above the other analytic handlers; and the 1.4 allocations per
-point that remain in ``ProjectAll`` belong to the parallel loop's
-bookkeeping, not to the projector.
+Two observations from the probe are not allocation problems: the
+skew-cylinder and plane-cylinder intersections took 300 ms and 140 ms per
+call (issue #155, next section); and the 1.4 allocations per point that
+remain in ``ProjectAll`` belong to the parallel loop's bookkeeping, not to
+the projector.
+
+Certification of intersection branches
+--------------------------------------
+
+Every bounded branch of an analytic intersection is certified on both
+surfaces to the Context's resolution, :math:`10^{-5}` mm by default
+(``CertifyDeviation``, ADR-0009). Timing the certificates apart from the
+rest of ``Intersect`` (issue #155) showed that they were the whole cost:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Fixture
+     - ``Intersect``
+     - Certification
+     - Spans on each surface
+   * - Plane across a cylinder's axis: a circle
+     - 87 ms
+     - 100 %
+     - 4096 and 4096
+   * - Tilted plane: an ellipse
+     - 95 ms
+     - 100 %
+     - 4096 and 4422
+   * - Skew cylinders, internally tangent (radius 3 at distance 2 inside 5)
+     - refused after 300 ms
+     - —
+     - —
+
+The bisection bounds each span by a mean-value form whose slope encloses
+the curve's derivative and the surface's along the pcurve separately, so
+it loses their correlation and shrinks only with the square of the span:
+an analytic identity is rediscovered span by span. The 300 ms of the skew
+row was the handler exhausting its sample budget on a tangent
+configuration, not the cost of a transverse skew intersection; the refusal
+itself was a defect (#159).
+
+Lines, circles and ellipses, and a plane along any of their plane forms or
+a cylinder along a ruling or a unit-speed turn, are all of the form
+:math:`K_0 + K_c \cos t + K_s \sin t + K_t t`. Two curves of that form
+differ by the same form in their coefficients, so
+:math:`|\Delta K_0| + |\Delta K_c| + |\Delta K_s| + |\Delta K_t| \max |t|`,
+computed with every coefficient enclosed and every sum rounded up, bounds
+their deviation over the whole range in one step. ``CertifyDeviation``
+tries that first and bisects only when a side is not of the form or the
+bound exceeds the target, so a refutation still finds its witness. The
+circle section now takes 0.33 ms, its certificates one step each with
+bounds near :math:`10^{-14}`. ``tests/surface/CertifyTests.cpp`` checks
+that the one-step bound never falls below the sampled deviation of
+pcurves moved off their curves by known amounts, and agrees with the
+bisection on whether the target is met.
+
+The bisection itself, on B-spline pcurves, had the same weakness: the
+fitted splines of the ellipse's cylinder side and of a transverse skew
+intersection have 63 and 126 knot spans, yet the bisection cut them into
+some 4 400 to 4 850 spans, forty to seventy per knot span. Two changes make
+it about one per knot span. It now starts from the range cut at every knot
+of the curve and the pcurve, so each span lies in one polynomial piece of
+both. And each span's bound is the smaller of the mean-value form and a
+third-order Taylor form at the span's midpoint :math:`m`,
+
+.. math::
+
+   |f(m)| + |f'(m)|\, r + |f''(m)|\, \frac{r^2}{2}
+   + \sup |f'''|\, \frac{r^3}{6},
+
+with :math:`f(t) = c(t) - S(p(t))`, :math:`r` the span's half width, the
+third derivative of :math:`S(p(t))` by the chain rule over the span, and
+the remainder in its integral form, which holds for vectors. The point
+terms are evaluated at :math:`m`, where the curve and the surface along the
+pcurve nearly cancel and their enclosures are tight, so only the cubic
+term is enclosed over the span, and the bound shrinks with the cube of the
+span rather than its square.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Fixture
+     - Before
+     - Closed form
+     - And Taylor within knot spans
+   * - Circle
+     - 87 ms
+     - 0.33 ms
+     - 0.017 ms
+   * - Ellipse
+     - 95 ms
+     - 93 ms
+     - 4.8 ms
+   * - Skew, crossing
+     - —
+     - 382 ms
+     - 11.7 ms
+   * - Skew, tangent (refused)
+     - 307 ms
+     - 307 ms
+     - 76 ms
+
+``tests/intersect/CertificationTests.cpp`` certifies the fitted branches
+and checks every bound against 20 000 samples of the deviation, refutes a
+spline pcurve moved off by more than the target, and checks that the span
+count stays a small multiple of the knot count.
+``bench/HotPathBench.cpp`` has rows for the circle, the ellipse, a
+transverse skew pair and the tangent pair.
+
+The tangent row was not a cost but a defect: a valid internally tangent pair
+was refused after the handler spent its sample budget on a sliver piece
+cut at a seam through the point of contact. The repair is its own change,
+#159; with it the row times a successful intersection, and it is named
+``skew-tangent``.
+
+Each certified span then cost 20 to 35 µs, and the ellipse's cylinder side
+evaluated three spans per knot span: every knot span failed whole and was
+halved. Timing the stages of a span with the time-stamp counter showed
+where both came from.
+
+The surface was evaluated partial by partial, each partial enclosing the
+same cos u and sin u again; a cylinder's jet, and a circle's or an
+ellipse's, now come from one enclosure of each, turned by quarter turns as
+``Deriv`` turns them. The curves' jets at the midpoint and over the span
+are evaluated together, so a B-spline's derivatives at the midpoint serve
+both.
+
+The halving came from the order enclosed over the span. The third
+derivative of :math:`f = c - S(p)` is the difference of the curve's and
+the surface's, each of which varies over a knot span by about 0.5 on the
+ellipse while their difference stays near zero; enclosed over the span,
+the cubic term carried that variation, about :math:`0.5\, r^4`, just over
+the target at a knot span's width. The Taylor form now goes one order
+further, with the coefficients up to the third at the midpoint and only
+the fourth derivative enclosed over the span:
+
+.. math::
+
+   \sum_{k \le 3} |f_k(m)|\, r^k + \sup |f_4|\, r^4,
+   \qquad f_k = f^{(k)} / k!.
+
+The coefficients of :math:`S(p(t))` come from composing truncated Taylor
+series, the chain rule to every order at once (Faà di Bruno's formula),
+skipping the partials that are exactly zero, as most of a cylinder's and a
+plane's are. A knot span of the ellipse's pcurve now certifies whole.
+
+Measured back to back, the old and new builds alternating at high
+priority, minimum of four runs. The machine was under background load, so
+the absolute times run about 1.7 times the quiet runs above; the ratios
+are the result.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Fixture
+     - Spans, before → after
+     - Before
+     - After
+   * - Ellipse, cylinder side (``CertifyDeviation``)
+     - 126 → 63
+     - 7.5 ms
+     - 2.1 ms
+   * - Skew crossing, side A
+     - 128 → 126
+     - 4.8 ms
+     - 4.2 ms
+   * - Skew crossing, side B
+     - 127 → 126
+     - 3.6 ms
+     - 3.1 ms
+   * - ``Intersect``, ellipse
+     -
+     - 8.1 ms
+     - 2.5 ms
+   * - ``Intersect``, skew crossing
+     -
+     - 20.2 ms
+     - 19.2 ms
+
+The skew pair's splines already certified one span per knot span, so it
+gains only the cheaper evaluation, about 10 %; the ellipse gains threefold.
+Certification is still most of the skew row: its fits take well under a
+millisecond a branch, its certificates some 126 knot spans a side at 25
+to 35 µs each, in interval arithmetic that rounds every operation
+outward.
 
 The Boolean broad phase
 -----------------------

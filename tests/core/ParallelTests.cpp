@@ -16,9 +16,11 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <memory>
 #include <set>
+#include <stdexcept>
 #include <thread>
 #include <vector>
 
@@ -75,6 +77,48 @@ TEST_CASE("ParallelFor runs every index once, in chunks independent of the threa
                 REQUIRE(parallel.ChunkStart == serial.ChunkStart);
             }
         }
+    }
+}
+
+TEST_CASE("ParallelFor joins every started chunk before an exception leaves it", "[core][parallel]")
+{
+    // ADR-0046, section 5 (AC-0046-05): the loop completes or joins all
+    // started work before unwinding past the caller's state, which here is
+    // on the stack. One chunk throws; every other chunk that started
+    // finishes; nothing runs once the exception has propagated.
+    struct State {
+        std::atomic<int> Started{0};
+        std::atomic<int> Finished{0};
+        std::atomic<bool> Returned{false};
+        std::atomic<bool> RanAfterReturn{false};
+    };
+    for (const unsigned threads : {1U, 4U}) {
+        INFO(threads << " threads");
+        State state;
+        const auto handle = MakePoolHandle(threads);
+        bool thrown = false;
+        try {
+            ParallelFor(64, 1, &handle->Get(), &state,
+                        [](void* raw, const std::size_t begin, std::size_t) {
+                            State& s = *static_cast<State*>(raw);
+                            if (s.Returned.load()) {
+                                s.RanAfterReturn = true;
+                            }
+                            ++s.Started;
+                            std::this_thread::sleep_for(std::chrono::microseconds(50));
+                            if (begin == 7) {
+                                throw std::runtime_error("chunk 7");
+                            }
+                            ++s.Finished;
+                        });
+        } catch (const std::runtime_error&) {
+            thrown = true;
+        }
+        state.Returned = true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        REQUIRE(thrown);
+        REQUIRE(state.Started.load() == state.Finished.load() + 1);
+        REQUIRE_FALSE(state.RanAfterReturn.load());
     }
 }
 
