@@ -53,6 +53,8 @@ inline const Stereon::Context ctx = Stereon::Context::Default();
     for (std::size_t k = 0; k <= count; ++k) {
         t[k] = lower + (upper - lower) * static_cast<double>(k) / static_cast<double>(count);
     }
+    // The last can round a step past the range.
+    t[count] = upper;
     return t;
 }
 
