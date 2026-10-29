@@ -708,19 +708,10 @@ template <typename V>
     return v.X.Value == Interval{0.0} && v.Y.Value == Interval{0.0} && v.Z.Value == Interval{0.0};
 }
 
-/// The Taylor coefficients g_k = g^(k) / k!, from <= k <= top, of g(s) =
-/// S(q(s)), from the surface's jet at q(0) and the coefficients q_k of the
-/// pcurve's series: S(q0 + d) is the sum over i + j >= 1 of
-/// S_ij du^i dv^j / (i! j!), du and dv the series of q less q0, which is the
-/// chain rule to every order at once (Faa di Bruno's formula). It holds at
-/// each parameter, so the jet and the coefficients enclosed over a span
-/// enclose the g_k at every parameter of it. Partials that are exactly zero,
-/// most of a cylinder's and a plane's, are skipped, and the powers of du and
-/// dv are raised only as far as the partials left need.
-[[nodiscard]] std::array<IVec3, TaylorOrder + 1> Composed(const SurfaceJet& jet,
-                                                          const CurveJet<2>& q,
-                                                          const std::size_t from,
-                                                          const std::size_t top)
+/// The highest powers of du and dv that the partials up to the order `top`
+/// need: those of the partials that are not exactly zero.
+[[nodiscard]] std::pair<std::size_t, std::size_t> HighestPowers(const SurfaceJet& jet,
+                                                                const std::size_t top)
 {
     std::size_t highU = 0;
     std::size_t highV = 0;
@@ -732,6 +723,22 @@ template <typename V>
             }
         }
     }
+    return {highU, highV};
+}
+
+/// The Taylor coefficients g_k = g^(k) / k!, from <= k <= top, of g(s) =
+/// S(q(s)), from the surface's jet at q(0) and the coefficients q_k of the
+/// pcurve's series: S(q0 + d) is the sum over i + j >= 1 of
+/// S_ij du^i dv^j / (i! j!), du and dv the series of q less q0, which is the
+/// chain rule to every order at once (Faa di Bruno's formula). It holds at
+/// each parameter, so the jet and the coefficients enclosed over a span
+/// enclose the g_k at every parameter of it. Partials that are exactly zero,
+/// most of a cylinder's and a plane's, are skipped, and the powers of du and
+/// dv are raised only as far as the partials left need.
+[[nodiscard]] std::array<IVec3, TaylorOrder + 1>
+Composed(const SurfaceJet& jet, const CurveJet<2>& q, const std::size_t from, const std::size_t top)
+{
+    const auto [highU, highV] = HighestPowers(jet, top);
     std::array<Series, TaylorOrder + 1> du{};
     std::array<Series, TaylorOrder + 1> dv{};
     du[0][0] = IntervalScalar{1.0};
@@ -754,9 +761,7 @@ template <typename V>
                 continue;
             }
             // du^i dv^j: one of the factors is 1 unless the partial is mixed.
-            const Series w = i == 0   ? dv[j]
-                             : j == 0 ? du[i]
-                                      : Times(du[i], i, dv[j], j, top);
+            const Series w = i == 0 ? dv[j] : j == 0 ? du[i] : Times(du[i], i, dv[j], j, top);
             const IVec3 scaled = jet.Partial[i][j] * reciprocal[i][j];
             for (std::size_t k = std::max(i + j, from); k <= top; ++k) {
                 g[k] = g[k] + scaled * w[k];

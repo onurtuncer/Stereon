@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -55,10 +56,22 @@ double Sampled(const Stereon::IntersectionBranch& b, const Surface& s, const Cur
     return worst;
 }
 
+/// The pcurve's B-spline. A throw, not a dereference of null, where it is
+/// not one: the throw is a path the optimiser sees end, so -O3 has no null
+/// dereference to warn of, and the test fails with a message.
+const BSplineCurve2d& SplineOf(const Curve2d& pcurve)
+{
+    const BSplineCurve2d* spline = pcurve.Target<BSplineCurve2d>();
+    if (spline == nullptr) {
+        throw std::runtime_error("the pcurve is not a B-spline");
+    }
+    return *spline;
+}
+
 /// The B-spline pcurve with every pole moved by `dv` along v.
 Curve2d MovedAlongV(const Curve2d& pcurve, const double dv)
 {
-    BSplineCurve2d spline = *pcurve.Target<BSplineCurve2d>();
+    BSplineCurve2d spline = SplineOf(pcurve);
     for (Point2& pole : spline.Poles) {
         pole.Y += dv;
     }
@@ -124,7 +137,7 @@ TEST_CASE("each knot span of a fitted branch is certified whole", "[intersect][c
     const auto result = Intersect(tilted, aboutZ, ctx);
     REQUIRE(result.has_value());
     const Stereon::IntersectionBranch& branch = result->Branches.front();
-    const BSplineCurve2d& spline = *branch.OnB.Target<BSplineCurve2d>();
+    const BSplineCurve2d& spline = SplineOf(branch.OnB);
     std::vector<double> knots(spline.Knots.begin(), spline.Knots.end());
     knots.erase(std::ranges::unique(knots).begin(), knots.end());
     const auto cert =
