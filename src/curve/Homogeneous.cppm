@@ -109,8 +109,13 @@ template <std::size_t D>
     for (std::size_t i = k - s; i <= n; ++i) {
         q[i + r] = h.Poles[i];
     }
-    std::vector<HPoint<D>> work(h.Poles.begin() + static_cast<std::ptrdiff_t>(k - p),
-                                h.Poles.begin() + static_cast<std::ptrdiff_t>(k - s + 1));
+    // The p - s + 1 poles the insertion touches, on the stack: at most
+    // BSplineMaxDegree + 1 of them, 832 bytes in space, so an insertion
+    // allocates its result and nothing else.
+    std::array<HPoint<D>, static_cast<std::size_t>(BSplineMaxDegree) + 1>
+        work; // written before read
+    std::copy(h.Poles.begin() + static_cast<std::ptrdiff_t>(k - p),
+              h.Poles.begin() + static_cast<std::ptrdiff_t>(k - s + 1), work.begin());
     for (std::size_t j = 1; j <= r; ++j) {
         const std::size_t l = k - p + j;
         for (std::size_t i = 0; i + j + s <= p; ++i) {
@@ -180,7 +185,7 @@ template <std::size_t D>
     std::vector<Segment<D>> segments;
     Segment<D> current{
         u[p], 0.0, {h.Poles.begin(), h.Poles.begin() + static_cast<std::ptrdiff_t>(p + 1)}};
-    std::vector<double> alphas(p);
+    std::array<double, static_cast<std::size_t>(BSplineMaxDegree)> alphas; // written before read
     std::size_t a = p;
     std::size_t b = p + 1;
     while (b < m) {

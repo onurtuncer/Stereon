@@ -17,6 +17,8 @@ module;
 #include <cstddef>
 #include <limits>
 #include <span>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -117,6 +119,16 @@ template <std::size_t D>
     double largest = 0.0;
     for (const HPoint<D>& q : h.Poles) {
         largest = std::max(largest, Length(ToVec(EuclideanOf<D>(q))));
+    }
+    return largest;
+}
+
+template <std::size_t D>
+[[nodiscard]] double LargestWeight(const Homogeneous<D>& h)
+{
+    double largest = 0.0;
+    for (const HPoint<D>& q : h.Poles) {
+        largest = std::max(largest, q[D]);
     }
     return largest;
 }
@@ -259,6 +271,45 @@ template <std::size_t D>
     return distance;
 }
 
+/// True when h has the weights a curve may have: all in [MinWeight,
+/// MaxWeight] (CheckWeights); always for a polynomial curve.
+template <std::size_t D>
+[[nodiscard]] bool WeightsInRange(const Homogeneous<D>& h)
+{
+    return !h.Rational ||
+           (SmallestWeight(h) >= Detail::MinWeight && LargestWeight(h) <= Detail::MaxWeight);
+}
+
+/// The curve of h, after the checks MakeBSplineCurve makes of data from
+/// outside the kernel: an operation on a valid curve can still produce
+/// knots or weights no valid curve has (an extended knot that overflows, a
+/// shifted span that rounds away, weights scaled out of range). That is
+/// NotSupported, with the check's reason, never a successful invalid curve.
+template <std::size_t D>
+[[nodiscard]] Result<BasicBSplineCurve<double, D>> Published(Homogeneous<D> h,
+                                                             const std::string_view where)
+{
+    BasicBSplineCurve<double, D> curve = FromHomogeneous(std::move(h));
+    auto valid = Detail::CheckKnotVector(curve.Degree, curve.Knots, curve.Poles.size(), where);
+    if (valid) {
+        valid = Detail::CheckWeights(curve.Weights, curve.Poles.size(), where);
+    }
+    if (valid) {
+        for (const BasicPointN<double, D>& pole : curve.Poles) {
+            for (std::size_t d = 0; d < D; ++d) {
+                if (!std::isfinite(pole[d])) {
+                    return Fail(ErrorCode::NotSupported,
+                                std::string(where) + ": the result would have a non-finite pole");
+                }
+            }
+        }
+        return curve;
+    }
+    return Fail(ErrorCode::NotSupported, std::string(where) +
+                                             ": no valid curve represents the result: " +
+                                             std::string(valid.error().GetMessage()));
+}
+
 /// A bound on how far the curve moved when RemoveOnce reported `distance`:
 /// one homogeneous pole of the re-inserted curve is off by at most that,
 /// which moves a polynomial curve by at most the same, and a rational one,
@@ -304,7 +355,7 @@ template <std::size_t D>
         // Not removable within the tolerance, or not as a curve at all: the
         // inversion extrapolates, and can leave a rational curve a weight
         // that is not positive, with no bound to speak of.
-        if (!(bound <= tolerance) || !(SmallestWeight(h) > 0.0)) {
+        if (!(bound <= tolerance) || !(SmallestWeight(h) > 0.0) || !WeightsInRange(h)) {
             h = std::move(before);
             break;
         }
@@ -320,21 +371,22 @@ template <std::size_t D>
 // ---------------------------------------------------------------------------
 // Degree elevation (A5.9)
 
-/// The Bezier poles raised by one degree, from n to n + 1:
-/// Q_i = (i / (n + 1)) P_{i-1} + (1 - i / (n + 1)) P_i.
+/// The most poles a Bezier segment has, at the largest degree.
+constexpr std::size_t MaxPoles = static_cast<std::size_t>(BSplineMaxDegree) + 1;
+
+/// The Bezier poles raised by one degree, from n to n + 1, into `raised`,
+/// which holds n + 2: Q_i = (i / (n + 1)) P_{i-1} + (1 - i / (n + 1)) P_i.
 template <std::size_t D>
-[[nodiscard]] std::vector<HPoint<D>> ElevatedOnce(const std::vector<HPoint<D>>& poles,
-                                                  const bool rational)
+void ElevatedOnce(const std::span<const HPoint<D>> poles, const std::span<HPoint<D>> raised,
+                  const bool rational)
 {
     const std::size_t n = poles.size() - 1;
-    std::vector<HPoint<D>> raised(n + 2);
     raised[0] = poles[0];
     raised[n + 1] = poles[n];
     for (std::size_t i = 1; i <= n; ++i) {
         const double alpha = static_cast<double>(i) / static_cast<double>(n + 1);
         raised[i] = Blend<D>(poles[i - 1], poles[i], alpha, rational);
     }
-    return raised;
 }
 
 /// A distinct knot strictly inside the domain and its multiplicity.
@@ -360,11 +412,23 @@ template <std::size_t D>
     return knots;
 }
 
+/// How far, relative to 1 + the largest pole norm, the knot removals of
+/// one elevation may move the curve in all: rounding, with room for the
+/// conditioning of ordinary knot spacings. A removal is exact in real
+/// arithmetic, but it inverts knot insertion, dividing by knot ratios that
+/// a closely spaced knot makes tiny, and then extrapolates the rounding of
+/// the poles by their inverse (audit A1, 2026-10-28).
+constexpr double ElevationRemovalBudget = 0x1p-40;
+
 /// The clamped curve h as one of `degree` >= its own: its Bezier segments
 /// are raised one degree at a time and joined with every breakpoint at the
 /// new degree's multiplicity q, then each interior knot of multiplicity s is
-/// removed q - (s + q - p) = p - s times, which is exact because the
-/// elevated curve is as smooth there as the original.
+/// removed q - (s + q - p) = p - s times, which is exact in real arithmetic
+/// because the elevated curve is as smooth there as the original. Each
+/// removal is kept only while the bound on how far the removals moved the
+/// curve (DeviationBound) stays within ElevationRemovalBudget and the
+/// weights stay valid; otherwise the knot keeps its remaining copies, and
+/// the curve, with more poles than the minimum, is unmoved.
 template <std::size_t D>
 void ElevateClamped(Homogeneous<D>& h, const int degree)
 {
@@ -377,21 +441,41 @@ void ElevateClamped(Homogeneous<D>& h, const int degree)
     const std::vector<Segment<D>> segments = ClampedBezierSegments(h);
     Homogeneous<D> raised{degree, {}, {}, h.Rational};
     raised.Knots.assign(q + 1, segments.front().Start);
+    // Two buffers of the largest degree's poles, alternating: each step of
+    // the elevation reads one and writes the other, with no array per step.
+    std::array<HPoint<D>, MaxPoles> front; // written before read
+    std::array<HPoint<D>, MaxPoles> back;  // likewise
     for (std::size_t k = 0; k < segments.size(); ++k) {
-        std::vector<HPoint<D>> poles = segments[k].Poles;
+        HPoint<D>* from = front.data();
+        HPoint<D>* to = back.data();
+        std::size_t count = segments[k].Poles.size();
+        std::copy(segments[k].Poles.begin(), segments[k].Poles.end(), from);
         for (std::size_t e = p; e < q; ++e) {
-            poles = ElevatedOnce<D>(poles, h.Rational);
+            ElevatedOnce<D>(std::span<const HPoint<D>>{from, count},
+                            std::span<HPoint<D>>{to, count + 1}, h.Rational);
+            std::swap(from, to);
+            ++count;
         }
         if (k > 0) {
             raised.Knots.insert(raised.Knots.end(), q, segments[k].Start);
         }
-        raised.Poles.insert(raised.Poles.end(), poles.begin() + (k > 0 ? 1 : 0), poles.end());
+        raised.Poles.insert(raised.Poles.end(), from + (k > 0 ? 1 : 0), from + count);
     }
     raised.Knots.insert(raised.Knots.end(), q + 1, segments.back().End);
+    const double largest = LargestPoleNorm(raised);
+    const double budget = ElevationRemovalBudget * (1.0 + largest);
+    double moved = 0.0;
     for (const InteriorKnot& knot : interior) {
         for (std::size_t s = knot.Multiplicity; s < p; ++s) {
             const std::size_t current = q - (s - knot.Multiplicity);
-            static_cast<void>(RemoveOnce(raised, LastKnotIndex(raised, knot.Value), current));
+            Homogeneous<D> before = raised;
+            const double distance = RemoveOnce(raised, LastKnotIndex(raised, knot.Value), current);
+            const double bound = moved + DeviationBound(raised, largest, distance);
+            if (!(bound <= budget) || !(SmallestWeight(raised) > 0.0) || !WeightsInRange(raised)) {
+                raised = std::move(before);
+                break;
+            }
+            moved = bound;
         }
     }
     h = std::move(raised);
@@ -412,7 +496,7 @@ ElevatedDegreeN(const BasicBSplineCurve<double, D>& curve, const int degree)
     Homogeneous<D> h = ToHomogeneous(curve);
     Clamp(h);
     ElevateClamped(h, degree);
-    return FromHomogeneous(std::move(h));
+    return Published(std::move(h), "ElevatedDegree");
 }
 
 // ---------------------------------------------------------------------------
@@ -430,16 +514,33 @@ template <std::size_t D>
 /// u_i +- T from knots of that size.
 constexpr double PeriodicKnotSlack = 0x1p-48;
 
+/// How small the rounding allowance of a knot must stay against the
+/// shortest knot interval of the domain for the comparison to mean
+/// anything: far from the origin, the allowance PeriodicKnotSlack gives
+/// can exceed a whole interval, and the knots no longer resolve the period
+/// (audit A2, 2026-10-28). Such a curve is not recognised as periodic.
+constexpr double PeriodicResolution = 0x1p-8;
+
 template <std::size_t D>
 [[nodiscard]] bool IsPeriodicN(const BasicBSplineCurve<double, D>& curve)
 {
     const auto p = static_cast<std::size_t>(curve.Degree);
     const std::size_t n = curve.Poles.size() - p;
     const double period = curve.Knots[n + p] - curve.Knots[p];
+    double shortest = period;
+    for (std::size_t k = p; k < n + p; ++k) {
+        const double interval = curve.Knots[k + 1] - curve.Knots[k];
+        if (interval > 0.0) {
+            shortest = std::min(shortest, interval);
+        }
+    }
+    // u_{i+n} - u_i must be the period, up to the rounding of knots of
+    // their size, and that rounding must be small against every interval.
     for (std::size_t i = 0; i + n < curve.Knots.size(); ++i) {
-        const double expected = curve.Knots[i] + period;
-        const double slack = PeriodicKnotSlack * (std::abs(curve.Knots[i]) + std::abs(expected));
-        if (std::abs(curve.Knots[i + n] - expected) > slack) {
+        const double slack =
+            PeriodicKnotSlack * (std::abs(curve.Knots[i]) + std::abs(curve.Knots[i + n]));
+        if (!(slack <= PeriodicResolution * shortest) ||
+            !(std::abs((curve.Knots[i + n] - curve.Knots[i]) - period) <= slack)) {
             return false;
         }
     }
@@ -524,7 +625,7 @@ AsPeriodicN(const BasicBSplineCurve<double, D>& curve, const double tolerance)
                     "AsPeriodic: the curve does not close within the tolerance");
     }
     const HPoint<D> merged = Blend<D>(start, end, 0.5, h.Rational);
-    return FromHomogeneous(PeriodicFormOf(h, merged));
+    return Published(PeriodicFormOf(h, merged), "AsPeriodic");
 }
 
 // ---------------------------------------------------------------------------
@@ -540,6 +641,37 @@ void ScaleWeights(Homogeneous<D>& h, const double factor)
             c *= factor;
         }
     }
+}
+
+/// Scales every homogeneous pole by the power of two that centres the
+/// weights' exponents in [MinWeight, MaxWeight], when they are not all in
+/// it: an exact scaling, so no point of the curve changes (audit A4,
+/// 2026-10-28). Weights spread over more than the range stay out of it,
+/// and Published refuses them.
+template <std::size_t D>
+void CentreWeights(Homogeneous<D>& h)
+{
+    if (!h.Rational || WeightsInRange(h)) {
+        return;
+    }
+    const double low = std::logb(SmallestWeight(h));
+    const double high = std::logb(LargestWeight(h));
+    const int shift = -static_cast<int>(std::floor(0.5 * (low + high)));
+    ScaleWeights(h, std::ldexp(1.0, shift));
+}
+
+/// True when every interval of `knots` that is not empty stays not empty
+/// in `shifted`, and every empty one stays empty: the shift kept the
+/// knots' structure.
+[[nodiscard]] bool SameStructure(const std::span<const double> knots,
+                                 const std::span<const double> shifted)
+{
+    for (std::size_t i = 1; i < knots.size(); ++i) {
+        if ((knots[i] > knots[i - 1]) != (shifted[i] > shifted[i - 1])) {
+            return false;
+        }
+    }
+    return true;
 }
 
 template <std::size_t D>
@@ -568,15 +700,27 @@ ConcatenatedN(const BasicBSplineCurve<double, D>& first, const BasicBSplineCurve
     const auto q = static_cast<std::size_t>(degree);
     const double junction = a.Knots.back();
     const double start = b.Knots.front();
+    // The second curve's knots from the junction on: the shift must keep
+    // every one of its intervals, or a span of it would vanish in the
+    // rounding of a large knot origin (audit A3, 2026-10-28). Its
+    // parametrisation is the contract, so it is not stretched instead.
+    std::vector<double> shifted{junction};
+    for (std::size_t i = q + 1; i < b.Knots.size(); ++i) {
+        shifted.push_back(junction + (b.Knots[i] - start));
+    }
+    if (!SameStructure(std::span{b.Knots}.subspan(q), shifted)) {
+        return Fail(ErrorCode::NotSupported,
+                    "Concatenated: the second curve's knot intervals cannot be represented at "
+                    "the first curve's knot values");
+    }
     Homogeneous<D> joined{degree, {}, {}, rational};
     joined.Knots.assign(a.Knots.begin(), a.Knots.end() - 1);
-    for (std::size_t i = q + 1; i < b.Knots.size(); ++i) {
-        joined.Knots.push_back(junction + (b.Knots[i] - start));
-    }
+    joined.Knots.insert(joined.Knots.end(), shifted.begin() + 1, shifted.end());
     joined.Poles.assign(a.Poles.begin(), a.Poles.end() - 1);
     joined.Poles.push_back(Blend<D>(a.Poles.back(), b.Poles.front(), 0.5, rational));
     joined.Poles.insert(joined.Poles.end(), b.Poles.begin() + 1, b.Poles.end());
-    return FromHomogeneous(std::move(joined));
+    CentreWeights(joined);
+    return Published(std::move(joined), "Concatenated");
 }
 
 } // namespace
