@@ -76,8 +76,12 @@ TEST_CASE("a geometry pool keeps built-in types unwrapped behind dense indices",
     REQUIRE(StoredAs(pool, 3) == "wrapper");
 
     // Read back wrapped, the same geometry whichever arena holds it.
-    REQUIRE(Deref(pool[0].Target<Line>()).Origin == line.Origin);
-    REQUIRE(Deref(pool[1].Target<BSplineCurve>()).Poles == Quadratic().Poles);
+    // pool[i] rebuilds a wrapper for the typed arenas, so it is named before
+    // it is inspected (ADR-0046: no borrow from a temporary).
+    const Curve first = pool[0];
+    const Curve second = pool[1];
+    REQUIRE(Deref(first.Target<Line>()).Origin == line.Origin);
+    REQUIRE(Deref(second.Target<BSplineCurve>()).Poles == Quadratic().Poles);
     REQUIRE(Eval(pool[2], 0.0) == Eval(circle, 0.0));
     REQUIRE(pool[3].IsEmpty());
 }
@@ -88,7 +92,8 @@ TEST_CASE("replacing a pool entry may move it to another arena", "[topo][memory]
     static_cast<void>(pool.PushBack(Curve(Line{Point3{}, Vec3{1, 0, 0}})));
     pool.Set(0, Curve(Quadratic()));
     REQUIRE(StoredAs(pool, 0) == "wrapper");
-    REQUIRE(pool[0].Target<BSplineCurve>() != nullptr);
+    const Curve replaced = pool[0];
+    REQUIRE(replaced.Target<BSplineCurve>() != nullptr);
     pool.Set(0, Curve{});
     REQUIRE(pool[0].IsEmpty());
     REQUIRE(pool.GetSize() == 1);
@@ -108,8 +113,10 @@ TEST_CASE("a copied pool shares its pages until it is written", "[topo][memory]"
     // copied; every other page is still shared.
     REQUIRE(SharedPageCount(pool, copy) + 2 >= pool.GetPageCount());
     REQUIRE(SharedPageCount(pool, copy) < copy.GetPageCount());
-    REQUIRE(Deref(pool[0].Target<Line>()).Origin == Point3{0, 0, 0});
-    REQUIRE(Deref(copy[0].Target<Line>()).Origin == Point3{9, 9, 9});
+    const Curve original = pool[0];
+    const Curve edited = copy[0];
+    REQUIRE(Deref(original.Target<Line>()).Origin == Point3{0, 0, 0});
+    REQUIRE(Deref(edited.Target<Line>()).Origin == Point3{9, 9, 9});
 }
 
 TEST_CASE("a shape's pools hold its lines and planes without wrappers", "[topo][memory]")
@@ -124,6 +131,7 @@ TEST_CASE("a shape's pools hold its lines and planes without wrappers", "[topo][
     // The accessors still give every edge its curve, wrapped.
     for (const Stereon::EdgeId e :
          TopoTest::Must(Stereon::AllEntities<Stereon::EntityKind::Edge>(box))) {
-        REQUIRE(Deref(Stereon::CurveOf(box, e)).Target<Line>() != nullptr);
+        const Curve curve = Deref(Stereon::CurveOf(box, e));
+        REQUIRE(curve.Target<Line>() != nullptr);
     }
 }

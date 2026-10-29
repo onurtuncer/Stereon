@@ -126,7 +126,7 @@ New deviations require a named exception here or in a linked ADR with the owner,
 
 ## Migration inventory
 
-The inventory is grounded in source revision `1776a52`. It is a work list, not evidence of completed enforcement.
+The inventory is grounded in source revision `1776a52`. It is a work list, not evidence of completed enforcement. Its first disposition, with the evidence gathered and what stays open, is [the audit of 2026-10-28](../planning/adr-0046-audit-2026-10-28.md).
 
 | Area | Required action |
 | --- | --- |

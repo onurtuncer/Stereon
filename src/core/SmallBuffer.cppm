@@ -220,7 +220,11 @@ public:
     }
 
     [[nodiscard]] bool IsEmpty() const noexcept { return m_Model == nullptr; }
-    [[nodiscard]] const Concept* Get() const noexcept { return m_Model; }
+    /// The model, or null when empty: a borrow of this buffer, valid until
+    /// Emplace(), assignment, a move from it or destruction (ADR-0046), and
+    /// lvalue-only, so that no temporary buffer hands out a dangling model.
+    [[nodiscard]] const Concept* Get() const& noexcept { return m_Model; }
+    const Concept* Get() const&& = delete;
 
 private:
     void Reset() noexcept
@@ -232,6 +236,11 @@ private:
     }
 
     alignas(GeometryAlignment) std::byte m_Storage[Size];
+    /// Into m_Storage, where Emplace(), CloneInto or MoveInto placed the
+    /// model; null when empty. The owner-internal raw pointer ADR-0046,
+    /// section 1, permits: this buffer owns the storage, every path that
+    /// sets the pointer constructs the object it points to, and Reset()
+    /// destroys it exactly once.
     Concept* m_Model = nullptr;
 };
 

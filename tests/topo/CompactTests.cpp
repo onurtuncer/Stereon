@@ -152,8 +152,10 @@ TEST_CASE("the compacted shape is the same shape under new indices", "[topo][com
         const FaceId g = c.Translate(f);
         REQUIRE(IsReversed(b, g) == IsReversed(a, f));
         REQUIRE(ShellOf(b, g) == c.Translate(ShellOf(a, f)));
-        REQUIRE(Deref(SurfaceOf(b, g).Target<Stereon::Plane>()).Origin ==
-                Deref(SurfaceOf(a, f).Target<Stereon::Plane>()).Origin);
+        const Stereon::Surface onB = SurfaceOf(b, g);
+        const Stereon::Surface onA = SurfaceOf(a, f);
+        REQUIRE(Deref(onB.Target<Stereon::Plane>()).Origin ==
+                Deref(onA.Target<Stereon::Plane>()).Origin);
         for (const LoopId l : Must(Stereon::LoopsOf(a, f))) {
             std::vector<CoedgeId> cycle;
             for (const CoedgeId u : Must(Stereon::CoedgesOf(a, l))) {
