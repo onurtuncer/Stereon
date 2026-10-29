@@ -911,8 +911,7 @@ void SeamCutsOnB(const Pair& p, const Configuration& c, const Track& k, const In
     std::ranges::sort(cuts);
     std::vector<double> distinct{cuts.front()};
     for (std::size_t i = 1; i < cuts.size(); ++i) {
-        if (cuts[i] > distinct.back() &&
-            ExtentOf(p, c, k, distinct.back(), cuts[i]) > resolution) {
+        if (cuts[i] > distinct.back() && ExtentOf(p, c, k, distinct.back(), cuts[i]) > resolution) {
             distinct.push_back(cuts[i]);
         } else if (i + 1 == cuts.size() && distinct.size() > 1) {
             distinct.back() = cuts[i];

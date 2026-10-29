@@ -257,7 +257,8 @@ TEST_CASE("internally tangent cylinders touching on both seams meet at a node",
     const Surface larger{Cylinder{Point3{}, 5.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}, true}};
     const Surface smaller{
         Cylinder{Point3{2.0, 0.0, 0.0}, 3.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 0.6, 0.8}, true}};
-    for (const auto& [first, second] : {std::pair{&larger, &smaller}, std::pair{&smaller, &larger}}) {
+    for (const auto& [first, second] :
+         {std::pair{&larger, &smaller}, std::pair{&smaller, &larger}}) {
         const auto result = Intersect(*first, *second, ctx);
         INFO(IntersectTest::ErrorText(result));
         REQUIRE(result.has_value());
