@@ -431,17 +431,22 @@ struct PairWork {
 };
 
 /// The candidate pairs: the faces whose boxes meet, A's faces in order and
-/// B's within each.
+/// B's within each. The broad phase finds them without testing every pair,
+/// in the order testing every pair would list them.
 [[nodiscard]] std::vector<Candidate> CandidatesOf(const std::vector<FaceData>& facesA,
                                                   const std::vector<FaceData>& facesB)
 {
-    std::vector<Candidate> candidates;
-    for (std::size_t i = 0; i < facesA.size(); ++i) {
-        for (std::size_t j = 0; j < facesB.size(); ++j) {
-            if (Intersects(facesA[i].Box, facesB[j].Box)) {
-                candidates.push_back({i, j});
-            }
+    const auto boxes = [](const std::vector<FaceData>& faces) {
+        std::vector<Box3> out;
+        out.reserve(faces.size());
+        for (const FaceData& face : faces) {
+            out.push_back(face.Box);
         }
+        return out;
+    };
+    std::vector<Candidate> candidates;
+    for (const BoxPair& pair : OverlappingPairs(boxes(facesA), boxes(facesB))) {
+        candidates.push_back({pair.A, pair.B});
     }
     return candidates;
 }

@@ -1017,6 +1017,51 @@ magnitude above the other analytic handlers; and the 1.4 allocations per
 point that remain in ``ProjectAll`` belong to the parallel loop's
 bookkeeping, not to the projector.
 
+The Boolean broad phase
+-----------------------
+
+A Boolean's first step lists the face pairs whose boxes meet, and it
+tested every pair: two operands of ten thousand faces were a hundred
+million box tests before any intersection work. ``OverlappingPairs``
+(``Stereon.Core``) builds a hierarchy of B's boxes, split at the median of
+their centres along the longest axis, and queries it with each of A's. Its
+list is exactly the one testing every pair gives, in the same order, so
+the pairs are still worked in ADR-0007's fixed order and every result is
+unchanged. ``tests/core/BoxPairsTests.cpp`` checks the equality on random
+lists of touching, degenerate, empty, unbounded and repeated boxes, and
+the determinism and Boolean suites pass unchanged.
+
+``bench/BroadPhaseBench.cpp``, a development laptop under background load,
+the same binary for both columns:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Boxes
+     - Pairs that meet
+     - Every pair tested
+     - Hierarchy
+   * - 10 000 × 10 000, two grids side by side
+     - 10 000 of 10⁸
+     - 380–440 ms
+     - 11–13 ms
+   * - 1 000 × 1 000, every box meeting every other
+     - 10⁶ of 10⁶
+     - 20–26 ms
+     - 35 ms
+
+When most pairs miss, the hierarchy is some thirty times faster. When
+every pair meets, the list is m × n long either way and the walk of the
+hierarchy costs about 1.5× the plain loop, so the worst case is a constant
+factor, not an order. A query's hits are sorted when they are few and, when
+they are more than one in sixteen of B's boxes, marked and read off in
+order, which is cheaper than sorting them.
+
+The review that asked for the broad phase also asked for a Boolean on
+large operands that barely meet, to show it end to end. Every layout of
+drill grids tried for that is refused by today's Boolean for reasons of
+its own (#160), so that row waits for those repairs.
+
 Reproducing the numbers
 -----------------------
 

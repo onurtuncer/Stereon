@@ -117,6 +117,14 @@ is not, and its vertices already bound it). The test is conservative: a
 box that misses the other proves the faces apart, and nothing else is
 skipped.
 
+The pairs whose boxes meet are found without testing every pair
+(``OverlappingPairs``): a hierarchy of B's face boxes, split at the median
+of their centres along the longest axis, is queried with each of A's, so
+two operands of ten thousand faces cost about the faces times the depth,
+not a hundred million box tests. The list is the one testing every pair
+would give, in the same order, A's faces in order and B's within each,
+and the pairs are worked in that order (ADR-0007).
+
 The surfaces are then intersected (``Intersect``) over the faces'
 *parameter boxes*, not over the whole surfaces. A face's parameter box is
 the hull of its pcurves over their ranges (a line pcurve by its ends, any
