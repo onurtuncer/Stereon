@@ -1008,12 +1008,69 @@ development laptop moves between sessions, where untouched rows differed
 by up to 40 %, so they are not quoted; their gain is the allocations
 above, and the reference runner decides the rest.
 
-Two observations from the probe are not allocation problems and are left
-for their own issues: the skew-cylinder intersection takes about 300 ms
-per call and the plane-cylinder one about 140 ms, three to four orders of
-magnitude above the other analytic handlers; and the 1.4 allocations per
-point that remain in ``ProjectAll`` belong to the parallel loop's
-bookkeeping, not to the projector.
+Two observations from the probe are not allocation problems: the
+skew-cylinder and plane-cylinder intersections took 300 ms and 140 ms per
+call (issue #155, next section); and the 1.4 allocations per point that
+remain in ``ProjectAll`` belong to the parallel loop's bookkeeping, not to
+the projector.
+
+Certification of intersection branches
+--------------------------------------
+
+Every bounded branch of an analytic intersection is certified on both
+surfaces to the Context's resolution, :math:`10^{-5}` mm by default
+(``CertifyDeviation``, ADR-0009). Timing the certificates apart from the
+rest of ``Intersect`` (issue #155) showed that they were the whole cost:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Fixture
+     - ``Intersect``
+     - Certification
+     - Spans on each surface
+   * - Plane across a cylinder's axis: a circle
+     - 87 ms
+     - 100 %
+     - 4096 and 4096
+   * - Tilted plane: an ellipse
+     - 95 ms
+     - 100 %
+     - 4096 and 4422
+   * - Skew cylinders, internally tangent (radius 3 at distance 2 inside 5)
+     - refused after 300 ms
+     - —
+     - —
+
+The bisection bounds each span by a mean-value form whose slope encloses
+the curve's derivative and the surface's along the pcurve separately, so
+it loses their correlation and shrinks only with the square of the span:
+an analytic identity is rediscovered span by span. The 300 ms of the skew
+row was the handler exhausting its sample budget on a tangent
+configuration, a failure path, not the cost of a transverse skew
+intersection.
+
+Lines, circles and ellipses, and a plane along any of their plane forms or
+a cylinder along a ruling or a unit-speed turn, are all of the form
+:math:`K_0 + K_c \cos t + K_s \sin t + K_t t`. Two curves of that form
+differ by the same form in their coefficients, so
+:math:`|\Delta K_0| + |\Delta K_c| + |\Delta K_s| + |\Delta K_t| \max |t|`,
+computed with every coefficient enclosed and every sum rounded up, bounds
+their deviation over the whole range in one step. ``CertifyDeviation``
+tries that first and bisects only when a side is not of the form or the
+bound exceeds the target, so a refutation still finds its witness. The
+circle section now takes 0.33 ms, its certificates one step each with
+bounds near :math:`10^{-14}`. ``tests/surface/CertifyTests.cpp`` checks
+that the one-step bound never falls below the sampled deviation of
+pcurves moved off their curves by known amounts, and agrees with the
+bisection on whether the target is met.
+
+What remains is the bisection itself, on B-spline pcurves: the ellipse's
+cylinder side (about 90 ms) and a transverse skew intersection (about
+290 ms, two branches), each near 4 800 spans per certificate.
+``bench/HotPathBench.cpp`` has rows for the circle, the ellipse, a
+transverse skew pair and the tangent pair, the last named as the failure
+path it times.
 
 Reproducing the numbers
 -----------------------

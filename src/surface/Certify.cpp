@@ -615,6 +615,145 @@ struct SpanBounds {
     return certificate;
 }
 
+// --- The closed-form certificate ------------------------------------------
+
+/// A curve in space of the form K0 + Kc cos t + Ks sin t + Kt t, with each
+/// coefficient enclosed: what lines, circles and ellipses are, and what a
+/// plane composed with any of their plane forms is, and a cylinder composed
+/// with a ruling or a unit-speed turn. The deviation of two such curves is
+/// the same form in the coefficient differences, so a bound over a whole
+/// range needs no subdivision: the analytic identity the generic
+/// mean-value forms rediscover span by span (issue #155) is used directly.
+struct TrigForm {
+    IVec3 Constant;
+    IVec3 Cosine;
+    IVec3 Sine;
+    IVec3 Linear;
+};
+
+[[nodiscard]] IVec3 ToVector(const IPoint3& p)
+{
+    return {p.X, p.Y, p.Z};
+}
+
+[[nodiscard]] std::optional<TrigForm> TrigFormOf(const Curve& curve)
+{
+    if (const Line* line = curve.Target<Line>()) {
+        const BasicLine<IntervalScalar, 3> l = Enclosed(*line);
+        return TrigForm{ToVector(l.Origin), {}, {}, l.Direction};
+    }
+    if (const Circle* circle = curve.Target<Circle>()) {
+        const BasicCircle<IntervalScalar, 3> c = Enclosed(*circle);
+        return TrigForm{ToVector(c.Center), c.Radius * c.XAxis, c.Radius * c.YAxis, {}};
+    }
+    if (const Ellipse* ellipse = curve.Target<Ellipse>()) {
+        const BasicEllipse<IntervalScalar, 3> e = Enclosed(*ellipse);
+        return TrigForm{ToVector(e.Center), e.MajorRadius * e.XAxis, e.MinorRadius * e.YAxis, {}};
+    }
+    return std::nullopt;
+}
+
+/// The plane curve as K0 + Kc cos t + Ks sin t + Kt t in the plane.
+struct PlaneTrigForm {
+    IVec2 Constant;
+    IVec2 Cosine;
+    IVec2 Sine;
+    IVec2 Linear;
+};
+
+[[nodiscard]] std::optional<PlaneTrigForm> PlaneTrigFormOf(const Curve2d& pcurve)
+{
+    if (const Line2d* line = pcurve.Target<Line2d>()) {
+        const BasicLine<IntervalScalar, 2> l = Enclosed(*line);
+        return PlaneTrigForm{{l.Origin.X, l.Origin.Y}, {}, {}, l.Direction};
+    }
+    if (const Circle2d* circle = pcurve.Target<Circle2d>()) {
+        const BasicCircle<IntervalScalar, 2> c = Enclosed(*circle);
+        return PlaneTrigForm{{c.Center.X, c.Center.Y}, c.Radius * c.XAxis, c.Radius * c.YAxis, {}};
+    }
+    if (const Ellipse2d* ellipse = pcurve.Target<Ellipse2d>()) {
+        const BasicEllipse<IntervalScalar, 2> e = Enclosed(*ellipse);
+        return PlaneTrigForm{
+            {e.Center.X, e.Center.Y}, e.MajorRadius * e.XAxis, e.MinorRadius * e.YAxis, {}};
+    }
+    return std::nullopt;
+}
+
+/// The plane O + u X + v Y along a plane curve: affine, so each coefficient
+/// maps through the plane's axes.
+[[nodiscard]] TrigForm OnPlane(const Plane& plane, const PlaneTrigForm& p)
+{
+    const BasicPlane<IntervalScalar> s = Enclosed(plane);
+    const auto map = [&s](const IVec2& w) { return w.X * s.XAxis + w.Y * s.YAxis; };
+    return {ToVector(s.Origin) + map(p.Constant), map(p.Cosine), map(p.Sine), map(p.Linear)};
+}
+
+/// The cylinder O + R (cos u X + sin u Y) + v A along a line (u0 + a t,
+/// v0 + b t) of its parameter plane, when that is of the form: a ruling,
+/// a = 0, is O + R (cos u0 X + sin u0 Y) + v0 A + b t A; a unit-speed turn,
+/// a = +-1 and b = 0, is O + v0 A + R (cos u0 X + sin u0 Y) cos t
+/// + a R (cos u0 Y - sin u0 X) sin t. Other lines are helices, not of the
+/// form, and are left to the generic certificate.
+[[nodiscard]] std::optional<TrigForm> OnCylinder(const Cylinder& cylinder, const Line2d& line)
+{
+    const double a = line.Direction.X;
+    const double b = line.Direction.Y;
+    const BasicCylinder<IntervalScalar> s = Enclosed(cylinder);
+    const IVec3 axis = Axis(s);
+    const IntervalScalar u0{line.Origin.X};
+    const IntervalScalar v0{line.Origin.Y};
+    const IntervalScalar c = cos(u0);
+    const IntervalScalar n = sin(u0);
+    const IVec3 radial = s.Radius * (c * s.XAxis + n * s.YAxis);
+    if (a == 0.0) { // STEREON-LINT-ALLOW(epsilon): the exact form, not a tolerance
+        return TrigForm{ToVector(s.Origin) + radial + v0 * axis, {}, {}, IntervalScalar{b} * axis};
+    }
+    if ((a == 1.0 || a == -1.0) && b == 0.0) { // STEREON-LINT-ALLOW(epsilon): the exact form
+        const IVec3 turned = s.Radius * (c * s.YAxis - n * s.XAxis);
+        return TrigForm{ToVector(s.Origin) + v0 * axis, radial, IntervalScalar{a} * turned, {}};
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] std::optional<TrigForm> TrigFormOf(const Surface& surface, const Curve2d& pcurve)
+{
+    if (const Plane* plane = surface.Target<Plane>()) {
+        if (const std::optional<PlaneTrigForm> p = PlaneTrigFormOf(pcurve)) {
+            return OnPlane(*plane, *p);
+        }
+        return std::nullopt;
+    }
+    if (const Cylinder* cylinder = surface.Target<Cylinder>()) {
+        if (const Line2d* line = pcurve.Target<Line2d>()) {
+            return OnCylinder(*cylinder, *line);
+        }
+    }
+    return std::nullopt;
+}
+
+/// A bound on sup |c(t) - S(p(t))| over the range when both sides are trig
+/// forms: |dK0| + |dKc| + |dKs| + |dKt| max |t|, every term rounded up,
+/// since |cos t| and |sin t| are at most 1. Nothing when either side is not
+/// of the form.
+[[nodiscard]] std::optional<double> ClosedFormBound(const Curve& curve, const Surface& surface,
+                                                    const Curve2d& pcurve, const Interval& range)
+{
+    const std::optional<TrigForm> c = TrigFormOf(curve);
+    if (!c) {
+        return std::nullopt;
+    }
+    const std::optional<TrigForm> s = TrigFormOf(surface, pcurve);
+    if (!s) {
+        return std::nullopt;
+    }
+    const double reach = std::max(std::abs(range.GetLower()), std::abs(range.GetUpper()));
+    const Interval total = Interval{Length(c->Constant - s->Constant).GetUpper()} +
+                           Interval{Length(c->Cosine - s->Cosine).GetUpper()} +
+                           Interval{Length(c->Sine - s->Sine).GetUpper()} +
+                           Interval{Length(c->Linear - s->Linear).GetUpper()} * Interval{reach};
+    return total.GetUpper();
+}
+
 /// A B-spline is evaluated only within its domain; the closed forms
 /// anywhere.
 [[nodiscard]] bool CoversRange(const Curve& curve, const Interval& range)
@@ -653,6 +792,14 @@ Result<DeviationCertificate> CertifyDeviation(const Curve& curve, const Surface&
         return Fail(ErrorCode::NotSupported,
                     "CertifyDeviation: interval evaluation covers lines, circles, ellipses and "
                     "non-rational B-splines on planes and cylinders");
+    }
+    // Analytic curves on a plane, or on a cylinder along a ruling or a
+    // unit-speed turn, have a bound over the whole range in one step; one
+    // that exceeds the target goes to the bisection, which can also find a
+    // witness against it.
+    if (const std::optional<double> bound = ClosedFormBound(curve, surface, pcurve, range);
+        bound && *bound <= target) {
+        return DeviationCertificate{*bound, 1};
     }
     return Bisect(*c, *p, *s, range, target);
 }

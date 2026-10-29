@@ -200,12 +200,30 @@ void CylinderCylinderParallel(benchmark::State& state)
     Intersection(state, AboutZ, AboutZShifted);
 }
 
-const Stereon::Surface Skew{
+// The fixtures of issue #155: a plane across the axis gives a circle, whose
+// certificates are of the closed form; a tilted plane an ellipse, whose
+// cylinder side has a B-spline pcurve; skew cylinders crossing transversally;
+// and skew cylinders internally tangent (3 + 2 = 5), which the handler
+// refuses after its sample budget, so that row times a failure path. The
+// tilted plane is the plane-plane row's.
+const Stereon::Surface SkewCrossing{
+    Stereon::Cylinder{Point3{1.0, 0.0, 0.0}, 3.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 0.6, 0.8}, true}};
+const Stereon::Surface SkewTangent{
     Stereon::Cylinder{Point3{2.0, 0.0, 0.0}, 3.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 0.6, 0.8}, true}};
 
-void CylinderCylinderSkew(benchmark::State& state)
+void PlaneCylinderEllipse(benchmark::State& state)
 {
-    Intersection(state, AboutZ, Skew);
+    Intersection(state, Tilted, AboutZ);
+}
+
+void CylinderCylinderSkewCrossing(benchmark::State& state)
+{
+    Intersection(state, AboutZ, SkewCrossing);
+}
+
+void CylinderCylinderSkewTangent(benchmark::State& state)
+{
+    Intersection(state, AboutZ, SkewTangent);
 }
 
 void RayMeets(benchmark::State& state, const Stereon::Surface& surface)
@@ -282,9 +300,12 @@ BENCHMARK(SurfaceGrid<false>)->Name("HotPath/EvalGrid/256/bicubic");
 BENCHMARK(SurfaceGrid<true>)->Name("HotPath/EvalGrid/256/bicubic-rational");
 BENCHMARK(CurveProjection)->Name("HotPath/CurveProjection/rational-cubic");
 BENCHMARK(PlanePlane)->Name("HotPath/Intersect/PlanePlane");
-BENCHMARK(PlaneCylinder)->Name("HotPath/Intersect/PlaneCylinder");
+BENCHMARK(PlaneCylinder)->Name("HotPath/Intersect/PlaneCylinder/circle");
 BENCHMARK(CylinderCylinderParallel)->Name("HotPath/Intersect/CylinderCylinder/parallel");
-BENCHMARK(CylinderCylinderSkew)->Name("HotPath/Intersect/CylinderCylinder/skew");
+BENCHMARK(PlaneCylinderEllipse)->Name("HotPath/Intersect/PlaneCylinder/ellipse");
+BENCHMARK(CylinderCylinderSkewCrossing)->Name("HotPath/Intersect/CylinderCylinder/skew-crossing");
+BENCHMARK(CylinderCylinderSkewTangent)
+    ->Name("HotPath/Intersect/CylinderCylinder/skew-tangent-refused");
 BENCHMARK(RayMeetsPlane)->Name("HotPath/RayMeets/plane");
 BENCHMARK(RayMeetsCylinder)->Name("HotPath/RayMeets/cylinder");
 BENCHMARK(CurveKnotInsertion)->Name("HotPath/CurveKnotInsertion");
