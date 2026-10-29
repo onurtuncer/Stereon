@@ -765,7 +765,9 @@ The geometry pools were still 60% of the total, and their wrappers most of
 it: a ``Line2d`` is 32 bytes, its ``Curve2d`` 80. The pools now keep the
 built-in types by value, each in its own arena, with the erased wrapper kept
 for B-splines, composite and user geometry (``GeometryPool``,
-``src/topo/Records.cppm``). Run 39437110770 measured, at 10⁶ faces:
+``src/topo/Records.cppm``). Run 39437110770, committed as
+``bench/reports/phase0-topology-reference-2026-10-20-memory.md``, measured
+at 10⁶ faces:
 
 .. list-table::
    :header-rows: 1
@@ -935,6 +937,85 @@ changes between sessions:
 These figures come from a development machine, not the reference runner,
 so they are not a measurement of record. The OCCT ratios that count are
 those of the reference workflow.
+
+Inline storage on hot paths
+---------------------------
+
+A second pass removed the heap allocations that repeated geometry
+operations made for small, bounded temporaries. Persistent geometry,
+copy-on-write pages, fitting matrices, topology-sized buffers and the exact
+expansions keep the heap; what moved onto the stack is bounded by the
+degree or by a case analysis:
+
+- **Ray hits** (``MeetPlane``, ``MeetCylinder``): zero to two parameters,
+  in an ``inplace_vector<double, 2>``. The classifier's casts allocate
+  nothing; the public ``Detail::RayMeets``, which exists for the tests,
+  still copies them into a vector.
+- **The relations read of an entity** (the History validator's
+  ``Readings``): four possible values, as four bits instead of a
+  ``std::set``, listed in the enumerators' order as the set listed them.
+- **Knot insertion**, curve and surface: the :math:`p - s + 1` poles an
+  insertion touches, at most 26, in a stack array. The surface reads each
+  row or column where it lies and writes it where it goes, with a stride,
+  instead of copying the line out and back.
+- **Bezier extraction and degree elevation**: the :math:`p` blending
+  ratios in a stack array, and the elevation of a segment in two
+  alternating stack buffers of 26 poles, where every step allocated a new
+  array.
+- **Skew cylinders**: at most four tracks and six parameters per query, in
+  ``inplace_vector``\ s.
+- **Batched projection**: ``ProjectAll`` gives each chunk of the parallel
+  loop one set of work arrays (the segments ordered by bound, the roots of
+  a segment), where every point built its own.
+
+Allocations per operation, counted by a replacement ``operator new`` in a
+probe build (exact, so no repetitions were needed):
+
+.. list-table::
+   :header-rows: 1
+
+   * - Operation
+     - Before
+     - After
+   * - ``CurveProjector::Project``, one point
+     - 2
+     - 2 (a single query owns its work arrays)
+   * - ``ProjectAll``, 256 points
+     - 887 (3.5 per point)
+     - 362 (1.4 per point: the parallel loop's chunks and their work arrays)
+   * - ``RayMeets``, plane or cylinder, through the public copy
+     - 1
+     - 1 (the copy; the classifier's own path, 0)
+   * - Curve knot insertion, cubic with 24 poles
+     - 6
+     - 5
+   * - Surface knot insertion, bicubic 8 × 8, one knot along u
+     - 54
+     - 6
+   * - Bezier extraction, cubic with 24 poles, 21 segments
+     - 120
+     - 119 (the segments returned)
+   * - Degree elevation, cubic to quintic
+     - 112
+     - 48
+   * - Skew cylinder intersection
+     - 1 283
+     - 1 280
+
+Of the timings, one change is large and consistent across sessions:
+surface knot insertion runs 3.3 to 4.7 times faster (195 µs for 16
+insertions before; 42 to 59 µs after, in two sessions). Degree elevation
+is 1.3 to 2.2 times faster. The other rows moved by less than the
+development laptop moves between sessions, where untouched rows differed
+by up to 40 %, so they are not quoted; their gain is the allocations
+above, and the reference runner decides the rest.
+
+Two observations from the probe are not allocation problems and are left
+for their own issues: the skew-cylinder intersection takes about 300 ms
+per call and the plane-cylinder one about 140 ms, three to four orders of
+magnitude above the other analytic handlers; and the 1.4 allocations per
+point that remain in ``ProjectAll`` belong to the parallel loop's
+bookkeeping, not to the projector.
 
 Reproducing the numbers
 -----------------------

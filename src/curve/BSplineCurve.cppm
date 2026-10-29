@@ -356,6 +356,11 @@ public:
     [[nodiscard]] double Project(const Point3& p) const;
     [[nodiscard]] double Project(const Point2& p) const;
 
+    /// ProjectAll reuses one query's work arrays across the points of a
+    /// chunk, which takes the prepared data.
+    friend std::vector<double> ProjectAll(const CurveProjector& projector,
+                                          std::span<const Point3> points, const Context& context);
+
 private:
     std::shared_ptr<const Detail::CurveProjectorData> m_Data;
 };

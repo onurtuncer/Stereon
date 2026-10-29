@@ -101,61 +101,50 @@ struct HSurface {
             rational ? alpha * a[3] + (1.0 - alpha) * b[3] : 1.0};
 }
 
-/// Boehm's algorithm (A5.1) on one line of poles: the line after inserting t
-/// r times into `knots`, for knot index k (the last with knots[k] <= t) and
-/// multiplicity s. The surface applies it to every row or column.
-[[nodiscard]] std::vector<HPoint> InsertIntoLine(const std::vector<HPoint>& line,
-                                                 const std::vector<double>& knots, const int degree,
-                                                 const double t, const std::size_t k,
-                                                 const std::size_t s, const std::size_t r,
-                                                 const bool rational)
+/// Boehm's algorithm (A5.1) on one line of poles, read with a stride out of
+/// the surface's poles and written with another into the new ones: the line
+/// after inserting t r times into `knots`, for knot index k (the last with
+/// knots[k] <= t) and multiplicity s. The surface applies it to every row or
+/// column; the p - s + 1 poles the insertion touches live on the stack, so
+/// a line costs no allocation.
+void InsertIntoLine(const HPoint* line, const std::size_t stride, const std::size_t count,
+                    const std::vector<double>& knots, const int degree, const double t,
+                    const std::size_t k, const std::size_t s, const std::size_t r,
+                    const bool rational, HPoint* out, const std::size_t outStride)
 {
     const auto p = static_cast<std::size_t>(degree);
-    const std::size_t n = line.size() - 1;
-    std::vector<HPoint> q(n + 1 + r);
+    const std::size_t n = count - 1;
+    const auto in = [&](const std::size_t i) -> const HPoint& { return line[i * stride]; };
+    const auto at = [&](const std::size_t i) -> HPoint& { return out[i * outStride]; };
     for (std::size_t i = 0; i <= k - p; ++i) {
-        q[i] = line[i];
+        at(i) = in(i);
     }
     for (std::size_t i = k - s; i <= n; ++i) {
-        q[i + r] = line[i];
+        at(i + r) = in(i);
     }
-    std::vector<HPoint> work(line.begin() + static_cast<std::ptrdiff_t>(k - p),
-                             line.begin() + static_cast<std::ptrdiff_t>(k - s + 1));
+    std::array<HPoint, static_cast<std::size_t>(BSplineMaxDegree) + 1> work; // written before read
+    for (std::size_t i = 0; i + s <= p; ++i) {
+        work[i] = in(k - p + i);
+    }
     for (std::size_t j = 1; j <= r; ++j) {
         const std::size_t l = k - p + j;
         for (std::size_t i = 0; i + j + s <= p; ++i) {
             const double alpha = (t - knots[l + i]) / (knots[i + k + 1] - knots[l + i]);
             work[i] = Blend(work[i + 1], work[i], alpha, rational);
         }
-        q[l] = work[0];
-        q[k + r - j - s] = work[p - j - s];
+        at(l) = work[0];
+        at(k + r - j - s) = work[p - j - s];
     }
     const std::size_t l = k - p + r;
     for (std::size_t i = l + 1; i + s < k; ++i) {
-        q[i] = work[i - l];
+        at(i) = work[i - l];
     }
-    return q;
-}
-
-/// The line of poles i (along u, at v index j fixed) or j (along v).
-[[nodiscard]] std::vector<HPoint> LineOf(const HSurface& h, const ParameterDirection direction,
-                                         const std::size_t fixed)
-{
-    std::vector<HPoint> line;
-    if (direction == ParameterDirection::U) {
-        for (std::size_t i = 0; i < h.CountU; ++i) {
-            line.push_back(h.Poles[i * h.CountV + fixed]);
-        }
-    } else {
-        for (std::size_t j = 0; j < h.CountV; ++j) {
-            line.push_back(h.Poles[fixed * h.CountV + j]);
-        }
-    }
-    return line;
 }
 
 /// Inserts t `times` times into the knots of one direction; times plus the
-/// current multiplicity is at most the degree.
+/// current multiplicity is at most the degree. Each row or column is read
+/// from the poles where it lies and written into the new array where it
+/// goes, with no copy of a line in between.
 void InsertInPlace(HSurface& h, const ParameterDirection direction, const double t,
                    const std::size_t times)
 {
@@ -169,11 +158,12 @@ void InsertInPlace(HSurface& h, const ParameterDirection direction, const double
     const std::size_t countV = alongU ? h.CountV : h.CountV + times;
     std::vector<HPoint> poles(countU * countV);
     for (std::size_t fixed = 0; fixed < lines; ++fixed) {
-        const std::vector<HPoint> line =
-            InsertIntoLine(LineOf(h, direction, fixed), knots, degree, t, k, s, times, h.Rational);
-        for (std::size_t index = 0; index < line.size(); ++index) {
-            poles[alongU ? index * countV + fixed : fixed * countV + index] = line[index];
-        }
+        // Along u a line is a column, strided by the row length; along v a
+        // row, contiguous. Row-major, i along u, before and after.
+        const HPoint* line = alongU ? &h.Poles[fixed] : &h.Poles[fixed * h.CountV];
+        HPoint* out = alongU ? &poles[fixed] : &poles[fixed * countV];
+        InsertIntoLine(line, alongU ? h.CountV : 1, alongU ? h.CountU : h.CountV, knots, degree, t,
+                       k, s, times, h.Rational, out, alongU ? countV : 1);
     }
     knots.insert(knots.begin() + static_cast<std::ptrdiff_t>(k + 1), times, t);
     h.Poles = std::move(poles);

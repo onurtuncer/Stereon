@@ -6,9 +6,11 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 // The hot paths the C++26 work of docs/performance.rst, *C++26 features
-// for speed*, changes, measured before and after: per-degree kernels in the
+// for speed*, and the inline-storage pass after it, *Inline storage on hot
+// paths*, change, measured before and after: per-degree kernels in the
 // basis functions, Eval and EvalGrid; the deferred exact values of the
-// analytic intersection handlers; and the projection's candidate lists.
+// analytic intersection handlers; the projection's candidate lists; ray
+// casts; knot insertion, Bezier extraction and degree elevation.
 // Stereon only; the OCCT comparison of the same operations is B1 in
 // bench/occt/OcctBench.cpp.
 
@@ -22,6 +24,7 @@
 
 import Stereon.Surface;
 import Stereon.Intersect;
+import Stereon.Boolean;
 
 using Stereon::BSplineCurve;
 using Stereon::BSplineSurface;
@@ -197,6 +200,77 @@ void CylinderCylinderParallel(benchmark::State& state)
     Intersection(state, AboutZ, AboutZShifted);
 }
 
+const Stereon::Surface Skew{
+    Stereon::Cylinder{Point3{2.0, 0.0, 0.0}, 3.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 0.6, 0.8}, true}};
+
+void CylinderCylinderSkew(benchmark::State& state)
+{
+    Intersection(state, AboutZ, Skew);
+}
+
+void RayMeets(benchmark::State& state, const Stereon::Surface& surface)
+{
+    const Stereon::Context ctx = Stereon::Context::Default();
+    const Point3 origin{0.3, 0.2, -7.0};
+    const Vec3 d{0.1, 0.2, 1.0};
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(Stereon::Detail::RayMeets(surface, origin, d, ctx));
+    }
+    Items(state, 1);
+}
+
+void RayMeetsPlane(benchmark::State& state)
+{
+    RayMeets(state, Level);
+}
+
+void RayMeetsCylinder(benchmark::State& state)
+{
+    RayMeets(state, AboutZ);
+}
+
+void CurveKnotInsertion(benchmark::State& state)
+{
+    const BSplineCurve c = SomeCurve(3, false);
+    const std::vector<double> t = Spread(Domain(c), 100);
+    for (auto _ : state) {
+        for (const double s : t) {
+            benchmark::DoNotOptimize(Stereon::InsertKnot(c, s));
+        }
+    }
+    Items(state, t.size());
+}
+
+void SurfaceKnotInsertion(benchmark::State& state)
+{
+    const BSplineSurface s = SomeSurface(false);
+    const std::vector<double> u = Spread(Domain(s).X, 16);
+    for (auto _ : state) {
+        for (const double t : u) {
+            benchmark::DoNotOptimize(Stereon::InsertKnot(s, Stereon::ParameterDirection::U, t));
+        }
+    }
+    Items(state, u.size());
+}
+
+void BezierSegments(benchmark::State& state)
+{
+    const BSplineCurve c = SomeCurve(3, false);
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(Stereon::ToBezierSegments(c));
+    }
+    Items(state, 1);
+}
+
+void DegreeElevation(benchmark::State& state)
+{
+    const BSplineCurve c = SomeCurve(3, false);
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(Stereon::ElevatedDegree(c, 5));
+    }
+    Items(state, 1);
+}
+
 } // namespace
 
 BENCHMARK(BasisFunctions)->Name("HotPath/BasisFunctions")->Arg(1)->Arg(2)->Arg(3)->Arg(5)->Arg(7);
@@ -210,3 +284,10 @@ BENCHMARK(CurveProjection)->Name("HotPath/CurveProjection/rational-cubic");
 BENCHMARK(PlanePlane)->Name("HotPath/Intersect/PlanePlane");
 BENCHMARK(PlaneCylinder)->Name("HotPath/Intersect/PlaneCylinder");
 BENCHMARK(CylinderCylinderParallel)->Name("HotPath/Intersect/CylinderCylinder/parallel");
+BENCHMARK(CylinderCylinderSkew)->Name("HotPath/Intersect/CylinderCylinder/skew");
+BENCHMARK(RayMeetsPlane)->Name("HotPath/RayMeets/plane");
+BENCHMARK(RayMeetsCylinder)->Name("HotPath/RayMeets/cylinder");
+BENCHMARK(CurveKnotInsertion)->Name("HotPath/CurveKnotInsertion");
+BENCHMARK(SurfaceKnotInsertion)->Name("HotPath/SurfaceKnotInsertion/U");
+BENCHMARK(BezierSegments)->Name("HotPath/BezierSegments/cubic-24");
+BENCHMARK(DegreeElevation)->Name("HotPath/DegreeElevation/3to5");
