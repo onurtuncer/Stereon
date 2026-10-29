@@ -70,6 +70,13 @@ void ShapeHandleViolation(EntityKind kind, std::uint32_t index, std::uint32_t ge
 /// show the entity behind a handle (ADR-0004, safeguard 4) through
 /// stereon_describe_handle(). A diagnostic registry, like the store counter
 /// (ADR-0007): it never decides anything, and release builds have none.
+/// The registry keeps observers of the tables only while a snapshot lives
+/// (it deregisters in its destructor), under one lock with every lookup, and
+/// a lookup copies its result while it holds that lock (ADR-0046, section
+/// 7). stereon_describe_handle_into() writes the copy into a caller's
+/// buffer; the debugger's stereon_describe_handle(), whose text is valid
+/// until its next call, is the one named legacy exception, for serialised
+/// debugger use only.
 void RegisterSnapshot(StoreId store, const TopologyTables* tables) noexcept;
 void UnregisterSnapshot(StoreId store) noexcept;
 
@@ -187,10 +194,14 @@ public:
     [[nodiscard]] bool IsEmpty() const noexcept { return m_Snapshot == nullptr; }
 
     /// The snapshot, which ranges share; null for an empty Shape.
-    [[nodiscard]] const std::shared_ptr<const TopologySnapshot>& GetSnapshot() const noexcept
+    /// The snapshot, borrowed from this shape (ADR-0046): a reference into
+    /// the shape, valid while it lives and is not assigned, and lvalue-only.
+    /// Copy the shared_ptr to retain the snapshot beyond the shape.
+    [[nodiscard]] const std::shared_ptr<const TopologySnapshot>& GetSnapshot() const& noexcept
     {
         return m_Snapshot;
     }
+    const std::shared_ptr<const TopologySnapshot>& GetSnapshot() const&& = delete;
 
     /// Live entities of kind K; 0 for an empty Shape.
     template <EntityKind K>
@@ -315,8 +326,13 @@ public:
         , m_First(NextLive(*m_Snapshot, 0))
     {}
 
-    [[nodiscard]] Iterator begin() const noexcept { return {m_Snapshot.get(), m_First}; }
-    [[nodiscard]] Iterator end() const noexcept { return {m_Snapshot.get(), SizeOf(*m_Snapshot)}; }
+    /// Iterators borrow the range (ADR-0038, ADR-0046): the range owns the
+    /// snapshot, an iterator does not, so none is taken from a temporary
+    /// range. A range-based for over a temporary binds it first and is fine.
+    [[nodiscard]] Iterator begin() const& noexcept { return {m_Snapshot.get(), m_First}; }
+    [[nodiscard]] Iterator end() const& noexcept { return {m_Snapshot.get(), SizeOf(*m_Snapshot)}; }
+    Iterator begin() const&& = delete;
+    Iterator end() const&& = delete;
     /// The live count, kept by the table: O(1).
     [[nodiscard]] std::size_t size() const noexcept
     {
@@ -401,8 +417,11 @@ public:
         , m_First(first)
     {}
 
-    [[nodiscard]] Iterator begin() const noexcept { return {m_Snapshot.get(), m_First, m_First}; }
-    [[nodiscard]] Iterator end() const noexcept
+    /// Iterators borrow the range, as EntityRange's do: lvalues only.
+    [[nodiscard]] Iterator begin() const& noexcept { return {m_Snapshot.get(), m_First, m_First}; }
+    Iterator begin() const&& = delete;
+    Iterator end() const&& = delete;
+    [[nodiscard]] Iterator end() const& noexcept
     {
         return {m_Snapshot.get(), Id<K>::Invalid, m_First};
     }
@@ -509,8 +528,11 @@ public:
         , m_First(first)
     {}
 
-    [[nodiscard]] Iterator begin() const noexcept { return {m_Snapshot.get(), m_Vertex, m_First}; }
-    [[nodiscard]] Iterator end() const noexcept
+    /// Iterators borrow the range, as EntityRange's do: lvalues only.
+    [[nodiscard]] Iterator begin() const& noexcept { return {m_Snapshot.get(), m_Vertex, m_First}; }
+    Iterator begin() const&& = delete;
+    Iterator end() const&& = delete;
+    [[nodiscard]] Iterator end() const& noexcept
     {
         return {m_Snapshot.get(), m_Vertex, EdgeId::Invalid};
     }

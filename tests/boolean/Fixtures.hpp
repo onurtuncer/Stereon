@@ -57,7 +57,8 @@ inline const Stereon::Context ctx = Stereon::Context::Default();
     const auto faces = AllEntities<Stereon::EntityKind::Face>(shape);
     REQUIRE(faces.has_value());
     for (const Stereon::FaceId face : *faces) {
-        if (SurfaceOf(shape, face).Target<Stereon::Cylinder>() != nullptr) {
+        const Stereon::Surface surface = SurfaceOf(shape, face);
+        if (surface.Target<Stereon::Cylinder>() != nullptr) {
             return face;
         }
     }

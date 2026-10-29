@@ -143,7 +143,8 @@ TEST_CASE("handles from another shape are refused by every query", "[topo][fault
         FaceId orphan;
         {
             const Shape gone = MakeSquareSheet().Freeze();
-            orphan = *Must(Stereon::AllEntities<EntityKind::Face>(gone)).begin();
+            const auto faces = Must(Stereon::AllEntities<EntityKind::Face>(gone));
+            orphan = *faces.begin();
         }
         REQUIRE_FALSE(Stereon::LoopsOf(b, orphan).has_value());
     }

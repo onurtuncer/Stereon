@@ -13,12 +13,14 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <iterator>
 #include <memory>
 #include <ranges>
 #include <set>
 #include <span>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <type_traits>
 #include <utility>
@@ -218,6 +220,34 @@ TEST_CASE("page spans edit a page in one copy-on-write step", "[core][arena]")
     REQUIRE(own[4] == -4);
 }
 
+// What Modify() and ModifyPage() accept, as templates over the arena, so that
+// a rejected callback is a false requirement rather than an error (ADR-0046,
+// section 4).
+template <typename A>
+constexpr bool ModifyReturnsValue = requires(A& a) { a.Modify(0, [](int& e) { return e + 1; }); };
+template <typename A>
+constexpr bool ModifyReturnsVoid = requires(A& a) { a.Modify(0, [](int& e) { e = 0; }); };
+template <typename A>
+constexpr bool ModifyReturnsReference =
+    requires(A& a) { a.Modify(0, [](int& e) -> int& { return e; }); };
+template <typename A>
+constexpr bool ModifyReturnsPointer = requires(A& a) { a.Modify(0, [](int& e) { return &e; }); };
+template <typename A>
+constexpr bool ModifyReturnsWrapper =
+    requires(A& a) { a.Modify(0, [](int& e) { return std::ref(e); }); };
+template <typename A>
+constexpr bool ModifyReturnsView =
+    requires(A& a) { a.Modify(0, [](int&) { return std::string_view{}; }); };
+template <typename A>
+constexpr bool PageReturnsSize =
+    requires(A& a) { a.ModifyPage(0, [](std::span<int> page) { return page.size(); }); };
+template <typename A>
+constexpr bool PageReturnsSpan =
+    requires(A& a) { a.ModifyPage(0, [](std::span<int> page) { return page; }); };
+template <typename A>
+constexpr bool PageReturnsData =
+    requires(A& a) { a.ModifyPage(0, [](std::span<int> page) { return page.data(); }); };
+
 TEST_CASE("edits are scoped to a callback and never hand out a reference", "[core][arena]")
 {
     const SmallArena frozen = Filled(6);
@@ -258,6 +288,20 @@ TEST_CASE("edits are scoped to a callback and never hand out a reference", "[cor
     // Copying, moving, resizing or taking a page with GetPage() inside a
     // callback is reported and stops the program; tests/probes/ContractProbe.cpp
     // runs those cases.
+
+    // A callback result may not be a borrow in any direct form (ADR-0046,
+    // section 4, AC-0046-04): the constraint rejects references, pointers,
+    // spans, string views and reference wrappers at compile time. A value
+    // of a user type that wraps one is for review, not for the trait.
+    STATIC_REQUIRE(ModifyReturnsValue<SmallArena>);
+    STATIC_REQUIRE(ModifyReturnsVoid<SmallArena>);
+    STATIC_REQUIRE_FALSE(ModifyReturnsReference<SmallArena>);
+    STATIC_REQUIRE_FALSE(ModifyReturnsPointer<SmallArena>);
+    STATIC_REQUIRE_FALSE(ModifyReturnsWrapper<SmallArena>);
+    STATIC_REQUIRE_FALSE(ModifyReturnsView<SmallArena>);
+    STATIC_REQUIRE(PageReturnsSize<SmallArena>);
+    STATIC_REQUIRE_FALSE(PageReturnsSpan<SmallArena>);
+    STATIC_REQUIRE_FALSE(PageReturnsData<SmallArena>);
 }
 
 TEST_CASE("resizing grows with value-initialised entries and drops whole pages", "[core][arena]")

@@ -765,7 +765,9 @@ The geometry pools were still 60% of the total, and their wrappers most of
 it: a ``Line2d`` is 32 bytes, its ``Curve2d`` 80. The pools now keep the
 built-in types by value, each in its own arena, with the erased wrapper kept
 for B-splines, composite and user geometry (``GeometryPool``,
-``src/topo/Records.cppm``). Run 39437110770 measured, at 10⁶ faces:
+``src/topo/Records.cppm``). Run 39437110770, committed as
+``bench/reports/phase0-topology-reference-2026-10-20-memory.md``, measured
+at 10⁶ faces:
 
 .. list-table::
    :header-rows: 1
