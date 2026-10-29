@@ -14,6 +14,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <concepts>
 #include <cstddef>
 #include <iterator>
@@ -21,6 +23,7 @@
 #include <numbers>
 #include <optional>
 #include <ranges>
+#include <string>
 #include <thread>
 #include <type_traits>
 #include <utility>
@@ -279,7 +282,12 @@ TEST_CASE("the last owner releases the snapshot", "[topo][ranges][lifetime]")
         const Shape shape = MakeSquareSheet().Freeze();
         weak = shape.GetSnapshot();
         {
-            const auto face = *Must(Stereon::AllEntities<EntityKind::Face>(shape)).begin();
+            // The range owning a snapshot is scoped, so the count is back
+            // to one once the id is out (ADR-0046: no iterator from a temporary).
+            const auto face = [&] {
+                const auto faces = Must(Stereon::AllEntities<EntityKind::Face>(shape));
+                return *faces.begin();
+            }();
             REQUIRE(weak.use_count() == 1);
             const auto loops = Must(Stereon::LoopsOf(shape, face));
             REQUIRE(weak.use_count() == 2);
@@ -316,7 +324,8 @@ TEST_CASE("a query refuses a handle that names no live entity", "[topo][ranges]"
     if constexpr (STEREON_CHECKED_HANDLES) {
         // A handle of another shape, at a slot that exists in both.
         const Shape other = MakeBox().Freeze();
-        const auto edge = *Must(Stereon::AllEntities<EntityKind::Edge>(other)).begin();
+        const auto edges = Must(Stereon::AllEntities<EntityKind::Edge>(other));
+        const auto edge = *edges.begin();
         check(Stereon::RadialCoedgesOf(shape, edge));
         REQUIRE(Stereon::Describe(shape, edge) == "Edge#0 [not in this shape]");
     }
@@ -358,5 +367,101 @@ TEST_CASE("separate ranges traverse one snapshot concurrently", "[topo][ranges][
     }
     for (const auto& out : seen) {
         REQUIRE(out == expected);
+    }
+}
+
+// Each borrow as a template over the range or shape, so that a rejected call
+// is a false requirement rather than an error.
+template <typename R>
+constexpr bool IteratorsFromLvalue = requires(const R& r) {
+    r.begin();
+    r.end();
+};
+template <typename R>
+constexpr bool BeginFromRvalue = requires(R&& r) { std::move(r).begin(); };
+template <typename R>
+constexpr bool EndFromRvalue = requires(R&& r) { std::move(r).end(); };
+template <typename S>
+constexpr bool SnapshotFromLvalue = requires(const S& s) { s.GetSnapshot(); };
+template <typename S>
+constexpr bool SnapshotFromRvalue = requires(S&& s) { std::move(s).GetSnapshot(); };
+
+TEST_CASE("topology ranges own their snapshot and lend iterators to lvalues only",
+          "[topo][range][borrowing]")
+{
+    // ADR-0038 and ADR-0046, section 3 (AC-0046-02): a range is no borrowed
+    // range, its iterators are taken from a named range only, and a
+    // range-based for over a temporary binds the temporary first.
+    using Faces = Stereon::EntityRange<EntityKind::Face>;
+    STATIC_REQUIRE_FALSE(std::ranges::borrowed_range<Faces>);
+    STATIC_REQUIRE_FALSE(std::ranges::borrowed_range<Stereon::LoopRange>);
+    STATIC_REQUIRE(IteratorsFromLvalue<Faces>);
+    STATIC_REQUIRE_FALSE(BeginFromRvalue<Faces>);
+    STATIC_REQUIRE_FALSE(EndFromRvalue<Faces>);
+    STATIC_REQUIRE(SnapshotFromLvalue<Shape>);
+    STATIC_REQUIRE_FALSE(SnapshotFromRvalue<Shape>);
+
+    const Shape shape = MakeSquareSheet().Freeze();
+    std::size_t counted = 0;
+    for ([[maybe_unused]] const Stereon::FaceId face :
+         Must(Stereon::AllEntities<EntityKind::Face>(shape))) {
+        ++counted;
+    }
+    REQUIRE(counted == Must(Stereon::AllEntities<EntityKind::Face>(shape)).size());
+}
+
+extern "C" const char* stereon_describe_handle(int kind, unsigned int index, unsigned int store);
+extern "C" std::size_t stereon_describe_handle_into(int kind, unsigned int index,
+                                                    unsigned int store, char* buffer,
+                                                    std::size_t capacity);
+
+TEST_CASE("a handle's description is copied into the caller's buffer", "[topo][describe]")
+{
+    // ADR-0046, section 7 (AC-0046-07): the registry's text leaves it only
+    // as a copy made under its lock; the legacy debugger entry point keeps
+    // its process-wide buffer for serialised use alone.
+    if constexpr (STEREON_CHECKED_HANDLES) {
+        const Shape shape = MakeBox().Freeze();
+        const auto edges = Must(Stereon::AllEntities<EntityKind::Edge>(shape));
+        const auto edge = *edges.begin();
+        const int kind = static_cast<int>(EntityKind::Edge);
+        const unsigned int index = edge.GetIndex();
+        const unsigned int store = shape.GetSnapshot()->GetStore();
+        const char* legacy = stereon_describe_handle(kind, index, store);
+        REQUIRE(legacy != nullptr);
+        const std::string expected = legacy;
+        REQUIRE_FALSE(expected.empty());
+
+        std::array<char, 256> buffer{};
+        REQUIRE(stereon_describe_handle_into(kind, index, store, buffer.data(), buffer.size()) ==
+                expected.size());
+        REQUIRE(std::string(buffer.data()) == expected);
+        std::array<char, 8> small{};
+        REQUIRE(stereon_describe_handle_into(kind, index, store, small.data(), small.size()) ==
+                expected.size());
+        REQUIRE(std::string(small.data()) == expected.substr(0, 7));
+        REQUIRE(stereon_describe_handle_into(kind, index, store, nullptr, 0) == expected.size());
+        REQUIRE(stereon_describe_handle_into(kind, index, 0xFFFFFFFFu, buffer.data(),
+                                             buffer.size()) == 0);
+        REQUIRE(stereon_describe_handle_into(-1, index, store, buffer.data(), buffer.size()) == 0);
+
+        // Concurrent callers each get a whole copy of their own.
+        std::atomic<int> mismatches{0};
+        std::vector<std::thread> threads;
+        for (int t = 0; t < 8; ++t) {
+            threads.emplace_back([&] {
+                for (int i = 0; i < 200; ++i) {
+                    std::array<char, 256> own{};
+                    stereon_describe_handle_into(kind, index, store, own.data(), own.size());
+                    if (std::string(own.data()) != expected) {
+                        ++mismatches;
+                    }
+                }
+            });
+        }
+        for (std::thread& thread : threads) {
+            thread.join();
+        }
+        REQUIRE(mismatches == 0);
     }
 }

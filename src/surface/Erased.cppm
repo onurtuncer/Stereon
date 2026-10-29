@@ -73,9 +73,11 @@ public:
 
     [[nodiscard]] bool IsEmpty() const noexcept { return m_Storage.IsEmpty(); }
 
-    /// The wrapped value if it is a T, otherwise null; see Curve::Target.
+    /// The wrapped value if it is a T, otherwise null; see Curve::Target. A
+    /// borrow of this wrapper, valid until it is assigned, moved from or
+    /// destroyed, and taken from lvalues only (ADR-0046).
     template <typename T>
-    [[nodiscard]] const T* Target() const noexcept
+    [[nodiscard]] const T* Target() const& noexcept
     {
         const Detail::SurfaceConcept* model = m_Storage.Get();
         if (model == nullptr || model->GetTypeId() != Detail::TypeIdOf<T>()) {
@@ -83,11 +85,16 @@ public:
         }
         return static_cast<const T*>(model->GetValue());
     }
+    template <typename T>
+    const T* Target() const&& = delete;
 
-    [[nodiscard]] const Detail::SurfaceConcept& GetModel() const STEREON_HOT_PRE(!IsEmpty())
+    /// The model, for the free functions below: a borrow of this wrapper,
+    /// lvalue-only as Target<T>() is.
+    [[nodiscard]] const Detail::SurfaceConcept& GetModel() const& STEREON_HOT_PRE(!IsEmpty())
     {
         return *m_Storage.Get();
     }
+    const Detail::SurfaceConcept& GetModel() const&& = delete;
 
 private:
     Detail::SmallBuffer<Detail::SurfaceConcept, SurfaceBufferSize> m_Storage;

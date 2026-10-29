@@ -73,7 +73,9 @@ public:
         , m_Patch(Detail::MakePatch(m_Basis, m_Range))
     {}
 
-    [[nodiscard]] const Surface& GetBasis() const noexcept { return m_Basis; }
+    /// The basis, borrowed from this trimmed surface: lvalues only (ADR-0046).
+    [[nodiscard]] const Surface& GetBasis() const& noexcept { return m_Basis; }
+    const Surface& GetBasis() const&& = delete;
     [[nodiscard]] Box2 GetRange() const noexcept { return m_Range; }
     [[nodiscard]] bool IsReversed() const noexcept { return m_Reversed; }
     /// The exact NURBS patch, or null for a user's basis type.
