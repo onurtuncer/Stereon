@@ -22,6 +22,7 @@
 #include <limits>
 #include <numbers>
 #include <string>
+#include <utility>
 #include <vector>
 
 import Stereon.Intersect;
@@ -244,6 +245,34 @@ TEST_CASE("internally tangent cylinders meet at a node where the loops touch",
     REQUIRE(smaller.has_value());
     RequireBranchesOn(*smaller, b, a);
     REQUIRE(ConnectivityOf(*smaller).Nodes == 1);
+}
+
+TEST_CASE("internally tangent cylinders touching on both seams meet at a node",
+          "[intersect][cylinder][skew]")
+{
+    // Radius 3 inside radius 5 with a tilted axis, touching at (5, 0, 0):
+    // on the seam of each. The seam of the smaller was found a hair inside
+    // the fold, and the sliver it cut off was refused as uncertifiable
+    // (issue #155).
+    const Surface larger{Cylinder{Point3{}, 5.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}, true}};
+    const Surface smaller{
+        Cylinder{Point3{2.0, 0.0, 0.0}, 3.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 0.6, 0.8}, true}};
+    for (const auto& [first, second] : {std::pair{&larger, &smaller}, std::pair{&smaller, &larger}}) {
+        const auto result = Intersect(*first, *second, ctx);
+        INFO(IntersectTest::ErrorText(result));
+        REQUIRE(result.has_value());
+        RequireBranchesOn(*result, *first, *second);
+        REQUIRE(ConnectivityOf(*result).Nodes == 1);
+        std::size_t endsAtNode = 0;
+        for (const Stereon::IntersectionBranch& branch : result->Branches) {
+            for (const double t : {branch.Range.GetLower(), branch.Range.GetUpper()}) {
+                if (Distance(Eval(branch.Curve3d, t), Point3{5.0, 0.0, 0.0}) <= 1e-7) {
+                    ++endsAtNode;
+                }
+            }
+        }
+        REQUIRE(endsAtNode == 4);
+    }
 }
 
 TEST_CASE("skew cylinders apart are proved separate", "[intersect][cylinder][skew]")

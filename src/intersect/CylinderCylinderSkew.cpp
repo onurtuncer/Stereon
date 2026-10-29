@@ -839,11 +839,19 @@ void SeamCutsOnA(const Pair& p, const Track& k, const Interval& span, std::vecto
 }
 
 /// The crossing between lo and hi, where the seam side changes sign, to
-/// rounding.
+/// rounding. Where it does not change sign, one end lies on the seam to
+/// rounding, such as a point of tangency there, and the crossing is that
+/// end: bisecting would run to the other end and cut a piece off for
+/// nothing.
 [[nodiscard]] double BisectSeam(const Pair& p, const Configuration& c, const Track& k, double lo,
                                 double hi)
 {
-    const bool lowerNegative = SeamSideOnB(p, c, k, lo) < 0.0;
+    const double lowerSide = SeamSideOnB(p, c, k, lo);
+    const double upperSide = SeamSideOnB(p, c, k, hi);
+    if ((lowerSide < 0.0) == (upperSide < 0.0)) {
+        return std::abs(lowerSide) <= std::abs(upperSide) ? lo : hi;
+    }
+    const bool lowerNegative = lowerSide < 0.0;
     for (int i = 0; i < 64 && lo < hi; ++i) {
         const double m = 0.5 * (lo + hi);
         if (m <= lo || m >= hi) {
@@ -876,21 +884,42 @@ void SeamCutsOnB(const Pair& p, const Configuration& c, const Track& k, const In
     }
 }
 
-/// The span's ends and the cuts inside it, in order; a cut within rounding
-/// of the one before joins it, so that no sliver is fitted on its own.
+/// The farthest the track gets from its point at lo, over hi and three
+/// parameters evenly between: the size of the piece in space.
+[[nodiscard]] double ExtentOf(const Pair& p, const Configuration& c, const Track& k,
+                              const double lo, const double hi)
+{
+    const Point3 start = PlaceOf(p, c, k, lo).Point;
+    double extent = 0.0;
+    for (const double f : {0.25, 0.5, 0.75, 1.0}) {
+        extent = std::max(extent, Distance(start, PlaceOf(p, c, k, lo + f * (hi - lo)).Point));
+    }
+    return extent;
+}
+
+/// The span's ends and the cuts inside it, in order. A piece that stays
+/// within the resolution of its start is a sliver of rounding, such as a
+/// seam found a hair inside a fold that lies on it: it joins its neighbour
+/// rather than being fitted on its own, which no chart could hold. The
+/// span's own ends are kept, so the pieces still cover it.
 [[nodiscard]] std::vector<double> CutsOf(const Pair& p, const Configuration& c, const Track& k,
-                                         const Interval& span)
+                                         const Interval& span, const double resolution)
 {
     std::vector<double> cuts{span.GetLower(), span.GetUpper()};
     SeamCutsOnA(p, k, span, cuts);
     SeamCutsOnB(p, c, k, span, cuts);
     std::ranges::sort(cuts);
-    const double sliver = 1e-9 * Width(span); // STEREON-LINT-ALLOW(epsilon): a parameter gap
     std::vector<double> distinct{cuts.front()};
     for (std::size_t i = 1; i < cuts.size(); ++i) {
-        if (cuts[i] - distinct.back() > sliver) {
+        if (cuts[i] > distinct.back() &&
+            ExtentOf(p, c, k, distinct.back(), cuts[i]) > resolution) {
             distinct.push_back(cuts[i]);
+        } else if (i + 1 == cuts.size() && distinct.size() > 1) {
+            distinct.back() = cuts[i];
         }
+    }
+    if (distinct.size() == 1) {
+        distinct.push_back(cuts.back());
     }
     return distinct;
 }
@@ -1046,7 +1075,7 @@ void ChartOnB(std::vector<Point2>& onB)
                                     const Box2& boxB, const Context& ctx)
 {
     for (const Interval& span : ClipTrack(p, c, k, boxA, boxB)) {
-        const std::vector<double> cuts = CutsOf(p, c, k, span);
+        const std::vector<double> cuts = CutsOf(p, c, k, span, ctx.GetResolution());
         for (std::size_t i = 1; i < cuts.size(); ++i) {
             STEREON_TRY_VOID(AddPiece(result, p, c, k, Interval{cuts[i - 1], cuts[i]}, ctx));
         }
