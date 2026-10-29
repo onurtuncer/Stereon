@@ -358,16 +358,15 @@ void Consider(const BSplineCurve& curve, const Point3& p, const double t, Closes
 /// The segments in increasing order of their lower bound for p, ties by
 /// index, so the search meets close candidates first and can stop at the
 /// first segment that cannot improve on them.
-[[nodiscard]] std::vector<std::pair<double, std::size_t>>
-SegmentsByBound(const std::vector<Detail::ProjectionSegment>& segments, const Point3& p)
+void SegmentsByBound(const std::vector<Detail::ProjectionSegment>& segments, const Point3& p,
+                     std::vector<std::pair<double, std::size_t>>& order)
 {
-    std::vector<std::pair<double, std::size_t>> order;
+    order.clear();
     order.reserve(segments.size());
     for (std::size_t i = 0; i < segments.size(); ++i) {
         order.emplace_back(LowerBoundSquared(segments[i], p), i);
     }
     std::ranges::sort(order);
-    return order;
 }
 
 [[nodiscard]] BSplineCurve Lifted(const BSplineCurve2d& curve)
@@ -560,27 +559,46 @@ CurveProjector::CurveProjector(const BSplineCurve2d& curve)
     : m_Data(Prepare(Lifted(curve)))
 {}
 
-double CurveProjector::Project(const Point3& p) const
+namespace {
+
+/// One query's work arrays: the segments ordered by bound and the roots of
+/// a segment. A batch reuses them across its points, so a point allocates
+/// nothing after the first of its chunk.
+struct ProjectionScratch {
+    std::vector<std::pair<double, std::size_t>> Order;
+    std::vector<double> Roots;
+};
+
+double ProjectWith(const Detail::CurveProjectorData& data, const Point3& p,
+                   ProjectionScratch& scratch)
 {
     Detail::RequireFinite(p, "Project(BSplineCurve)", "a non-finite point");
-    const BSplineCurve& curve = m_Data->Curve;
+    const BSplineCurve& curve = data.Curve;
     const double start = Domain(curve).GetLower();
     Closest best{start, DistanceSquared(Eval(curve, start), p)};
-    std::vector<double> roots; // reused by every segment: one allocation per query
-    for (const auto& [bound, index] : SegmentsByBound(m_Data->Segments, p)) {
+    SegmentsByBound(data.Segments, p, scratch.Order);
+    for (const auto& [bound, index] : scratch.Order) {
         if (bound > best.DistanceSquared) {
             break; // every later segment is at least as far
         }
-        const Detail::ProjectionSegment& segment = m_Data->Segments[index];
+        const Detail::ProjectionSegment& segment = data.Segments[index];
         Consider(curve, p, segment.End, best);
-        roots.clear();
-        IsolateRoots(StationarityFor(segment, p), 0.0, 1.0, 0, roots);
-        for (const double r : roots) {
+        scratch.Roots.clear();
+        IsolateRoots(StationarityFor(segment, p), 0.0, 1.0, 0, scratch.Roots);
+        for (const double r : scratch.Roots) {
             const double t = segment.Start + r * (segment.End - segment.Start);
             Consider(curve, p, std::clamp(t, segment.Start, segment.End), best);
         }
     }
     return best.Parameter;
+}
+
+} // namespace
+
+double CurveProjector::Project(const Point3& p) const
+{
+    ProjectionScratch scratch;
+    return ProjectWith(*m_Data, p, scratch);
 }
 
 double CurveProjector::Project(const Point2& p) const
@@ -593,15 +611,16 @@ std::vector<double> ProjectAll(const CurveProjector& projector,
 {
     std::vector<double> parameters(points.size());
     struct Work {
-        const CurveProjector* Projector;
+        const Detail::CurveProjectorData* Data;
         const Point3* Points;
         double* Parameters;
-    } work{&projector, points.data(), parameters.data()};
+    } work{projector.m_Data.get(), points.data(), parameters.data()};
     Detail::ParallelFor(points.size(), context.GetWorkerPool(), &work,
                         [](void* state, const std::size_t begin, const std::size_t end) {
                             const Work& w = *static_cast<const Work*>(state);
+                            ProjectionScratch scratch; // one per chunk, not per point
                             for (std::size_t i = begin; i < end; ++i) {
-                                w.Parameters[i] = w.Projector->Project(w.Points[i]);
+                                w.Parameters[i] = ProjectWith(*w.Data, w.Points[i], scratch);
                             }
                         });
     return parameters;

@@ -11,6 +11,7 @@ module;
 #include <Stereon/Core/Contracts.hpp>
 
 #include <algorithm>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <format>
@@ -342,15 +343,42 @@ constexpr EntityKind AllKinds[] = {EntityKind::Vertex, EntityKind::Edge, EntityK
                                    EntityKind::Loop,   EntityKind::Face, EntityKind::Shell,
                                    EntityKind::Solid};
 
+/// A set of the four relations, as bits in the enumerators' order, which is
+/// the order a std::set listed them in: one byte per entity instead of a
+/// tree, for a validator that reads every entry of a History.
+class RelationSet {
+public:
+    void Add(const HistoryRelation relation) noexcept
+    {
+        m_Bits = static_cast<std::uint8_t>(m_Bits | (1u << static_cast<unsigned>(relation)));
+    }
+    [[nodiscard]] bool Contains(const HistoryRelation relation) const noexcept
+    {
+        return (m_Bits & (1u << static_cast<unsigned>(relation))) != 0;
+    }
+    [[nodiscard]] int Count() const noexcept { return std::popcount(m_Bits); }
+    /// The first relation in the enumerators' order; Unchanged when empty.
+    [[nodiscard]] HistoryRelation First() const noexcept
+    {
+        return static_cast<HistoryRelation>(std::countr_zero(m_Bits) % 8);
+    }
+
+private:
+    std::uint8_t m_Bits = 0;
+};
+
+constexpr HistoryRelation AllRelations[] = {HistoryRelation::Unchanged, HistoryRelation::Modified,
+                                            HistoryRelation::Generated, HistoryRelation::Deleted};
+
 /// What the entries say of one entity: the relations read of it, and how
 /// many entries read it.
 struct Readings {
-    std::set<HistoryRelation> Relations;
+    RelationSet Relations;
     int Entries = 0;
 
     void Add(const HistoryRelation relation)
     {
-        Relations.insert(relation);
+        Relations.Add(relation);
         ++Entries;
     }
 };
@@ -424,13 +452,15 @@ struct Accounted {
     return std::nullopt;
 }
 
-/// The relations named: "Unchanged and Deleted".
-[[nodiscard]] std::string Listed(const std::set<HistoryRelation>& relations)
+/// The relations named in the enumerators' order: "Unchanged and Deleted".
+[[nodiscard]] std::string Listed(const RelationSet& relations)
 {
     std::string out;
-    for (const HistoryRelation relation : relations) {
-        out += out.empty() ? "" : " and ";
-        out += ToString(relation);
+    for (const HistoryRelation relation : AllRelations) {
+        if (relations.Contains(relation)) {
+            out += out.empty() ? "" : " and ";
+            out += ToString(relation);
+        }
     }
     return out;
 }
@@ -440,13 +470,13 @@ struct Accounted {
 /// Unchanged entity continued to two targets, or from two sources).
 [[nodiscard]] std::optional<std::string> Contradiction(const Readings& readings)
 {
-    if (readings.Relations.size() > 1) {
+    if (readings.Relations.Count() > 1) {
         return Listed(readings.Relations) + " at once";
     }
-    const bool single = readings.Relations.contains(HistoryRelation::Unchanged) ||
-                        readings.Relations.contains(HistoryRelation::Deleted);
+    const bool single = readings.Relations.Contains(HistoryRelation::Unchanged) ||
+                        readings.Relations.Contains(HistoryRelation::Deleted);
     if (single && readings.Entries > 1) {
-        return std::string(ToString(*readings.Relations.begin())) + " twice";
+        return std::string(ToString(readings.Relations.First())) + " twice";
     }
     return std::nullopt;
 }
