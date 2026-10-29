@@ -7,7 +7,8 @@
 
 // The certificates of fitted branches (issue #155): the bisection of a
 // B-spline pcurve starts at the knots and bounds each span by the smaller of
-// a mean-value and a third-order Taylor form. Whatever the bound's form, it
+// a mean-value form and a Taylor form whose remainder alone is enclosed over
+// the span, from the fourth derivative. Whatever the bound's form, it
 // must never fall below the deviation actually sampled, and moving a pcurve
 // off its curve by more than the target must still be refuted.
 
@@ -115,11 +116,11 @@ TEST_CASE("a fitted pcurve moved off its curve is refuted or bounded above the m
     }
 }
 
-TEST_CASE("a fitted branch is certified in far fewer spans than knot spans times forty",
-          "[intersect][certify]")
+TEST_CASE("each knot span of a fitted branch is certified whole", "[intersect][certify]")
 {
-    // The mean-value form alone needed some forty spans per knot span;
-    // the Taylor form within each knot span needs a few.
+    // The mean-value form alone needed some forty spans per knot span, and
+    // the Taylor form with its third derivative enclosed over the span two;
+    // with the fourth enclosed, one (docs/performance.rst).
     const auto result = Intersect(tilted, aboutZ, ctx);
     REQUIRE(result.has_value());
     const Stereon::IntersectionBranch& branch = result->Branches.front();
@@ -129,5 +130,5 @@ TEST_CASE("a fitted branch is certified in far fewer spans than knot spans times
     const auto cert =
         CertifyDeviation(branch.Curve3d, aboutZ, branch.OnB, branch.Range, ctx.GetResolution());
     REQUIRE(cert.has_value());
-    REQUIRE(cert->Spans <= 8 * knots.size());
+    REQUIRE(cert->Spans <= knots.size() - 1);
 }

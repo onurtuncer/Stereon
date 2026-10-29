@@ -57,7 +57,7 @@ constexpr double TwoPi = 2.0 * std::numbers::pi;
 /// narrower than one period, so a few k suffice.
 [[nodiscard]] bool MeetsLattice(const Interval& x, const double phase)
 {
-    const Interval pi = Around(std::numbers::pi);
+    static const Interval pi = Around(std::numbers::pi);
     const double first = std::floor((x.GetLower() / std::numbers::pi - phase) / 2.0) - 1.0;
     const double last = std::ceil((x.GetUpper() / std::numbers::pi - phase) / 2.0) + 1.0;
     for (double k = first; k <= last; k += 1.0) {
@@ -232,67 +232,155 @@ template <std::size_t D>
 
 // --- Traces: what the enclosure needs of each operand -----------------
 
-/// The 3D curve: its point at a parameter, its derivative over a span, its
-/// first and second derivatives at a parameter (DAt(t, n), n = 1, 2), its
-/// third derivative over a span, and the parameters where it may be less
-/// smooth than that (a B-spline's knots; none for the closed forms).
-struct CurveTrace {
-    std::function<IPoint3(double)> At;
-    std::function<IVec3(const Interval&)> D1Over;
-    std::function<IVec3(double, int)> DAt;
-    std::function<IVec3(const Interval&)> D3Over;
+/// The highest derivative the certificate takes: the Taylor form is of the
+/// third order with its remainder from the fourth derivative.
+constexpr int TaylorOrder = 4;
+
+/// A curve's position vector and derivatives, [n] the n-th, enclosed at a
+/// parameter or over a span.
+template <std::size_t D>
+using CurveJet = std::array<BasicVecN<IntervalScalar, D>, TaylorOrder + 1>;
+
+/// A curve's jets for a span: at its midpoint, to the order TaylorOrder - 1,
+/// and over it, to TaylorOrder.
+template <std::size_t D>
+struct SpanJets {
+    CurveJet<D> AtMidpoint;
+    CurveJet<D> Over;
+};
+
+/// A curve in D dimensions: its jets for a span, and the parameters where it
+/// may be less smooth than they need (a B-spline's knots; none for the
+/// closed forms). The jets are evaluated together, since each order over
+/// the span is narrowed by the one above it and the midpoint's.
+template <std::size_t D>
+struct Trace {
+    std::function<SpanJets<D>(const Interval&)> Jets;
     std::vector<double> Breaks;
 };
 
-/// The pcurve: its point at a parameter, and its points and derivatives
-/// over a span; its first and second derivatives at a parameter, its second
-/// and third over a span, and its breaks, as for the curve.
-struct PcurveTrace {
-    std::function<IPoint2(double)> At;
-    std::function<IPoint2(const Interval&)> Over;
-    std::function<IVec2(const Interval&)> D1Over;
-    std::function<IVec2(double, int)> DAt;
-    std::function<IVec2(const Interval&)> D2Over;
-    std::function<IVec2(const Interval&)> D3Over;
-    std::vector<double> Breaks;
+/// The 3D curve and the pcurve.
+using CurveTrace = Trace<3>;
+using PcurveTrace = Trace<2>;
+
+/// The surface's point and partial derivatives at enclosed parameters:
+/// Partial[du][dv] for 1 <= du + dv <= the order asked for, at most
+/// TaylorOrder, the rest zero.
+struct SurfaceJet {
+    IPoint3 Point;
+    std::array<std::array<IVec3, TaylorOrder + 1>, TaylorOrder + 1> Partial;
 };
 
-/// The surface: its point and partial derivatives at enclosed parameters.
+/// The surface: its jet at enclosed parameters, to an order.
 struct SurfaceTrace {
-    std::function<IPoint3(const IPoint2&)> At;
-    std::function<IVec3(const IPoint2&, int, int)> Deriv;
+    std::function<SurfaceJet(const IPoint2&, int)> Jet;
 };
 
-template <typename G>
-[[nodiscard]] CurveTrace ClosedFormCurve(const G& g)
+/// The jet of a closed form at x, a parameter or a span, to the order `top`.
+template <std::size_t D, typename G>
+[[nodiscard]] CurveJet<D> ClosedFormJet(const G& g, const IntervalScalar& x, const int top)
 {
-    return {[g](const double t) { return Eval(g, IntervalScalar{t}); },
-            [g](const Interval& span) { return Deriv(g, IntervalScalar{span}, 1); },
-            [g](const double t, const int n) { return Deriv(g, IntervalScalar{t}, n); },
-            [g](const Interval& span) { return Deriv(g, IntervalScalar{span}, 3); },
-            {}};
+    CurveJet<D> jet{};
+    jet[0] = ToVec(Eval(g, x));
+    for (int n = 1; n <= top; ++n) {
+        jet[static_cast<std::size_t>(n)] = Deriv(g, x, n);
+    }
+    return jet;
 }
 
-template <typename G>
-[[nodiscard]] PcurveTrace ClosedFormPcurve(const G& g)
+/// A circle's and an ellipse's jets from one enclosure of cos x and sin x:
+/// their derivatives turn the radii by quarter turns, as Deriv computes
+/// them, and each evaluated on its own would enclose the same cos and sin
+/// again.
+template <std::size_t D>
+[[nodiscard]] CurveJet<D> ClosedFormJet(const BasicCircle<IntervalScalar, D>& g,
+                                        const IntervalScalar& x, const int top)
 {
-    return {[g](const double t) { return Eval(g, IntervalScalar{t}); },
-            [g](const Interval& span) { return Eval(g, IntervalScalar{span}); },
-            [g](const Interval& span) { return Deriv(g, IntervalScalar{span}, 1); },
-            [g](const double t, const int n) { return Deriv(g, IntervalScalar{t}, n); },
-            [g](const Interval& span) { return Deriv(g, IntervalScalar{span}, 2); },
-            [g](const Interval& span) { return Deriv(g, IntervalScalar{span}, 3); },
+    const IntervalScalar c = cos(x);
+    const IntervalScalar s = sin(x);
+    CurveJet<D> jet{};
+    for (int n = 0; n <= top; ++n) {
+        const BasicCosSin<IntervalScalar> turned = QuarterTurned(c, s, n);
+        jet[static_cast<std::size_t>(n)] = g.Radius * (turned.Cos * g.XAxis + turned.Sin * g.YAxis);
+    }
+    jet[0] = jet[0] + ToVec(g.Center);
+    return jet;
+}
+
+template <std::size_t D>
+[[nodiscard]] CurveJet<D> ClosedFormJet(const BasicEllipse<IntervalScalar, D>& g,
+                                        const IntervalScalar& x, const int top)
+{
+    const IntervalScalar c = cos(x);
+    const IntervalScalar s = sin(x);
+    CurveJet<D> jet{};
+    for (int n = 0; n <= top; ++n) {
+        const BasicCosSin<IntervalScalar> turned = QuarterTurned(c, s, n);
+        jet[static_cast<std::size_t>(n)] =
+            (g.MajorRadius * turned.Cos) * g.XAxis + (g.MinorRadius * turned.Sin) * g.YAxis;
+    }
+    jet[0] = jet[0] + ToVec(g.Center);
+    return jet;
+}
+
+template <std::size_t D, typename G>
+[[nodiscard]] Trace<D> ClosedFormTrace(const G& g)
+{
+    return {[g](const Interval& span) {
+                const double m = 0.5 * (span.GetLower() + span.GetUpper());
+                return SpanJets<D>{ClosedFormJet<D>(g, IntervalScalar{m}, TaylorOrder - 1),
+                                   ClosedFormJet<D>(g, IntervalScalar{span}, TaylorOrder)};
+            },
             {}};
 }
 
 template <typename G>
 [[nodiscard]] SurfaceTrace SurfaceOf(const G& g)
 {
-    return {[g](const IPoint2& uv) { return Eval(g, uv); },
-            [g](const IPoint2& uv, const int du, const int dv) { return Deriv(g, uv, du, dv); }};
+    return {[g](const IPoint2& uv, const int top) {
+        SurfaceJet jet{Eval(g, uv), {}};
+        for (int du = 0; du <= top; ++du) {
+            for (int dv = du == 0 ? 1 : 0; du + dv <= top; ++dv) {
+                jet.Partial[static_cast<std::size_t>(du)][static_cast<std::size_t>(dv)] =
+                    Deriv(g, uv, du, dv);
+            }
+        }
+        return jet;
+    }};
+}
+
+/// A cylinder's jet from one enclosure of cos u and sin u: its u-partials
+/// are the radius turned by quarter turns, as Deriv computes them, and the
+/// axis its only other partial; each partial evaluated on its own would
+/// enclose the same cos and sin again.
+[[nodiscard]] SurfaceTrace SurfaceOf(const BasicCylinder<IntervalScalar>& g)
+{
+    return {[g](const IPoint2& uv, const int top) {
+        const IntervalScalar c = cos(uv.X);
+        const IntervalScalar s = sin(uv.X);
+        const IVec3 axis = Axis(g);
+        const auto radial = [&](const int n) {
+            const BasicCosSin<IntervalScalar> turned = QuarterTurned(c, s, n);
+            return g.Radius * (turned.Cos * g.XAxis + turned.Sin * g.YAxis);
+        };
+        SurfaceJet jet{g.Origin + radial(0) + uv.Y * axis, {}};
+        for (std::size_t du = 1; du <= static_cast<std::size_t>(top); ++du) {
+            jet.Partial[du][0] = radial(static_cast<int>(du));
+        }
+        jet.Partial[0][1] = axis;
+        return jet;
+    }};
 }
 
 // --- B-splines over spans ------------------------------------------------
+
+/// t - m for every t in the span, rounded outward: the differences of the
+/// ends need not be exact when the span holds 0.
+[[nodiscard]] Interval OffsetOver(const Interval& span, const double m)
+{
+    return {(Interval{span.GetLower()} - Interval{m}).GetLower(),
+            (Interval{span.GetUpper()} - Interval{m}).GetUpper()};
+}
 
 /// The derivative curve of a non-rational B-spline (The NURBS Book, eq.
 /// 3.8): degree p - 1 on the knots less their first and last, with poles
@@ -374,99 +462,81 @@ EnclosedPoint(const BasicBSplineCurve<IntervalScalar, D>& c, const double magnit
     return point;
 }
 
-/// A non-rational B-spline with its first two derivative curves, all over
-/// intervals, and what it encloses over a parameter span. The hull of the
-/// poles active over a span holds for any span but is as wide as the knot
-/// spans it covers; within one knot span the spline is a polynomial, so a
-/// mean-value form from the next derivative, p(m) + p'(span) (t - m),
+//// A non-rational B-spline with its derivative curves up to TaylorOrder, all
+/// over intervals, and what it encloses over a parameter span. The hull of
+/// the poles active over a span holds for any span but is as wide as the
+/// knot spans it covers; within one knot span the spline is a polynomial, so
+/// a mean-value form from the next derivative, p(m) + p'(span) (t - m),
 /// narrows with the span. Both are enclosures, so their meet is one.
 template <std::size_t D>
 struct SplineEnclosure {
-    BasicBSplineCurve<IntervalScalar, D> C0;
-    BasicBSplineCurve<IntervalScalar, D> C1;
-    std::optional<BasicBSplineCurve<IntervalScalar, D>> C2;
-    /// The third derivative curve; none below degree 3, where the third
-    /// derivative is zero within a knot span.
-    std::optional<BasicBSplineCurve<IntervalScalar, D>> C3;
-    double Magnitude0 = 0.0;
-    double Magnitude1 = 0.0;
-    double Magnitude2 = 0.0;
+    /// Derivs[n], the n-th derivative curve, Derivs[0] the spline itself;
+    /// none beyond the degree, where the derivative is zero within a knot
+    /// span.
+    std::vector<BasicBSplineCurve<IntervalScalar, D>> Derivs;
+    /// The largest magnitude of each derivative curve's poles.
+    std::vector<double> Magnitudes;
 
-    /// True when the span lies within one knot span of C0.
+    /// True when the span lies within one knot span of the spline.
     [[nodiscard]] bool WithinOneSpan(const Interval& span) const
     {
-        const Interval domain = Domain(C0);
+        const BasicBSplineCurve<IntervalScalar, D>& c = Derivs.front();
+        const Interval domain = Domain(c);
         const double lower = std::clamp(span.GetLower(), domain.GetLower(), domain.GetUpper());
         const double upper = std::clamp(span.GetUpper(), domain.GetLower(), domain.GetUpper());
-        return FindSpan(C0.Knots, C0.Degree, C0.Poles.size(), lower) ==
-               FindSpan(C0.Knots, C0.Degree, C0.Poles.size(), upper);
+        return FindSpan(c.Knots, c.Degree, c.Poles.size(), lower) ==
+               FindSpan(c.Knots, c.Degree, c.Poles.size(), upper);
     }
 
-    [[nodiscard]] static IntervalScalar Offset(const Interval& span)
+    /// The n-th derivative at t; zero beyond the degree.
+    [[nodiscard]] BasicVecN<IntervalScalar, D> At(const double t, const std::size_t n) const
     {
-        const double m = 0.5 * (span.GetLower() + span.GetUpper());
-        return IntervalScalar{Interval{span.GetLower() - m, span.GetUpper() - m}};
-    }
-
-    /// The derivative over the span.
-    [[nodiscard]] BasicVecN<IntervalScalar, D> D1Over(const Interval& span) const
-    {
-        BasicVecN<IntervalScalar, D> hull = ToVec(HullOver(C1, span));
-        if (!C2 || !WithinOneSpan(span)) {
-            return hull;
-        }
-        const double m = 0.5 * (span.GetLower() + span.GetUpper());
-        const BasicVecN<IntervalScalar, D> refined =
-            ToVec(EnclosedPoint(C1, Magnitude1, m)) + ToVec(HullOver(*C2, span)) * Offset(span);
-        return Meet(hull, refined);
-    }
-
-    /// The n-th derivative at t, n = 1 or 2; zero where the degree is below n.
-    [[nodiscard]] BasicVecN<IntervalScalar, D> DAt(const double t, const int n) const
-    {
-        if (n == 1) {
-            return ToVec(EnclosedPoint(C1, Magnitude1, t));
-        }
-        return C2 ? ToVec(EnclosedPoint(*C2, Magnitude2, t)) : BasicVecN<IntervalScalar, D>{};
-    }
-
-    /// The second derivative over the span, narrowed like D1Over.
-    [[nodiscard]] BasicVecN<IntervalScalar, D> D2Over(const Interval& span) const
-    {
-        if (!C2) {
+        if (n >= Derivs.size()) {
             return {};
         }
-        BasicVecN<IntervalScalar, D> hull = ToVec(HullOver(*C2, span));
-        if (!C3 || !WithinOneSpan(span)) {
-            return hull;
-        }
-        const double m = 0.5 * (span.GetLower() + span.GetUpper());
-        return Meet(hull, ToVec(EnclosedPoint(*C2, Magnitude2, m)) +
-                              ToVec(HullOver(*C3, span)) * Offset(span));
+        // Of degree 0, the derivative is its active pole, exactly; Eval
+        // takes degree 1 and above.
+        return Derivs[n].Degree == 0 ? ToVec(HullOver(Derivs[n], Interval{t}))
+                                     : ToVec(EnclosedPoint(Derivs[n], Magnitudes[n], t));
     }
 
-    /// The third derivative over the span: the hull of its derivative
-    /// curve's active poles, constant within a knot span at degree 3.
-    [[nodiscard]] BasicVecN<IntervalScalar, D> D3Over(const Interval& span) const
+    /// The jet at t, to the order TaylorOrder - 1.
+    [[nodiscard]] CurveJet<D> JetAt(const double t) const
     {
-        return C3 ? ToVec(HullOver(*C3, span)) : BasicVecN<IntervalScalar, D>{};
+        CurveJet<D> jet{};
+        for (std::size_t n = 0; n < static_cast<std::size_t>(TaylorOrder); ++n) {
+            jet[n] = At(t, n);
+        }
+        return jet;
+    }
+
+    /// The jets for the span: at its midpoint m, and over it from the top
+    /// order down, each order the hull of its active poles, met within one
+    /// knot span with the mean-value form from m and the order above.
+    [[nodiscard]] SpanJets<D> Jets(const Interval& span) const
+    {
+        const double m = 0.5 * (span.GetLower() + span.GetUpper());
+        SpanJets<D> jets{JetAt(m), {}};
+        const std::size_t top = std::min(Derivs.size() - 1, static_cast<std::size_t>(TaylorOrder));
+        const bool within = WithinOneSpan(span);
+        const IntervalScalar offset{OffsetOver(span, m)};
+        for (std::size_t n = top + 1; n-- > 0;) {
+            jets.Over[n] = ToVec(HullOver(Derivs[n], span));
+            if (within && n < top) {
+                // n < top <= TaylorOrder, an order the midpoint's jet has.
+                jets.Over[n] = Meet(jets.Over[n], jets.AtMidpoint[n] + jets.Over[n + 1] * offset);
+            }
+        }
+        return jets;
     }
 
     /// The distinct knots: where the spline may be less smooth.
     [[nodiscard]] std::vector<double> Breaks() const
     {
-        std::vector<double> breaks(C0.Knots.begin(), C0.Knots.end());
+        const auto& knots = Derivs.front().Knots;
+        std::vector<double> breaks(knots.begin(), knots.end());
         breaks.erase(std::ranges::unique(breaks).begin(), breaks.end());
         return breaks;
-    }
-
-    /// The points over the span.
-    [[nodiscard]] BasicPointN<IntervalScalar, D> Over(const Interval& span) const
-    {
-        const double m = 0.5 * (span.GetLower() + span.GetUpper());
-        const BasicPointN<IntervalScalar, D> refined =
-            EnclosedPoint(C0, Magnitude0, m) + D1Over(span) * Offset(span);
-        return ToPoint(Meet(ToVec(HullOver(C0, span)), ToVec(refined)));
     }
 
     /// The componentwise meet of two enclosures of the same vector; the
@@ -485,55 +555,28 @@ struct SplineEnclosure {
 };
 
 template <std::size_t D>
-[[nodiscard]] std::optional<std::shared_ptr<const SplineEnclosure<D>>>
-EnclosureOf(const BasicBSplineCurve<double, D>& spline)
+[[nodiscard]] std::optional<Trace<D>> SplineTrace(const BasicBSplineCurve<double, D>& spline)
 {
     if (IsRational(spline)) {
         return std::nullopt;
     }
-    SplineEnclosure<D> e{Enclosed(spline), {}, std::nullopt, std::nullopt};
-    std::optional<BasicBSplineCurve<IntervalScalar, D>> first = DerivativeCurve(e.C0);
-    if (!first) {
+    SplineEnclosure<D> e;
+    e.Derivs.push_back(Enclosed(spline));
+    while (e.Derivs.size() <= static_cast<std::size_t>(TaylorOrder)) {
+        std::optional<BasicBSplineCurve<IntervalScalar, D>> next = DerivativeCurve(e.Derivs.back());
+        if (!next) {
+            break;
+        }
+        e.Derivs.push_back(std::move(*next));
+    }
+    if (e.Derivs.size() < 2) {
         return std::nullopt;
     }
-    e.C1 = std::move(*first);
-    e.C2 = DerivativeCurve(e.C1);
-    if (e.C2) {
-        e.C3 = DerivativeCurve(*e.C2);
-        e.Magnitude2 = PoleMagnitude(*e.C2);
+    for (const BasicBSplineCurve<IntervalScalar, D>& c : e.Derivs) {
+        e.Magnitudes.push_back(PoleMagnitude(c));
     }
-    e.Magnitude0 = PoleMagnitude(e.C0);
-    e.Magnitude1 = PoleMagnitude(e.C1);
-    return std::make_shared<const SplineEnclosure<D>>(std::move(e));
-}
-
-[[nodiscard]] std::optional<CurveTrace> SplineCurve(const BSplineCurve& spline)
-{
-    const auto e = EnclosureOf(spline);
-    if (!e) {
-        return std::nullopt;
-    }
-    const std::shared_ptr<const SplineEnclosure<3>> c = *e;
-    return CurveTrace{[c](const double t) { return EnclosedPoint(c->C0, c->Magnitude0, t); },
-                      [c](const Interval& span) { return c->D1Over(span); },
-                      [c](const double t, const int n) { return c->DAt(t, n); },
-                      [c](const Interval& span) { return c->D3Over(span); }, c->Breaks()};
-}
-
-[[nodiscard]] std::optional<PcurveTrace> SplinePcurve(const BSplineCurve2d& spline)
-{
-    const auto e = EnclosureOf(spline);
-    if (!e) {
-        return std::nullopt;
-    }
-    const std::shared_ptr<const SplineEnclosure<2>> c = *e;
-    return PcurveTrace{[c](const double t) { return EnclosedPoint(c->C0, c->Magnitude0, t); },
-                       [c](const Interval& span) { return c->Over(span); },
-                       [c](const Interval& span) { return c->D1Over(span); },
-                       [c](const double t, const int n) { return c->DAt(t, n); },
-                       [c](const Interval& span) { return c->D2Over(span); },
-                       [c](const Interval& span) { return c->D3Over(span); },
-                       c->Breaks()};
+    const auto c = std::make_shared<const SplineEnclosure<D>>(std::move(e));
+    return Trace<D>{[c](const Interval& span) { return c->Jets(span); }, c->Breaks()};
 }
 
 // --- The erased operands --------------------------------------------------
@@ -541,16 +584,16 @@ EnclosureOf(const BasicBSplineCurve<double, D>& spline)
 [[nodiscard]] std::optional<CurveTrace> TraceOf(const Curve& curve)
 {
     if (const Line* line = curve.Target<Line>()) {
-        return ClosedFormCurve(Enclosed(*line));
+        return ClosedFormTrace<3>(Enclosed(*line));
     }
     if (const Circle* circle = curve.Target<Circle>()) {
-        return ClosedFormCurve(Enclosed(*circle));
+        return ClosedFormTrace<3>(Enclosed(*circle));
     }
     if (const Ellipse* ellipse = curve.Target<Ellipse>()) {
-        return ClosedFormCurve(Enclosed(*ellipse));
+        return ClosedFormTrace<3>(Enclosed(*ellipse));
     }
     if (const BSplineCurve* spline = curve.Target<BSplineCurve>()) {
-        return SplineCurve(*spline);
+        return SplineTrace(*spline);
     }
     return std::nullopt;
 }
@@ -558,16 +601,16 @@ EnclosureOf(const BasicBSplineCurve<double, D>& spline)
 [[nodiscard]] std::optional<PcurveTrace> TraceOf(const Curve2d& pcurve)
 {
     if (const Line2d* line = pcurve.Target<Line2d>()) {
-        return ClosedFormPcurve(Enclosed(*line));
+        return ClosedFormTrace<2>(Enclosed(*line));
     }
     if (const Circle2d* circle = pcurve.Target<Circle2d>()) {
-        return ClosedFormPcurve(Enclosed(*circle));
+        return ClosedFormTrace<2>(Enclosed(*circle));
     }
     if (const Ellipse2d* ellipse = pcurve.Target<Ellipse2d>()) {
-        return ClosedFormPcurve(Enclosed(*ellipse));
+        return ClosedFormTrace<2>(Enclosed(*ellipse));
     }
     if (const BSplineCurve2d* spline = pcurve.Target<BSplineCurve2d>()) {
-        return SplinePcurve(*spline);
+        return SplineTrace(*spline);
     }
     return std::nullopt;
 }
@@ -612,10 +655,121 @@ EnclosureOf(const BasicBSplineCurve<double, D>& spline)
     return {std::max(0.0, lower), upper};
 }
 
+///// A truncated Taylor series in s, [k] the coefficient of s^k.
+using Series = std::array<IntervalScalar, TaylorOrder + 1>;
+
+/// 1 / (i! j!) enclosed, for i + j <= TaylorOrder.
+[[nodiscard]] const std::array<std::array<IntervalScalar, TaylorOrder + 1>, TaylorOrder + 1>&
+ReciprocalFactorials()
+{
+    static const auto table = [] {
+        std::array<std::array<IntervalScalar, TaylorOrder + 1>, TaylorOrder + 1> r{};
+        double fi = 1.0;
+        for (std::size_t i = 0; i <= static_cast<std::size_t>(TaylorOrder); ++i) {
+            fi *= i == 0 ? 1.0 : static_cast<double>(i);
+            double fj = 1.0;
+            for (std::size_t j = 0; i + j <= static_cast<std::size_t>(TaylorOrder); ++j) {
+                fj *= j == 0 ? 1.0 : static_cast<double>(j);
+                r[i][j] = IntervalScalar{Interval{1.0} / Interval{fi * fj}};
+            }
+        }
+        return r;
+    }();
+    return table;
+}
+
+/// The coefficients of a curve's Taylor series: its jet's [k] over k!.
+template <typename V>
+[[nodiscard]] std::array<V, TaylorOrder + 1> Coefficients(std::array<V, TaylorOrder + 1> jet)
+{
+    const auto& reciprocal = ReciprocalFactorials();
+    for (std::size_t k = 2; k <= static_cast<std::size_t>(TaylorOrder); ++k) {
+        jet[k] = jet[k] * reciprocal[k][0];
+    }
+    return jet;
+}
+
+/// a b to the order `top`, where a's coefficients below `lowA` and b's below
+/// `lowB` are zero.
+[[nodiscard]] Series Times(const Series& a, const std::size_t lowA, const Series& b,
+                           const std::size_t lowB, const std::size_t top)
+{
+    Series product{};
+    for (std::size_t i = lowA; i + lowB <= top; ++i) {
+        for (std::size_t j = lowB; i + j <= top; ++j) {
+            product[i + j] = product[i + j] + a[i] * b[j];
+        }
+    }
+    return product;
+}
+
+[[nodiscard]] bool IsZero(const IVec3& v)
+{
+    return v.X.Value == Interval{0.0} && v.Y.Value == Interval{0.0} && v.Z.Value == Interval{0.0};
+}
+
+/// The Taylor coefficients g_k = g^(k) / k!, from <= k <= top, of g(s) =
+/// S(q(s)), from the surface's jet at q(0) and the coefficients q_k of the
+/// pcurve's series: S(q0 + d) is the sum over i + j >= 1 of
+/// S_ij du^i dv^j / (i! j!), du and dv the series of q less q0, which is the
+/// chain rule to every order at once (Faa di Bruno's formula). It holds at
+/// each parameter, so the jet and the coefficients enclosed over a span
+/// enclose the g_k at every parameter of it. Partials that are exactly zero,
+/// most of a cylinder's and a plane's, are skipped, and the powers of du and
+/// dv are raised only as far as the partials left need.
+[[nodiscard]] std::array<IVec3, TaylorOrder + 1> Composed(const SurfaceJet& jet,
+                                                          const CurveJet<2>& q,
+                                                          const std::size_t from,
+                                                          const std::size_t top)
+{
+    std::size_t highU = 0;
+    std::size_t highV = 0;
+    for (std::size_t i = 0; i <= top; ++i) {
+        for (std::size_t j = 0; i + j <= top; ++j) {
+            if (i + j > 0 && !IsZero(jet.Partial[i][j])) {
+                highU = std::max(highU, i);
+                highV = std::max(highV, j);
+            }
+        }
+    }
+    std::array<Series, TaylorOrder + 1> du{};
+    std::array<Series, TaylorOrder + 1> dv{};
+    du[0][0] = IntervalScalar{1.0};
+    dv[0][0] = IntervalScalar{1.0};
+    for (std::size_t k = 1; k <= top; ++k) {
+        du[1][k] = q[k].X;
+        dv[1][k] = q[k].Y;
+    }
+    for (std::size_t i = 2; i <= highU; ++i) {
+        du[i] = Times(du[i - 1], i - 1, du[1], 1, top);
+    }
+    for (std::size_t j = 2; j <= highV; ++j) {
+        dv[j] = Times(dv[j - 1], j - 1, dv[1], 1, top);
+    }
+    const auto& reciprocal = ReciprocalFactorials();
+    std::array<IVec3, TaylorOrder + 1> g{};
+    for (std::size_t i = 0; i <= highU; ++i) {
+        for (std::size_t j = 0; j <= highV && i + j <= top; ++j) {
+            if (i + j == 0 || IsZero(jet.Partial[i][j])) {
+                continue;
+            }
+            // du^i dv^j: one of the factors is 1 unless the partial is mixed.
+            const Series w = i == 0   ? dv[j]
+                             : j == 0 ? du[i]
+                                      : Times(du[i], i, dv[j], j, top);
+            const IVec3 scaled = jet.Partial[i][j] * reciprocal[i][j];
+            for (std::size_t k = std::max(i + j, from); k <= top; ++k) {
+                g[k] = g[k] + scaled * w[k];
+            }
+        }
+    }
+    return g;
+}
+
 /// What a span proves about |c(t) - S(p(t))| over it.
 struct SpanBounds {
-    /// A bound over the whole span: the mean-value form
-    /// f(m) + f'(span) (t - m) at the span's midpoint m.
+    /// A bound over the whole span: the smaller of the mean-value form's and
+    /// the Taylor form's, the second only where the first misses the target.
     double Upper;
     /// A deviation that certainly occurs, at the midpoint: the least
     /// magnitude of f(m)'s enclosure. A witness that no certificate below it
@@ -623,66 +777,59 @@ struct SpanBounds {
     double Witness;
 };
 
+/// Bounds on f(t) = c(t) - S(p(t)) over the span from its midpoint m, s = t - m.
+///
+/// The mean-value form, |f(m) + f'(span) s|, shrinks with the square of
+/// the span. Where it misses the target, the Taylor form of the third order
+/// with its remainder in integral form, which holds for vectors:
+///     sum over k <= 3 of |f_k(m)| |s|^k + sup |f_4| |s|^4,
+/// f_k = f^(k) / k!. The coefficients up to the third are evaluated at m,
+/// where c and S(p) nearly cancel and their enclosures are tight; only the
+/// remainder is enclosed over the span. That matters: f's derivatives are
+/// differences of the curve's and the surface's, each varying over the
+/// span by much more than their difference, so whichever order is enclosed
+/// over the span carries that variation. Enclosing the third, as the form
+/// of issue #155 first did, left a remainder of about 0.5 r^4 on the
+/// ellipse's fitted pcurve, just over the target at a knot span's width, and
+/// every knot span was halved; with the fourth enclosed, a knot span
+/// certifies whole. Valid where c and S(p) are four times differentiable
+/// over the span: within one polynomial piece of each B-spline, which
+/// Bisect's seeding at the knots guarantees.
 [[nodiscard]] SpanBounds BoundsOver(const CurveTrace& c, const PcurveTrace& p,
-                                    const SurfaceTrace& s, const Interval& span)
+                                    const SurfaceTrace& s, const Interval& span,
+                                    const double target)
 {
+    constexpr auto order = static_cast<std::size_t>(TaylorOrder);
     const double m = 0.5 * (span.GetLower() + span.GetUpper());
-    const IVec3 atMidpoint = c.At(m) - s.At(p.At(m));
-    const IPoint2 uv = p.Over(span);
-    const IVec2 duv = p.D1Over(span);
-    const IVec3 slope = c.D1Over(span) - (s.Deriv(uv, 1, 0) * duv.X + s.Deriv(uv, 0, 1) * duv.Y);
-    const IntervalScalar offset{Interval{span.GetLower() - m, span.GetUpper() - m}};
-    const IVec3 f = atMidpoint + slope * offset;
-    return {Length(f).GetUpper(), Length(atMidpoint).GetLower()};
-}
-
-/// A bound over the span from the third-order Taylor form at its midpoint
-/// m, with s = t - m and |s| <= r, the span's half width:
-///     |f(m)| + |f1(m)| r + |f2(m)| r^2 / 2 + sup |f3| r^3 / 6,
-/// fk the k-th derivative of f(t) = c(t) - S(p(t)), the remainder by its
-/// integral form, so that it holds for vectors. The
-/// point terms are evaluated at m, where c and S(p) nearly cancel and their
-/// enclosures are tight; only the cubic term is enclosed over the span, so
-/// the bound shrinks with the cube of the span where the mean-value form
-/// shrinks with its square, which made the bisection rediscover each knot
-/// span in some forty pieces (issue #155). Valid where c and S(p) are three
-/// times differentiable over the span: within one polynomial piece of each
-/// B-spline, which Bisect's seeding at the knots guarantees.
-[[nodiscard]] double TaylorBound(const CurveTrace& c, const PcurveTrace& p, const SurfaceTrace& s,
-                                 const Interval& span)
-{
-    const double m = 0.5 * (span.GetLower() + span.GetUpper());
-    const IPoint2 uv = p.At(m);
-    const IVec2 d1 = p.DAt(m, 1);
-    const IVec2 d2 = p.DAt(m, 2);
-    const IVec3 s10 = s.Deriv(uv, 1, 0);
-    const IVec3 s01 = s.Deriv(uv, 0, 1);
-    const IntervalScalar two{2.0};
-    const IntervalScalar three{3.0};
-    const IVec3 f0 = c.At(m) - s.At(uv);
-    const IVec3 f1 = c.DAt(m, 1) - (s10 * d1.X + s01 * d1.Y);
-    const IVec3 f2 =
-        c.DAt(m, 2) - (s.Deriv(uv, 2, 0) * (d1.X * d1.X) + s.Deriv(uv, 1, 1) * (two * d1.X * d1.Y) +
-                       s.Deriv(uv, 0, 2) * (d1.Y * d1.Y) + s10 * d2.X + s01 * d2.Y);
-    // The third derivative of S(p(t)) over the span, by the chain rule.
-    const IPoint2 box = p.Over(span);
-    const IVec2 e1 = p.D1Over(span);
-    const IVec2 e2 = p.D2Over(span);
-    const IVec2 e3 = p.D3Over(span);
-    const IVec3 g3 = s.Deriv(box, 3, 0) * (e1.X * e1.X * e1.X) +
-                     s.Deriv(box, 2, 1) * (three * e1.X * e1.X * e1.Y) +
-                     s.Deriv(box, 1, 2) * (three * e1.X * e1.Y * e1.Y) +
-                     s.Deriv(box, 0, 3) * (e1.Y * e1.Y * e1.Y) +
-                     s.Deriv(box, 2, 0) * (three * e1.X * e2.X) +
-                     s.Deriv(box, 1, 1) * (three * (e1.X * e2.Y + e2.X * e1.Y)) +
-                     s.Deriv(box, 0, 2) * (three * e1.Y * e2.Y) + s.Deriv(box, 1, 0) * e3.X +
-                     s.Deriv(box, 0, 1) * e3.Y;
-    const IVec3 f3 = c.D3Over(span) - g3;
-    const Interval r{0.5 * (span.GetUpper() - span.GetLower())};
-    const Interval total = Interval{Length(f0).GetUpper()} + Interval{Length(f1).GetUpper()} * r +
-                           Interval{Length(f2).GetUpper()} * r * r / Interval{2.0} +
-                           Interval{Length(f3).GetUpper()} * r * r * r / Interval{6.0};
-    return total.GetUpper();
+    const SpanJets<3> curve = c.Jets(span);
+    const SpanJets<2> pcurve = p.Jets(span);
+    const CurveJet<3> curveAt = Coefficients(curve.AtMidpoint);
+    const CurveJet<2> pcurveAt = Coefficients(pcurve.AtMidpoint);
+    const SurfaceJet at = s.Jet(ToPoint(pcurveAt[0]), TaylorOrder - 1);
+    const IVec3 f0 = curveAt[0] - ToVec(at.Point);
+    const CurveJet<3> curveOver = Coefficients(curve.Over);
+    const CurveJet<2> pcurveOver = Coefficients(pcurve.Over);
+    const SurfaceJet over = s.Jet(ToPoint(pcurveOver[0]), TaylorOrder);
+    const IVec3 slope = curveOver[1] - (over.Partial[1][0] * pcurveOver[1].X +
+                                        over.Partial[0][1] * pcurveOver[1].Y);
+    const Interval offset = OffsetOver(span, m);
+    SpanBounds bounds{Length(f0 + slope * IntervalScalar{offset}).GetUpper(),
+                      Length(f0).GetLower()};
+    if (bounds.Upper <= target) {
+        return bounds;
+    }
+    const std::array<IVec3, TaylorOrder + 1> surfaceAt = Composed(at, pcurveAt, 1, order - 1);
+    const IVec3 remainder = curveOver[order] - Composed(over, pcurveOver, order, order)[order];
+    const Interval reach{std::max(std::abs(offset.GetLower()), std::abs(offset.GetUpper()))};
+    Interval taylor{Length(f0).GetUpper()};
+    Interval power{1.0};
+    for (std::size_t k = 1; k <= order; ++k) {
+        power = power * reach;
+        const IVec3 fk = k < order ? curveAt[k] - surfaceAt[k] : remainder;
+        taylor = taylor + Interval{Length(fk).GetUpper()} * power;
+    }
+    bounds.Upper = std::min(bounds.Upper, taylor.GetUpper());
+    return bounds;
 }
 
 /// The breaks of either operand strictly inside the range, sorted, without
@@ -739,10 +886,7 @@ struct SpanBounds {
     for (std::size_t spans = 0; !work.empty(); ++spans) {
         const Interval span = work.back();
         work.pop_back();
-        SpanBounds local = BoundsOver(c, p, s, span);
-        if (local.Upper > target) {
-            local.Upper = std::min(local.Upper, TaylorBound(c, p, s, span));
-        }
+        const SpanBounds local = BoundsOver(c, p, s, span, target);
         if (local.Upper <= target) {
             certificate.Bound = std::max(certificate.Bound, local.Upper);
             ++certificate.Spans;

@@ -1047,8 +1047,8 @@ the curve's derivative and the surface's along the pcurve separately, so
 it loses their correlation and shrinks only with the square of the span:
 an analytic identity is rediscovered span by span. The 300 ms of the skew
 row was the handler exhausting its sample budget on a tangent
-configuration, a failure path, not the cost of a transverse skew
-intersection.
+configuration, not the cost of a transverse skew intersection; the refusal
+itself was a defect (#159).
 
 Lines, circles and ellipses, and a plane along any of their plane forms or
 a cylinder along a ruling or a unit-speed turn, are all of the form
@@ -1116,8 +1116,84 @@ and checks every bound against 20 000 samples of the deviation, refutes a
 spline pcurve moved off by more than the target, and checks that the span
 count stays a small multiple of the knot count.
 ``bench/HotPathBench.cpp`` has rows for the circle, the ellipse, a
-transverse skew pair and the tangent pair, the last named as the failure
-path it times.
+transverse skew pair and the tangent pair.
+
+The tangent row was not a cost but a defect: a valid internally tangent pair
+was refused after the handler spent its sample budget on a sliver piece
+cut at a seam through the point of contact. The repair is its own change,
+#159; with it the row times a successful intersection, and it is named
+``skew-tangent``.
+
+Each certified span then cost 20 to 35 µs, and the ellipse's cylinder side
+evaluated three spans per knot span: every knot span failed whole and was
+halved. Timing the stages of a span with the time-stamp counter showed
+where both came from.
+
+The surface was evaluated partial by partial, each partial enclosing the
+same cos u and sin u again; a cylinder's jet, and a circle's or an
+ellipse's, now come from one enclosure of each, turned by quarter turns as
+``Deriv`` turns them. The curves' jets at the midpoint and over the span
+are evaluated together, so a B-spline's derivatives at the midpoint serve
+both.
+
+The halving came from the order enclosed over the span. The third
+derivative of :math:`f = c - S(p)` is the difference of the curve's and
+the surface's, each of which varies over a knot span by about 0.5 on the
+ellipse while their difference stays near zero; enclosed over the span,
+the cubic term carried that variation, about :math:`0.5\, r^4`, just over
+the target at a knot span's width. The Taylor form now goes one order
+further, with the coefficients up to the third at the midpoint and only
+the fourth derivative enclosed over the span:
+
+.. math::
+
+   \sum_{k \le 3} |f_k(m)|\, r^k + \sup |f_4|\, r^4,
+   \qquad f_k = f^{(k)} / k!.
+
+The coefficients of :math:`S(p(t))` come from composing truncated Taylor
+series, the chain rule to every order at once (Faà di Bruno's formula),
+skipping the partials that are exactly zero, as most of a cylinder's and a
+plane's are. A knot span of the ellipse's pcurve now certifies whole.
+
+Measured back to back, the old and new builds alternating at high
+priority, minimum of four runs. The machine was under background load, so
+the absolute times run about 1.7 times the quiet runs above; the ratios
+are the result.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Fixture
+     - Spans, before → after
+     - Before
+     - After
+   * - Ellipse, cylinder side (``CertifyDeviation``)
+     - 126 → 63
+     - 7.5 ms
+     - 2.1 ms
+   * - Skew crossing, side A
+     - 128 → 126
+     - 4.8 ms
+     - 4.2 ms
+   * - Skew crossing, side B
+     - 127 → 126
+     - 3.6 ms
+     - 3.1 ms
+   * - ``Intersect``, ellipse
+     -
+     - 8.1 ms
+     - 2.5 ms
+   * - ``Intersect``, skew crossing
+     -
+     - 20.2 ms
+     - 19.2 ms
+
+The skew pair's splines already certified one span per knot span, so it
+gains only the cheaper evaluation, about 10 %; the ellipse gains threefold.
+Certification is still most of the skew row: its fits take well under a
+millisecond a branch, its certificates some 126 knot spans a side at 25
+to 35 µs each, in interval arithmetic that rounds every operation
+outward.
 
 Reproducing the numbers
 -----------------------

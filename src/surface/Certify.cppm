@@ -87,12 +87,14 @@ struct DeviationCertificate {
 /// a line, circle or ellipse pcurve; a cylinder along a ruling or a
 /// unit-speed turn), the bound is |dK0| + |dKc| + |dKs| + |dKt| max|t| over
 /// enclosed coefficient differences, in one step. Otherwise, or when that
-/// bound exceeds the target, the
-/// range is bisected until the enclosure on every span is within `target`,
-/// and the largest enclosure is the bound. The enclosures are mean-value
-/// forms, f(m) + f'(span) (t - m), from the geometry templates evaluated
-/// over IntervalScalar; a B-spline's derivative over a span is the hull of
-/// its derivative curve's poles.
+/// bound exceeds the target, the range is cut at every knot of the curve
+/// and the pcurve and bisected until the bound on every span is within
+/// `target`, and the largest is the bound. A span's bound is the smaller of
+/// the mean-value form f(m) + f'(span) (t - m) and a Taylor form of the
+/// third order at the midpoint m with its remainder from the fourth
+/// derivative enclosed over the span, from the geometry templates evaluated
+/// over IntervalScalar; a B-spline's derivatives over a span are the hulls
+/// of its derivative curves' poles, narrowed by mean-value forms.
 ///
 /// Covers lines, circles, ellipses and non-rational B-splines as the curve,
 /// lines, circles, ellipses and non-rational B-splines as the pcurve, and

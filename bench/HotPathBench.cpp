@@ -203,9 +203,9 @@ void CylinderCylinderParallel(benchmark::State& state)
 // The fixtures of issue #155: a plane across the axis gives a circle, whose
 // certificates are of the closed form; a tilted plane an ellipse, whose
 // cylinder side has a B-spline pcurve; skew cylinders crossing transversally;
-// and skew cylinders internally tangent (3 + 2 = 5), which the handler
-// refuses after its sample budget, so that row times a failure path. The
-// tilted plane is the plane-plane row's.
+// and skew cylinders internally tangent (3 + 2 = 5), touching on the seam
+// of each, which the handler refused after its sample budget until #155.
+// The tilted plane is the plane-plane row's.
 const Stereon::Surface SkewCrossing{
     Stereon::Cylinder{Point3{1.0, 0.0, 0.0}, 3.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 0.6, 0.8}, true}};
 const Stereon::Surface SkewTangent{
@@ -304,8 +304,7 @@ BENCHMARK(PlaneCylinder)->Name("HotPath/Intersect/PlaneCylinder/circle");
 BENCHMARK(CylinderCylinderParallel)->Name("HotPath/Intersect/CylinderCylinder/parallel");
 BENCHMARK(PlaneCylinderEllipse)->Name("HotPath/Intersect/PlaneCylinder/ellipse");
 BENCHMARK(CylinderCylinderSkewCrossing)->Name("HotPath/Intersect/CylinderCylinder/skew-crossing");
-BENCHMARK(CylinderCylinderSkewTangent)
-    ->Name("HotPath/Intersect/CylinderCylinder/skew-tangent-refused");
+BENCHMARK(CylinderCylinderSkewTangent)->Name("HotPath/Intersect/CylinderCylinder/skew-tangent");
 BENCHMARK(RayMeetsPlane)->Name("HotPath/RayMeets/plane");
 BENCHMARK(RayMeetsCylinder)->Name("HotPath/RayMeets/cylinder");
 BENCHMARK(CurveKnotInsertion)->Name("HotPath/CurveKnotInsertion");
