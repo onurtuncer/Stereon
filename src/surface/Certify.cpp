@@ -232,18 +232,29 @@ template <std::size_t D>
 
 // --- Traces: what the enclosure needs of each operand -----------------
 
-/// The 3D curve: its point at a parameter, and its derivative over a span.
+/// The 3D curve: its point at a parameter, its derivative over a span, its
+/// first and second derivatives at a parameter (DAt(t, n), n = 1, 2), its
+/// third derivative over a span, and the parameters where it may be less
+/// smooth than that (a B-spline's knots; none for the closed forms).
 struct CurveTrace {
     std::function<IPoint3(double)> At;
     std::function<IVec3(const Interval&)> D1Over;
+    std::function<IVec3(double, int)> DAt;
+    std::function<IVec3(const Interval&)> D3Over;
+    std::vector<double> Breaks;
 };
 
 /// The pcurve: its point at a parameter, and its points and derivatives
-/// over a span.
+/// over a span; its first and second derivatives at a parameter, its second
+/// and third over a span, and its breaks, as for the curve.
 struct PcurveTrace {
     std::function<IPoint2(double)> At;
     std::function<IPoint2(const Interval&)> Over;
     std::function<IVec2(const Interval&)> D1Over;
+    std::function<IVec2(double, int)> DAt;
+    std::function<IVec2(const Interval&)> D2Over;
+    std::function<IVec2(const Interval&)> D3Over;
+    std::vector<double> Breaks;
 };
 
 /// The surface: its point and partial derivatives at enclosed parameters.
@@ -256,7 +267,10 @@ template <typename G>
 [[nodiscard]] CurveTrace ClosedFormCurve(const G& g)
 {
     return {[g](const double t) { return Eval(g, IntervalScalar{t}); },
-            [g](const Interval& span) { return Deriv(g, IntervalScalar{span}, 1); }};
+            [g](const Interval& span) { return Deriv(g, IntervalScalar{span}, 1); },
+            [g](const double t, const int n) { return Deriv(g, IntervalScalar{t}, n); },
+            [g](const Interval& span) { return Deriv(g, IntervalScalar{span}, 3); },
+            {}};
 }
 
 template <typename G>
@@ -264,7 +278,11 @@ template <typename G>
 {
     return {[g](const double t) { return Eval(g, IntervalScalar{t}); },
             [g](const Interval& span) { return Eval(g, IntervalScalar{span}); },
-            [g](const Interval& span) { return Deriv(g, IntervalScalar{span}, 1); }};
+            [g](const Interval& span) { return Deriv(g, IntervalScalar{span}, 1); },
+            [g](const double t, const int n) { return Deriv(g, IntervalScalar{t}, n); },
+            [g](const Interval& span) { return Deriv(g, IntervalScalar{span}, 2); },
+            [g](const Interval& span) { return Deriv(g, IntervalScalar{span}, 3); },
+            {}};
 }
 
 template <typename G>
@@ -367,8 +385,12 @@ struct SplineEnclosure {
     BasicBSplineCurve<IntervalScalar, D> C0;
     BasicBSplineCurve<IntervalScalar, D> C1;
     std::optional<BasicBSplineCurve<IntervalScalar, D>> C2;
+    /// The third derivative curve; none below degree 3, where the third
+    /// derivative is zero within a knot span.
+    std::optional<BasicBSplineCurve<IntervalScalar, D>> C3;
     double Magnitude0 = 0.0;
     double Magnitude1 = 0.0;
+    double Magnitude2 = 0.0;
 
     /// True when the span lies within one knot span of C0.
     [[nodiscard]] bool WithinOneSpan(const Interval& span) const
@@ -397,6 +419,45 @@ struct SplineEnclosure {
         const BasicVecN<IntervalScalar, D> refined =
             ToVec(EnclosedPoint(C1, Magnitude1, m)) + ToVec(HullOver(*C2, span)) * Offset(span);
         return Meet(hull, refined);
+    }
+
+    /// The n-th derivative at t, n = 1 or 2; zero where the degree is below n.
+    [[nodiscard]] BasicVecN<IntervalScalar, D> DAt(const double t, const int n) const
+    {
+        if (n == 1) {
+            return ToVec(EnclosedPoint(C1, Magnitude1, t));
+        }
+        return C2 ? ToVec(EnclosedPoint(*C2, Magnitude2, t)) : BasicVecN<IntervalScalar, D>{};
+    }
+
+    /// The second derivative over the span, narrowed like D1Over.
+    [[nodiscard]] BasicVecN<IntervalScalar, D> D2Over(const Interval& span) const
+    {
+        if (!C2) {
+            return {};
+        }
+        BasicVecN<IntervalScalar, D> hull = ToVec(HullOver(*C2, span));
+        if (!C3 || !WithinOneSpan(span)) {
+            return hull;
+        }
+        const double m = 0.5 * (span.GetLower() + span.GetUpper());
+        return Meet(hull, ToVec(EnclosedPoint(*C2, Magnitude2, m)) +
+                              ToVec(HullOver(*C3, span)) * Offset(span));
+    }
+
+    /// The third derivative over the span: the hull of its derivative
+    /// curve's active poles, constant within a knot span at degree 3.
+    [[nodiscard]] BasicVecN<IntervalScalar, D> D3Over(const Interval& span) const
+    {
+        return C3 ? ToVec(HullOver(*C3, span)) : BasicVecN<IntervalScalar, D>{};
+    }
+
+    /// The distinct knots: where the spline may be less smooth.
+    [[nodiscard]] std::vector<double> Breaks() const
+    {
+        std::vector<double> breaks(C0.Knots.begin(), C0.Knots.end());
+        breaks.erase(std::ranges::unique(breaks).begin(), breaks.end());
+        return breaks;
     }
 
     /// The points over the span.
@@ -430,13 +491,17 @@ EnclosureOf(const BasicBSplineCurve<double, D>& spline)
     if (IsRational(spline)) {
         return std::nullopt;
     }
-    SplineEnclosure<D> e{Enclosed(spline), {}, std::nullopt};
+    SplineEnclosure<D> e{Enclosed(spline), {}, std::nullopt, std::nullopt};
     std::optional<BasicBSplineCurve<IntervalScalar, D>> first = DerivativeCurve(e.C0);
     if (!first) {
         return std::nullopt;
     }
     e.C1 = std::move(*first);
     e.C2 = DerivativeCurve(e.C1);
+    if (e.C2) {
+        e.C3 = DerivativeCurve(*e.C2);
+        e.Magnitude2 = PoleMagnitude(*e.C2);
+    }
     e.Magnitude0 = PoleMagnitude(e.C0);
     e.Magnitude1 = PoleMagnitude(e.C1);
     return std::make_shared<const SplineEnclosure<D>>(std::move(e));
@@ -450,7 +515,9 @@ EnclosureOf(const BasicBSplineCurve<double, D>& spline)
     }
     const std::shared_ptr<const SplineEnclosure<3>> c = *e;
     return CurveTrace{[c](const double t) { return EnclosedPoint(c->C0, c->Magnitude0, t); },
-                      [c](const Interval& span) { return c->D1Over(span); }};
+                      [c](const Interval& span) { return c->D1Over(span); },
+                      [c](const double t, const int n) { return c->DAt(t, n); },
+                      [c](const Interval& span) { return c->D3Over(span); }, c->Breaks()};
 }
 
 [[nodiscard]] std::optional<PcurveTrace> SplinePcurve(const BSplineCurve2d& spline)
@@ -462,7 +529,11 @@ EnclosureOf(const BasicBSplineCurve<double, D>& spline)
     const std::shared_ptr<const SplineEnclosure<2>> c = *e;
     return PcurveTrace{[c](const double t) { return EnclosedPoint(c->C0, c->Magnitude0, t); },
                        [c](const Interval& span) { return c->Over(span); },
-                       [c](const Interval& span) { return c->D1Over(span); }};
+                       [c](const Interval& span) { return c->D1Over(span); },
+                       [c](const double t, const int n) { return c->DAt(t, n); },
+                       [c](const Interval& span) { return c->D2Over(span); },
+                       [c](const Interval& span) { return c->D3Over(span); },
+                       c->Breaks()};
 }
 
 // --- The erased operands --------------------------------------------------
@@ -565,6 +636,73 @@ struct SpanBounds {
     return {Length(f).GetUpper(), Length(atMidpoint).GetLower()};
 }
 
+/// A bound over the span from the third-order Taylor form at its midpoint
+/// m, with s = t - m and |s| <= r, the span's half width:
+///     |f(m)| + |f1(m)| r + |f2(m)| r^2 / 2 + sup |f3| r^3 / 6,
+/// fk the k-th derivative of f(t) = c(t) - S(p(t)), the remainder by its
+/// integral form, so that it holds for vectors. The
+/// point terms are evaluated at m, where c and S(p) nearly cancel and their
+/// enclosures are tight; only the cubic term is enclosed over the span, so
+/// the bound shrinks with the cube of the span where the mean-value form
+/// shrinks with its square, which made the bisection rediscover each knot
+/// span in some forty pieces (issue #155). Valid where c and S(p) are three
+/// times differentiable over the span: within one polynomial piece of each
+/// B-spline, which Bisect's seeding at the knots guarantees.
+[[nodiscard]] double TaylorBound(const CurveTrace& c, const PcurveTrace& p, const SurfaceTrace& s,
+                                 const Interval& span)
+{
+    const double m = 0.5 * (span.GetLower() + span.GetUpper());
+    const IPoint2 uv = p.At(m);
+    const IVec2 d1 = p.DAt(m, 1);
+    const IVec2 d2 = p.DAt(m, 2);
+    const IVec3 s10 = s.Deriv(uv, 1, 0);
+    const IVec3 s01 = s.Deriv(uv, 0, 1);
+    const IntervalScalar two{2.0};
+    const IntervalScalar three{3.0};
+    const IVec3 f0 = c.At(m) - s.At(uv);
+    const IVec3 f1 = c.DAt(m, 1) - (s10 * d1.X + s01 * d1.Y);
+    const IVec3 f2 =
+        c.DAt(m, 2) - (s.Deriv(uv, 2, 0) * (d1.X * d1.X) + s.Deriv(uv, 1, 1) * (two * d1.X * d1.Y) +
+                       s.Deriv(uv, 0, 2) * (d1.Y * d1.Y) + s10 * d2.X + s01 * d2.Y);
+    // The third derivative of S(p(t)) over the span, by the chain rule.
+    const IPoint2 box = p.Over(span);
+    const IVec2 e1 = p.D1Over(span);
+    const IVec2 e2 = p.D2Over(span);
+    const IVec2 e3 = p.D3Over(span);
+    const IVec3 g3 = s.Deriv(box, 3, 0) * (e1.X * e1.X * e1.X) +
+                     s.Deriv(box, 2, 1) * (three * e1.X * e1.X * e1.Y) +
+                     s.Deriv(box, 1, 2) * (three * e1.X * e1.Y * e1.Y) +
+                     s.Deriv(box, 0, 3) * (e1.Y * e1.Y * e1.Y) +
+                     s.Deriv(box, 2, 0) * (three * e1.X * e2.X) +
+                     s.Deriv(box, 1, 1) * (three * (e1.X * e2.Y + e2.X * e1.Y)) +
+                     s.Deriv(box, 0, 2) * (three * e1.Y * e2.Y) + s.Deriv(box, 1, 0) * e3.X +
+                     s.Deriv(box, 0, 1) * e3.Y;
+    const IVec3 f3 = c.D3Over(span) - g3;
+    const Interval r{0.5 * (span.GetUpper() - span.GetLower())};
+    const Interval total = Interval{Length(f0).GetUpper()} + Interval{Length(f1).GetUpper()} * r +
+                           Interval{Length(f2).GetUpper()} * r * r / Interval{2.0} +
+                           Interval{Length(f3).GetUpper()} * r * r * r / Interval{6.0};
+    return total.GetUpper();
+}
+
+/// The breaks of either operand strictly inside the range, sorted, without
+/// repeats: the seams of the starting spans.
+[[nodiscard]] std::vector<double> BreaksWithin(const CurveTrace& c, const PcurveTrace& p,
+                                               const Interval& range)
+{
+    std::vector<double> breaks;
+    for (const std::vector<double>* list : {&c.Breaks, &p.Breaks}) {
+        for (const double b : *list) {
+            if (range.GetLower() < b && b < range.GetUpper()) {
+                breaks.push_back(b);
+            }
+        }
+    }
+    std::ranges::sort(breaks);
+    breaks.erase(std::ranges::unique(breaks).begin(), breaks.end());
+    return breaks;
+}
+
 [[nodiscard]] std::string Number(const double x)
 {
     std::array<char, 32> buffer{};
@@ -572,8 +710,12 @@ struct SpanBounds {
     return std::string(buffer.data(), r.ptr);
 }
 
-/// Spans bisected until each is within the target: a stack, so the memory
-/// stays logarithmic in their number. A span whose midpoint deviates by
+/// Spans bisected until each is within the target, starting from the range
+/// cut at every break of the curve and the pcurve, so that each span lies
+/// in one polynomial piece of both and the Taylor form holds on it; each
+/// span's bound is the smaller of that form's and the mean-value form's,
+/// both rigorous. A stack, so the memory stays logarithmic in the number of
+/// spans of each starting piece. A span whose midpoint deviates by
 /// more than the target for certain ends the search at once: no
 /// subdivision can certify what a point already refutes. A span that can
 /// no longer be split (its midpoint is one of its ends) or the budget
@@ -584,12 +726,23 @@ struct SpanBounds {
                                                   const double target)
 {
     constexpr std::size_t SpanBudget = std::size_t{1} << 18;
-    std::vector<Interval> work{range};
+    // The starting pieces, pushed last first so that the first is checked
+    // first, as when the range was one piece.
+    std::vector<double> cuts = BreaksWithin(c, p, range);
+    cuts.insert(cuts.begin(), range.GetLower());
+    cuts.push_back(range.GetUpper());
+    std::vector<Interval> work;
+    for (std::size_t k = cuts.size() - 1; k > 0; --k) {
+        work.emplace_back(cuts[k - 1], cuts[k]);
+    }
     DeviationCertificate certificate;
     for (std::size_t spans = 0; !work.empty(); ++spans) {
         const Interval span = work.back();
         work.pop_back();
-        const SpanBounds local = BoundsOver(c, p, s, span);
+        SpanBounds local = BoundsOver(c, p, s, span);
+        if (local.Upper > target) {
+            local.Upper = std::min(local.Upper, TaylorBound(c, p, s, span));
+        }
         if (local.Upper <= target) {
             certificate.Bound = std::max(certificate.Bound, local.Upper);
             ++certificate.Spans;
