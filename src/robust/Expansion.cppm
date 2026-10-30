@@ -184,10 +184,11 @@ public:
     [[nodiscard]] constexpr bool IsZero() const noexcept { return m_Length == 0; }
 
     /// The components, smallest magnitude first, none of them zero.
-    [[nodiscard]] constexpr std::span<const double> GetComponents() const noexcept
+    [[nodiscard]] constexpr std::span<const double> GetComponents() const& noexcept
     {
         return std::span<const double>{m_Components.data(), m_Length};
     }
+    constexpr std::span<const double> GetComponents() const&& = delete;
     [[nodiscard]] constexpr double operator[](const std::size_t i) const
         STEREON_HOT_PRE(i < GetLength())
     {
@@ -450,10 +451,11 @@ public:
     [[nodiscard]] bool IsZero() const noexcept { return m_Components.empty(); }
 
     /// The components, smallest magnitude first, none of them zero.
-    [[nodiscard]] std::span<const double> GetComponents() const noexcept
+    [[nodiscard]] std::span<const double> GetComponents() const& noexcept
     {
         return std::span<const double>{m_Components};
     }
+    std::span<const double> GetComponents() const&& = delete;
     [[nodiscard]] double operator[](const std::size_t i) const STEREON_HOT_PRE(i < GetLength())
     {
         return m_Components[i];

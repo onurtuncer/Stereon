@@ -77,6 +77,14 @@ using Stereon::WriteGeometry;
 
 namespace {
 
+/// The message of a failed result, copied: the result is named by the
+/// parameter, so the message is read from a named owner (ADR-0046).
+template <typename R>
+std::string MessageOf(const R& result)
+{
+    return std::string(result.error().GetMessage());
+}
+
 using Bytes = std::vector<std::byte>;
 
 constexpr Vec3 X{1.0 / 3.0, 2.0 / 3.0, 2.0 / 3.0};
@@ -390,9 +398,7 @@ TEST_CASE("invalid geometry in a file is caught by the checked factories", "[io]
     Bytes renamed = Written(one);
     renamed[ChunkAt(renamed, "CRVS") + 20 + 8 + 2] = std::byte{'Q'};
     Reseal(renamed, ChunkAt(renamed, "CRVS"));
-    REQUIRE(
-        std::string(ReadGeometry(renamed).error().GetMessage()).find("unknown type \"Qircle\"") !=
-        std::string::npos);
+    REQUIRE(MessageOf(ReadGeometry(renamed)).find("unknown type \"Qircle\"") != std::string::npos);
 }
 
 TEST_CASE("unknown chunks: required ones are refused, optional ones skipped", "[io][archive]")
@@ -654,7 +660,7 @@ TEST_CASE("trimmed-curve records are validated and their nesting bounded", "[io]
             b[end - 9 + i] = static_cast<std::byte>((bits >> (8 * i)) & 0xFFU);
         }
         Reseal(b, curves);
-        return std::string(ReadGeometry(b).error().GetMessage());
+        return MessageOf(ReadGeometry(b));
     };
     REQUIRE(withUpper(std::numeric_limits<double>::quiet_NaN()).find("not finite and non-empty") !=
             std::string::npos);
@@ -675,8 +681,7 @@ TEST_CASE("trimmed-curve records are validated and their nesting bounded", "[io]
     // "TrimmedCurve2d" -> "TrimmedCurve2x": the name, after count and length.
     renamed[planeCurves + 20 + 8 + 2 + 13] = std::byte{'x'};
     Reseal(renamed, planeCurves);
-    REQUIRE(std::string(ReadGeometry(renamed).error().GetMessage()).find("unknown type") !=
-            std::string::npos);
+    REQUIRE(MessageOf(ReadGeometry(renamed)).find("unknown type") != std::string::npos);
 }
 
 TEST_CASE("swept NURBS surfaces survive the geometry archive", "[io][swept]")
@@ -784,7 +789,7 @@ std::string ReadWithTail(Bytes b, const Bytes& bytes)
     const std::size_t end = surfaces + 20 + U32At(b, surfaces + 8);
     std::ranges::copy(bytes, b.begin() + static_cast<std::ptrdiff_t>(end - bytes.size()));
     Reseal(b, surfaces);
-    return std::string(ReadGeometry(b).error().GetMessage());
+    return MessageOf(ReadGeometry(b));
 }
 
 Bytes DoubleBytes(const double x)
@@ -897,8 +902,7 @@ TEST_CASE("trimmed-surface and sweep records are validated and their nesting bou
     // "TrimmedSurface" -> "TrimmedSurfacx": the name, after count and length.
     renamed[surfaces + 20 + 8 + 2 + 13] = std::byte{'x'};
     Reseal(renamed, surfaces);
-    REQUIRE(std::string(ReadGeometry(renamed).error().GetMessage()).find("unknown type") !=
-            std::string::npos);
+    REQUIRE(MessageOf(ReadGeometry(renamed)).find("unknown type") != std::string::npos);
 }
 
 TEST_CASE("a revolution's unit axis survives the round trip whatever its direction",

@@ -141,6 +141,24 @@ struct PointBasis {
     return hash;
 }
 
+/// The product's values as a Valid result, unless the arithmetic overflowed:
+/// finite inputs can still give an infinite or NaN component, which is no
+/// derivative. That is reported as Indeterminate, naming the component,
+/// rather than published as Valid (SensitivityResult::Computed refuses it).
+[[nodiscard]] Result<SensitivityResult>
+Published(std::vector<double> values, const std::uint64_t signature, const std::string_view where)
+{
+    for (std::size_t k = 0; k < values.size(); ++k) {
+        if (!std::isfinite(values[k])) {
+            return SensitivityResult::Without(DerivativeStatus::Indeterminate,
+                                              std::string(where) +
+                                                  ": the derivative overflowed: component " +
+                                                  std::to_string(k) + " is not finite");
+        }
+    }
+    return SensitivityResult::Computed(DerivativeStatus::Valid, std::move(values), signature);
+}
+
 } // namespace
 
 Result<SensitivityResult> EvalJvp(const BSplineCurve& curve,
@@ -167,8 +185,7 @@ Result<SensitivityResult> EvalJvp(const BSplineCurve& curve,
         values[3 * k + 1] = velocity.Y;
         values[3 * k + 2] = velocity.Z;
     }
-    return SensitivityResult::Computed(DerivativeStatus::Valid, std::move(values),
-                                       Signature(curve));
+    return Published(std::move(values), Signature(curve), "EvalJvp");
 }
 
 Result<SensitivityResult> EvalVjp(const BSplineCurve& curve,
@@ -192,8 +209,7 @@ Result<SensitivityResult> EvalVjp(const BSplineCurve& curve,
                 set.GetReference(binding.Parameter) * Dot(bar, Partial(curve, basis, binding));
         }
     }
-    return SensitivityResult::Computed(DerivativeStatus::Valid, std::move(values),
-                                       Signature(curve));
+    return Published(std::move(values), Signature(curve), "EvalVjp");
 }
 
 } // namespace Stereon

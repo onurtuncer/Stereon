@@ -115,7 +115,9 @@ public:
     /// Takes the entries and sorts them.
     explicit History(std::vector<HistoryEntry> entries);
 
-    [[nodiscard]] std::span<const HistoryEntry> GetEntries() const noexcept { return m_Entries; }
+    [[nodiscard]] std::span<const HistoryEntry> GetEntries() const& noexcept { return m_Entries; }
+
+    std::span<const HistoryEntry> GetEntries() const&& = delete;
 
     /// The entries of one entity of an input: where it continues, or its
     /// deletion. Empty for an index that named no live entity of the input.

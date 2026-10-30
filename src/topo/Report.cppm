@@ -117,10 +117,11 @@ public:
 
     /// No findings at all.
     [[nodiscard]] bool IsValid() const noexcept { return m_Count == 0; }
-    [[nodiscard]] std::span<const ValidityFinding> GetFindings() const noexcept
+    [[nodiscard]] std::span<const ValidityFinding> GetFindings() const& noexcept
     {
         return m_Findings;
     }
+    std::span<const ValidityFinding> GetFindings() const&& = delete;
     /// Findings found, including those not kept.
     [[nodiscard]] std::size_t GetCount() const noexcept { return m_Count; }
     /// True when a finding of `rule` was kept.
