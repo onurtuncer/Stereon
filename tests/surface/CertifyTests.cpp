@@ -14,10 +14,12 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <numbers>
 #include <string>
+#include <utility>
 #include <vector>
 
 import Stereon.Surface;
@@ -134,9 +136,79 @@ TEST_CASE("a line on a plane and a circle on a cylinder are certified to tiny bo
     const Curve2d onCylinder{Line2d{Point2{0.0, 3.0}, Vec2{1.0, 0.0}}};
     const auto round = CertifyDeviation(circle, aboutZ, onCylinder, Interval{0.0, 2.0 * pi}, 1e-5);
     REQUIRE(round.has_value());
-    REQUIRE(round->Bound <= 1e-5);
-    REQUIRE(round->Spans > 1); // The bound is the enclosures', so near the target, not tiny. // The
-                               // spans end up finer than the target needs.
+    // A circle along a unit-speed turn is of the closed form, so the whole
+    // turn is proved at once and the bound is the rounding of the
+    // coefficients, where the bisection needed 4096 spans to get within the
+    // target (issue #155).
+    REQUIRE(round->Bound <= 1e-13);
+    REQUIRE(round->Spans == 1);
+}
+
+namespace {
+
+/// The largest |c(t) - S(p(t))| at n + 1 parameters of the range: what
+/// every proved bound must be at least.
+double SampledDeviation(const Curve& c, const Surface& s, const Curve2d& p, const Interval& range,
+                        const int n = 2000)
+{
+    double worst = 0.0;
+    for (int k = 0; k <= n; ++k) {
+        const double t = range.GetLower() + Width(range) * k / n;
+        worst = std::max(worst, Distance(Eval(c, t), Eval(s, Eval(p, t))));
+    }
+    return worst;
+}
+
+} // namespace
+
+TEST_CASE("the closed-form certificate never bounds below the deviation", "[surface][certify]")
+{
+    // Pcurves moved off their curves by known amounts: the one-step bound
+    // must cover the sampled deviation at every amount, and the result must
+    // agree with what the bisection proves or refutes.
+    const Curve circle{
+        Circle{Point3{0.0, 0.0, 3.0}, 5.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}}};
+    const Curve ellipse{Stereon::Ellipse{Point3{1.0, -2.0, 0.0}, 4.0, 1.5, Vec3{0.6, 0.8, 0.0},
+                                         Vec3{-0.8, 0.6, 0.0}}};
+    for (const double off : {0.0, 1e-9, 1e-7, 3e-6, 1e-4}) {
+        INFO("offset " << off);
+        const Interval turn{-1.0, 2.0 * pi - 1.0};
+        const std::vector<std::pair<Curve, std::pair<Surface, Curve2d>>> cases{
+            {circle, {aboutZ, Curve2d{Line2d{Point2{0.0, 3.0 + off}, Vec2{1.0, 0.0}}}}},
+            {circle, {aboutZ, Curve2d{Line2d{Point2{off, 3.0}, Vec2{1.0, 0.0}}}}},
+            {ellipse,
+             {xy, Curve2d{Stereon::Ellipse2d{Point2{1.0 + off, -2.0}, 4.0, 1.5, Vec2{0.6, 0.8},
+                                             Vec2{-0.8, 0.6}}}}},
+            {ellipse,
+             {xy, Curve2d{Stereon::Ellipse2d{Point2{1.0, -2.0}, 4.0 + off, 1.5, Vec2{0.6, 0.8},
+                                             Vec2{-0.8, 0.6}}}}},
+        };
+        for (const auto& [curve, onto] : cases) {
+            const auto& [surface, pcurve] = onto;
+            const double sampled = SampledDeviation(curve, surface, pcurve, turn);
+            const auto loose = CertifyDeviation(curve, surface, pcurve, turn, 1.0);
+            REQUIRE(loose.has_value());
+            REQUIRE(loose->Bound >= sampled);
+            const auto tight = CertifyDeviation(curve, surface, pcurve, turn, 1e-5);
+            REQUIRE(tight.has_value() == (sampled <= 1e-5));
+            if (tight) {
+                REQUIRE(tight->Bound >= sampled);
+                REQUIRE(tight->Bound <= 1e-5);
+            }
+        }
+    }
+}
+
+TEST_CASE("a helix on a cylinder is left to the bisection", "[surface][certify]")
+{
+    // u = t / 2 is a line of the parameter plane but not a unit-speed turn:
+    // its image is not of the closed form, so the bisection proves it.
+    const Curve circle{
+        Circle{Point3{0.0, 0.0, 3.0}, 5.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}}};
+    const Curve2d slow{Line2d{Point2{0.0, 3.0}, Vec2{0.5, 0.0}}};
+    const auto result = CertifyDeviation(circle, aboutZ, slow, Interval{0.0, 1.0}, 1e-5);
+    REQUIRE_FALSE(result.has_value()); // the curves part: the circle runs twice as fast
+    REQUIRE(result.error().GetCode() == ErrorCode::CertificationFailed);
 }
 
 TEST_CASE("a pcurve off its curve fails certification, or is bounded above its error",

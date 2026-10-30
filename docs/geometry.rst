@@ -179,7 +179,10 @@ code written against the concept works on either. A wrapped value smaller
 than the 128-byte buffer, which every built-in analytic type is, lives inside the
 wrapper and allocates nothing; a larger one, such as a NURBS curve with many
 poles, is held immutable behind a shared pointer and shared between copies.
-``Target<T>()`` returns the wrapped value when it is a ``T``.
+``Target<T>()`` returns the wrapped value when it is a ``T``. The pointer
+borrows from the wrapper: it is valid while the wrapper lives and is not
+assigned or moved from, and it can be taken from a named wrapper only, never
+from a temporary, which the compiler rejects (ADR-0046).
 
 .. code-block:: cpp
 

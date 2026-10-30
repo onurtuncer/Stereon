@@ -239,7 +239,8 @@ TEST_CASE("the open conics reverse, move and work in the plane", "[curve][conic]
     REQUIRE_THAT(Project(planar, Point2{-2.0, 2.0}), WithinAbs(2.0, 1e-12));
     const Hyperbola2d planarH{Point2{}, 1.0, 1.0, Vec2{1.0, 0.0}, Vec2{0.0, 1.0}};
     REQUIRE_THAT(Project(planarH, Point2{1.0, 0.0}), WithinAbs(0.0, 1e-12));
-    REQUIRE(Stereon::Curve(TiltedHyperbola()).Target<Hyperbola>() != nullptr);
+    const Stereon::Curve tilted(TiltedHyperbola());
+    REQUIRE(tilted.Target<Hyperbola>() != nullptr);
 }
 
 TEST_CASE("the open conics validate data from outside the kernel", "[curve][conic][factory]")

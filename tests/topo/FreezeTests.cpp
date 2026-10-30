@@ -45,7 +45,12 @@ TEST_CASE("every Freeze makes a snapshot of its own", "[topo][freeze]")
 {
     std::set<Stereon::StoreId> ids;
     for (int i = 0; i < 20; ++i) {
-        ids.insert(MakeSquareSheet().Freeze().GetSnapshot()->GetStore());
+        // The shape is named before its snapshot is borrowed (ADR-0046) and
+        // dies before the next freeze, as the temporary did.
+        ids.insert([] {
+            const Stereon::Shape sheet = MakeSquareSheet().Freeze();
+            return sheet.GetSnapshot()->GetStore();
+        }());
     }
     REQUIRE(ids.size() == 20);
 }

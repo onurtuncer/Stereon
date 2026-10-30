@@ -15,6 +15,7 @@ module;
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <format>
 #include <mutex>
 #include <optional>
@@ -93,6 +94,32 @@ void UnregisterSnapshot(const StoreId store) noexcept
     }
     r.Text = DescribeEntity(*found->second, static_cast<EntityKind>(kind), index);
     return r.Text.c_str();
+}
+
+/// As DescribeRegistered, into the caller's buffer, NUL-terminated and cut
+/// to capacity - 1 characters; the full length, 0 when no live snapshot has
+/// the store or the kind is not one. Built and copied under the registry's
+/// lock, so nothing of the registry leaves it (ADR-0046, section 7).
+[[nodiscard]] std::size_t DescribeRegisteredInto(const int kind, const std::uint32_t index,
+                                                 const StoreId store, char* const buffer,
+                                                 const std::size_t capacity)
+{
+    if (kind < 0 || static_cast<std::size_t>(kind) >= EntityKindCount) {
+        return 0;
+    }
+    SnapshotRegistry& r = Registry();
+    const std::lock_guard lock(r.Mutex);
+    const auto found = r.Tables.find(store);
+    if (found == r.Tables.end()) {
+        return 0;
+    }
+    const std::string text = DescribeEntity(*found->second, static_cast<EntityKind>(kind), index);
+    if (buffer != nullptr && capacity > 0) {
+        const std::size_t copied = std::min(text.size(), capacity - 1);
+        std::memcpy(buffer, text.data(), copied);
+        buffer[copied] = '\0';
+    }
+    return text.size();
 }
 
 } // namespace Detail
@@ -248,7 +275,11 @@ std::string ValidityReport::ToText() const
 /// `index` of the entity kind `kind` (EntityKind's order) in the live
 /// snapshot with store `store`, or null when there is none or the build
 /// checks no handles. The GDB and LLDB pretty-printers call it to show the
-/// entity behind a handle; the text stays valid until the next call.
+/// entity behind a handle; the text stays valid until the next call. That
+/// text is a process-wide buffer, so this is the one named legacy exception
+/// of ADR-0046, section 7: for serialised debugger invocation only, with no
+/// concurrent consumers. Every other consumer uses
+/// stereon_describe_handle_into().
 extern "C" const char* stereon_describe_handle(const int kind, const unsigned int index,
                                                const unsigned int store)
 {
@@ -256,4 +287,19 @@ extern "C" const char* stereon_describe_handle(const int kind, const unsigned in
         return Stereon::Detail::DescribeRegistered(kind, index, store);
     }
     return nullptr;
+}
+
+/// The description stereon_describe_handle() gives, copied into the caller's
+/// `buffer` of `capacity` bytes, NUL-terminated and cut to fit; returns the
+/// full length, 0 when there is no such entity or the build checks no
+/// handles. Safe to call concurrently: the copy is made under the registry's
+/// lock and nothing of the registry escapes it (ADR-0046, section 7).
+extern "C" std::size_t stereon_describe_handle_into(const int kind, const unsigned int index,
+                                                    const unsigned int store, char* const buffer,
+                                                    const std::size_t capacity)
+{
+    if constexpr (STEREON_CHECKED_HANDLES) {
+        return Stereon::Detail::DescribeRegisteredInto(kind, index, store, buffer, capacity);
+    }
+    return 0;
 }

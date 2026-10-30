@@ -93,11 +93,15 @@ public:
 
     [[nodiscard]] bool IsEmpty() const noexcept { return m_Storage.IsEmpty(); }
 
-    /// The wrapped value if it is a T, otherwise null. Copies of a curve
-    /// whose type is too large for the buffer share one value, so their
-    /// Target<T>() pointers are equal.
+    /// The wrapped value if it is a T, otherwise null. A borrow of this
+    /// wrapper (ADR-0046): the pointer is into the wrapper's own buffer, or
+    /// into the value the copies of a large type share, and stays valid until
+    /// the wrapper is assigned, moved from or destroyed. Lvalues only: a
+    /// temporary curve would leave it dangling, so name the curve first.
+    /// Copies of a curve whose type is too large for the buffer share one
+    /// value, so their Target<T>() pointers are equal.
     template <typename T>
-    [[nodiscard]] const T* Target() const noexcept
+    [[nodiscard]] const T* Target() const& noexcept
     {
         const Detail::CurveConcept<D>* model = m_Storage.Get();
         if (model == nullptr || model->GetTypeId() != Detail::TypeIdOf<T>()) {
@@ -105,12 +109,16 @@ public:
         }
         return static_cast<const T*>(model->GetValue());
     }
+    template <typename T>
+    const T* Target() const&& = delete;
 
-    /// The model, for the free functions below.
-    [[nodiscard]] const Detail::CurveConcept<D>& GetModel() const STEREON_HOT_PRE(!IsEmpty())
+    /// The model, for the free functions below: a borrow of this wrapper,
+    /// as Target<T>() is, and lvalue-only for the same reason.
+    [[nodiscard]] const Detail::CurveConcept<D>& GetModel() const& STEREON_HOT_PRE(!IsEmpty())
     {
         return *m_Storage.Get();
     }
+    const Detail::CurveConcept<D>& GetModel() const&& = delete;
 
 private:
     Detail::SmallBuffer<Detail::CurveConcept<D>, CurveBufferSizeN<D>> m_Storage;
