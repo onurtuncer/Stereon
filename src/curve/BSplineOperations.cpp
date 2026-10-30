@@ -10,6 +10,7 @@ module;
 // The contract anchor (docs/toolchain/gcc16-feature-probe.md); see
 // src/curve/BSplineCurve.cpp.
 #include <Stereon/Core/Contracts.hpp>
+#include <Stereon/Core/Try.hpp>
 
 #include <algorithm>
 #include <array>
@@ -553,29 +554,6 @@ template <std::size_t D>
     return true;
 }
 
-/// The knots of the periodic form from the n + 1 knots v_0 <= ... <= v_n of
-/// one period, v_n = v_0 + T: p copies below, shifted down by the period,
-/// then the period, then p copies above. The shifts are formed as
-/// a - (b - v) and b + (v - a), which keep the copies below at or below a
-/// and those above at or above b whatever the rounding.
-[[nodiscard]] std::vector<double> PeriodicKnotsOf(const std::span<const double> period,
-                                                  const std::size_t p)
-{
-    const std::size_t n = period.size() - 1;
-    const double a = period.front();
-    const double b = period.back();
-    std::vector<double> knots;
-    knots.reserve(n + 2 * p + 1);
-    for (std::size_t r = p; r >= 1; --r) {
-        knots.push_back(a - (b - period[n - r]));
-    }
-    knots.insert(knots.end(), period.begin(), period.end());
-    for (std::size_t r = 1; r <= p; ++r) {
-        knots.push_back(b + (period[r] - a));
-    }
-    return knots;
-}
-
 /// The clamped closed curve h, with n + 1 poles whose ends have been merged
 /// into `merged`, in the periodic form: the n distinct poles are
 /// D_i = M_{(i - p + 1) mod n} with M_0 the merged pole, so that the seam
@@ -626,6 +604,28 @@ AsPeriodicN(const BasicBSplineCurve<double, D>& curve, const double tolerance)
     }
     const HPoint<D> merged = Blend<D>(start, end, 0.5, h.Rational);
     return Published(PeriodicFormOf(h, merged), "AsPeriodic");
+}
+
+/// Opened: the piece over [t, t + T] of a curve in the periodic form.
+template <std::size_t D>
+[[nodiscard]] Result<BasicBSplineCurve<double, D>>
+OpenedN(const BasicBSplineCurve<double, D>& curve, const double t)
+{
+    const double period = Period(curve);
+    if (!(period > 0.0)) {
+        return Fail(ErrorCode::InvalidInput, "Opened: the curve is not in the periodic form");
+    }
+    if (!std::isfinite(t) || !std::isfinite(t + period)) {
+        return Fail(ErrorCode::InvalidInput, "Opened: the parameter must be finite");
+    }
+    STEREON_TRY(auto piece, PeriodicPiece(curve, Interval{t, t + period}, period));
+    // Its two ends are one point of the curve, reached in two periods, so
+    // they differ by rounding alone: made equal, the piece closes exactly.
+    piece.Poles.back() = piece.Poles.front();
+    if (IsRational(piece)) {
+        piece.Weights.back() = piece.Weights.front();
+    }
+    return piece;
 }
 
 // ---------------------------------------------------------------------------
@@ -746,6 +746,26 @@ bool IsPeriodic(const BSplineCurve& curve)
 bool IsPeriodic(const BSplineCurve2d& curve)
 {
     return IsPeriodicN(curve);
+}
+
+Result<BSplineCurve> Opened(const BSplineCurve& curve, const double t)
+{
+    return OpenedN(curve, t);
+}
+
+Result<BSplineCurve2d> Opened(const BSplineCurve2d& curve, const double t)
+{
+    return OpenedN(curve, t);
+}
+
+double Period(const BSplineCurve& curve)
+{
+    return IsPeriodicN(curve) ? Width(Domain(curve)) : 0.0;
+}
+
+double Period(const BSplineCurve2d& curve)
+{
+    return IsPeriodicN(curve) ? Width(Domain(curve)) : 0.0;
 }
 
 BSplineCurve Clamped(const BSplineCurve& curve)

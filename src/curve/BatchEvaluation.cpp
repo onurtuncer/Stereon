@@ -122,9 +122,11 @@ void EvalLanes(const BasicBSplineCurve<double, D>& curve, const std::size_t span
 }
 
 template <std::size_t D>
-void EvalAllN(const BasicBSplineCurve<double, D>& curve, const std::span<const double> parameters,
+void EvalAllN(const BasicBSplineCurve<double, D>& curve, const std::span<const double> given,
               const std::span<BasicPointN<double, D>> points)
 {
+    std::vector<double> storage;
+    const std::span<const double> parameters = Detail::IntoDomain(curve, given, storage);
     Detail::Require(points.size() == parameters.size(), "EvalAll(BSplineCurve)",
                     "as many points as parameters");
     for (const double t : parameters) {

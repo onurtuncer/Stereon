@@ -11,6 +11,8 @@ module;
 
 #include <algorithm>
 #include <array>
+#include <cmath>
+#include <concepts>
 #include <cstddef>
 #include <memory>
 #include <span>
@@ -84,6 +86,16 @@ template <Scalar T, std::size_t D>
     return Interval{curve.Knots[p], curve.Knots[curve.Poles.size()]};
 }
 
+/// The period of a curve in the periodic form (IsPeriodic), the width of its
+/// domain, and 0, "not periodic", for any other: a B-spline curve is a
+/// PeriodicCurve whose period its data decide, with no flag to disagree with
+/// them. A curve in the form continues across either end of its domain, so
+/// it evaluates at every finite parameter, carried into the domain by whole
+/// periods, and its knot insertion and conversion keep the form. O(n): the
+/// evaluators ask for it only for a parameter outside the domain.
+[[nodiscard]] double Period(const BSplineCurve& curve);
+[[nodiscard]] double Period(const BSplineCurve2d& curve);
+
 } // namespace Stereon
 
 namespace Stereon::Detail {
@@ -109,6 +121,46 @@ constexpr void CheckEvaluation(const BasicBSplineCurve<T, D>& curve, const doubl
         RequireFinite(t, function, "a non-finite parameter");
         Require(Contains(Domain(curve), t), function, "a parameter outside the domain");
     }
+}
+
+/// t as the evaluators use it: a parameter outside the domain of a curve in
+/// the periodic form is carried into the domain by whole periods
+/// (NearestInRange); any other is returned as it is, for CheckEvaluation to
+/// judge. Only a curve of doubles has a period; the others, interval and
+/// dual curves among them, are evaluated inside their domains.
+template <Scalar T, std::size_t D>
+[[nodiscard]] double IntoDomain(const BasicBSplineCurve<T, D>& curve, const double t)
+{
+    if constexpr (std::same_as<T, double>) {
+        const Interval domain = Domain(curve);
+        if (!Contains(domain, t) && std::isfinite(t)) {
+            if (const double period = Period(curve); period > 0.0) {
+                return NearestInRange(t, domain, period);
+            }
+        }
+    }
+    return t;
+}
+
+/// The parameters as the batch evaluators use them: when some lie outside
+/// the domain of a curve in the periodic form, all carried into the domain,
+/// in `storage`; otherwise the parameters themselves, with nothing copied.
+template <std::size_t D>
+[[nodiscard]] std::span<const double> IntoDomain(const BasicBSplineCurve<double, D>& curve,
+                                                 const std::span<const double> parameters,
+                                                 std::vector<double>& storage)
+{
+    const Interval domain = Domain(curve);
+    const bool outside =
+        std::ranges::any_of(parameters, [&](const double t) { return !Contains(domain, t); });
+    if (!outside || !(Period(curve) > 0.0)) {
+        return parameters;
+    }
+    storage.reserve(parameters.size());
+    for (const double t : parameters) {
+        storage.push_back(IntoDomain(curve, t));
+    }
+    return storage;
 }
 
 /// The weight of pole i: 1 for a polynomial curve.
@@ -217,8 +269,9 @@ void DerivativesWithCapacity(const BasicBSplineCurve<T, D>& curve, const double 
 export namespace Stereon {
 
 template <Scalar T, std::size_t D>
-[[nodiscard]] BasicPointN<T, D> Eval(const BasicBSplineCurve<T, D>& curve, const double t)
+[[nodiscard]] BasicPointN<T, D> Eval(const BasicBSplineCurve<T, D>& curve, const double parameter)
 {
+    const double t = Detail::IntoDomain(curve, parameter);
     Detail::CheckEvaluation(curve, t, "Eval(BSplineCurve)");
     const std::size_t span = FindSpan(curve.Knots, curve.Degree, curve.Poles.size(), t);
     const auto p = static_cast<std::size_t>(curve.Degree);
@@ -241,9 +294,10 @@ template <Scalar T, std::size_t D>
 /// functions (see Detail::HomogeneousDerivatives). `out` holds n + 1
 /// entries.
 template <Scalar T, std::size_t D>
-void Derivatives(const BasicBSplineCurve<T, D>& curve, const double t, const int n,
+void Derivatives(const BasicBSplineCurve<T, D>& curve, const double parameter, const int n,
                  std::span<BasicVecN<T, D>> out)
 {
+    const double t = Detail::IntoDomain(curve, parameter);
     Detail::CheckEvaluation(curve, t, "Derivatives(BSplineCurve)");
     Detail::Require(n >= 0 && out.size() > static_cast<std::size_t>(n), "Derivatives(BSplineCurve)",
                     "an order below 0 or too small an output");
@@ -258,9 +312,10 @@ void Derivatives(const BasicBSplineCurve<T, D>& curve, const double t, const int
 /// The n-th derivative, n >= 1. A polynomial curve's derivatives above its
 /// degree are zero; a rational curve's are not (algorithm A4.2).
 template <Scalar T, std::size_t D>
-[[nodiscard]] BasicVecN<T, D> Deriv(const BasicBSplineCurve<T, D>& curve, const double t,
+[[nodiscard]] BasicVecN<T, D> Deriv(const BasicBSplineCurve<T, D>& curve, const double parameter,
                                     const int n)
 {
+    const double t = Detail::IntoDomain(curve, parameter);
     Detail::CheckEvaluation(curve, t, "Deriv(BSplineCurve)");
     Detail::Require(n >= 1, "Deriv(BSplineCurve)", "a derivative order below 1");
     if (!IsRational(curve) && n > curve.Degree) {
@@ -408,7 +463,10 @@ template <Scalar T>
 /// The curve with the knot t inserted `times` times (Boehm's algorithm,
 /// A5.1): the same point set and parametrisation with more poles.
 /// InvalidInput unless t lies in the domain, times >= 1 and the multiplicity
-/// of t stays at most the degree.
+/// of t stays at most the degree. A curve in the periodic form takes any
+/// finite t, which stands for all its images a period apart: the knot is
+/// inserted at every one of them, so the result is in the form again, with
+/// `times` more distinct poles and the same period.
 [[nodiscard]] Result<BSplineCurve> InsertKnot(const BSplineCurve& curve, double t, int times = 1);
 [[nodiscard]] Result<BSplineCurve2d> InsertKnot(const BSplineCurve2d& curve, double t,
                                                 int times = 1);
@@ -422,6 +480,10 @@ template <Scalar T>
 /// The two pieces of the curve on either side of t, each with the same
 /// parametrisation as the original. InvalidInput unless t lies strictly
 /// inside the domain.
+/// A curve in the periodic form takes any finite t, whose image in the
+/// domain it is split at, as any other curve is: the pieces are those of
+/// the domain on either side of that image. To open the curve at t into one
+/// piece, take Opened.
 [[nodiscard]] Result<std::pair<BSplineCurve, BSplineCurve>> Split(const BSplineCurve& curve,
                                                                   double t);
 [[nodiscard]] Result<std::pair<BSplineCurve2d, BSplineCurve2d>> Split(const BSplineCurve2d& curve,
