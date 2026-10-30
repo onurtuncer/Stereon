@@ -504,7 +504,7 @@ struct TopologyTables {
     SurfacePool Surfaces;
 
     template <EntityKind K>
-    [[nodiscard]] const PagedArena<Record<K>>& Table() const noexcept
+    [[nodiscard]] const PagedArena<Record<K>>& Table() const& noexcept
     {
         if constexpr (K == EntityKind::Vertex) {
             return Vertices;
@@ -522,12 +522,16 @@ struct TopologyTables {
             return Solids;
         }
     }
+    template <EntityKind K>
+    const PagedArena<Record<K>>& Table() const&& = delete;
 
     template <EntityKind K>
-    [[nodiscard]] PagedArena<Record<K>>& Table() noexcept
+    [[nodiscard]] PagedArena<Record<K>>& Table() & noexcept
     {
         return const_cast<PagedArena<Record<K>>&>(std::as_const(*this).template Table<K>());
     }
+    template <EntityKind K>
+    PagedArena<Record<K>>& Table() && = delete;
 
     /// True when `index` names a live slot of the table of kind K.
     template <EntityKind K>

@@ -50,8 +50,10 @@ public:
     PoolHandle(const PoolHandle&) = delete;
     PoolHandle& operator=(const PoolHandle&) = delete;
 
-    /// The pool, its threads started on the first call. Thread-safe.
-    [[nodiscard]] WorkerPool& Get();
+    /// The pool, its threads started on the first call. Thread-safe. A
+    /// borrow of this handle (ADR-0046): asked of a named handle only.
+    [[nodiscard]] WorkerPool& Get() &;
+    WorkerPool& Get() && = delete;
     /// The worker count the pool has or will have: the thread count, or the
     /// hardware's for 0.
     [[nodiscard]] unsigned GetWorkerCount() const noexcept;

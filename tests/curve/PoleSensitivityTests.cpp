@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstddef>
 #include <string>
+#include <string_view>
 #include <vector>
 
 import Stereon.Curve;
@@ -298,4 +299,38 @@ TEST_CASE("Eval of a curve declares its forward and reverse products", "[curve][
     REQUIRE(eval->Supports(DerivativeProduct::Vjp));
     REQUIRE_FALSE(eval->Supports(DerivativeProduct::DenseJacobian));
     REQUIRE(eval->Correspondence.Contains(Stereon::TrackingConvention::FixedEdgeParameter));
+}
+
+TEST_CASE("a product whose arithmetic overflows is Indeterminate, not Valid",
+          "[curve][sensitivity]")
+{
+    // Finite seeds, adjoints and references whose products overflow: the
+    // audit of 2026-10-30 found these published as Valid with inf values.
+    const BSplineCurve c{
+        3,
+        {0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0},
+        {Point3{}, Point3{1.0, 1.0, 0.0}, Point3{2.0, -1.0, 0.0}, Point3{3.0, 0.0, 0.0}},
+        {}};
+    ParameterSet set;
+    const auto id = set.Add("x", ParameterQuantity::Length, 1e300);
+    REQUIRE(id.has_value());
+    const std::vector<PoleBinding> bindings{{*id, 1, PoleComponent::X}};
+    SensitivityContext sensitivity{std::move(set)};
+    const std::vector<double> seed{1e300};
+    REQUIRE(sensitivity.SetSeed(seed).has_value());
+    const std::vector<double> t{0.5};
+    const auto jvp = Stereon::EvalJvp(c, bindings, t, sensitivity);
+    REQUIRE(jvp.has_value());
+    const Stereon::SensitivityResult& forward = *jvp;
+    REQUIRE(forward.GetStatus() == Stereon::DerivativeStatus::Indeterminate);
+    REQUIRE_FALSE(forward.GetValues().has_value());
+    REQUIRE(forward.GetReason().find("overflowed") != std::string_view::npos);
+
+    const std::vector<double> adjoint{1e300, 0.0, 0.0};
+    REQUIRE(sensitivity.SetAdjoint(adjoint).has_value());
+    const auto vjp = Stereon::EvalVjp(c, bindings, t, sensitivity);
+    REQUIRE(vjp.has_value());
+    const Stereon::SensitivityResult& reverse = *vjp;
+    REQUIRE(reverse.GetStatus() == Stereon::DerivativeStatus::Indeterminate);
+    REQUIRE_FALSE(reverse.GetValues().has_value());
 }

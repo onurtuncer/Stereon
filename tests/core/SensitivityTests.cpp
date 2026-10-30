@@ -314,3 +314,79 @@ TEST_CASE("a sensitivity context owns its seeds and cannot be shared", "[core][s
     REQUIRE(moved.GetAdjoint().empty());
     REQUIRE(moved.GetParameters().GetSize() == 2);
 }
+
+namespace {
+
+// Each borrowing accessor as a template over the owner, so that a call the
+// owner refuses is a false requirement rather than an error (ADR-0046). The
+// audit of 2026-10-30 found GetValues() read through a temporary
+// (Computed(...).value().GetValues()) and used after its storage was freed.
+template <typename R>
+constexpr bool ValuesFromRvalue = requires(R&& r) { std::move(r).GetValues(); };
+template <typename R>
+constexpr bool ValuesFromLvalue = requires(const R& r) { r.GetValues(); };
+template <typename R>
+constexpr bool ReasonFromRvalue = requires(R&& r) { std::move(r).GetReason(); };
+template <typename R>
+constexpr bool EntitiesFromRvalue = requires(R&& r) { std::move(r).GetEntities(); };
+template <typename C>
+constexpr bool SeedFromRvalue = requires(C&& c) { std::move(c).GetSeed(); };
+template <typename C>
+constexpr bool AdjointFromRvalue = requires(C&& c) { std::move(c).GetAdjoint(); };
+template <typename C>
+constexpr bool ParametersFromRvalue = requires(C&& c) { std::move(c).GetParameters(); };
+template <typename C>
+constexpr bool ParametersFromLvalue = requires(const C& c) { c.GetParameters(); };
+template <typename C>
+constexpr bool WorkspaceFromRvalue = requires(C&& c) { std::move(c).Workspace(1); };
+template <typename C>
+constexpr bool WorkspaceFromLvalue = requires(C& c) { c.Workspace(1); };
+template <typename S>
+constexpr bool NameFromRvalue = requires(S&& s, ParameterId id) { std::move(s).GetName(id); };
+template <typename S>
+constexpr bool UnitFromRvalue = requires(S&& s, ParameterId id) { std::move(s).GetUnit(id); };
+
+} // namespace
+
+TEST_CASE("sensitivity borrows are taken from named owners only", "[core][sensitivity][borrowing]")
+{
+    STATIC_REQUIRE(ValuesFromLvalue<SensitivityResult>);
+    STATIC_REQUIRE_FALSE(ValuesFromRvalue<SensitivityResult>);
+    STATIC_REQUIRE_FALSE(ReasonFromRvalue<SensitivityResult>);
+    STATIC_REQUIRE_FALSE(EntitiesFromRvalue<SensitivityResult>);
+    STATIC_REQUIRE(ParametersFromLvalue<SensitivityContext>);
+    STATIC_REQUIRE_FALSE(ParametersFromRvalue<SensitivityContext>);
+    STATIC_REQUIRE_FALSE(SeedFromRvalue<SensitivityContext>);
+    STATIC_REQUIRE_FALSE(AdjointFromRvalue<SensitivityContext>);
+    STATIC_REQUIRE(WorkspaceFromLvalue<SensitivityContext>);
+    STATIC_REQUIRE_FALSE(WorkspaceFromRvalue<SensitivityContext>);
+    STATIC_REQUIRE_FALSE(NameFromRvalue<ParameterSet>);
+    // The unit is a literal, which outlives every set.
+    STATIC_REQUIRE(UnitFromRvalue<ParameterSet>);
+
+    // The named result's borrow is the result's own storage.
+    const auto result = SensitivityResult::Computed(DerivativeStatus::Valid, {1.0, 2.0}, 7);
+    REQUIRE(result.has_value());
+    const SensitivityResult& named = *result;
+    REQUIRE(named.GetValues()->size() == 2);
+    REQUIRE((*named.GetValues())[1] == 2.0);
+}
+
+TEST_CASE("a derivative that is not finite is never published as computed", "[core][sensitivity]")
+{
+    constexpr double inf = std::numeric_limits<double>::infinity();
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    for (const DerivativeStatus status : {DerivativeStatus::Valid, DerivativeStatus::NearEvent}) {
+        for (const double bad : {inf, -inf, nan}) {
+            const auto refused = SensitivityResult::Computed(status, {1.0, bad}, 0);
+            REQUIRE_FALSE(refused.has_value());
+            REQUIRE(refused.error().GetCode() == ErrorCode::InvalidInput);
+        }
+    }
+    // What an operation reports instead: no derivative, and why.
+    const auto indeterminate =
+        SensitivityResult::Without(DerivativeStatus::Indeterminate, "overflowed");
+    REQUIRE(indeterminate.has_value());
+    const SensitivityResult& named = *indeterminate;
+    REQUIRE_FALSE(named.GetValues().has_value());
+}

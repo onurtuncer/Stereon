@@ -386,10 +386,11 @@ public:
                                                           const Context& ctx);
     /// Transaction-local low-level events, not final snapshot references.
     /// The enclosing operation supplies semantic history (ADR-0030).
-    [[nodiscard]] std::span<const TopologyEvent> GetTopologyEvents() const noexcept
+    [[nodiscard]] std::span<const TopologyEvent> GetTopologyEvents() const& noexcept
     {
         return m_Events;
     }
+    std::span<const TopologyEvent> GetTopologyEvents() const&& = delete;
 
     // --- Transactions (ADR-0027, section 9) ---------------------------------
 

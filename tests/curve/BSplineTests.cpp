@@ -479,7 +479,8 @@ TEST_CASE("MakeBSplineCurve validates data from outside the kernel", "[curve][bs
     // An interior knot of multiplicity p + 1 would break the curve.
     REQUIRE(codeOf(Stereon::MakeBSplineCurve(1, {0.0, 0.0, 0.5, 0.5, 1.0, 1.0},
                                              {Point3{}, Point3{}, Point3{}, Point3{}})) == invalid);
-    REQUIRE(Stereon::MakeBSplineCurve(2, clamped, poles, {1.0, -1.0, 1.0}).error().GetMessage() ==
+    const auto negative = Stereon::MakeBSplineCurve(2, clamped, poles, {1.0, -1.0, 1.0});
+    REQUIRE(negative.error().GetMessage() ==
             "MakeBSplineCurve: weights must be finite and positive");
 }
 

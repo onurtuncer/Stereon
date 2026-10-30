@@ -76,10 +76,12 @@ public:
     {}
 
     [[nodiscard]] ErrorCode GetCode() const noexcept { return m_Code; }
-    [[nodiscard]] std::string_view GetMessage() const noexcept { return m_Message; }
+    [[nodiscard]] std::string_view GetMessage() const& noexcept { return m_Message; }
+    std::string_view GetMessage() const&& = delete;
 
     /// Tolerances at stake in millimetres, in the order they were added.
-    [[nodiscard]] std::span<const double> GetTolerances() const noexcept { return m_Tolerances; }
+    [[nodiscard]] std::span<const double> GetTolerances() const& noexcept { return m_Tolerances; }
+    std::span<const double> GetTolerances() const&& = delete;
 
     /// The journal entry of the operation that failed, or the invalid id when
     /// the Context had no journal (ADR-0023).

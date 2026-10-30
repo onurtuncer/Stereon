@@ -362,7 +362,8 @@ TEST_CASE("random face removals keep the structure valid, and Compact keeps the 
             live.erase(live.begin() + static_cast<std::ptrdiff_t>(pick));
             // A face removal can leave the shell disconnected and an Exact
             // edge with no use, which its kind forbids; nothing else.
-            for (const Stereon::ValidityFinding& f : b.Validate().GetFindings()) {
+            const Stereon::ValidityReport report = b.Validate();
+            for (const Stereon::ValidityFinding& f : report.GetFindings()) {
                 RC_ASSERT((f.Rule == TopologyRule::ShellDisconnected ||
                            f.Rule == TopologyRule::EdgeUseCount));
             }
@@ -370,7 +371,8 @@ TEST_CASE("random face removals keep the structure valid, and Compact keeps the 
         Must(b.RemoveShell(prism.Shells[0]));
         // The report names the edges left with no use: they go, and their
         // vertices may stay isolated.
-        for (const Stereon::ValidityFinding& f : b.Validate().GetFindings()) {
+        const Stereon::ValidityReport report = b.Validate();
+        for (const Stereon::ValidityFinding& f : report.GetFindings()) {
             RC_ASSERT(f.Rule == TopologyRule::EdgeUseCount);
             RC_ASSERT(f.Entities[0].starts_with("Edge#"));
             const auto index = static_cast<std::size_t>(std::stoul(f.Entities[0].substr(5)));
