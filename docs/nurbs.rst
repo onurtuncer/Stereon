@@ -260,6 +260,35 @@ rounding.
   :math:`C^{p-1}`, which ``RemoveKnot`` at the seam would recover where the
   curve allows. A rational curve needs equal weights at its two ends;
   scaling one side's weights by a constant changes no point.
+
+Periodic curves
+~~~~~~~~~~~~~~~
+
+A curve in the periodic form is periodic, with no flag to say so:
+``Period`` returns the width of its domain, and 0 for every other B-spline
+curve, so ``BSplineCurve`` and ``BSplineCurve2d`` are ``PeriodicCurve``\ s
+whose period their data decide. Everything that reads a period then treats
+the curve as it treats a circle:
+
+- **Evaluation** (``Eval``, ``Deriv``, ``Derivatives``, ``EvalAll``,
+  ``EvalAllFast``) takes every finite parameter. One outside the domain is
+  carried into it by whole periods (``NearestInRange``); the periodicity is
+  checked only then, so evaluation inside the domain costs what it did.
+- **Knot insertion** keeps the form. A parameter stands for all its images,
+  and the knot goes in at every one of them: the form is written out over a
+  few periods on each side, every image inserted by Boehm's algorithm, and
+  one period of knots and poles taken back from the middle, its last
+  :math:`p` poles copies of its first :math:`p`. The result has
+  :math:`n + r` distinct poles for :math:`r` insertions, the same domain
+  and the same period, and is the same curve up to rounding. The
+  multiplicity limit counts one period, so the seam of ``AsPeriodic``,
+  already at multiplicity :math:`p`, takes no more.
+- **Pieces** (``ToBSpline`` over a range of at most one period) may cross
+  the seam and lie in any period: the range is moved by whole periods to
+  start in the domain, cut from the form written out over one more period
+  on each side, and its knots moved back. A piece is a clamped curve, so it
+  is not periodic itself. Trimmed curves on a periodic B-spline cross its
+  seam the same way, as they cross a circle's (:doc:`trimmed`).
 - **Degree elevation** (A5.9). ``ElevatedDegree`` splits the clamped curve
   into its Bezier segments, raises each by the convex combination
   :math:`Q_i = \tfrac{i}{q+1} P_{i-1} + (1 - \tfrac{i}{q+1}) P_i` one degree
@@ -826,13 +855,14 @@ size: ``FitsInline`` admits only trivially copyable types.
 Current limits
 --------------
 
-- Periodic B-splines have no periodic flag; they are represented by their
-  unclamped equivalent, which is what the periodic fits of :doc:`fitting`
-  produce and ``AsPeriodic`` builds, and ``IsPeriodic`` recognises. They are
-  not ``PeriodicCurve``\ s or ``PeriodicSurface``\ s: evaluation is
-  confined to the domain, and ``InsertKnot`` on the form inserts into one
-  period only, so the result is the same curve on the domain but no longer
-  in the form.
+- B-spline *surfaces* have no periodic form: no fit produces one and nothing
+  recognises one, so a surface is evaluated inside its domain only. Curves
+  in the periodic form are periodic (*Periodic curves*, above).
+- ``Split`` cuts a periodic curve on its domain, as any other; to open it
+  at a parameter, take ``ToBSpline`` over the period that starts there.
+- The precomputed span polynomials of ``EvalAllFast`` are evaluated inside
+  the domain only; ``EvalAllFast`` on the curve itself carries parameters
+  in.
 - Surface projection is not certified inside its final sub-patches (see
   *Surface projection*).
 - Degree elevation, knot removal, clamping and concatenation exist for

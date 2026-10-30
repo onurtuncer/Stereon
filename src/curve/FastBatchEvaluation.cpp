@@ -326,13 +326,15 @@ void EvalAllFast(const SpanPolynomials2d& polynomials, const std::span<const dou
 void EvalAllFast(const BSplineCurve& curve, const std::span<const double> parameters,
                  const std::span<Point3> points)
 {
-    EvalConverting(curve, parameters, points);
+    std::vector<double> storage;
+    EvalConverting(curve, Detail::IntoDomain(curve, parameters, storage), points);
 }
 
 void EvalAllFast(const BSplineCurve2d& curve, const std::span<const double> parameters,
                  const std::span<Point2> points)
 {
-    EvalConverting(curve, parameters, points);
+    std::vector<double> storage;
+    EvalConverting(curve, Detail::IntoDomain(curve, parameters, storage), points);
 }
 
 } // namespace Stereon

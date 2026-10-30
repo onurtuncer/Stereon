@@ -406,10 +406,55 @@ MakeCurve(const int degree, std::vector<double> knots, std::vector<BasicPointN<d
                                         std::move(weights)};
 }
 
+/// Units of 2^-52, of the sizes of t and of the domain's ends, by which
+/// carrying t into the domain by whole periods may move it.
+constexpr double PeriodicSnap = 4.0 * 0x1p-52;
+
+/// InsertKnot on a curve in the periodic form: t carried into the domain
+/// [a, b) by whole periods, its multiplicity counted over one period, and
+/// the knot inserted at every image by PeriodicInserted. Carrying t rounds,
+/// so a t within that rounding of a knot of the period is that knot, and
+/// one within it of b is the seam a: otherwise an image meant to land on a
+/// knot would land a step beside it, in an interval the form cannot resolve
+/// (IsPeriodic).
+template <std::size_t D>
+[[nodiscard]] Result<BasicBSplineCurve<double, D>>
+PeriodicInsertKnot(const BasicBSplineCurve<double, D>& curve, const double t, const int times,
+                   const double period)
+{
+    const Interval domain = Domain(curve);
+    const double a = domain.GetLower();
+    const double b = domain.GetUpper();
+    const auto p = static_cast<std::size_t>(curve.Degree);
+    const std::span<const double> onePeriod{curve.Knots.data() + p, curve.Poles.size() - p + 1};
+    const double slack = PeriodicSnap * (std::abs(t) + std::abs(a) + std::abs(b));
+    double u = NearestInRange(t, domain, period);
+    if (b - u <= slack) {
+        u = a;
+    }
+    for (const double knot : onePeriod) {
+        if (std::abs(u - knot) <= slack) {
+            u = knot == b ? a : knot;
+            break;
+        }
+    }
+    const std::size_t s = KnotMultiplicity(onePeriod, u);
+    if (times < 1 || s + static_cast<std::size_t>(times) > p) {
+        return Fail(ErrorCode::InvalidInput,
+                    "InsertKnot: times must be positive and keep the multiplicity at most the "
+                    "degree");
+    }
+    return FromHomogeneous(
+        PeriodicInserted(ToHomogeneous(curve), u, static_cast<std::size_t>(times)));
+}
+
 template <std::size_t D>
 [[nodiscard]] Result<BasicBSplineCurve<double, D>>
 InsertKnotN(const BasicBSplineCurve<double, D>& curve, const double t, const int times)
 {
+    if (const double period = Period(curve); period > 0.0 && std::isfinite(t)) {
+        return PeriodicInsertKnot(curve, t, times, period);
+    }
     if (!std::isfinite(t) || !Contains(Domain(curve), t)) {
         return Fail(ErrorCode::InvalidInput, "InsertKnot: the knot must lie in the domain");
     }

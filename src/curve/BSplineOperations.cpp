@@ -553,29 +553,6 @@ template <std::size_t D>
     return true;
 }
 
-/// The knots of the periodic form from the n + 1 knots v_0 <= ... <= v_n of
-/// one period, v_n = v_0 + T: p copies below, shifted down by the period,
-/// then the period, then p copies above. The shifts are formed as
-/// a - (b - v) and b + (v - a), which keep the copies below at or below a
-/// and those above at or above b whatever the rounding.
-[[nodiscard]] std::vector<double> PeriodicKnotsOf(const std::span<const double> period,
-                                                  const std::size_t p)
-{
-    const std::size_t n = period.size() - 1;
-    const double a = period.front();
-    const double b = period.back();
-    std::vector<double> knots;
-    knots.reserve(n + 2 * p + 1);
-    for (std::size_t r = p; r >= 1; --r) {
-        knots.push_back(a - (b - period[n - r]));
-    }
-    knots.insert(knots.end(), period.begin(), period.end());
-    for (std::size_t r = 1; r <= p; ++r) {
-        knots.push_back(b + (period[r] - a));
-    }
-    return knots;
-}
-
 /// The clamped closed curve h, with n + 1 poles whose ends have been merged
 /// into `merged`, in the periodic form: the n distinct poles are
 /// D_i = M_{(i - p + 1) mod n} with M_0 the merged pole, so that the seam
@@ -746,6 +723,16 @@ bool IsPeriodic(const BSplineCurve& curve)
 bool IsPeriodic(const BSplineCurve2d& curve)
 {
     return IsPeriodicN(curve);
+}
+
+double Period(const BSplineCurve& curve)
+{
+    return IsPeriodicN(curve) ? Width(Domain(curve)) : 0.0;
+}
+
+double Period(const BSplineCurve2d& curve)
+{
+    return IsPeriodicN(curve) ? Width(Domain(curve)) : 0.0;
 }
 
 BSplineCurve Clamped(const BSplineCurve& curve)
