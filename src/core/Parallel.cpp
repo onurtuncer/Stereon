@@ -42,7 +42,7 @@ PoolHandle::PoolHandle(const unsigned threads) noexcept
 
 PoolHandle::~PoolHandle() = default;
 
-WorkerPool& PoolHandle::Get()
+WorkerPool& PoolHandle::Get() &
 {
     std::call_once(m_Started,
                    [this] { m_Pool = std::make_unique<WorkerPool>(WorkersFor(m_Threads)); });

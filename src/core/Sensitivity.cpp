@@ -101,7 +101,7 @@ bool ParameterSet::Contains(const ParameterId id) const noexcept
            m_Quantities[id.GetIndex()] == id.GetQuantity();
 }
 
-std::string_view ParameterSet::GetName(const ParameterId id) const noexcept
+std::string_view ParameterSet::GetName(const ParameterId id) const& noexcept
 {
     return Contains(id) ? std::string_view{m_Names[id.GetIndex()]} : std::string_view{};
 }
@@ -212,7 +212,7 @@ Result<void> SensitivityContext::SetAdjoint(const std::span<const double> adjoin
     return {};
 }
 
-std::span<double> SensitivityContext::Workspace(const std::size_t size)
+std::span<double> SensitivityContext::Workspace(const std::size_t size) &
 {
     if (m_Workspace.size() < size) {
         m_Workspace.resize(size);
@@ -237,6 +237,12 @@ Result<SensitivityResult> SensitivityResult::Computed(const DerivativeStatus sta
         return Fail(ErrorCode::InvalidInput, "SensitivityResult::Computed: a " +
                                                  std::string(ToString(status)) +
                                                  " result carries no derivative");
+    }
+    if (!AllFinite(values)) {
+        return Fail(ErrorCode::InvalidInput,
+                    "SensitivityResult::Computed: a derivative value is not finite; an overflowed "
+                    "evaluation is Indeterminate (Without), never " +
+                        std::string(ToString(status)));
     }
     SensitivityResult result;
     result.m_Status = status;
@@ -269,7 +275,7 @@ SensitivityResult SensitivityResult::NotSupported(const OperationCapability& cap
     return result;
 }
 
-std::optional<std::span<const double>> SensitivityResult::GetValues() const noexcept
+std::optional<std::span<const double>> SensitivityResult::GetValues() const& noexcept
 {
     if (!HasDerivative(m_Status)) {
         return std::nullopt;
