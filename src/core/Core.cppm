@@ -14,6 +14,7 @@ export module Stereon.Core;
 export import :Allowances;
 export import :Arena;
 export import :Box;
+export import :BoxPairs;
 export import :Context;
 export import :Enum;
 export import :EvaluatorChecks;

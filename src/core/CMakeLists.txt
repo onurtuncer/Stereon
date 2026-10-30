@@ -10,6 +10,7 @@ stereon_add_library(core
         Allowances.cppm
         Arena.cppm
         Box.cppm
+        BoxPairs.cppm
         Context.cppm
         Core.cppm
         Enum.cppm
@@ -32,6 +33,7 @@ stereon_add_library(core
         Version.cppm
     SOURCES
         Arena.cpp
+        BoxPairs.cpp
         EvaluatorChecks.cpp
         GeometryChecks.cpp
         Handle.cpp
