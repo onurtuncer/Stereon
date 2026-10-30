@@ -131,14 +131,17 @@ namespace Stereon::Detail {
 /// The checks every erased curve evaluation makes in checked builds: a
 /// finite parameter inside the domain of a non-periodic curve. They run
 /// here, at the boundary to user geometry, because a user type need not
-/// check anything itself.
+/// check anything itself. The period is asked for only outside the domain:
+/// a B-spline's is found from its data (Period(BSplineCurve)).
 template <std::size_t D>
 void CheckCurveParameter(const CurveConcept<D>& model, const double t,
                          const std::string_view function) noexcept
 {
     if constexpr (EvaluatorChecks) {
         RequireFinite(t, function, "a non-finite parameter");
-        RequireInDomain(model.GetDomain(), t, model.GetPeriod(), function);
+        if (const Interval domain = model.GetDomain(); !Contains(domain, t)) {
+            RequireInDomain(domain, t, model.GetPeriod(), function);
+        }
     }
 }
 

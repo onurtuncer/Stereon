@@ -268,6 +268,10 @@ TEST_CASE("RemoveKnot undoes an insertion", "[curve][bspline][operations][proper
         const double u = RandomParameter(c);
         const Interval d = Domain(c);
         RC_PRE(u > d.GetLower() && u < d.GetUpper());
+        // A curve in the periodic form takes the knot at every image of u
+        // (InsertKnot), which one removal does not undo. The random curves
+        // reach the form only when degenerate: equal poles on uniform knots.
+        RC_PRE(Stereon::Period(c) == 0.0);
         const auto inserted = Stereon::InsertKnot(c, u);
         RC_PRE(inserted.has_value());
         const auto removal = *Stereon::RemoveKnot(*inserted, u, 1, 1e-8);

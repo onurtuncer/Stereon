@@ -11,7 +11,9 @@ module;
 // src/curve/BSplineCurve.cpp.
 #include <Stereon/Core/Contracts.hpp>
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <span>
 #include <vector>
@@ -276,8 +278,23 @@ void EvalPrepared(const BasicSpanPolynomials<D>& polynomials,
         return SpanForm{polynomials.Midpoints[slot], polynomials.InverseWidths[slot],
                         polynomials.Coefficients.data() + slot * stride};
     };
+    // A periodic curve's parameters outside the domain, carried in as
+    // Detail::IntoDomain carries them for the curve itself.
+    const auto p = static_cast<std::size_t>(polynomials.Degree);
+    const Interval domain{polynomials.Knots[p], polynomials.Knots[polynomials.PoleCount]};
+    std::vector<double> storage;
+    std::span<const double> inside = parameters;
+    if (polynomials.Period > 0.0 &&
+        std::ranges::any_of(parameters, [&](const double t) { return !Contains(domain, t); })) {
+        storage.reserve(parameters.size());
+        for (const double t : parameters) {
+            const bool carried = std::isfinite(t) && !Contains(domain, t);
+            storage.push_back(carried ? NearestInRange(t, domain, polynomials.Period) : t);
+        }
+        inside = storage;
+    }
     EvalAllFastN<D>(polynomials.Knots, polynomials.Degree, polynomials.PoleCount,
-                    polynomials.Rational, form, parameters, points);
+                    polynomials.Rational, form, inside, points);
 }
 
 template <std::size_t D>
@@ -303,12 +320,16 @@ void EvalConverting(const BasicBSplineCurve<double, D>& curve,
 
 SpanPolynomials ToSpanPolynomials(const BSplineCurve& curve)
 {
-    return SpanPolynomialsOf(curve);
+    SpanPolynomials polynomials = SpanPolynomialsOf(curve);
+    polynomials.Period = Period(curve);
+    return polynomials;
 }
 
 SpanPolynomials2d ToSpanPolynomials(const BSplineCurve2d& curve)
 {
-    return SpanPolynomialsOf(curve);
+    SpanPolynomials2d polynomials = SpanPolynomialsOf(curve);
+    polynomials.Period = Period(curve);
+    return polynomials;
 }
 
 void EvalAllFast(const SpanPolynomials& polynomials, const std::span<const double> parameters,
@@ -326,13 +347,15 @@ void EvalAllFast(const SpanPolynomials2d& polynomials, const std::span<const dou
 void EvalAllFast(const BSplineCurve& curve, const std::span<const double> parameters,
                  const std::span<Point3> points)
 {
-    EvalConverting(curve, parameters, points);
+    std::vector<double> storage;
+    EvalConverting(curve, Detail::IntoDomain(curve, parameters, storage), points);
 }
 
 void EvalAllFast(const BSplineCurve2d& curve, const std::span<const double> parameters,
                  const std::span<Point2> points)
 {
-    EvalConverting(curve, parameters, points);
+    std::vector<double> storage;
+    EvalConverting(curve, Detail::IntoDomain(curve, parameters, storage), points);
 }
 
 } // namespace Stereon

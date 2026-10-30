@@ -31,6 +31,7 @@ import :Circle;
 import :Conversion;
 import :Ellipse;
 import :Erased;
+import :Homogeneous;
 import :Hyperbola;
 import :Line;
 import :Trimmed;
@@ -191,17 +192,14 @@ Result<BSplineCurve> ToBSpline(const Parabola& parabola, const Interval range)
 
 Result<BSplineCurve> ToBSpline(const BSplineCurve& curve, const Interval range)
 {
-    STEREON_TRY_VOID(CheckRange(range, Domain(curve), 0.0, "ToBSpline(BSplineCurve)"));
-    BSplineCurve piece = curve;
-    if (range.GetLower() > Domain(piece).GetLower()) {
-        STEREON_TRY(auto halves, Split(piece, range.GetLower()));
-        piece = std::move(halves.second);
+    const double period = Period(curve);
+    STEREON_TRY_VOID(CheckRange(range, Domain(curve), period, "ToBSpline(BSplineCurve)"));
+    const Interval domain = Domain(curve);
+    if (period > 0.0 &&
+        !(Contains(domain, range.GetLower()) && Contains(domain, range.GetUpper()))) {
+        return PeriodicPiece(curve, range, period);
     }
-    if (range.GetUpper() < Domain(piece).GetUpper()) {
-        STEREON_TRY(auto halves, Split(piece, range.GetUpper()));
-        piece = std::move(halves.first);
-    }
-    return piece;
+    return Restricted(curve, range);
 }
 
 Result<BSplineCurve> ToBSpline(const Curve& curve, const Interval range)

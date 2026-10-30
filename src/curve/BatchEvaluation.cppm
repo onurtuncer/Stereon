@@ -55,6 +55,9 @@ struct BasicSpanPolynomials {
     /// Per span, (Degree + 1) rows of D + 1 values: c_k's coordinates and
     /// weight. The weight is 1 for k = 0 and 0 otherwise on a polynomial curve.
     std::vector<double> Coefficients;
+    /// The curve's Period: for a curve in the periodic form, parameters
+    /// outside the domain are carried into it as Eval carries them.
+    double Period = 0.0;
 };
 
 using SpanPolynomials = BasicSpanPolynomials<3>;
@@ -70,7 +73,8 @@ using SpanPolynomials2d = BasicSpanPolynomials<2>;
 /// and the difference is bounded in docs/nurbs.rst, *Fast batch
 /// evaluation*. The result does not depend on the SIMD width, the order of
 /// the parameters or how they fall into spans. Preconditions as Eval's for
-/// every parameter, and as many points as parameters.
+/// every parameter, and as many points as parameters; polynomials of a curve
+/// in the periodic form take every finite parameter, as the curve does.
 void EvalAllFast(const SpanPolynomials& polynomials, std::span<const double> parameters,
                  std::span<Point3> points);
 void EvalAllFast(const SpanPolynomials2d& polynomials, std::span<const double> parameters,
