@@ -148,7 +148,7 @@ jobs:
           --benchmark_out=build/reference/results-topology.json --benchmark_out_format=json
       # ADR-0007's speed-up: the drilled slab's cut (over 1 000 faces) on the
       # serial scheduler and on the runner's 4 threads, interleaved, the ratio
-      # of the medians reported against the 3x the ADR asks for, beside the
+      # of the medians reported against half the control's, as the ADR asks, beside the
       # control (batch projection, parallel through and through), whose ratio
       # is what the runner's 4 threads give any work.
       - name: Run the Boolean speed-up (M10, ADR-0007)
@@ -183,8 +183,9 @@ jobs:
               print(f"| {bench} | {median['serial']:.0f} ms | {median['threads:4']:.0f} ms | {ratios[bench]:.2f}x "
                     f"| {100 * spread['serial']:.1f} %, {100 * spread['threads:4']:.1f} % |")
           ratio = ratios["DrilledSlabCut"]
-          print(f"\nSpeed-up on 4 threads: **{ratio:.2f}x** (ADR-0007 asks for at least 3x): {'met' if ratio >= 3 else 'NOT met'}; "
-                f"{100 * ratio / ratios['Control']:.0f} % of the control's {ratios['Control']:.2f}x, what the runner's 4 threads give work with no serial part.")
+          share = ratio / ratios["Control"]
+          print(f"\nSpeed-up on 4 threads: **{ratio:.2f}x**, {100 * share:.0f} % of the control's {ratios['Control']:.2f}x, "
+                f"what the runner's 4 threads give work with no serial part. ADR-0007 asks for at least 50 %: {'met' if share >= 0.5 else 'NOT met'}.")
           EOF
       - name: Render the report
         run: |
