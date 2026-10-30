@@ -242,19 +242,21 @@ public:
         return m_Pages.size() * BytesPerPage;
     }
 
-    [[nodiscard]] const T& operator[](const std::size_t index) const
-        STEREON_HOT_PRE(index < GetSize())
+    [[nodiscard]] const T& operator[](const std::size_t index) const& STEREON_HOT_PRE(index <
+                                                                                      GetSize())
     {
         return (*m_Pages[PageOf(index)])[OffsetOf(index)];
     }
+    const T& operator[](std::size_t index) const&& = delete;
 
     /// The live entries of a page: PageSize of them for every page but the
     /// last. Hot loops read a page through this, once per page.
-    [[nodiscard]] std::span<const T> GetPageSpan(const std::size_t page) const
-        STEREON_PRE(page < GetPageCount())
+    [[nodiscard]] std::span<const T>
+    GetPageSpan(const std::size_t page) const& STEREON_PRE(page < GetPageCount())
     {
         return std::span<const T>{m_Pages[page]->data(), PageLength(page)};
     }
+    std::span<const T> GetPageSpan(std::size_t page) const&& = delete;
 
     /// The page itself, for code that holds pages (a serialiser, a diff).
     /// While the pointer lives the page counts as shared, so a write to it

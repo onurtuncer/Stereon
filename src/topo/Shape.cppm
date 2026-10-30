@@ -134,7 +134,9 @@ public:
         }
     }
 
-    [[nodiscard]] const Detail::TopologyTables& GetTables() const noexcept { return m_Tables; }
+    [[nodiscard]] const Detail::TopologyTables& GetTables() const& noexcept { return m_Tables; }
+
+    const Detail::TopologyTables& GetTables() const&& = delete;
     [[nodiscard]] ValidationCertificate GetCertificate() const noexcept
     {
         return {.ValidatorVersion = Detail::StructuralValidatorVersion,

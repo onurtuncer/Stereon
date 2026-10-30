@@ -146,8 +146,10 @@ public:
     [[nodiscard]] bool Contains(ParameterId id) const noexcept;
     /// The parameter's name, unit and reference scale. For an id this set
     /// did not make they are empty, empty and NaN: never another
-    /// parameter's.
-    [[nodiscard]] std::string_view GetName(ParameterId id) const noexcept;
+    /// parameter's. The name is a borrow of this set (ADR-0046), so it is
+    /// asked of a named set only; the unit is a literal and outlives any set.
+    [[nodiscard]] std::string_view GetName(ParameterId id) const& noexcept;
+    std::string_view GetName(ParameterId id) const&& = delete;
     [[nodiscard]] std::string_view GetUnit(ParameterId id) const noexcept;
     [[nodiscard]] double GetReference(ParameterId id) const noexcept;
     /// The parameter of that name, invalid if there is none.
@@ -453,24 +455,30 @@ public:
     SensitivityContext& operator=(SensitivityContext&&) noexcept = default;
     ~SensitivityContext() = default;
 
-    [[nodiscard]] const ParameterSet& GetParameters() const noexcept { return m_Parameters; }
+    /// The seed, the adjoint, the parameters and the workspace are borrows
+    /// of this context (ADR-0046): asked of a named context only.
+    [[nodiscard]] const ParameterSet& GetParameters() const& noexcept { return m_Parameters; }
+    const ParameterSet& GetParameters() const&& = delete;
 
     /// The seed p' of a forward product, one component per parameter in the
     /// set's order, each per the parameter's reference. InvalidInput for a
     /// length other than the set's size or a component that is not finite
     /// (ADR-0021, section 5: invalid seeds are KernelErrors).
     [[nodiscard]] Result<void> SetSeed(std::span<const double> seed);
-    [[nodiscard]] std::span<const double> GetSeed() const noexcept { return m_Seed; }
+    [[nodiscard]] std::span<const double> GetSeed() const& noexcept { return m_Seed; }
+    std::span<const double> GetSeed() const&& = delete;
 
     /// The adjoint x' of a reverse product: a covector over `size` sample
     /// coordinates under the operation's declared pairing. InvalidInput for
     /// a component that is not finite.
     [[nodiscard]] Result<void> SetAdjoint(std::span<const double> adjoint);
-    [[nodiscard]] std::span<const double> GetAdjoint() const noexcept { return m_Adjoint; }
+    [[nodiscard]] std::span<const double> GetAdjoint() const& noexcept { return m_Adjoint; }
+    std::span<const double> GetAdjoint() const&& = delete;
 
     /// Scratch space of at least `size` doubles for one evaluation's
     /// solvers, reused between calls; its contents are the evaluation's.
-    [[nodiscard]] std::span<double> Workspace(std::size_t size);
+    [[nodiscard]] std::span<double> Workspace(std::size_t size) &;
+    std::span<double> Workspace(std::size_t size) && = delete;
 
     /// Drops the seed, the adjoint and the workspace, keeping the parameters.
     void Clear() noexcept;
@@ -494,6 +502,9 @@ class SensitivityResult {
 public:
     /// A computed derivative. `status` must be Valid or NearEvent; any other
     /// status gives InvalidInput, since it would carry a payload it must not.
+    /// So does a value that is not finite: overflow is no derivative, and an
+    /// operation whose arithmetic overflows reports Indeterminate instead
+    /// (Without), so that nothing infinite is ever published as Valid.
     [[nodiscard]] static Result<SensitivityResult>
     Computed(DerivativeStatus status, std::vector<double> values, std::uint64_t signature);
     /// No derivative: NotSupported, Nondifferentiable or Indeterminate, with
@@ -507,24 +518,29 @@ public:
 
     [[nodiscard]] DerivativeStatus GetStatus() const noexcept { return m_Status; }
     /// The derivative for Valid and NearEvent; nothing otherwise, so that no
-    /// caller can mistake an absent derivative for a zero one.
-    [[nodiscard]] std::optional<std::span<const double>> GetValues() const noexcept;
+    /// caller can mistake an absent derivative for a zero one. The values,
+    /// the reason and the entities are borrows of this result (ADR-0046):
+    /// asked of a named result only, never of Computed(...).value().
+    [[nodiscard]] std::optional<std::span<const double>> GetValues() const& noexcept;
+    std::optional<std::span<const double>> GetValues() const&& = delete;
     /// True for NearEvent: the derivative is usable but qualified.
     [[nodiscard]] bool IsQualified() const noexcept
     {
         return m_Status == DerivativeStatus::NearEvent;
     }
-    [[nodiscard]] std::string_view GetReason() const noexcept { return m_Reason; }
+    [[nodiscard]] std::string_view GetReason() const& noexcept { return m_Reason; }
+    std::string_view GetReason() const&& = delete;
 
     /// A digest of the branch and topology the derivative belongs to: two
     /// evaluations with different signatures were not in one regime.
     [[nodiscard]] std::uint64_t GetSignature() const noexcept { return m_Signature; }
     /// The entities of the input the derivative concerns, by snapshot and
     /// slot, as tracked samples name theirs.
-    [[nodiscard]] std::span<const std::pair<StoreId, std::uint32_t>> GetEntities() const noexcept
+    [[nodiscard]] std::span<const std::pair<StoreId, std::uint32_t>> GetEntities() const& noexcept
     {
         return m_Entities;
     }
+    std::span<const std::pair<StoreId, std::uint32_t>> GetEntities() const&& = delete;
     void AddEntity(StoreId snapshot, std::uint32_t index);
     /// The resolution and tolerance ceiling held fixed during the evaluation
     /// (ADR-0021, section 8); NaN until set.
