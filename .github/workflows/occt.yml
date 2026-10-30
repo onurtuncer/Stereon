@@ -67,3 +67,14 @@ jobs:
         run: cmake --build --preset gcc16-release --target stereon_occt_tests
       - name: Differential tests
         run: 'ctest --preset gcc16-release -R "^occt: "'
+      # The Boolean prototype's M11: the comparison's table, each fixture's
+      # volume, area and face count from both kernels, kept in the summary.
+      - name: Boolean comparison table (M11)
+        run: |
+          {
+            echo '## Booleans against BRepAlgoAPI (M11)'
+            echo
+            echo '```'
+            ./build/gcc16-release/tests/stereon_occt_tests "[occt][boolean]" | grep -E "volume .* faces"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
