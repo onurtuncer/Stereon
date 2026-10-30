@@ -109,6 +109,16 @@ template <Scalar T, std::size_t D>
 [[nodiscard]] Result<BSplineCurve> AsPeriodic(const BSplineCurve& curve, double tolerance);
 [[nodiscard]] Result<BSplineCurve2d> AsPeriodic(const BSplineCurve2d& curve, double tolerance);
 
+/// A curve in the periodic form opened at t: the clamped curve over
+/// [t, t + Period(curve)] that traces the curve once from t round to t
+/// again, with the curve's parametrisation, cut from the form written out
+/// over one more period on each side. t may lie in any period. The piece
+/// closes exactly, its last pole and weight its first, and is C^0 there;
+/// AsPeriodic turns it back into the form.
+/// InvalidInput unless the curve is in the periodic form and t is finite.
+[[nodiscard]] Result<BSplineCurve> Opened(const BSplineCurve& curve, double t);
+[[nodiscard]] Result<BSplineCurve2d> Opened(const BSplineCurve2d& curve, double t);
+
 // ---------------------------------------------------------------------------
 // Degree elevation and knot removal
 

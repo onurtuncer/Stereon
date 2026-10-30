@@ -190,49 +190,6 @@ Result<BSplineCurve> ToBSpline(const Parabola& parabola, const Interval range)
                         {}};
 }
 
-/// The restriction of a B-spline to a range inside its domain: split at the
-/// range's ends where they are inside.
-[[nodiscard]] Result<BSplineCurve> Restricted(BSplineCurve piece, const Interval range)
-{
-    if (range.GetLower() > Domain(piece).GetLower()) {
-        STEREON_TRY(auto halves, Split(piece, range.GetLower()));
-        piece = std::move(halves.second);
-    }
-    if (range.GetUpper() < Domain(piece).GetUpper()) {
-        STEREON_TRY(auto halves, Split(piece, range.GetUpper()));
-        piece = std::move(halves.first);
-    }
-    return piece;
-}
-
-/// The piece of a curve in the periodic form over a range of at most one
-/// period that leaves its domain: the range moved by whole periods to start
-/// in the domain, cut from the form written out over one more period on
-/// each side, and its knots moved back, the ends set to the range's own.
-[[nodiscard]] Result<BSplineCurve> PeriodicPiece(const BSplineCurve& curve, const Interval range,
-                                                 const double period)
-{
-    // The start in [a, b): b is the seam a, and taking a keeps the range's
-    // end inside the extension, whose own ends are not clamped.
-    double low = NearestInRange(range.GetLower(), Domain(curve), period);
-    if (low >= Domain(curve).GetUpper()) {
-        low = Domain(curve).GetLower();
-    }
-    const double shift = range.GetLower() - low;
-    const BSplineCurve extended = FromHomogeneous(PeriodicExtension(ToHomogeneous(curve), 1));
-    STEREON_TRY(BSplineCurve piece, Restricted(extended, Interval{low, low + Width(range)}));
-    const auto p = static_cast<std::size_t>(piece.Degree);
-    for (std::size_t i = 0; i < piece.Knots.size(); ++i) {
-        const bool start = i <= p;
-        const bool end = i + p + 1 >= piece.Knots.size();
-        piece.Knots[i] =
-            start ? range.GetLower()
-            : end ? range.GetUpper()
-                  : std::clamp(piece.Knots[i] + shift, range.GetLower(), range.GetUpper());
-    }
-    return piece;
-}
-
 Result<BSplineCurve> ToBSpline(const BSplineCurve& curve, const Interval range)
 {
     const double period = Period(curve);

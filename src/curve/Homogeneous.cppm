@@ -7,6 +7,8 @@
 
 module;
 
+#include <Stereon/Core/Try.hpp>
+
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -382,6 +384,53 @@ template <std::size_t D>
         result.Poles.push_back(e.Poles[start - p + i % count]);
     }
     return result;
+}
+
+/// The restriction of a B-spline to a range inside its domain: split at the
+/// range's ends where they are inside.
+template <std::size_t D>
+[[nodiscard]] Result<BasicBSplineCurve<double, D>> Restricted(BasicBSplineCurve<double, D> piece,
+                                                              const Interval range)
+{
+    if (range.GetLower() > Domain(piece).GetLower()) {
+        STEREON_TRY(auto halves, Split(piece, range.GetLower()));
+        piece = std::move(halves.second);
+    }
+    if (range.GetUpper() < Domain(piece).GetUpper()) {
+        STEREON_TRY(auto halves, Split(piece, range.GetUpper()));
+        piece = std::move(halves.first);
+    }
+    return piece;
+}
+
+/// The piece of a curve in the periodic form over a range of at most one
+/// period, anywhere: the range moved by whole periods to start
+/// in the domain, cut from the form written out over one more period on
+/// each side, and its knots moved back, the ends set to the range's own.
+template <std::size_t D>
+[[nodiscard]] Result<BasicBSplineCurve<double, D>>
+PeriodicPiece(const BasicBSplineCurve<double, D>& curve, const Interval range, const double period)
+{
+    // The start in [a, b): b is the seam a, and taking a keeps the range's
+    // end inside the extension, whose own ends are not clamped.
+    double low = NearestInRange(range.GetLower(), Domain(curve), period);
+    if (low >= Domain(curve).GetUpper()) {
+        low = Domain(curve).GetLower();
+    }
+    const double shift = range.GetLower() - low;
+    const BasicBSplineCurve<double, D> extended =
+        FromHomogeneous(PeriodicExtension(ToHomogeneous(curve), 1));
+    STEREON_TRY(auto piece, Restricted(extended, Interval{low, low + Width(range)}));
+    const auto p = static_cast<std::size_t>(piece.Degree);
+    for (std::size_t i = 0; i < piece.Knots.size(); ++i) {
+        const bool start = i <= p;
+        const bool end = i + p + 1 >= piece.Knots.size();
+        piece.Knots[i] =
+            start ? range.GetLower()
+            : end ? range.GetUpper()
+                  : std::clamp(piece.Knots[i] + shift, range.GetLower(), range.GetUpper());
+    }
+    return piece;
 }
 
 } // namespace Stereon

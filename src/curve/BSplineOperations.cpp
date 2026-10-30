@@ -10,6 +10,7 @@ module;
 // The contract anchor (docs/toolchain/gcc16-feature-probe.md); see
 // src/curve/BSplineCurve.cpp.
 #include <Stereon/Core/Contracts.hpp>
+#include <Stereon/Core/Try.hpp>
 
 #include <algorithm>
 #include <array>
@@ -605,6 +606,28 @@ AsPeriodicN(const BasicBSplineCurve<double, D>& curve, const double tolerance)
     return Published(PeriodicFormOf(h, merged), "AsPeriodic");
 }
 
+/// Opened: the piece over [t, t + T] of a curve in the periodic form.
+template <std::size_t D>
+[[nodiscard]] Result<BasicBSplineCurve<double, D>>
+OpenedN(const BasicBSplineCurve<double, D>& curve, const double t)
+{
+    const double period = Period(curve);
+    if (!(period > 0.0)) {
+        return Fail(ErrorCode::InvalidInput, "Opened: the curve is not in the periodic form");
+    }
+    if (!std::isfinite(t) || !std::isfinite(t + period)) {
+        return Fail(ErrorCode::InvalidInput, "Opened: the parameter must be finite");
+    }
+    STEREON_TRY(auto piece, PeriodicPiece(curve, Interval{t, t + period}, period));
+    // Its two ends are one point of the curve, reached in two periods, so
+    // they differ by rounding alone: made equal, the piece closes exactly.
+    piece.Poles.back() = piece.Poles.front();
+    if (IsRational(piece)) {
+        piece.Weights.back() = piece.Weights.front();
+    }
+    return piece;
+}
+
 // ---------------------------------------------------------------------------
 // Concatenation
 
@@ -723,6 +746,16 @@ bool IsPeriodic(const BSplineCurve& curve)
 bool IsPeriodic(const BSplineCurve2d& curve)
 {
     return IsPeriodicN(curve);
+}
+
+Result<BSplineCurve> Opened(const BSplineCurve& curve, const double t)
+{
+    return OpenedN(curve, t);
+}
+
+Result<BSplineCurve2d> Opened(const BSplineCurve2d& curve, const double t)
+{
+    return OpenedN(curve, t);
 }
 
 double Period(const BSplineCurve& curve)

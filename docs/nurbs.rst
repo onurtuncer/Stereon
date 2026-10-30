@@ -271,7 +271,8 @@ whose period their data decide. Everything that reads a period then treats
 the curve as it treats a circle:
 
 - **Evaluation** (``Eval``, ``Deriv``, ``Derivatives``, ``EvalAll``,
-  ``EvalAllFast``) takes every finite parameter. One outside the domain is
+  ``EvalAllFast``, and the span polynomials of ``ToSpanPolynomials``, which
+  record the period) takes every finite parameter. One outside the domain is
   carried into it by whole periods (``NearestInRange``); the periodicity is
   checked only then, so evaluation inside the domain costs what it did.
 - **Knot insertion** keeps the form. A parameter stands for all its images,
@@ -289,6 +290,12 @@ the curve as it treats a circle:
   on each side, and its knots moved back. A piece is a clamped curve, so it
   is not periodic itself. Trimmed curves on a periodic B-spline cross its
   seam the same way, as they cross a circle's (:doc:`trimmed`).
+- **Opening and splitting.** ``Opened(curve, t)`` opens the curve at
+  :math:`t`, in any period: the clamped curve over :math:`[t, t + T]` that
+  traces it once round, its last pole made its first, so that it closes
+  exactly and ``AsPeriodic`` turns it back into the form. ``Split`` takes
+  any finite :math:`t` and cuts the domain at its image, as it cuts any
+  curve; at the seam there is nothing on one side, and it refuses.
 - **Degree elevation** (A5.9). ``ElevatedDegree`` splits the clamped curve
   into its Bezier segments, raises each by the convex combination
   :math:`Q_i = \tfrac{i}{q+1} P_{i-1} + (1 - \tfrac{i}{q+1}) P_i` one degree
@@ -858,11 +865,6 @@ Current limits
 - B-spline *surfaces* have no periodic form: no fit produces one and nothing
   recognises one, so a surface is evaluated inside its domain only. Curves
   in the periodic form are periodic (*Periodic curves*, above).
-- ``Split`` cuts a periodic curve on its domain, as any other; to open it
-  at a parameter, take ``ToBSpline`` over the period that starts there.
-- The precomputed span polynomials of ``EvalAllFast`` are evaluated inside
-  the domain only; ``EvalAllFast`` on the curve itself carries parameters
-  in.
 - Surface projection is not certified inside its final sub-patches (see
   *Surface projection*).
 - Degree elevation, knot removal, clamping and concatenation exist for

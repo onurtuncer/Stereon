@@ -20,6 +20,7 @@
 #include <cstddef>
 #include <numbers>
 #include <span>
+#include <string>
 #include <vector>
 
 import Stereon.Curve;
@@ -292,5 +293,69 @@ TEST_CASE("a periodic plane B-spline is periodic as in space", "[curve][periodic
     for (int k = 0; k <= 50; ++k) {
         const double t = domain.GetLower() + period * k / 50.0;
         REQUIRE(Distance(Eval(*inserted, t), Eval(c, t)) <= 1e-12);
+    }
+}
+
+TEST_CASE("a periodic curve opened at any parameter traces it once from there", "[curve][periodic]")
+{
+    for (const BSplineCurve& c : Fixtures()) {
+        const double a = Stereon::Domain(c).GetLower();
+        const double period = Stereon::Period(c);
+        for (const double t : {a, a + 0.37 * period, a - 2.6 * period, a + 7.0 * period}) {
+            INFO("t = " << t);
+            const auto opened = Stereon::Opened(c, t);
+            REQUIRE(opened.has_value());
+            REQUIRE(Stereon::Domain(*opened) == Interval{t, t + period});
+            REQUIRE(Stereon::Period(*opened) == 0.0);
+            REQUIRE(Stereon::IsClosed(*opened, 1e-11));
+            for (int k = 0; k <= 100; ++k) {
+                const double u = t + period * k / 100.0;
+                REQUIRE(Distance(Eval(*opened, u), Eval(c, u)) <= 1e-11);
+            }
+            const auto closed = Stereon::AsPeriodic(*opened, 1e-11);
+            INFO((closed ? "" : std::string(closed.error().GetMessage())));
+            REQUIRE(closed.has_value());
+            REQUIRE(Stereon::IsPeriodic(*closed));
+        }
+    }
+    const BSplineCurve open = Stereon::Clamped(Loop(3));
+    REQUIRE(Stereon::Opened(open, 0.5).error().GetCode() == ErrorCode::InvalidInput);
+}
+
+TEST_CASE("a periodic curve splits at the image of any parameter", "[curve][periodic]")
+{
+    const BSplineCurve c = Loop(3);
+    const Interval domain = Stereon::Domain(c);
+    const double period = Stereon::Period(c);
+    const double inside = domain.GetLower() + 0.4 * period;
+    const auto near = Stereon::Split(c, inside);
+    const auto far = Stereon::Split(c, inside + 3.0 * period);
+    REQUIRE(near.has_value());
+    REQUIRE(far.has_value());
+    REQUIRE(Stereon::Domain(far->first).GetLower() == domain.GetLower());
+    REQUIRE(std::abs(Stereon::Domain(far->first).GetUpper() - inside) <= 1e-14);
+    REQUIRE(Stereon::Domain(far->second).GetUpper() == domain.GetUpper());
+    // The seam has nothing on one side.
+    REQUIRE(Stereon::Split(c, domain.GetLower() + 2.0 * period).error().GetCode() ==
+            ErrorCode::InvalidInput);
+}
+
+TEST_CASE("span polynomials of a periodic curve carry parameters in", "[curve][periodic]")
+{
+    const BSplineCurve c = Circle();
+    const Stereon::SpanPolynomials polynomials = Stereon::ToSpanPolynomials(c);
+    REQUIRE(polynomials.Period == Stereon::Period(c));
+    REQUIRE(Stereon::ToSpanPolynomials(Stereon::Clamped(c)).Period == 0.0);
+    const Interval domain = Stereon::Domain(c);
+    const double period = Stereon::Period(c);
+    std::vector<double> parameters;
+    for (int k = 0; k <= 80; ++k) {
+        parameters.push_back(domain.GetLower() - 3.0 * period + 7.0 * period * k / 80.0);
+    }
+    std::vector<Point3> points(parameters.size());
+    Stereon::EvalAllFast(polynomials, parameters, points);
+    for (std::size_t k = 0; k < parameters.size(); ++k) {
+        INFO("t = " << parameters[k]);
+        REQUIRE(Distance(points[k], Eval(c, parameters[k])) <= 1e-12);
     }
 }

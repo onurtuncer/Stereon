@@ -482,9 +482,12 @@ BezierCurvesOf(const BasicBSplineCurve<double, D>& curve)
 
 template <std::size_t D>
 [[nodiscard]] Result<std::pair<BasicBSplineCurve<double, D>, BasicBSplineCurve<double, D>>>
-SplitN(const BasicBSplineCurve<double, D>& curve, const double t)
+SplitN(const BasicBSplineCurve<double, D>& curve, const double given)
 {
     const Interval domain = Domain(curve);
+    // A periodic curve takes the image of t in its domain; t on the seam
+    // leaves nothing to split there (Opened opens the curve at it).
+    const double t = Detail::IntoDomain(curve, given);
     if (!std::isfinite(t) || !(t > domain.GetLower() && t < domain.GetUpper())) {
         return Fail(ErrorCode::InvalidInput, "Split: the parameter must lie inside the domain");
     }

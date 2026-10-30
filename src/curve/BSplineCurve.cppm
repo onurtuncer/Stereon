@@ -480,8 +480,10 @@ template <Scalar T>
 /// The two pieces of the curve on either side of t, each with the same
 /// parametrisation as the original. InvalidInput unless t lies strictly
 /// inside the domain.
-/// A curve in the periodic form is split as any other, on its domain: to
-/// open it at t instead, take ToBSpline over [t, t + Period(curve)].
+/// A curve in the periodic form takes any finite t, whose image in the
+/// domain it is split at, as any other curve is: the pieces are those of
+/// the domain on either side of that image. To open the curve at t into one
+/// piece, take Opened.
 [[nodiscard]] Result<std::pair<BSplineCurve, BSplineCurve>> Split(const BSplineCurve& curve,
                                                                   double t);
 [[nodiscard]] Result<std::pair<BSplineCurve2d, BSplineCurve2d>> Split(const BSplineCurve2d& curve,
