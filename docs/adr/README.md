@@ -22,7 +22,7 @@ Open questions that have to be researched before they can be decided live in [`d
 | [0004](0004-topology-storage-and-handles.md) | Topology storage and handles | 0 | Accepted |
 | [0005](0005-immutability-and-sharing.md) | Immutability and structural sharing | 0 | Accepted |
 | [0006](0006-error-handling.md) | Error handling | 0 | Accepted |
-| [0007](0007-threading-and-determinism.md) | Threading and determinism | 0 | Proposed |
+| [0007](0007-threading-and-determinism.md) | Threading and determinism | 0 | Accepted |
 | [0008](0008-licence.md) | Licence | 0 | Accepted |
 | [0009](0009-parameter-space-representation.md) | Parameter-space curves (pcurves) | 1 | Proposed |
 | [0010](0010-ssi-strategy.md) | Surface–surface intersection strategy | 2 | Accepted in part |

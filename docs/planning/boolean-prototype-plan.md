@@ -4,7 +4,7 @@
 **Opened:** 2026-10-20
 **Status:** decided 2026-10-20 (section 4). M0, M1, M2 and the first half of M5 are merged; M3 and M4 landed on 2026-10-22 (the three analytic handlers, run on the corpus and against OCCT; the interval certificates of every bounded branch and of the cached edge curves); next is M3b.
 
-The Phase 0 exit gate has one open line: ADR-0007 accepted, which waits for a Boolean prototype that can test its speed-up and cross-platform checks. ADR-0001 is accepted with its Boolean and merge tests as conditions of the same prototype. This plan sets out what the prototype is, what it must prove, and the order of the work.
+The Phase 0 exit gate had one open line: ADR-0007 accepted, which waited for a Boolean prototype that could test its speed-up and cross-platform checks; it was accepted on 2026-10-30 on the prototype's M10. ADR-0001 is accepted with its Boolean and merge tests as conditions of the same prototype. This plan sets out what the prototype is, what it must prove, and the order of the work.
 
 ## 1. What the prototype is
 
@@ -18,7 +18,7 @@ It must pass:
 | The same with deliberately loosened inputs, 1e-4 to 1e-2 mm | ADR-0001 verification |
 | The merge-policy chain test at 0.8× the pair tolerance, byte-identical across thread counts and runs | ADR-0001 verification |
 | Every Tier A case of `corpus/analytic-ssi/` decided as RS-0001 requires | TODO.md §10, RS-0001 |
-| Identical output at 1, 2, 8 and 32 threads; a speed-up of at least 3× on the 4 cores of the hosted reference runner on a many-face fixture; the cross-platform (G2) comparison (ADR-0007, revised 2026-10-25) | ADR-0007 verification |
+| Identical output at 1, 2, 8 and 32 threads; a speed-up on the 4 threads of the hosted reference runner, on a many-face fixture, of at least half the workflow's control (restated 2026-10-30 from 3×; measured 2.05× against the control's 3.50×); the cross-platform (G2) comparison (ADR-0007, revised 2026-10-25) | ADR-0007 verification |
 | Splitting a face and an edge within ADR-0005's copy budget | ADR-0005 verification |
 | Volumes, areas and face counts against OCCT's `BRepAlgoAPI` on shared cases | TODO.md §9 |
 

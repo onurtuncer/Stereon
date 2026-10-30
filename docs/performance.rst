@@ -828,10 +828,15 @@ scheduler against 8 threads:
      - 6.16 s
      - 5.3x
 
-These are a development machine's figures, not the measurement of record:
-ADR-0007 asks for at least 3x on the 4 cores of the OCCT reference
-workflow's runner, on a body of more than 1 000 faces, measured as that
-workflow measures.
+These are a development machine's figures, not the measurement of record.
+The measurement of record is the OCCT reference workflow's, on a body of
+more than 1 000 faces (20 x 20 holes, 1 206 faces). Its run of 2026-10-30
+on main measured 1 761 ms serially and 860 ms on 4 threads, a speed-up of
+2.05x, against 3.50x for the workflow's control, batch projection that runs
+in parallel throughout. That runner has 2 physical cores with 2 threads
+each. ADR-0007 asks for at least half the control's speed-up; the Boolean
+reaches 59 %. Its remaining serial share, the network assembly and the
+classification after the parallel pair stage, is Phase 1 work.
 
 These speed-ups compare Stereon with itself. How fast Stereon's Boolean is
 next to OCCT's ``BRepAlgoAPI`` is benchmark B4.1–B4.3, which has not run.

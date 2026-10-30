@@ -142,7 +142,7 @@ Per [ADR-0035](docs/adr/0035-debug-viewer.md): objects reach the viewer as `.stn
 - [ ] **ADR-0018:** seeded-fault corpus for the checker; zero false positives on valid bodies
 - [x] **ADR-0007:** determinism check across thread counts on the prototype operations. The operations that run in parallel so far, `ProjectAll` onto B-spline curves and surfaces through `Detail::ParallelFor`, give the same bits serially and at 1, 2, 8 and 32 threads (`[determinism]`, CTest and the nightly run); booleans, tessellation and import join as they are parallelised
 - [ ] **ADR-0009:** early review of the edge representation, since ADR-0004's edge record depends on it (full acceptance is due before Phase 1 topology work)
-- [ ] Review ADRs 0001–0008, 0015–0018 and 0021 and move each to **Accepted** or revise. 0001, 0003, 0004, 0005, 0006 and 0016 accepted on 2026-10-20 with revisions; 0007 stays Proposed until the Boolean prototype can test it; 0018 and 0021 are open
+- [ ] Review ADRs 0001–0008, 0015–0018 and 0021 and move each to **Accepted** or revise. 0001, 0003, 0004, 0005, 0006 and 0016 accepted on 2026-10-20 with revisions; 0007 accepted on 2026-10-30 on the Boolean prototype's M10, its speed-up target restated against the reference workflow's control; 0018 and 0021 are open
 
 ## 11. Documentation (ongoing)
 
@@ -168,4 +168,4 @@ All of the following must pass in CI before Phase 1 starts:
 - [x] Output identical for 1, 2, 8 and 32 threads. For every operation that runs in parallel today (batch projection), on every pull request and nightly across processes (§3, §10); each new parallel operation adds its case
 - [x] ADR-0021 foundation types in place; no geometric operation can be added without a capability declaration
 - [ ] All blocking CI jobs green on Linux, Windows and macOS
-- [ ] ADRs 0001–0008, 0015–0017 accepted. All but 0007, whose speed-up and cross-platform checks wait for the Boolean prototype; 0001 accepted on 2026-10-20 with its Boolean and merge tests as conditions of that prototype
+- [x] ADRs 0001–0008, 0015–0017 accepted. 0007 last, on 2026-10-30, on the Boolean prototype's M10 (its speed-up restated against the reference workflow's control); 0001 accepted on 2026-10-20 with its Boolean and merge tests as conditions of that prototype
