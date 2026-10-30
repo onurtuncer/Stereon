@@ -24,8 +24,15 @@ Configuring with ``-DSTEREON_WITH_OCCT=ON`` and the OCCT install directory in
 ``CMAKE_PREFIX_PATH`` builds ``stereon_occt_tests``: the same line, circle,
 plane and cylinder are built in both kernels and evaluated, with first and
 second derivatives, over two periods of parameters, and must agree to a
-relative 1e-13. The volume, area and face-count comparisons of
-``docs/benchmarks.md`` join when Stereon can build bodies.
+relative 1e-13. The Boolean prototype's union, cut and common of the M10
+fixtures (``tests/support/BooleanCases.hpp``) run through ``BRepAlgoAPI`` on
+OCCT twins of the operands, and their volumes, areas and face counts must
+agree: volumes and areas within 1e-6 relative (ADR-0013) plus a band as
+wide as the result's largest tolerance, face counts exactly. Stereon's side
+is measured by ``tests/support/ShapeMeasures.hpp``, Green's theorem over
+each face's loops in its parameter plane at two quadrature resolutions,
+which ``tests/boolean/MeasureTests.cpp`` checks against the fixtures' exact
+volumes and areas in every build. The OCCT job's summary shows the table.
 
 .. code-block:: bash
 
