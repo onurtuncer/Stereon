@@ -87,7 +87,8 @@ export namespace Stereon::Detail {
 /// InvalidInput, naming `where`, unless the degree and knots describe a
 /// B-spline with poleCount poles: 1 <= degree <= BSplineMaxDegree,
 /// poleCount >= degree + 1, poleCount + degree + 1 knots, all finite and
-/// non-decreasing, a non-empty domain [u_p, u_n+1], no knot value repeated
+/// non-decreasing, every non-empty knot interval having a finite reciprocal,
+/// a non-empty domain [u_p, u_n+1], no knot value repeated
 /// more than degree + 1 times, and no value strictly inside the domain
 /// repeated more than degree times, so that the curve is continuous.
 [[nodiscard]] Result<void> CheckKnotVector(int degree, std::span<const double> knots,

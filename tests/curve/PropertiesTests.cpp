@@ -108,6 +108,26 @@ Circle TiltedCircle()
     return {Point3{1.0, -2.0, 0.5}, 3.0, Vec3{s, s, 0.0}, Vec3{0.0, 0.0, 1.0}};
 }
 
+/// The width of the Blip's moving stretch, 2^-20: far narrower than the
+/// gap between the Gauss nodes of a piece a period wide.
+constexpr double BlipWidth = 0x1p-20;
+
+/// A degree-1 curve in the periodic form over [0, 1], period 1: it rises
+/// one unit over [0, e] and falls back over [e, 2e], e = BlipWidth, then
+/// stands still to the seam, so its length over any period is exactly 2.
+/// Its knots are stored for one period only, as the form requires; the
+/// release audit of 2026-10-30 (F1) found the quadrature over a later
+/// period looking for kinks at the stored knots, finding none in range
+/// and returning 0 with an error estimate of 0.
+BSplineCurve Blip()
+{
+    constexpr double e = BlipWidth;
+    return *Stereon::MakeBSplineCurve(
+        1, std::vector<double>{-1.0 + 2.0 * e, 0.0, e, 2.0 * e, 1.0, 1.0 + e},
+        std::vector<Point3>{{0.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}},
+        std::vector<double>{});
+}
+
 } // namespace
 
 TEST_CASE("a circle's properties are its radius and centre", "[curve][properties]")
@@ -232,6 +252,68 @@ TEST_CASE("arc length matches closed forms", "[curve][properties][arclength]")
     }
 }
 
+TEST_CASE("arc length of a periodic B-spline finds the knots of every period",
+          "[curve][properties][arclength][periodic]")
+{
+    const BSplineCurve blip = Blip();
+    REQUIRE(Stereon::IsPeriodic(blip));
+    REQUIRE(Stereon::Period(blip) == 1.0);
+    constexpr double e = BlipWidth;
+    // The speed is constant between the knots' images, so the quadrature
+    // is exact on every piece once it splits there.
+    constexpr double Exact = 1e-9;
+    SECTION("one period, from anywhere")
+    {
+        for (const double start : {0.0, 2.0, -3.0, 0.5, 1.0 - e, 1.0e6 + 0.25}) {
+            const auto result = *ArcLength(blip, Interval{start, start + 1.0});
+            CHECK(Near(result.Length, 2.0, Exact));
+            CHECK(result.ErrorEstimate <= Exact);
+        }
+    }
+    SECTION("many periods")
+    {
+        CHECK(Near(ArcLength(blip, Interval{0.25, 1000.25})->Length, 2000.0, Exact));
+        CHECK(Near(ArcLength(blip, Interval{-7.0, 3.0})->Length, 20.0, Exact));
+    }
+    SECTION("a narrow range of another period")
+    {
+        // Half the rise and half the fall.
+        CHECK(Near(ArcLength(blip, Interval{2.0 + 0.5 * e, 2.0 + 1.5 * e})->Length, 1.0, Exact));
+        CHECK(Near(ArcLength(blip, Interval{-1.0 + 0.5 * e, -1.0 + 1.5 * e})->Length, 1.0, Exact));
+        // The still stretch.
+        CHECK(ArcLength(blip, Interval{5.0 + 2.0 * e, 6.0})->Length == 0.0);
+    }
+    SECTION("the same through an erased wrapper")
+    {
+        const Curve erased(blip);
+        CHECK(Near(ArcLength(erased, Interval{2.0, 3.0})->Length, 2.0, Exact));
+        CHECK(Near(ArcLength(erased, Interval{2.0 + 0.5 * e, 2.0 + 1.5 * e})->Length, 1.0, Exact));
+    }
+    SECTION("a trimmed arc across the seam")
+    {
+        // The blip of the next period, at [1, 1 + 2e], lies inside the arc.
+        const auto across = Stereon::MakeTrimmedCurve(Curve(blip), Interval{0.5, 1.5});
+        REQUIRE(across.has_value());
+        CHECK(Near(ArcLength(*across, Domain(*across))->Length, 2.0, Exact));
+        CHECK(Near(ArcLength(Stereon::Reversed(*across), Domain(*across))->Length, 2.0, Exact));
+        // Half the rise alone, on an arc that starts in the period before
+        // the seam and ends just past it (an arc spans at most one period).
+        const auto rise = Stereon::MakeTrimmedCurve(Curve(blip), Interval{-0.5, 0.5 * e});
+        REQUIRE(rise.has_value());
+        CHECK(Near(ArcLength(*rise, Domain(*rise))->Length, 0.5, Exact));
+    }
+    SECTION("the parameter at a length follows later periods")
+    {
+        // The speed is positive where these lengths are reached, so the
+        // parameters are unique.
+        CHECK(Near(*ParameterAtArcLength(blip, 2.0, 1.0), 2.0 + e, Exact));
+        CHECK(Near(*ParameterAtArcLength(blip, 2.0, 2.5), 3.0 + 0.5 * e, Exact));
+        CHECK(Near(*ParameterAtArcLength(blip, 0.5, -1.0), e, Exact));
+        // Three whole turns and the whole of the next rise.
+        CHECK(Near(*ParameterAtArcLength(blip, -4.0, 7.0), -1.0 + e, Exact));
+    }
+}
+
 TEST_CASE("arc length checks its range", "[curve][properties][arclength]")
 {
     const Ellipse ellipse{Point3{0.0, 0.0, 0.0}, 5.0, 2.0, Vec3{1.0, 0.0, 0.0},
@@ -305,5 +387,34 @@ TEST_CASE("arc length inversion reports unmet residual targets", "[curve][proper
             REQUIRE(result.has_value());
             CHECK(*result == 1.0 + length);
         }
+    }
+}
+
+TEST_CASE("periodic arc length survives an overflowing parameter width",
+          "[curve][properties][regression]")
+{
+    const Circle circle{Point3{0.0, 0.0, 0.0}, 0.1, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+    for (const Interval range : {Interval{-1e308, 1e308}, Interval{-1.7e308, 1e308}}) {
+        const double expected = 0.1 * range.GetUpper() - 0.1 * range.GetLower();
+        REQUIRE(std::isfinite(expected));
+        const auto length = ArcLength(circle, range);
+        REQUIRE(length.has_value());
+        REQUIRE(std::isfinite(length->Length));
+        REQUIRE(std::isfinite(length->ErrorEstimate));
+        CHECK(std::abs(length->Length / expected - 1.0) <= Tolerance);
+        const auto erased = ArcLength(Curve{circle}, range);
+        REQUIRE(erased.has_value());
+        CHECK(erased->Length == length->Length);
+    }
+}
+
+TEST_CASE("arc length refuses an unrepresentable result", "[curve][properties][regression]")
+{
+    const Circle circle{Point3{0.0, 0.0, 0.0}, 2.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+    // Exercise both the finite-width and split-width paths.
+    for (const Interval range : {Interval{0.0, 1e308}, Interval{-1e308, 1e308}}) {
+        const auto length = ArcLength(circle, range);
+        REQUIRE_FALSE(length.has_value());
+        CHECK(length.error().GetCode() == ErrorCode::InvalidResult);
     }
 }

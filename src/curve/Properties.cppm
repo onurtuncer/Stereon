@@ -276,58 +276,168 @@ void AdaptiveLength(const C& curve, const double a, const double b, const double
     AdaptiveLength(curve, mid, b, right, depth + 1, result);
 }
 
-/// Appends the knots of the curve in (breaks.back(), high): a B-spline's
-/// own, those of a B-spline inside an erased wrapper, found through
-/// VisitBuiltin, or a trimmed curve's basis's, in the trimmed parameter;
-/// nothing for other types.
 template <typename C>
-void AppendKnots(const C& curve, const double high, std::vector<double>& breaks)
+[[nodiscard]] double PeriodOrZero(const C& curve)
 {
+    if constexpr (PeriodicCurve<C>) {
+        return Period(curve);
+    } else {
+        return 0.0;
+    }
+}
+
+/// Appends to `knots` the images u + k T of the knot u, k an integer, that
+/// lie strictly inside `range`; u itself when the period T is 0. The range
+/// is at most one period wide, so the images to look at are the first at
+/// or above its lower end and the next.
+inline void AppendImages(const double u, const Interval range, const double period,
+                         std::vector<double>& knots)
+{
+    const auto inside = [&](const double image) {
+        return image > range.GetLower() && image < range.GetUpper();
+    };
+    if (!(period > 0.0)) {
+        if (inside(u)) {
+            knots.push_back(u);
+        }
+        return;
+    }
+    const double k = std::ceil((range.GetLower() - u) / period);
+    for (const double image : {u + k * period, u + (k + 1.0) * period}) {
+        if (inside(image)) {
+            knots.push_back(image);
+        }
+    }
+}
+
+/// The distinct knots strictly inside `range`, sorted, where a B-spline's
+/// speed may have a kink: a B-spline's own and, when it is periodic with
+/// the given period, the images of one period's knots in the range (the
+/// stored knots alone would leave a range outside the domain without its
+/// kinks, and the quadrature with nothing to tell it where to look); those
+/// of a B-spline inside an erased wrapper, found through VisitBuiltin; a
+/// trimmed curve's basis's over the basis's range, in the trimmed
+/// parameter; none for other types. The range is at most one period wide
+/// (any width for a period of 0): PeriodicLength reduces a longer one.
+template <typename C>
+[[nodiscard]] std::vector<double> KnotsInside(const C& curve, const Interval range,
+                                              const double period)
+{
+    std::vector<double> knots;
     if constexpr (requires {
                       curve.Knots;
                       curve.Degree;
                   }) {
-        for (const double u : curve.Knots) {
-            if (u > breaks.back() && u < high) {
-                breaks.push_back(u);
-            }
+        // In the periodic form, one period's knots [a, b) stand for all.
+        std::span<const double> own = curve.Knots;
+        if (period > 0.0) {
+            const auto p = static_cast<std::size_t>(curve.Degree);
+            own = own.subspan(p, curve.Poles.size() - p);
+        }
+        for (const double u : own) {
+            AppendImages(u, range, period, knots);
         }
     } else if constexpr (requires {
                              curve.GetBasis();
                              curve.BasisParameter(0.0);
                          }) {
-        // A trimmed curve: its basis's knots, in its own parameter.
-        std::vector<double> basisKnots{-std::numeric_limits<double>::infinity()};
-        AppendKnots(curve.GetBasis(), std::numeric_limits<double>::infinity(), basisKnots);
-        std::vector<double> knots;
-        for (std::size_t k = 1; k < basisKnots.size(); ++k) {
-            knots.push_back(curve.BasisParameter(basisKnots[k]));
-        }
-        std::ranges::sort(knots);
-        for (const double u : knots) {
-            if (u > breaks.back() && u < high) {
-                breaks.push_back(u);
+        // A trimmed curve: the basis's knots over the basis's range, which
+        // may cross the seam of a periodic basis, taken to its own parameter.
+        const double lower = curve.BasisParameter(range.GetLower());
+        const double upper = curve.BasisParameter(range.GetUpper());
+        for (const double u :
+             KnotsInside(curve.GetBasis(), Interval{std::min(lower, upper), std::max(lower, upper)},
+                         PeriodOrZero(curve.GetBasis()))) {
+            const double t = curve.BasisParameter(u);
+            if (t > range.GetLower() && t < range.GetUpper()) {
+                knots.push_back(t);
             }
         }
     } else if constexpr (requires { curve.IsEmpty(); }) {
         VisitBuiltin(curve, [&](const auto& wrapped) {
             if constexpr (!std::is_same_v<std::remove_cvref_t<decltype(wrapped)>, C>) {
-                AppendKnots(wrapped, high, breaks);
+                knots = KnotsInside(wrapped, range, period);
             }
         });
     }
+    std::ranges::sort(knots);
+    const auto [first, last] = std::ranges::unique(knots);
+    knots.erase(first, last);
+    return knots;
 }
 
-/// The break points of the quadrature in [low, high]: the ends and the
+/// The break points of the quadrature over the range: its ends and the
 /// distinct knots between them, where a B-spline's speed may have a kink
 /// that would slow a high-order rule down, or fool its error estimate.
 template <typename C>
-[[nodiscard]] std::vector<double> LengthBreaks(const C& curve, const double low, const double high)
+[[nodiscard]] std::vector<double> LengthBreaks(const C& curve, const Interval range,
+                                               const double period)
 {
-    std::vector<double> breaks{low};
-    AppendKnots(curve, high, breaks);
-    breaks.push_back(high);
+    // KnotsInside already returns sorted, unique interior knots. Inserting
+    // the endpoints also avoids GCC 16's null-dereference warning for the
+    // empty vector returned by knot-free user curves in optimised builds.
+    std::vector<double> breaks = KnotsInside(curve, range, period);
+    breaks.insert(breaks.begin(), range.GetLower());
+    breaks.push_back(range.GetUpper());
     return breaks;
+}
+
+/// The length over a range at most one period wide (any width for a period
+/// of 0), by the adaptive quadrature between its break points.
+template <typename C>
+[[nodiscard]] ArcLengthResult QuadratureLength(const C& curve, const Interval range,
+                                               const double period)
+{
+    ArcLengthResult result;
+    const std::vector<double> breaks = LengthBreaks(curve, range, period);
+    for (std::size_t i = 0; i + 1 < breaks.size(); ++i) {
+        const double a = breaks[i];
+        const double b = breaks[i + 1];
+        if (a < b) {
+            AdaptiveLength(curve, a, b, GaussLegendre(curve, a, b), 0, result);
+        }
+    }
+    return result;
+}
+
+/// The length over a range of a periodic curve that leaves the domain: the
+/// whole periods it covers, each the length of one period over the domain,
+/// and what remains, less than a period, from the range's start carried
+/// into the domain, between the images of the knots it holds. Bounded work
+/// for a range of any length, where a break at every knot image would not
+/// be; the error estimate counts the period's estimate once per turn.
+template <typename C>
+[[nodiscard]] ArcLengthResult PeriodicLength(const C& curve, const Interval range,
+                                             const double period)
+{
+    const double width = Width(range);
+    double turns = std::floor(width / period);
+    // width - turns * period in one rounding; the quotient may have rounded
+    // up to a whole number.
+    double rest = std::fma(-turns, period, width);
+    if (rest < 0.0) {
+        turns -= 1.0;
+        rest += period;
+    }
+    // At enormous turn counts the quotient's rounding error itself spans
+    // many periods. Keep the quadrature tail bounded even in that case;
+    // the rounded turn count already limits the total's relative accuracy.
+    if (!(rest >= 0.0 && rest < period)) {
+        rest = std::fmod(width, period);
+    }
+    ArcLengthResult result;
+    if (turns > 0.0) {
+        const ArcLengthResult turn = QuadratureLength(curve, Domain(curve), period);
+        result.Length = turns * turn.Length;
+        result.ErrorEstimate = turns * turn.ErrorEstimate;
+    }
+    if (rest > 0.0) {
+        const double low = NearestInRange(range.GetLower(), Domain(curve), period);
+        const ArcLengthResult tail = QuadratureLength(curve, Interval{low, low + rest}, period);
+        result.Length += tail.Length;
+        result.ErrorEstimate += tail.ErrorEstimate;
+    }
+    return result;
 }
 
 } // namespace Stereon::Detail
@@ -339,29 +449,36 @@ export namespace Stereon {
 /// speed |C'(t)|, split at a B-spline's knots. InvalidInput unless the
 /// range is finite and inside the domain of a non-periodic curve; a range
 /// of a periodic curve may be any finite range, and its length then counts
-/// every turn it covers.
+/// every turn it covers, split at the knots' images in every period.
 template <typename C>
 [[nodiscard]] Result<ArcLengthResult> ArcLength(const C& curve, const Interval range)
 {
     const double low = range.GetLower();
     const double high = range.GetUpper();
     const bool finite = std::isfinite(low) && std::isfinite(high) && low <= high;
-    bool inside = Contains(Domain(curve), range);
-    if constexpr (PeriodicCurve<C>) {
-        inside = inside || Period(curve) > 0.0;
-    }
-    if (!finite || !inside) {
+    const bool inside = Contains(Domain(curve), range);
+    const double period = Detail::PeriodOrZero(curve);
+    if (!finite || !(inside || period > 0.0)) {
         return Fail(ErrorCode::InvalidInput,
                     "ArcLength: the range must be finite and inside the curve's domain");
     }
     ArcLengthResult result;
-    const std::vector<double> breaks = Detail::LengthBreaks(curve, low, high);
-    for (std::size_t i = 0; i + 1 < breaks.size(); ++i) {
-        const double a = breaks[i];
-        const double b = breaks[i + 1];
-        if (a < b) {
-            Detail::AdaptiveLength(curve, a, b, Detail::GaussLegendre(curve, a, b), 0, result);
-        }
+    if (inside) {
+        result = Detail::QuadratureLength(curve, range, period);
+    } else if (std::isfinite(Width(range))) {
+        result = Detail::PeriodicLength(curve, range, period);
+    } else {
+        // Finite endpoints may have an unrepresentable difference. Such a
+        // range straddles zero; each half has a finite width. Accumulate
+        // lengths, not parameter widths: a small curve can have a finite
+        // length over this range (e.g. radius 0.1 over [-1e308, 1e308]).
+        result = Detail::PeriodicLength(curve, Interval{low, 0.0}, period);
+        const auto right = Detail::PeriodicLength(curve, Interval{0.0, high}, period);
+        result.Length += right.Length;
+        result.ErrorEstimate += right.ErrorEstimate;
+    }
+    if (!std::isfinite(result.Length) || !std::isfinite(result.ErrorEstimate)) {
+        return Fail(ErrorCode::InvalidResult, "ArcLength: the length or error estimate overflowed");
     }
     return result;
 }
@@ -405,16 +522,6 @@ template <typename C>
     const Interval range{std::min(start, t), std::max(start, t)};
     const double length = ArcLength(curve, range)->Length;
     return t >= start ? length : -length;
-}
-
-template <typename C>
-[[nodiscard]] double PeriodOrZero(const C& curve)
-{
-    if constexpr (PeriodicCurve<C>) {
-        return Period(curve);
-    } else {
-        return 0.0;
-    }
 }
 
 /// A parameter and the signed length to it from start.

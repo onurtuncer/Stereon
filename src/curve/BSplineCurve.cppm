@@ -199,26 +199,25 @@ template <Scalar T, std::size_t D>
 /// the curves met in practice, use arrays of this size instead.
 inline constexpr std::size_t SmallDegreeCapacity = 8;
 
-/// The derivatives A^(k) = sum N^(k) w P and w^(k) = sum N^(k) w of the
-/// homogeneous curve for k < known (known <= p + 1 <= Capacity), by
-/// differencing the active poles rather than differentiating the basis (The
-/// NURBS Book, eq. 3.8 and A3.3): the k-th derivative of a degree-p
-/// B-spline is the degree-(p - k) B-spline on the same knots whose poles are
-/// Q^(k)_i = (p - k + 1) (Q^(k-1)_(i+1) - Q^(k-1)_i) / (u_(i+p+1) - u_(i+k)),
-/// and its basis functions on the span are a level of the triangle that
-/// BasisFunctionsOfAllDegrees computes for the point anyway. On a non-empty
-/// span every denominator is positive.
-template <std::size_t Capacity, Scalar T, std::size_t D>
-void HomogeneousDerivatives(const BasicBSplineCurve<T, D>& curve, const double t,
-                            const std::size_t known, std::array<BasicVecN<T, D>, Capacity>& aw,
-                            std::array<T, Capacity>& w)
+/// The sums sum_i N_(i,p-k) Q^(k)_i and sum_i N_(i,p-k) q^(k)_i on the
+/// span holding t, for k < known (known <= p + 1 <= Capacity), over the
+/// active window of homogeneous poles (w P, w) differenced in place level
+/// by level, Q^(k+1)_i = factor(k, u_(i+p+1) - u_(i+k+1)) (Q^(k)_(i+1) -
+/// Q^(k)_i) (The NURBS Book, eq. 3.8 and A3.3): the body of
+/// HomogeneousDerivatives and of the span polynomials' coefficients, which
+/// differ in the factor. The basis functions of degree p - k on the span
+/// are a level of the triangle that BasisFunctionsOfAllDegrees computes for
+/// the point anyway. Every knot difference contains the span, so on a
+/// non-empty one it is positive and at least the span's width.
+template <std::size_t Capacity, Scalar T, std::size_t D, typename Factor>
+void DifferencedSums(const BasicBSplineCurve<T, D>& curve, const std::size_t span, const double t,
+                     const std::size_t known, std::array<BasicVecN<T, D>, Capacity>& aw,
+                     std::array<T, Capacity>& w, Factor factor)
 {
     const auto p = static_cast<std::size_t>(curve.Degree);
-    const std::size_t span = FindSpan(curve.Knots, curve.Degree, curve.Poles.size(), t);
     std::array<double, Capacity * Capacity> table; // filled below
     BasisFunctionsOfAllDegrees(curve.Knots, curve.Degree, span, t,
                                std::span{table}.first((p + 1) * (p + 1)));
-    // The active window of homogeneous poles, differenced in place.
     std::array<BasicVecN<T, D>, Capacity> qv;
     std::array<T, Capacity> qw;
     for (std::size_t i = 0; i <= p; ++i) {
@@ -236,12 +235,50 @@ void HomogeneousDerivatives(const BasicBSplineCurve<T, D>& curve, const double t
             w[k] = w[k] + basis * qw[i];
         }
         for (std::size_t i = 0; k + 1 < known && i < degree; ++i) {
-            const double scale = static_cast<double>(degree) /
-                                 (curve.Knots[span + i + 1] - curve.Knots[span - p + i + k + 1]);
+            const double scale =
+                factor(k, curve.Knots[span + i + 1] - curve.Knots[span - p + i + k + 1]);
             qv[i] = T{scale} * (qv[i + 1] - qv[i]);
             qw[i] = T{scale} * (qw[i + 1] - qw[i]);
         }
     }
+}
+
+/// The derivatives A^(k) = sum N^(k) w P and w^(k) = sum N^(k) w of the
+/// homogeneous curve for k < known, by differencing the active poles rather
+/// than differentiating the basis: the k-th derivative of a degree-p
+/// B-spline is the degree-(p - k) B-spline on the same knots whose poles are
+/// Q^(k)_i = (p - k + 1) (Q^(k-1)_(i+1) - Q^(k-1)_i) / (u_(i+p+1) - u_(i+k)).
+template <std::size_t Capacity, Scalar T, std::size_t D>
+void HomogeneousDerivatives(const BasicBSplineCurve<T, D>& curve, const double t,
+                            const std::size_t known, std::array<BasicVecN<T, D>, Capacity>& aw,
+                            std::array<T, Capacity>& w)
+{
+    const auto p = static_cast<std::size_t>(curve.Degree);
+    const std::size_t span = FindSpan(curve.Knots, curve.Degree, curve.Poles.size(), t);
+    DifferencedSums<Capacity>(curve, span, t, known, aw, w,
+                              [p](const std::size_t k, const double difference) {
+                                  return static_cast<double>(p - k) / difference;
+                              });
+}
+
+/// The coefficients c_k, k <= p, of the polynomial of the non-empty span
+/// `span`, with midpoint m and width h, in u = (t - m) / h: the homogeneous
+/// curve is sum_k c_k u^k with c_k = (h^k / k!) (A, w)^(k)(m), its Taylor
+/// coefficients at m in u. Each level's factor is (p - k) / (k + 1) times h
+/// over the knot difference, a quotient at most 1 since every difference
+/// contains the span, so the coefficients of a span narrow against its
+/// poles come out finite where the derivatives in t overflow while h^k / k!
+/// underflows, and their product is NaN (release audit of 2026-10-30, F2).
+template <std::size_t Capacity, Scalar T, std::size_t D>
+void SpanCoefficients(const BasicBSplineCurve<T, D>& curve, const std::size_t span, const double m,
+                      const double h, std::array<BasicVecN<T, D>, Capacity>& aw,
+                      std::array<T, Capacity>& w)
+{
+    const auto p = static_cast<std::size_t>(curve.Degree);
+    DifferencedSums<Capacity>(
+        curve, span, m, p + 1, aw, w, [p, h](const std::size_t k, const double difference) {
+            return (static_cast<double>(p - k) / static_cast<double>(k + 1)) * (h / difference);
+        });
 }
 
 /// Derivatives with work arrays of the given capacity, Capacity > degree.
