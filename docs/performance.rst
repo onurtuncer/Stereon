@@ -502,7 +502,12 @@ thread. The report lists each row's spread across the repetitions.
      - 409 ns
      - 0.93
 
-No row is below parity. Surface projection, the one row where OCCT had been
+On the run of 2026-10-30 (``bench/reports/phase1-reference-2026-10-30.md``,
+on ``fb7366a``, the report of record) every row with a target meets it but
+one: principal curvatures read 0.90, just under the parity band, after
+0.93 on 28 October. The row is reported as below parity until a run reads
+otherwise; the two runs together put it at the band's edge rather than on
+either side of it. Surface projection, the one row where OCCT had been
 ahead (0.89 on the first reference run), reads 1.24 since the search
 skips the divisions and edge projections that prove nothing (*Projection*
 above); the safeguards of the leaf Newton iteration (:doc:`nurbs`, *Surface
@@ -512,9 +517,13 @@ derivatives (1.33) and interpolation (1.34) were below parity on that run
 too and have the kernels described under *Evaluation* and *Fitting*.
 
 Not yet measured: B1.3's convergence rate over a corpus. B1.1's batch
-row, grid evaluation (B1.2) and degree elevation (B1.5) run in the
-reference workflow since they landed; their first reference results are
-next. The reference host varies between runs by
+rows, grid evaluation (B1.2) and degree elevation (B1.5) have their
+reference results since 28 October: ``EvalAllFast`` at 2.6 and 2.5 times
+``GeomGridEval_BSplineCurve`` (cubic, rational cubic) on 28 October and 2.3
+and 2.3 on 30 October, meeting the ≥ 2× target; the bit-identical
+``EvalAll`` at 0.43 and 0.51, then 0.42 and 0.50, reported without a
+target; grid evaluation at 3.4 on both runs; degree elevation at 3.3, then
+1.28. The reference host varies between runs by
 up to about 1.5× in absolute time on both sides, so a ratio is read within
 one run, and one within a few percent of 1 is parity.
 
