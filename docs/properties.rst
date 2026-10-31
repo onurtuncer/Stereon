@@ -173,9 +173,20 @@ accepted pieces add up to ``ErrorEstimate``, which
 reported rather than assumed (ADR-0028). It is an estimate, not a bound,
 since the two-piece value is itself approximate.
 
-A periodic curve, such as a circle or an ellipse, accepts any finite range,
-and its length counts every turn the range covers. Any other curve requires
-the range to lie inside its domain; an unbounded range is ``InvalidInput``.
+A periodic curve, such as a circle, an ellipse or a B-spline in the
+periodic form, accepts any finite range, and its length counts every turn
+the range covers: the whole periods once each, by the length over the
+domain, and what remains, less than a period, from the range's start
+carried into the domain. On that remainder, and on a trimmed arc of a
+periodic basis that crosses its seam, the pieces split at the *images* of
+the knots, :math:`u + kT` for the period :math:`T`, not at the stored
+knots alone, which belong to one period: a range outside the domain would
+otherwise be integrated in one piece, and a short, fast stretch between
+the Gauss nodes passed over, both halves agreeing with the whole on a
+length of zero (a defect of the release audit of 2026-10-30;
+``tests/curve/PropertiesTests.cpp`` keeps its curve, a period-1 blip
+:math:`2^{-20}` wide). Any other curve requires the range to lie inside
+its domain; an unbounded range is ``InvalidInput``.
 
 Point at a given length
 ~~~~~~~~~~~~~~~~~~~~~~~

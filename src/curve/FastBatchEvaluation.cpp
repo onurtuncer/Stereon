@@ -27,10 +27,11 @@ import :BatchEvaluation;
 /// EvalAllFast: each non-empty span converted to a polynomial in a local
 /// parameter centred on the span, then every point by Horner's rule
 /// (docs/nurbs.rst, *Fast batch evaluation*). Its coefficients are the
-/// homogeneous curve's derivatives at the span's midpoint, which
-/// Detail::HomogeneousDerivatives computes by de Boor differencing; scaling
-/// them to u = (t - m) / h keeps every |u|^k <= 2^-k, so Horner's rule sums
-/// terms that shrink. A run of Simd::Width<double> parameters in one span is
+/// homogeneous curve's Taylor coefficients at the span's midpoint in
+/// u = (t - m) / h, which Detail::SpanCoefficients computes by de Boor
+/// differencing in u itself, so that a narrow span cannot overflow them;
+/// |u|^k <= 2^-k, so Horner's rule sums terms that shrink. A run of
+/// Simd::Width<double> parameters in one span is
 /// evaluated in the lanes of one vector by the scalar Horner steps, so lanes
 /// and scalars agree bit for bit and the result does not depend on the SIMD
 /// width. The overloads on a curve convert a span when a parameter first
@@ -53,25 +54,22 @@ struct SpanForm {
     const double* Coefficients = nullptr;
 };
 
-/// The coefficients of the non-empty span [knots[span], knots[span + 1]]
-/// into `out`, (p + 1) (D + 1) values; work arrays sized for the degree.
+/// The coefficients of the non-empty span [knots[span], knots[span + 1]],
+/// midpoint m and width h, into `out`, (p + 1) (D + 1) values; work arrays
+/// sized for the degree.
 template <std::size_t Capacity, std::size_t D>
-void CoefficientsWithCapacity(const BasicBSplineCurve<double, D>& curve, const double m,
-                              const double h, double* out)
+void CoefficientsWithCapacity(const BasicBSplineCurve<double, D>& curve, const std::size_t span,
+                              const double m, const double h, double* out)
 {
     const auto p = static_cast<std::size_t>(curve.Degree);
     std::array<BasicVecN<double, D>, Capacity> aw;
     std::array<double, Capacity> w;
-    Detail::HomogeneousDerivatives<Capacity>(curve, m, p + 1, aw, w);
-    double scale = 1.0; // h^k / k!
+    Detail::SpanCoefficients<Capacity>(curve, span, m, h, aw, w);
     for (std::size_t k = 0; k <= p; ++k) {
-        if (k > 0) {
-            scale = scale * h / static_cast<double>(k);
-        }
         for (std::size_t d = 0; d < D; ++d) {
-            out[k * (D + 1) + d] = scale * aw[k][d];
+            out[k * (D + 1) + d] = aw[k][d];
         }
-        out[k * (D + 1) + D] = scale * w[k];
+        out[k * (D + 1) + D] = w[k];
     }
 }
 
@@ -85,9 +83,9 @@ template <std::size_t D>
     const double m = a + 0.5 * (b - a);
     const double h = b - a;
     if (static_cast<std::size_t>(curve.Degree) < Detail::SmallDegreeCapacity) {
-        CoefficientsWithCapacity<Detail::SmallDegreeCapacity>(curve, m, h, out);
+        CoefficientsWithCapacity<Detail::SmallDegreeCapacity>(curve, span, m, h, out);
     } else {
-        CoefficientsWithCapacity<MaxBasis>(curve, m, h, out);
+        CoefficientsWithCapacity<MaxBasis>(curve, span, m, h, out);
     }
     return {m, 1.0 / h, out};
 }

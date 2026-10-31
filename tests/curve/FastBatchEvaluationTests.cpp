@@ -230,3 +230,163 @@ TEST_CASE("EvalAllFast deviation from Eval, measured by degree", "[.][measure][b
         }
     }
 }
+
+namespace {
+
+/// The curve with its knots moved to shift + factor * u: the same curve
+/// over a domain scaled and moved. A power of two scales the knots exactly,
+/// any other factor rounds each.
+BSplineCurve Placed(const BSplineCurve& c, const double shift, const double factor)
+{
+    BSplineCurve placed = c;
+    for (double& u : placed.Knots) {
+        u = shift + factor * u;
+    }
+    return placed;
+}
+
+/// EvalAllFast through both overloads, which must agree bit for bit, and
+/// the deviation of the result from Eval; every point must be finite.
+double FastDeviation(const BSplineCurve& c, const std::vector<double>& t)
+{
+    std::vector<Point3> converting(t.size());
+    std::vector<Point3> prepared(t.size());
+    Stereon::EvalAllFast(c, t, converting);
+    Stereon::EvalAllFast(Stereon::ToSpanPolynomials(c), t, prepared);
+    REQUIRE(converting == prepared);
+    for (const Point3& point : converting) {
+        REQUIRE(std::isfinite(point.X));
+        REQUIRE(std::isfinite(point.Y));
+        REQUIRE(std::isfinite(point.Z));
+    }
+    return Deviation(c, t, converting);
+}
+
+} // namespace
+
+TEST_CASE("EvalAllFast is finite on a span as narrow as the factory admits",
+          "[curve][bspline][batch]")
+{
+    // The release audit of 2026-10-30 (F2): the span's second derivative in
+    // t overflows while h^2 / 2 underflows, and their product is NaN, on a
+    // valid curve whose points are finite. The polynomial is x(u) =
+    // 3/4 + u - u^2 in u = (t - h/2) / h.
+    const double h = 1e-200;
+    const std::vector<double> knots{0.0, 0.0, 0.0, h, h, h};
+    const std::vector<Point3> poles{{0.0, 0.0, 0.0}, {1.0, 0.0, 0.0}, {1.0, 0.0, 0.0}};
+    const std::vector<double> t{0.0, 0.25 * h, 0.5 * h, 0.75 * h, h};
+    SECTION("polynomial")
+    {
+        const auto c = Stereon::MakeBSplineCurve(2, knots, poles, std::vector<double>{});
+        REQUIRE(c.has_value());
+        REQUIRE(Eval(*c, 0.5 * h).X == 0.75);
+        CHECK(FastDeviation(*c, t) <= FastBound(2));
+    }
+    SECTION("rational")
+    {
+        const auto c =
+            Stereon::MakeBSplineCurve(2, knots, poles, std::vector<double>{1.0, 3.0, 2.0});
+        REQUIRE(c.has_value());
+        CHECK(FastDeviation(*c, t) <= FastBound(2));
+    }
+    SECTION("in the plane")
+    {
+        const auto c = Stereon::MakeBSplineCurve(
+            2, knots, std::vector<Point2>{{0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}},
+            std::vector<double>{});
+        REQUIRE(c.has_value());
+        std::vector<Point2> fast(t.size());
+        Stereon::EvalAllFast(*c, t, fast);
+        const double scale = std::hypot(1.0, 1.0);
+        for (std::size_t k = 0; k < t.size(); ++k) {
+            REQUIRE(std::isfinite(fast[k].X));
+            REQUIRE(std::isfinite(fast[k].Y));
+            REQUIRE(Length(fast[k] - Eval(*c, t[k])) <= FastBound(2) * Epsilon * scale);
+        }
+    }
+}
+
+TEST_CASE("EvalAllFast keeps its bound over domains scaled to the limits of double and moved far "
+          "from the origin",
+          "[curve][bspline][batch][property]")
+{
+    // The accepted knots are any finite, ordered ones (ADR-0006): the span
+    // widths may reach the exponent range of double in either direction,
+    // and the domain may lie far from the origin, where a parameter has few
+    // digits left for the spans. The bound is the documented one in both
+    // cases: scaling by a power of two changes no bit of Eval, and the
+    // subtractions t - m and t - u_i are exact when the knots lie within a
+    // factor of two of each other (Sterbenz), as they do once moved.
+    rc::prop("for random curves of every degree, scaled by 2^e, |e| <= 1000", [] {
+        const int p = *rc::gen::inRange(1, Stereon::BSplineMaxDegree + 1);
+        const auto [c, made] = MakeCurve(p, *rc::gen::arbitrary<bool>(), [](int low, int high) {
+            return *rc::gen::inRange(low, high);
+        });
+        RC_PRE(made);
+        const int exponent = *rc::gen::inRange(-1000, 1001);
+        // An odd mantissa makes the scaling round; 1 keeps it exact.
+        const double mantissa =
+            *rc::gen::arbitrary<bool>() ? 1.0 : 1.0 + *rc::gen::inRange(1, 1024) / 1024.0;
+        const BSplineCurve placed = Placed(c, 0.0, std::ldexp(mantissa, exponent));
+        const std::vector<double> t = SortedParameters(placed, *rc::gen::inRange(1, 80));
+        RC_ASSERT(FastDeviation(placed, t) <= FastBound(p));
+    });
+    rc::prop("for random curves of every degree, moved by up to 2^40", [] {
+        const int p = *rc::gen::inRange(1, Stereon::BSplineMaxDegree + 1);
+        const auto [c, made] = MakeCurve(p, *rc::gen::arbitrary<bool>(), [](int low, int high) {
+            return *rc::gen::inRange(low, high);
+        });
+        RC_PRE(made);
+        const double shift =
+            (*rc::gen::arbitrary<bool>() ? 1.0 : -1.0) * std::ldexp(1.0, *rc::gen::inRange(0, 41));
+        const BSplineCurve placed = Placed(c, shift, 1.0);
+        const std::vector<double> t = SortedParameters(placed, *rc::gen::inRange(1, 80));
+        RC_ASSERT(FastDeviation(placed, t) <= FastBound(p));
+    });
+}
+
+TEST_CASE("span polynomials hold the Taylor coefficients of each span",
+          "[curve][bspline][batch][property]")
+{
+    // c_k = (h^k / k!) C^(k)(m) on a polynomial curve, and the weight row is
+    // 1 (up to the rounding of a sum of basis functions) for k = 0 and
+    // exactly 0 above (docs/nurbs.rst, *Fast batch evaluation*), against
+    // Derivatives. The two differ in the order of their roundings only, so
+    // they agree as closely as the points do.
+    rc::prop("for random polynomial curves of degrees 1 to 7", [] {
+        const int p = *rc::gen::inRange(1, 8);
+        const auto [c, made] =
+            MakeCurve(p, false, [](int low, int high) { return *rc::gen::inRange(low, high); });
+        RC_PRE(made);
+        const Stereon::SpanPolynomials polynomials = Stereon::ToSpanPolynomials(c);
+        const auto q = static_cast<std::size_t>(p);
+        const std::size_t stride = (q + 1) * 4;
+        const double tolerance = 4.0 * FastBound(p) * Epsilon * Scale(c);
+        std::vector<Stereon::Vec3> derivatives(q + 1);
+        for (std::size_t span = q; span < c.Poles.size(); ++span) {
+            if (!(c.Knots[span] < c.Knots[span + 1])) {
+                continue;
+            }
+            const std::size_t slot = polynomials.Slots[span];
+            const double m = polynomials.Midpoints[slot];
+            const double h = 1.0 / polynomials.InverseWidths[slot];
+            Stereon::Derivatives(c, m, p, derivatives);
+            const double* coefficients = polynomials.Coefficients.data() + slot * stride;
+            double scale = 1.0;
+            for (std::size_t k = 0; k <= q; ++k) {
+                if (k > 0) {
+                    scale = scale * h / static_cast<double>(k);
+                }
+                const Stereon::Vec3 expected = scale * derivatives[k];
+                const Stereon::Vec3 actual{coefficients[4 * k], coefficients[4 * k + 1],
+                                           coefficients[4 * k + 2]};
+                RC_ASSERT(Length(actual - expected) <= tolerance);
+                if (k == 0) {
+                    RC_ASSERT(std::abs(coefficients[3] - 1.0) <= 8.0 * (p + 1) * Epsilon);
+                } else {
+                    RC_ASSERT(coefficients[4 * k + 3] == 0.0);
+                }
+            }
+        }
+    });
+}
