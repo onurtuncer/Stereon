@@ -8,6 +8,8 @@
 - [Roadmap, modelling milestones and versioning](roadmap-and-versioning.md)
 - [Capability matrix and repository audit](stereon-capability-matrix.md)
 - [v0.1 acceptance ledger](v0.1-acceptance-ledger.md): gates, evidence and the OCCT operations still to add
+- [v0.1 release report](v0.1-release-report.md): the release-wide record the roadmap requires (commit, corpus, comparator, limits, structured failures, invalid successes), a draft until the tag commit refreshes it
+- [v0.1 release audit of 2026-10-30](v0.1-audit-2026-10-30.md): the read-only audit of `fb7366a` that held the tag, its two numerical defects and their disposition
 - [Boolean prototype plan](boolean-prototype-plan.md): the last Phase 0 gate (ADR-0001, ADR-0007), its milestones and the decisions of 2026-10-20
 - [Placement and follow-up checklist](capability-matrix-checklist.md)
 - [Existing benchmark specification](../benchmarks.md)
