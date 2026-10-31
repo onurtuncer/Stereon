@@ -306,12 +306,48 @@ TEST_CASE("EvalAllFast is finite on a span as narrow as the factory admits",
     }
 }
 
+TEST_CASE("B-spline factories refuse knot intervals whose reciprocal overflows",
+          "[curve][bspline][batch][regression]")
+{
+    // Both ordinary basis evaluation and the cached fast inverse width used
+    // to overflow on this accepted degree-1 curve, including at its midpoint.
+    for (const double h : {1e-309, std::numeric_limits<double>::denorm_min()}) {
+        const std::vector<double> knots{0.0, 0.0, h, h};
+        for (const auto& weights : {std::vector<double>{}, std::vector<double>{1.0, 2.0}}) {
+            const auto space = Stereon::MakeBSplineCurve(
+                1, knots, std::vector<Point3>{{0.0, 0.0, 0.0}, {1.0, 0.0, 0.0}}, weights);
+            REQUIRE_FALSE(space.has_value());
+            CHECK(space.error().GetCode() == Stereon::ErrorCode::InvalidInput);
+            const auto plane = Stereon::MakeBSplineCurve(
+                1, knots, std::vector<Point2>{{0.0, 0.0}, {1.0, 0.0}}, weights);
+            REQUIRE_FALSE(plane.has_value());
+            CHECK(plane.error().GetCode() == Stereon::ErrorCode::InvalidInput);
+        }
+    }
+}
+
+TEST_CASE("EvalAllFast remains finite at the supported reciprocal boundary",
+          "[curve][bspline][batch][regression]")
+{
+    const double boundary = std::nextafter(1.0 / std::numeric_limits<double>::max(), 1.0);
+    for (const double h : {boundary, std::numeric_limits<double>::min()}) {
+        REQUIRE(std::isfinite(1.0 / h));
+        const std::vector<double> t{0.0, 0.25 * h, 0.5 * h, 0.75 * h, h};
+        const auto curve = Stereon::MakeBSplineCurve(
+            1, std::vector<double>{0.0, 0.0, h, h},
+            std::vector<Point3>{{0.0, 0.0, 0.0}, {1.0, 0.0, 0.0}}, std::vector<double>{});
+        REQUIRE(curve.has_value());
+        CHECK(FastDeviation(*curve, t) <= FastBound(1));
+        CHECK(std::abs(Eval(*curve, t[2]).X - t[2] / h) <= Epsilon);
+    }
+}
+
 TEST_CASE("EvalAllFast keeps its bound over domains scaled to the limits of double and moved far "
           "from the origin",
           "[curve][bspline][batch][property]")
 {
-    // The accepted knots are any finite, ordered ones (ADR-0006): the span
-    // widths may reach the exponent range of double in either direction,
+    // The accepted knots are finite and ordered, with finite reciprocal
+    // intervals: span widths may reach almost the full exponent range,
     // and the domain may lie far from the origin, where a parameter has few
     // digits left for the spans. The bound is the documented one in both
     // cases: scaling by a power of two changes no bit of Eval, and the

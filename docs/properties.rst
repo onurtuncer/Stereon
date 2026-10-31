@@ -135,6 +135,11 @@ a caller who needs a margin knows its scale; the kernel does not hide one
 Arc length
 ----------
 
+Finite endpoints whose difference overflows are split at zero for periodic
+curves, so a representable length can still be returned. A non-finite length
+or error estimate is refused with ``InvalidResult`` rather than returned as
+a successful measurement.
+
 The length of the curve between two parameters is
 
 .. math::

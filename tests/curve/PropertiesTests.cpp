@@ -389,3 +389,32 @@ TEST_CASE("arc length inversion reports unmet residual targets", "[curve][proper
         }
     }
 }
+
+TEST_CASE("periodic arc length survives an overflowing parameter width",
+          "[curve][properties][regression]")
+{
+    const Circle circle{Point3{0.0, 0.0, 0.0}, 0.1, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+    for (const Interval range : {Interval{-1e308, 1e308}, Interval{-1.7e308, 1e308}}) {
+        const double expected = 0.1 * range.GetUpper() - 0.1 * range.GetLower();
+        REQUIRE(std::isfinite(expected));
+        const auto length = ArcLength(circle, range);
+        REQUIRE(length.has_value());
+        REQUIRE(std::isfinite(length->Length));
+        REQUIRE(std::isfinite(length->ErrorEstimate));
+        CHECK(std::abs(length->Length / expected - 1.0) <= Tolerance);
+        const auto erased = ArcLength(Curve{circle}, range);
+        REQUIRE(erased.has_value());
+        CHECK(erased->Length == length->Length);
+    }
+}
+
+TEST_CASE("arc length refuses an unrepresentable result", "[curve][properties][regression]")
+{
+    const Circle circle{Point3{0.0, 0.0, 0.0}, 2.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+    // Exercise both the finite-width and split-width paths.
+    for (const Interval range : {Interval{0.0, 1e308}, Interval{-1e308, 1e308}}) {
+        const auto length = ArcLength(circle, range);
+        REQUIRE_FALSE(length.has_value());
+        CHECK(length.error().GetCode() == ErrorCode::InvalidResult);
+    }
+}

@@ -373,12 +373,11 @@ template <typename C>
 [[nodiscard]] std::vector<double> LengthBreaks(const C& curve, const Interval range,
                                                const double period)
 {
-    std::vector<double> breaks{range.GetLower()};
-    for (const double u : KnotsInside(curve, range, period)) {
-        if (u > breaks.back()) {
-            breaks.push_back(u);
-        }
-    }
+    // KnotsInside already returns sorted, unique interior knots. Inserting
+    // the endpoints also avoids GCC 16's null-dereference warning for the
+    // empty vector returned by knot-free user curves in optimised builds.
+    std::vector<double> breaks = KnotsInside(curve, range, period);
+    breaks.insert(breaks.begin(), range.GetLower());
     breaks.push_back(range.GetUpper());
     return breaks;
 }
@@ -420,6 +419,12 @@ template <typename C>
         turns -= 1.0;
         rest += period;
     }
+    // At enormous turn counts the quotient's rounding error itself spans
+    // many periods. Keep the quadrature tail bounded even in that case;
+    // the rounded turn count already limits the total's relative accuracy.
+    if (!(rest >= 0.0 && rest < period)) {
+        rest = std::fmod(width, period);
+    }
     ArcLengthResult result;
     if (turns > 0.0) {
         const ArcLengthResult turn = QuadratureLength(curve, Domain(curve), period);
@@ -457,10 +462,25 @@ template <typename C>
         return Fail(ErrorCode::InvalidInput,
                     "ArcLength: the range must be finite and inside the curve's domain");
     }
-    if (!inside) {
-        return Detail::PeriodicLength(curve, range, period);
+    ArcLengthResult result;
+    if (inside) {
+        result = Detail::QuadratureLength(curve, range, period);
+    } else if (std::isfinite(Width(range))) {
+        result = Detail::PeriodicLength(curve, range, period);
+    } else {
+        // Finite endpoints may have an unrepresentable difference. Such a
+        // range straddles zero; each half has a finite width. Accumulate
+        // lengths, not parameter widths: a small curve can have a finite
+        // length over this range (e.g. radius 0.1 over [-1e308, 1e308]).
+        result = Detail::PeriodicLength(curve, Interval{low, 0.0}, period);
+        const auto right = Detail::PeriodicLength(curve, Interval{0.0, high}, period);
+        result.Length += right.Length;
+        result.ErrorEstimate += right.ErrorEstimate;
     }
-    return Detail::QuadratureLength(curve, range, period);
+    if (!std::isfinite(result.Length) || !std::isfinite(result.ErrorEstimate)) {
+        return Fail(ErrorCode::InvalidResult, "ArcLength: the length or error estimate overflowed");
+    }
+    return result;
 }
 
 /// The parameter at which the arc length from `start` reaches `length`

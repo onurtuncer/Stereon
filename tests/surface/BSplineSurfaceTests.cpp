@@ -537,3 +537,19 @@ TEST_CASE("a SurfaceProjector answers as Project does", "[surface][bspline][prop
         }
     });
 }
+
+TEST_CASE("surface factories refuse reciprocal-overflow spans in either direction",
+          "[surface][bspline][factory][regression]")
+{
+    const std::vector<double> regular{0.0, 0.0, 1.0, 1.0};
+    const std::vector<double> narrow{0.0, 0.0, 1e-309, 1e-309};
+    const std::vector<Point3> poles{
+        {0.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {1.0, 0.0, 0.0}, {1.0, 1.0, 0.0}};
+    for (const bool narrowU : {false, true}) {
+        const auto surface =
+            Stereon::MakeBSplineSurface(1, 1, narrowU ? narrow : regular,
+                                        narrowU ? regular : narrow, poles, std::vector<double>{});
+        REQUIRE_FALSE(surface.has_value());
+        CHECK(surface.error().GetCode() == ErrorCode::InvalidInput);
+    }
+}

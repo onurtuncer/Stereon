@@ -25,6 +25,12 @@ surface projection built on the same Bernstein-form reasoning.
 Knot vectors and basis functions
 --------------------------------
 
+Checked factories require each non-empty knot interval to have a finite
+reciprocal in ``double``. Smaller intervals (for example, width ``1e-309``)
+return ``InvalidInput``: ordinary basis evaluation and the fast evaluator's
+cached inverse width would overflow. Repeated knots remain supported. This
+check applies to curves in 2D and 3D and to both surface parameter directions.
+
 A B-spline of degree :math:`p` with poles :math:`P_0, \dots, P_n` has a
 *knot vector*
 
