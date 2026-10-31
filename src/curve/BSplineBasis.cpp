@@ -363,6 +363,15 @@ Result<void> CheckKnotVector(const int degree, const std::span<const double> kno
     if (!std::isfinite(knots.back() - knots.front())) {
         return Invalid(where, "the knot vector must span a finite width");
     }
+    // Evaluation divides by knot differences, and the fast evaluator caches
+    // inverse span widths. A positive subnormal interval can overflow both
+    // even though its knots pass the finite/order checks above.
+    for (std::size_t i = 1; i < knots.size(); ++i) {
+        const double width = knots[i] - knots[i - 1];
+        if (width > 0.0 && !std::isfinite(1.0 / width)) {
+            return Invalid(where, "non-empty knot intervals must have finite reciprocals");
+        }
+    }
     const double low = knots[p];
     const double high = knots[poleCount];
     if (!(low < high)) {

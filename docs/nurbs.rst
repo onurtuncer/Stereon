@@ -25,6 +25,12 @@ surface projection built on the same Bernstein-form reasoning.
 Knot vectors and basis functions
 --------------------------------
 
+Checked factories require each non-empty knot interval to have a finite
+reciprocal in ``double``. Smaller intervals (for example, width ``1e-309``)
+return ``InvalidInput``: ordinary basis evaluation and the fast evaluator's
+cached inverse width would overflow. Repeated knots remain supported. This
+check applies to curves in 2D and 3D and to both surface parameter directions.
+
 A B-spline of degree :math:`p` with poles :math:`P_0, \dots, P_n` has a
 *knot vector*
 
@@ -275,6 +281,10 @@ the curve as it treats a circle:
   record the period) takes every finite parameter. One outside the domain is
   carried into it by whole periods (``NearestInRange``); the periodicity is
   checked only then, so evaluation inside the domain costs what it did.
+- **Arc length** (``ArcLength``, ``ParameterAtArcLength``) over any finite
+  range, counting the turns it covers and splitting the quadrature at the
+  images of the knots in every period, not at the stored knots of one
+  (:doc:`properties`).
 - **Knot insertion** keeps the form. A parameter stands for all its images,
   and the knot goes in at every one of them: the form is written out over a
   few periods on each side, every image inserted by Boehm's algorithm, and
@@ -421,9 +431,21 @@ homogeneous curve's derivatives at :math:`m`,
    (w\mathbf C, w)(t) = \sum_{k=0}^{p} \mathbf c_k\, u^k, \qquad
    \mathbf c_k = \frac{h^k}{k!}\, (w\mathbf C, w)^{(k)}(m),
 
-computed by de Boor differencing (A3.3). A point is then :math:`p`
-multiply-adds per coordinate by Horner's rule, and one division for a
-rational curve, against the :math:`O(p^2)` basis recurrence of ``Eval``.
+computed by de Boor differencing (A3.3) in :math:`u` itself: the active
+poles are differenced level by level with the factor
+:math:`\frac{p - k}{k + 1}\, \frac{h}{\Delta}`, :math:`\Delta` the knot
+difference of the level, which contains the span and so is at least
+:math:`h`. Every factor is therefore at most :math:`p`, and the
+coefficients of a span narrow against its poles come out finite, where
+the derivatives in :math:`t` would overflow while :math:`h^k / k!`
+underflows and their product is NaN (a defect of the release audit of
+2026-10-30; ``tests/curve/FastBatchEvaluationTests.cpp`` keeps the span
+:math:`h = 10^{-200}` that showed it, and the bound below on random
+curves whose knots are scaled by :math:`2^{e}`, :math:`|e| \le 1000`,
+or moved as far as :math:`2^{40}` from the origin). A point is then
+:math:`p` multiply-adds per coordinate by Horner's rule, and one division
+for a rational curve, against the :math:`O(p^2)` basis recurrence of
+``Eval``.
 Parameters that share a span run in the lanes of one vector, by the same
 steps as the scalar fallback, so the result still does not depend on the
 SIMD width, the parameters' order or how they fall into spans. Degrees 1
@@ -453,21 +475,23 @@ for every degree :math:`p` from 1 to 25. This bound is tested, not proved.
 unclamped, polynomial and rational curves with repeated knots, at sorted
 parameters including every knot and both ends. Its ``[measure]`` case,
 2000 curves per degree up to 12 and 300 above, each at about 200
-parameters, gives these maxima in units of :math:`\varepsilon S`:
+parameters, gives these maxima in units of :math:`\varepsilon S` (measured
+2026-10-31, with the coefficients computed in the span's coordinate; the
+earlier computation gave the same orders of magnitude):
 
 =========== ============ ========= ==========
 Degree      Polynomial   Rational  Bound
 =========== ============ ========= ==========
-1           1.4          2.0       17
-2           2.7          1.7       26
-3           3.1          2.4       36
-5           5.2          2.9       64
-7           14           8.3       128
-9           50           29        336
-12          313          131       2 152
-16          2 845        956       32 904
-20          46 252       8 410     524 456
-25          1.4 × 10⁶    2.5 × 10⁵ 1.7 × 10⁷
+1           1.3          1.8       17
+2           2.1          1.7       26
+3           2.7          2.3       36
+5           5.4          3.0       64
+7           13           9.8       128
+9           48           39        336
+12          331          187       2 152
+16          3 396        800       32 904
+20          36 978       18 238    524 456
+25          1.1 × 10⁶    3.1 × 10⁵ 1.7 × 10⁷
 =========== ============ ========= ==========
 
 Up to degree 5 the deviation grows like :math:`p + 1`, as Horner's rule
