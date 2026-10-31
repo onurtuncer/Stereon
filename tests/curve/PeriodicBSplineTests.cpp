@@ -27,6 +27,7 @@ import Stereon.Curve;
 
 #include "Formatting.hpp"
 
+using Stereon::ArcLength;
 using Stereon::BSplineCurve;
 using Stereon::BSplineCurve2d;
 using Stereon::Curve;
@@ -358,4 +359,70 @@ TEST_CASE("span polynomials of a periodic curve carry parameters in", "[curve][p
         INFO("t = " << parameters[k]);
         REQUIRE(Distance(points[k], Eval(c, parameters[k])) <= 1e-12);
     }
+}
+
+TEST_CASE("the arc length of a periodic B-spline counts its turns from anywhere",
+          "[curve][periodic][arclength]")
+{
+    // The quadrature aims at a relative 2^-40 on each range; two ranges a
+    // whole number of periods apart integrate the same speeds between the
+    // same kinks, so they agree to a few units of that target.
+    constexpr double Agreement = 1e-10;
+    for (const BSplineCurve& c : Fixtures()) {
+        const Interval domain = Stereon::Domain(c);
+        const double period = Stereon::Period(c);
+        const double turn = ArcLength(c, domain)->Length;
+        INFO("degree " << c.Degree << ", one turn " << turn);
+        SECTION("any range one period long covers the curve once")
+        {
+            for (const double offset : {-2.5, -0.3, 0.37, 1.0 + 1e-3, 7.0}) {
+                const double start = domain.GetLower() + offset * period;
+                const auto result = *ArcLength(c, Interval{start, start + period});
+                INFO("from " << start);
+                CHECK(std::abs(result.Length - turn) <= Agreement * turn);
+                CHECK(result.ErrorEstimate <= Agreement * turn);
+            }
+        }
+        SECTION("lengths add up across the seam and over several turns")
+        {
+            const double a = domain.GetLower() - 0.4 * period;
+            const double m = domain.GetLower() + 0.6 * period;
+            const double b = domain.GetUpper() + 2.3 * period;
+            const double whole = ArcLength(c, Interval{a, b})->Length;
+            const double parts =
+                ArcLength(c, Interval{a, m})->Length + ArcLength(c, Interval{m, b})->Length;
+            CHECK(std::abs(whole - parts) <= Agreement * whole);
+            CHECK(std::abs(ArcLength(c, Interval{a, a + 3.0 * period})->Length - 3.0 * turn) <=
+                  Agreement * 3.0 * turn);
+        }
+        SECTION("the erased curve and the parameter at a length agree")
+        {
+            const Curve erased(c);
+            const double start = domain.GetUpper() + 0.2 * period;
+            const Interval range{start, start + 1.7 * period};
+            CHECK(std::abs(ArcLength(erased, range)->Length - ArcLength(c, range)->Length) <=
+                  Agreement * turn);
+            const double t = *Stereon::ParameterAtArcLength(c, start, 2.5 * turn);
+            CHECK(std::abs(ArcLength(c, Interval{start, t})->Length - 2.5 * turn) <=
+                  Agreement * turn);
+        }
+    }
+}
+
+TEST_CASE("the arc length of a periodic B-spline is the same a period on",
+          "[curve][periodic][arclength][property]")
+{
+    const std::vector<BSplineCurve> fixtures = Fixtures();
+    rc::prop("for every range of up to five periods, anywhere", [&fixtures] {
+        const BSplineCurve& c = fixtures[static_cast<std::size_t>(
+            *rc::gen::inRange(0, static_cast<int>(fixtures.size())))];
+        const Interval domain = Stereon::Domain(c);
+        const double period = Stereon::Period(c);
+        const double start = domain.GetLower() + period * *rc::gen::inRange(-4000, 4000) / 1000.0;
+        const double width = period * *rc::gen::inRange(0, 5000) / 1000.0;
+        const double shift = period * *rc::gen::inRange(-6, 7);
+        const double here = ArcLength(c, Interval{start, start + width})->Length;
+        const double there = ArcLength(c, Interval{start + shift, start + shift + width})->Length;
+        RC_ASSERT(std::abs(here - there) <= 1e-10 * (1.0 + here));
+    });
 }
