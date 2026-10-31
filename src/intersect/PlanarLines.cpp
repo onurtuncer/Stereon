@@ -46,25 +46,6 @@ namespace Stereon::Detail {
 
 namespace {
 
-/// The quadratic A t² + 2 B t + C of a line against a circle or an ellipse,
-/// its coefficients as a formula over a field, and its roots by the form
-/// that does not cancel.
-struct Quadratic {
-    double A;
-    double B;
-    double C;
-};
-
-/// The two roots, the smaller first; `discriminant` is B² - A C >= 0.
-[[nodiscard]] std::array<double, 2> RootsOf(const Quadratic& q, const double discriminant)
-{
-    const double root = std::sqrt(discriminant);
-    const double head = -(q.B + (q.B < 0.0 ? -root : root));
-    const double t1 = head / q.A;
-    const double t2 = head == 0.0 ? t1 : q.C / head;
-    return {std::min(t1, t2), std::max(t1, t2)};
-}
-
 /// The points where a line cuts a conic, from the sign of the discriminant
 /// (exact) and the roots (rounded): two crossings, one tangency or none.
 template <typename Coefficients>
@@ -80,7 +61,7 @@ void CutConic(PlanarIntersection& result, const Line2d& line, const Interval& do
         return;
     }
     const auto [a, b, c] = coefficients(Plain{});
-    const Quadratic q{a, b, c};
+    const LineQuadratic q{a, b, c};
     const auto keep = [&](const double t, const ContactType contact) {
         const Point2 p = Eval(line, t);
         KeepPoint(result, {t, conicParameter(p), p, contact, true}, domainLine, false, domainConic,

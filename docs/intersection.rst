@@ -198,6 +198,48 @@ conservative interval error bound within the Context resolution; otherwise the
 operation returns ``CertificationFailed``. This conservative check may reject
 large-coordinate contacts even when a particular rounded point is exact.
 
+Curves against surfaces
+-----------------------
+
+``Intersect(curve, domain, surface, box, ctx)`` meets a curve and a
+surface over the requested domains (ADR-0029). A
+``CurveSurfaceIntersection`` holds ``CurveSurfacePoint`` entries, in order
+of the curve's parameter, each with its parameter on the curve, its
+parameters on the surface, its position, the ``ContactType`` there
+(``Crossing``, the curve passing through the surface, or ``Tangential``,
+touching it and staying on one side) and whether the count and the contact
+were *decided* exactly on the input doubles; and ``CurveSurfaceOverlap``
+stretches where the curve lies in the surface, each the parameter interval
+on the curve and the pcurve on the surface on the curve's own parameter
+(ADR-0009). A point is kept when its parameters lie in the requested
+domains, a periodic surface's angle taken modulo its period and placed in
+the box. ``Intersect(curve, surface, ctx)`` takes the whole domains.
+
+The first handlers are a ``Line`` against a ``Plane``, a ``Sphere`` and a
+``Cylinder``: ADR-0010's analytic table carried to the line–quadric pairs.
+Every configuration decision is the sign of a polynomial in the input
+doubles, written once over a scalar field, read as an enclosure and
+settled exactly when the enclosure straddles zero (RS-0001 G5): whether
+the line runs along the plane, :math:`(X \times Y) \cdot d = 0`, or along
+the cylinder's axis, :math:`\lVert d \times (X \times Y) \rVert^2 = 0`;
+whether it then lies in the surface or apart from it, however close; and
+the discriminant of the quadratic the line cuts out of the sphere or the
+cylinder, which settles whether there are two crossings, one touch or
+none. The crossing of a plane has a rational parameter, and whether it
+and the point's parameters on the plane lie in the requested domains is
+decided exactly on that rational, as the line–line handler decides; the
+roots of a quadric are irrational and are placed by their rounded values,
+so a crossing within rounding of a domain's end may fall on either side
+of it. A touch of a quadric is a ``Tangential`` point: the line stays
+outside. A root that double precision cannot place, a line so nearly along
+the axis that the quadratic's leading coefficient rounds to zero while it
+is exactly positive, fails with ``IntersectionFailed`` rather than
+dropping the point. Every other pair reports ``NotImplemented``; the
+generic path for B-spline curves and surfaces waits for Phase 2 with the
+surface–surface one. ``tests/occt/IntersectionDifferentialTests.cpp``
+compares the three handlers with OCCT's ``IntAna_IntConicQuad`` on
+generic lines.
+
 Plane curves
 ------------
 
