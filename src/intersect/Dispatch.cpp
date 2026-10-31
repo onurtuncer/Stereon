@@ -115,6 +115,36 @@ Result<PlanarIntersection> Intersect(const Curve2d& a, const Curve2d& b, const C
     return Intersect(a, Domain(a), b, Domain(b), ctx);
 }
 
+Result<CurveSurfaceIntersection> Intersect(const Curve& curve, const Interval& domain,
+                                           const Surface& surface, const Box2& box,
+                                           const Context& ctx)
+{
+    if (curve.IsEmpty() || surface.IsEmpty()) {
+        return Fail(ErrorCode::InvalidInput, "cannot intersect an empty curve or surface");
+    }
+    const bool valid = IsDomain(domain) && IsDomain(box.X) && IsDomain(box.Y);
+    if (const Result<void> ok = CheckDomains(valid, "curve and surface"); !ok) {
+        return std::unexpected(ok.error());
+    }
+    const std::size_t i = BuiltinIndexOf(curve);
+    const std::size_t j = BuiltinIndexOf(surface);
+    if (i == BuiltinCurveTypes::Size || j == BuiltinSurfaceTypes::Size) {
+        return Fail(ErrorCode::NotSupported,
+                    "curve-surface intersection needs built-in types until user types can "
+                    "declare the capabilities of tiers 2 and 3 (ADR-0003)");
+    }
+    return Detail::CurveSurfaceTable[i][j](curve, domain, surface, box, ctx);
+}
+
+Result<CurveSurfaceIntersection> Intersect(const Curve& curve, const Surface& surface,
+                                           const Context& ctx)
+{
+    if (curve.IsEmpty() || surface.IsEmpty()) {
+        return Fail(ErrorCode::InvalidInput, "cannot intersect an empty curve or surface");
+    }
+    return Intersect(curve, Domain(curve), surface, Domain(surface), ctx);
+}
+
 Result<SurfaceSurfaceIntersection> Intersect(const Surface& a, const Box2& domainA,
                                              const Surface& b, const Box2& domainB,
                                              const double tolerance, const Context& ctx)

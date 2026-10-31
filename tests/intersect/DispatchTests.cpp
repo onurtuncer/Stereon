@@ -130,10 +130,38 @@ TEST_CASE("every built-in pair has a handler that names both types", "[intersect
     REQUIRE(Intersect(SomeCylinder(), SomeCylinder(), ctx).has_value());
 }
 
+TEST_CASE("every curve-surface pair has a handler; lines against planes, spheres and cylinders "
+          "have theirs",
+          "[intersect][dispatch]")
+{
+    STATIC_REQUIRE(Stereon::Detail::CurveSurfaceTable.size() == Stereon::BuiltinCurveTypes::Size);
+    STATIC_REQUIRE(Stereon::Detail::CurveSurfaceTable[0].size() ==
+                   Stereon::BuiltinSurfaceTypes::Size);
+    for (const auto& row : Stereon::Detail::CurveSurfaceTable) {
+        for (const auto handler : row) {
+            const bool present = handler != nullptr;
+            REQUIRE(present);
+        }
+    }
+    REQUIRE(Intersect(SomeLine(), SomePlane(), ctx).has_value());
+    REQUIRE(Intersect(SomeLine(), SomeSphere(), ctx).has_value());
+    REQUIRE(Intersect(SomeLine(), SomeCylinder(), ctx).has_value());
+    // The other pairs name their types, the curve first.
+    const auto circlePlane = Intersect(SomeCircle(), SomePlane(), ctx);
+    REQUIRE_FALSE(circlePlane.has_value());
+    REQUIRE(circlePlane.error().GetCode() == ErrorCode::NotImplemented);
+    REQUIRE(MessageOf(circlePlane.error()).starts_with("Circle x Plane"));
+    const Surface torus(
+        Stereon::Torus{Point3{}, 2.0, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}});
+    REQUIRE(MessageOf(Intersect(SomeLine(), torus, ctx).error()).starts_with("Line x Torus"));
+}
+
 TEST_CASE("empty inputs are invalid input", "[intersect][dispatch]")
 {
     REQUIRE(Intersect(Curve{}, SomeLine(), ctx).error().GetCode() == ErrorCode::InvalidInput);
     REQUIRE(Intersect(SomePlane(), Surface{}, ctx).error().GetCode() == ErrorCode::InvalidInput);
+    REQUIRE(Intersect(Curve{}, SomePlane(), ctx).error().GetCode() == ErrorCode::InvalidInput);
+    REQUIRE(Intersect(SomeLine(), Surface{}, ctx).error().GetCode() == ErrorCode::InvalidInput);
 }
 
 TEST_CASE("types that are not built in are not supported yet", "[intersect][dispatch]")
@@ -142,4 +170,5 @@ TEST_CASE("types that are not built in are not supported yet", "[intersect][disp
     const auto result = Intersect(user, SomeLine(), ctx);
     REQUIRE(result.error().GetCode() == ErrorCode::NotSupported);
     REQUIRE(Intersect(SomeCircle(), user, ctx).error().GetCode() == ErrorCode::NotSupported);
+    REQUIRE(Intersect(user, SomePlane(), ctx).error().GetCode() == ErrorCode::NotSupported);
 }
