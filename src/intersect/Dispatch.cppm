@@ -172,6 +172,41 @@ struct CurveCurveIntersection {
     [[nodiscard]] bool IsEmpty() const noexcept { return Points.empty() && Overlaps.empty(); }
 };
 
+/// A point where a curve meets a surface: its parameter on the curve, its
+/// parameters on the surface, where it is, how they meet there (Crossing:
+/// the curve passes through the surface; Tangential: it touches and stays
+/// on one side), and whether the count and the contact were decided
+/// exactly on the input doubles (RS-0001 G5). A line's crossing of a plane
+/// has a rational parameter, decided exactly against the domains; its
+/// meetings with a sphere or a cylinder are decided in count and contact
+/// and placed to rounding.
+struct CurveSurfacePoint {
+    double Parameter = 0.0;
+    Point2 OnSurface;
+    Point3 Position;
+    ContactType Contact = ContactType::Crossing;
+    bool Decided = true;
+};
+
+/// A stretch where the curve lies in the surface: its parameter interval on
+/// the curve, inside the requested domains, and its pcurve on the surface
+/// on the curve's own parameter (ADR-0009).
+struct CurveSurfaceOverlap {
+    Interval Range;
+    Curve2d OnSurface;
+};
+
+/// A complete intersection of a curve and a surface over the requested
+/// domains: the points where they meet, in order of the curve's parameter,
+/// and the stretches where the curve lies in the surface. A result with no
+/// component is a proved separation.
+struct CurveSurfaceIntersection {
+    std::vector<CurveSurfacePoint> Points;
+    std::vector<CurveSurfaceOverlap> Overlaps;
+
+    [[nodiscard]] bool IsEmpty() const noexcept { return Points.empty() && Overlaps.empty(); }
+};
+
 /// A point where two plane curves meet, the pcurves of a face's loop and of
 /// an intersection branch in the face's parameter space (ADR-0009): its
 /// parameter on each, where it is, how the curves meet there, and whether
@@ -208,12 +243,14 @@ struct PlanarIntersection {
 
 /// The type-pair dispatch of ADR-0003 for binary operations: one handler per
 /// ordered pair of built-in types, in a table generated at compile time from
-/// BuiltinCurveTypes and BuiltinSurfaceTypes. A pair with a closed-form
-/// method gets an analytic handler (ADR-0010): plane–plane, plane–cylinder
-/// and cylinder–cylinder so far (the Boolean prototype's M3 and M3b). Every other
-/// pair has a stub, which reports NotImplemented naming both types. Types
-/// that are not built in report NotSupported: the generic subdivision path
-/// needs tier 2 and 3 capabilities that no user type can declare yet.
+/// BuiltinCurveTypes and BuiltinSurfaceTypes, and one per curve–surface
+/// pair, from both lists. A pair with a closed-form method gets an analytic
+/// handler (ADR-0010): plane–plane, plane–cylinder and cylinder–cylinder
+/// (the Boolean prototype's M3 and M3b), and a line against a plane, a
+/// sphere or a cylinder (v0.2's first curve–surface handlers) so far. Every
+/// other pair has a stub, which reports NotImplemented naming both types.
+/// Types that are not built in report NotSupported: the generic subdivision
+/// path needs tier 2 and 3 capabilities that no user type can declare yet.
 ///
 /// The table is constant data, not a registry: nothing is added at run time,
 /// so there is no global mutable state (ADR-0007).
@@ -291,6 +328,24 @@ Result<PlanarIntersection> SplineCircle2d(const Curve2d&, const Interval&, const
 Result<PlanarIntersection> CircleSpline2d(const Curve2d&, const Interval&, const Curve2d&,
                                           const Interval&, const Context&);
 
+/// A curve against a surface: the curve with the parameter domain and the
+/// surface with the parameter box the intersection is requested over.
+using CurveSurfaceHandler = Result<CurveSurfaceIntersection> (*)(const Curve&, const Interval&,
+                                                                 const Surface&, const Box2&,
+                                                                 const Context&);
+
+/// A line against a plane, a sphere or a cylinder (v0.2's first
+/// curve–surface handlers): every configuration decision the sign of a
+/// polynomial in the input doubles, a plane's crossing decided exactly
+/// against the requested domains, a quadric's roots placed to rounding.
+/// Defined in LineSurface.cpp.
+Result<CurveSurfaceIntersection> LinePlane(const Curve&, const Interval&, const Surface&,
+                                           const Box2&, const Context&);
+Result<CurveSurfaceIntersection> LineSphere(const Curve&, const Interval&, const Surface&,
+                                            const Box2&, const Context&);
+Result<CurveSurfaceIntersection> LineCylinder(const Curve&, const Interval&, const Surface&,
+                                              const Box2&, const Context&);
+
 template <typename A, typename B>
 Result<CurveCurveIntersection> CurveStub(const Curve&, const Interval&, const Curve&,
                                          const Interval&, const Context&)
@@ -319,11 +374,35 @@ Result<SurfaceSurfaceIntersection> SurfaceStub(const Surface&, const Box2&, cons
     return Fail(ErrorCode::NotImplemented, std::move(message));
 }
 
+template <typename A, typename B>
+Result<CurveSurfaceIntersection> CurveSurfaceStub(const Curve&, const Interval&, const Surface&,
+                                                  const Box2&, const Context&)
+{
+    // The names are read at compile time.
+    constexpr std::string_view nameA = GeometryTypeName<A>;
+    constexpr std::string_view nameB = GeometryTypeName<B>;
+    std::string message(nameA);
+    message += " x ";
+    message += nameB;
+    message += " intersection is not implemented yet (ADR-0010)";
+    return Fail(ErrorCode::NotImplemented, std::move(message));
+}
+
 /// One row of the table: type A against each of Ts.
 template <typename Handler, template <typename, typename> typename Stub, typename A, typename... Ts>
 consteval std::array<Handler, sizeof...(Ts)> MakePairRow(TypeList<Ts...>)
 {
     return {Stub<A, Ts>::Call...};
+}
+
+/// table[i][j] handles type i of As against type j of Bs: the table of a
+/// binary operation over two type lists, a curve against a surface.
+template <typename Handler, template <typename, typename> typename Of, typename... As,
+          typename... Bs>
+consteval auto MakeMixedTable(TypeList<As...>, TypeList<Bs...> columns)
+{
+    return std::array<std::array<Handler, sizeof...(Bs)>, sizeof...(As)>{
+        MakePairRow<Handler, Of, As>(columns)...};
 }
 
 /// table[i][j] handles type i of Ts against type j, generated by pack
@@ -448,6 +527,22 @@ consteval PlanarHandler PlanarHandlerFor()
     }
 }
 
+/// The handler of a curve of type A against a surface of type B; see
+/// SurfaceHandlerFor.
+template <typename A, typename B>
+consteval CurveSurfaceHandler CurveSurfaceHandlerFor()
+{
+    if constexpr (std::same_as<A, Line> && std::same_as<B, Plane>) {
+        return &LinePlane;
+    } else if constexpr (std::same_as<A, Line> && std::same_as<B, Sphere>) {
+        return &LineSphere;
+    } else if constexpr (std::same_as<A, Line> && std::same_as<B, Cylinder>) {
+        return &LineCylinder;
+    } else {
+        return &CurveSurfaceStub<A, B>;
+    }
+}
+
 /// Class templates wrapping the handlers, so MakePairTable can take them as
 /// a template template parameter.
 template <typename A, typename B>
@@ -468,6 +563,10 @@ template <typename A, typename B>
 struct PlanarHandlerOf {
     static constexpr PlanarHandler Call = PlanarHandlerFor<A, B>();
 };
+template <typename A, typename B>
+struct CurveSurfaceHandlerOf {
+    static constexpr CurveSurfaceHandler Call = CurveSurfaceHandlerFor<A, B>();
+};
 
 inline constexpr auto CurvePairTable =
     MakePairTable<CurveHandler, CurveStubOf>(BuiltinCurveTypes{});
@@ -475,6 +574,11 @@ inline constexpr auto SurfacePairTable =
     MakePairTable<SurfaceHandler, SurfaceHandlerOf>(BuiltinSurfaceTypes{});
 inline constexpr auto PlanarPairTable =
     MakePairTable<PlanarHandler, PlanarHandlerOf>(BuiltinCurve2dTypes{});
+/// Row i: curve type i of BuiltinCurveTypes; column j: surface type j of
+/// BuiltinSurfaceTypes.
+inline constexpr auto CurveSurfaceTable =
+    MakeMixedTable<CurveSurfaceHandler, CurveSurfaceHandlerOf>(BuiltinCurveTypes{},
+                                                               BuiltinSurfaceTypes{});
 
 } // namespace Stereon::Detail
 
@@ -509,6 +613,23 @@ export namespace Stereon {
 /// Over the curves' whole domains.
 [[nodiscard]] Result<PlanarIntersection> Intersect(const Curve2d& a, const Curve2d& b,
                                                    const Context& ctx);
+
+/// The intersection of a curve and a surface over the requested parameter
+/// domains (ADR-0029): the points where they meet, in order of the curve's
+/// parameter, and the stretches where the curve lies in the surface, or
+/// the reason there is none. A point is kept when its parameters lie in
+/// the requested domains, a periodic surface's angle taken modulo its
+/// period and placed in the box. InvalidInput for an empty curve or
+/// surface or a domain that is empty or NaN-bounded; NotSupported for a
+/// type that is not built in; NotImplemented for a pair without a handler
+/// yet: lines against planes, spheres and cylinders have theirs.
+[[nodiscard]] Result<CurveSurfaceIntersection> Intersect(const Curve& curve, const Interval& domain,
+                                                         const Surface& surface, const Box2& box,
+                                                         const Context& ctx);
+
+/// Over the whole domains.
+[[nodiscard]] Result<CurveSurfaceIntersection> Intersect(const Curve& curve, const Surface& surface,
+                                                         const Context& ctx);
 
 /// The intersection of two surfaces over the requested parameter domains
 /// (ADR-0029); see Intersect(Curve, Interval, Curve, Interval). A face's

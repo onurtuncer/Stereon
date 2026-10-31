@@ -23,6 +23,7 @@
 #include <Geom_BSplineSurface.hxx>
 #include <Geom_Ellipse.hxx>
 #include <IntAna_Curve.hxx>
+#include <IntAna_IntConicQuad.hxx>
 #include <IntAna_IntQuadQuad.hxx>
 #include <IntAna_QuadQuadGeo.hxx>
 #include <IntAna_Quadric.hxx>
@@ -38,6 +39,7 @@
 #include <gp_Lin.hxx>
 #include <gp_Pln.hxx>
 #include <gp_Pnt.hxx>
+#include <gp_Sphere.hxx>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -45,15 +47,19 @@
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <numbers>
 #include <vector>
 
 import Stereon.Intersect;
 
 #include "OcctConversion.hpp"
 
+using Stereon::Curve;
 using Stereon::Cylinder;
+using Stereon::Line;
 using Stereon::Plane;
 using Stereon::Point3;
+using Stereon::Sphere;
 using Stereon::Surface;
 using Stereon::Vec3;
 
@@ -82,6 +88,45 @@ gp_Cylinder ToOcct(const Cylinder& cylinder)
 }
 
 /// The distance from p to the nearest of OCCT's result curves.
+gp_Lin ToOcct(const Line& line)
+{
+    return gp_Lin(ToOcct(line.Origin), ToDir(line.Direction));
+}
+
+gp_Sphere ToOcct(const Sphere& sphere)
+{
+    return gp_Sphere(gp_Ax3(ToOcct(sphere.Center), ToDir(Axis(sphere)), ToDir(sphere.XAxis)),
+                     sphere.Radius);
+}
+
+/// Stereon's line against the surface, and OCCT's IntAna_IntConicQuad on
+/// the same line and quadric: the same count, every point within `within`
+/// of one of OCCT's, and the parameter along the unit direction the same.
+template <typename S>
+void RequireAgreesWithConicQuad(const Line& line, const S& surface, const double within)
+{
+    const auto ours = Intersect(Curve{line}, Surface{surface}, ctx);
+    REQUIRE(ours.has_value());
+    const IntAna_Quadric quadric(ToOcct(surface));
+    const IntAna_IntConicQuad occt(ToOcct(line), quadric);
+    REQUIRE(occt.IsDone());
+    REQUIRE_FALSE(occt.IsInQuadric());
+    REQUIRE(ours->Overlaps.empty());
+    REQUIRE(static_cast<int>(ours->Points.size()) == occt.NbPoints());
+    const double speed = Length(line.Direction);
+    for (const Stereon::CurveSurfacePoint& p : ours->Points) {
+        double nearest = std::numeric_limits<double>::infinity();
+        for (int i = 1; i <= occt.NbPoints(); ++i) {
+            const double apart = occt.Point(i).Distance(ToOcct(p.Position));
+            if (apart < nearest) {
+                nearest = apart;
+                REQUIRE(std::abs(p.Parameter * speed - occt.ParamOnConic(i)) <= within);
+            }
+        }
+        REQUIRE(nearest <= within);
+    }
+}
+
 double DistanceToResult(const IntAna_QuadQuadGeo& occt, const Point3& p)
 {
     double nearest = std::numeric_limits<double>::infinity();
@@ -133,6 +178,29 @@ Plane Tilted(const Point3& origin, const Vec3& normal)
 }
 
 } // namespace
+
+TEST_CASE("lines against planes, spheres and cylinders agree with IntAna_IntConicQuad",
+          "[occt][intersect]")
+{
+    // Generic lines, away from tangency and from parallel, where OCCT's
+    // tolerances cannot change the count; the surfaces off the axes.
+    const Plane plane{Point3{1.0, -2.0, 0.5}, Normalized(Vec3{1.0, 1.0, 0.0}), Vec3{0.0, 0.0, 1.0}};
+    const Sphere sphere{Point3{2.0, 1.0, -1.0}, 1.5, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+    const Cylinder cylinder{Point3{-1.0, 0.5, 2.0}, 2.0, Normalized(Vec3{1.0, 1.0, 0.0}),
+                            Vec3{0.0, 0.0, 1.0}};
+    for (int k = 0; k < 24; ++k) {
+        const double a = static_cast<double>(k) / 24.0 * 2.0 * std::numbers::pi;
+        // Through a point near each surface's centre, so the quadrics are
+        // crossed twice and the plane once.
+        const Vec3 direction{std::cos(a) + 0.3, std::sin(a) - 0.2, 0.7 - 0.05 * k};
+        const Point3 through{1.5 + 0.25 * std::sin(3.0 * a), 0.5 + 0.25 * std::cos(2.0 * a),
+                             0.5 + 0.1 * k / 24.0};
+        const Line line{through - 4.0 * direction, direction};
+        RequireAgreesWithConicQuad(line, plane, 1e-9);
+        RequireAgreesWithConicQuad(line, sphere, 1e-9);
+        RequireAgreesWithConicQuad(line, cylinder, 1e-9);
+    }
+}
 
 TEST_CASE("plane-plane intersections agree with OCCT", "[occt][intersect]")
 {

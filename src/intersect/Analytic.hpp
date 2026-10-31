@@ -37,6 +37,27 @@ inline constexpr double Infinity = std::numeric_limits<double>::infinity();
     return Hull(Interval{c} - Interval{reach}, Interval{c} + Interval{reach});
 }
 
+/// The quadratic A t² + 2 B t + C = 0 that a line cuts out of a conic or a
+/// quadric; its discriminant is B² - A C.
+struct LineQuadratic {
+    double A;
+    double B;
+    double C;
+};
+
+/// The roots, in order, for a non-negative discriminant: the one farther
+/// from zero by the formula, the other from the product of the roots, so
+/// that neither suffers the cancellation of the formula alone.
+[[nodiscard]] inline std::array<double, 2> RootsOf(const LineQuadratic& q,
+                                                   const double discriminant)
+{
+    const double root = std::sqrt(discriminant);
+    const double head = -(q.B + (q.B < 0.0 ? -root : root));
+    const double t1 = head / q.A;
+    const double t2 = head == 0.0 ? t1 : q.C / head;
+    return {std::min(t1, t2), std::max(t1, t2)};
+}
+
 /// The parameters t at which origin + t direction lies within range along
 /// one axis, outward-rounded: Everything or Empty when the line runs along
 /// the axis, inside or outside the range.
