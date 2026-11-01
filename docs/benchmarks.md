@@ -30,7 +30,7 @@ Stereon is measured against OpenCASCADE (OCCT) on **speed, memory and robustness
 | ID | Benchmark | OCCT counterpart | Metric | Target |
 | --- | --- | --- | --- | --- |
 | B0.1 | Robust `Orient3D` on random and near-degenerate points | Plain floating-point determinant (OCCT has no exact predicate) | ns/call; inconsistency count | ≤ 1.5× naive cost, 0 inconsistencies |
-| B0.2 | Curve dispatch: 10⁸ evaluations, line/circle/cubic B-spline | `Geom_Curve::EvalD0` through `occ::handle` | ns/eval | `VisitBuiltin` ≤ 1.1× direct call and faster than OCCT virtual call |
+| B0.2 | Curve dispatch: 10⁸ evaluations, line/circle/cubic B-spline | `Geom_Curve::EvalD0` through `occ::handle` | ns/eval | `VisitBuiltin` ≤ 1.1× the same loop through `VisitBuiltin` on a local copy of the geometry (`B0.2/DispatchCopy`; ADR-0003, revised 2026-11-01), and faster than OCCT's virtual call; the ratio to the direct call on the concrete type is reported, not gated; the virtual fallback adds ≤ 5 ns per call over the direct call |
 | B0.3 | Adjacency on a 10⁶-face body: faces of each edge, edges of each vertex | `TopExp::MapShapesAndAncestors`; also `BRepGraph` relation queries | total time; memory | ≥ 5× faster than `TopExp`; report vs `BRepGraph` |
 | B0.4 | Memory per entity | Same body as `TopoDS` and as `BRepGraph` | bytes/face, bytes/edge | < 50% of `TopoDS` |
 | B0.5 | Copy / snapshot after editing one face of a 10⁶-face body | `BRepBuilderAPI_Copy`; `BRepGraph_Copy` | time; bytes copied | < 1% of body copied |
