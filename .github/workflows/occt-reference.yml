@@ -34,6 +34,7 @@ on:
       - bench/Memory.*
       - bench/CMakeLists.txt
       - tools/bench_report.py
+      - tools/check_release_benchmarks.py
       - tools/occt/build_occt.sh
       - .github/workflows/occt-reference.yml
   workflow_dispatch:
@@ -54,6 +55,10 @@ on:
         description: Google Benchmark regex of the topology benchmarks (empty for all of them)
         type: string
         default: ""
+      release_candidate:
+        description: Qualify this commit for release — the run fails unless every benchmark gate passes
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -193,7 +198,28 @@ jobs:
             --title "Benchmark reference run — dispatch (B0.2), topology (B0.3–B0.5), curves and surfaces (B1.1–B1.6)" \
             --machine build/reference/machine.txt --out build/reference/report.md
           cat build/reference/report.md >> "$GITHUB_STEP_SUMMARY"
+      # The release gates, decided on full-precision medians
+      # (tools/check_release_benchmarks.py): the verdict is written and
+      # uploaded on every run, and fails the run only when it is dispatched
+      # to qualify a release candidate. Timings cannot gate a merge on a
+      # shared runner; they gate a release.
+      - name: Check the release gates
+        env:
+          ENFORCE: ${{ inputs.release_candidate && '--enforce' || '' }}
+        run: |
+          CONVERGENCE=""
+          if [ -f build/reference/convergence.json ]; then
+            CONVERGENCE="--convergence build/reference/convergence.json"
+          fi
+          status=0
+          python3 tools/check_release_benchmarks.py build/reference/results.json \
+            build/reference/results-topology.json --machine build/reference/machine.txt \
+            --candidate "${{ github.sha }}" $CONVERGENCE --json build/reference/gates.json \
+            --out build/reference/gates.md $ENFORCE || status=$?
+          { echo; cat build/reference/gates.md; } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
       - name: Upload the run
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: occt-reference-run-${{ github.sha }}
