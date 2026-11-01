@@ -140,7 +140,10 @@ template <typename Partials>
         return Fail(ErrorCode::DegenerateResult,
                     "the parametrisation is singular here (Su x Sv = 0)");
     }
-    const Vec3 normal = cross / length;
+    // One division and three products rather than three divisions: each
+    // component rounds once more, within an ulp, and a division costs what
+    // a dozen products do (docs/performance.rst, *Local properties*).
+    const Vec3 normal = (1.0 / length) * cross;
     return FundamentalFormsResult{.E = Dot(d.Su, d.Su),
                                   .F = Dot(d.Su, d.Sv),
                                   .G = Dot(d.Sv, d.Sv),
@@ -169,7 +172,7 @@ template <typename Forms>
     const double dv = firstRow ? a : b;
     const Vec3 direction = du * su + dv * sv;
     const double length = Length(direction);
-    return length > 0.0 ? direction / length : su / Length(su);
+    return length > 0.0 ? (1.0 / length) * direction : su / Length(su);
 }
 
 } // namespace Stereon::Detail
@@ -226,9 +229,10 @@ template <typename S>
         return std::unexpected(forms.error());
     }
     const FundamentalFormsResult& f = *forms;
-    const double metric = f.E * f.G - f.F * f.F;
-    const double gauss = (f.L * f.N - f.M * f.M) / metric;
-    const double mean = (f.E * f.N - 2.0 * f.F * f.M + f.G * f.L) / (2.0 * metric);
+    // The metric EG - F^2 divides both; once, as a reciprocal.
+    const double inverseMetric = 1.0 / (f.E * f.G - f.F * f.F);
+    const double gauss = (f.L * f.N - f.M * f.M) * inverseMetric;
+    const double mean = 0.5 * (f.E * f.N - 2.0 * f.F * f.M + f.G * f.L) * inverseMetric;
     // H^2 - K >= 0 in exact arithmetic; rounding may push it below at an
     // umbilic. The larger root in magnitude first, the other from K = k1 k2.
     const double spread = std::sqrt(std::max(mean * mean - gauss, 0.0));
