@@ -1,0 +1,757 @@
+{
+ "benchmarks": {
+  "ADR-0004/Compact/Stereon/10000": {
+   "ns": 3349613.8243244765,
+   "repetitions": 5,
+   "spread": 0.03637722825895898
+  },
+  "ADR-0005/EditSequence/Stereon/10000": {
+   "ns": 186938931.50000206,
+   "repetitions": 5,
+   "spread": 0.02789789001226712
+  },
+  "ArenaEditHistory<1024>": {
+   "ns": 10364.205745937643,
+   "repetitions": 5,
+   "spread": 0.00561611517019953
+  },
+  "ArenaEditHistory<128>": {
+   "ns": 78350.43417582415,
+   "repetitions": 5,
+   "spread": 0.016244983857995714
+  },
+  "ArenaEditHistory<256>": {
+   "ns": 38872.328659216786,
+   "repetitions": 5,
+   "spread": 0.007229182026311586
+  },
+  "ArenaIndexRead<1024>": {
+   "ns": 0.8246490371621629,
+   "repetitions": 5,
+   "spread": 0.030021835182969334
+  },
+  "ArenaIndexRead<128>": {
+   "ns": 0.8360240984936341,
+   "repetitions": 5,
+   "spread": 0.028948780752879377
+  },
+  "ArenaIndexRead<256>": {
+   "ns": 0.853757586002376,
+   "repetitions": 5,
+   "spread": 0.08880152993887495
+  },
+  "ArenaIteratorRead<1024>": {
+   "ns": 0.8287818199104935,
+   "repetitions": 5,
+   "spread": 0.06249466996548703
+  },
+  "ArenaIteratorRead<128>": {
+   "ns": 0.8338438273464625,
+   "repetitions": 5,
+   "spread": 0.037997967677444976
+  },
+  "ArenaIteratorRead<256>": {
+   "ns": 0.829762409915372,
+   "repetitions": 5,
+   "spread": 0.024668139987460504
+  },
+  "ArenaLocalEdits<1024>": {
+   "ns": 734.5106020914715,
+   "repetitions": 5,
+   "spread": 0.07278159458155951
+  },
+  "ArenaLocalEdits<128>": {
+   "ns": 917.8365741588914,
+   "repetitions": 5,
+   "spread": 0.01922751124578814
+  },
+  "ArenaLocalEdits<256>": {
+   "ns": 582.1257024052239,
+   "repetitions": 5,
+   "spread": 0.019430694012643808
+  },
+  "ArenaPageSpanRead<1024>": {
+   "ns": 0.6868824616915604,
+   "repetitions": 5,
+   "spread": 0.04060661423146273
+  },
+  "ArenaPageSpanRead<128>": {
+   "ns": 0.6864643092405852,
+   "repetitions": 5,
+   "spread": 0.039350715666441084
+  },
+  "ArenaPageSpanRead<256>": {
+   "ns": 0.6867380374999803,
+   "repetitions": 5,
+   "spread": 0.08168775996233367
+  },
+  "ArenaPushBack<1024>": {
+   "ns": 2.6938809140625297,
+   "repetitions": 5,
+   "spread": 0.030956997545214332
+  },
+  "ArenaPushBack<128>": {
+   "ns": 2.6897863408239426,
+   "repetitions": 5,
+   "spread": 0.0645111930301376
+  },
+  "ArenaPushBack<256>": {
+   "ns": 2.4080134826390696,
+   "repetitions": 5,
+   "spread": 0.06989918094401915
+  },
+  "ArenaRandomRead<1024>": {
+   "ns": 1.4260594358488876,
+   "repetitions": 5,
+   "spread": 0.012128920383481522
+  },
+  "ArenaRandomRead<128>": {
+   "ns": 1.5667366945008088,
+   "repetitions": 5,
+   "spread": 0.049533946954581645
+  },
+  "ArenaRandomRead<256>": {
+   "ns": 1.4795638655188457,
+   "repetitions": 5,
+   "spread": 0.04014209690567206
+  },
+  "ArenaSnapshot<1024>": {
+   "ns": 9573.822465383006,
+   "repetitions": 5,
+   "spread": 0.01926123108686014
+  },
+  "ArenaSnapshot<128>": {
+   "ns": 75774.90524479275,
+   "repetitions": 5,
+   "spread": 0.027384108689974256
+  },
+  "ArenaSnapshot<256>": {
+   "ns": 37619.753691924765,
+   "repetitions": 5,
+   "spread": 0.006284242719733451
+  },
+  "B0.3/EdgesOfVertices/Stereon/10000": {
+   "ns": 413092.29550826875,
+   "repetitions": 5,
+   "spread": 0.01250809347230801
+  },
+  "B0.3/FacesOfEdges/Stereon/10000": {
+   "ns": 503829.25401457865,
+   "repetitions": 5,
+   "spread": 0.016829529888315653
+  },
+  "B0.3/SheetBuild/Stereon/10000": {
+   "ns": 4843275.749999828,
+   "repetitions": 5,
+   "spread": 0.08397249443137297
+  },
+  "B0.4/BytesPerFace/Stereon/10000": {
+   "ns": 5.413490421368893,
+   "repetitions": 5,
+   "spread": 0.01940211150435774
+  },
+  "B0.4/HeapPerFace/Stereon/10000": {
+   "ns": 4728955.489932848,
+   "repetitions": 5,
+   "spread": 0.026174244860216748
+  },
+  "B0.5/DeleteFace/Stereon/10000": {
+   "ns": 1685461.985576927,
+   "repetitions": 5,
+   "spread": 0.020554618936934468
+  },
+  "B0.5/ReplaceSurface/Stereon/10000": {
+   "ns": 1670644.0404762125,
+   "repetitions": 5,
+   "spread": 0.11167566020661206
+  },
+  "B0.5/SplitEdge/Stereon/10000": {
+   "ns": 1687412.9544364584,
+   "repetitions": 5,
+   "spread": 0.09777652593281203
+  },
+  "B0.5/SplitFace/Stereon/10000": {
+   "ns": 1661530.224018483,
+   "repetitions": 5,
+   "spread": 0.038650069515555226
+  },
+  "Batch/CurveD0/cubic-rational/EvalAll": {
+   "ns": 12.867985339912,
+   "repetitions": 5,
+   "spread": 0.02952178592201086
+  },
+  "Batch/CurveD0/cubic-rational/EvalAllFast": {
+   "ns": 3.0325919808402992,
+   "repetitions": 5,
+   "spread": 0.04932301647756901
+  },
+  "Batch/CurveD0/cubic-rational/EvalAllFastPrepared": {
+   "ns": 2.6508328441360423,
+   "repetitions": 5,
+   "spread": 0.04861197672328253
+  },
+  "Batch/CurveD0/cubic-rational/PointByPoint": {
+   "ns": 20.83677626352913,
+   "repetitions": 5,
+   "spread": 0.02354241359342665
+  },
+  "Batch/CurveD0/cubic/EvalAll": {
+   "ns": 11.105973103550683,
+   "repetitions": 5,
+   "spread": 0.030444977406131026
+  },
+  "Batch/CurveD0/cubic/EvalAllFast": {
+   "ns": 2.583445472179213,
+   "repetitions": 5,
+   "spread": 0.05553779523048451
+  },
+  "Batch/CurveD0/cubic/EvalAllFastPrepared": {
+   "ns": 2.1012081548801285,
+   "repetitions": 5,
+   "spread": 0.02709990742348705
+  },
+  "Batch/CurveD0/cubic/PointByPoint": {
+   "ns": 16.317616278365964,
+   "repetitions": 5,
+   "spread": 0.07083258759524572
+  },
+  "Batch/SurfaceGrid/256/bicubic-rational/EvalGrid": {
+   "ns": 8.092132018387506,
+   "repetitions": 5,
+   "spread": 0.016583003354492042
+  },
+  "Batch/SurfaceGrid/256/bicubic-rational/PointByPoint": {
+   "ns": 38.246736660808935,
+   "repetitions": 5,
+   "spread": 0.04030918829563054
+  },
+  "Batch/SurfaceGrid/256/bicubic/EvalGrid": {
+   "ns": 6.0967633859368595,
+   "repetitions": 5,
+   "spread": 0.011719912864262449
+  },
+  "Batch/SurfaceGrid/256/bicubic/PointByPoint": {
+   "ns": 35.46407101830349,
+   "repetitions": 5,
+   "spread": 0.08377303231387444
+  },
+  "Broad/Pairs/10000x10000-disjoint/all-pairs/iterations:1": {
+   "ns": 119929248.9999948,
+   "repetitions": 5,
+   "spread": 0.013501677142676223
+  },
+  "Broad/Pairs/10000x10000-disjoint/hierarchy": {
+   "ns": 3359572.0287081986,
+   "repetitions": 5,
+   "spread": 0.0536212893168343
+  },
+  "Broad/Pairs/1000x1000-overlapping/all-pairs": {
+   "ns": 3292090.934579449,
+   "repetitions": 5,
+   "spread": 0.012003709655547699
+  },
+  "Broad/Pairs/1000x1000-overlapping/hierarchy": {
+   "ns": 5727770.927418965,
+   "repetitions": 5,
+   "spread": 0.046640378362109006
+  },
+  "CopySurfaceWrapper<Cone, 128>": {
+   "ns": 5.194258935210987,
+   "repetitions": 5,
+   "spread": 0.008007530191619436
+  },
+  "CopySurfaceWrapper<Cone, 96>": {
+   "ns": 13.669465587157578,
+   "repetitions": 5,
+   "spread": 0.022696490400213716
+  },
+  "CopySurfaceWrapper<Cylinder, 128>": {
+   "ns": 5.134935940321123,
+   "repetitions": 5,
+   "spread": 0.01908350002945996
+  },
+  "CopySurfaceWrapper<Cylinder, 96>": {
+   "ns": 4.9491781206376295,
+   "repetitions": 5,
+   "spread": 0.01601546029691548
+  },
+  "CopySurfaceWrapper<Torus, 128>": {
+   "ns": 5.158515844859278,
+   "repetitions": 5,
+   "spread": 0.005578732937852207
+  },
+  "CopySurfaceWrapper<Torus, 96>": {
+   "ns": 13.72135255284309,
+   "repetitions": 5,
+   "spread": 0.012648603221128422
+  },
+  "CopyWrapper<Circle, 128>": {
+   "ns": 5.1972998676457225,
+   "repetitions": 5,
+   "spread": 0.00596066538527376
+  },
+  "CopyWrapper<Circle, 64>": {
+   "ns": 13.549786059508167,
+   "repetitions": 5,
+   "spread": 0.6361028746240505
+  },
+  "CopyWrapper<Circle, 96>": {
+   "ns": 4.922523152930957,
+   "repetitions": 5,
+   "spread": 0.047606119729943656
+  },
+  "CopyWrapper<Line, 128>": {
+   "ns": 5.1356429512564,
+   "repetitions": 5,
+   "spread": 0.025425863127756673
+  },
+  "CopyWrapper<Line, 64>": {
+   "ns": 4.685045001542775,
+   "repetitions": 5,
+   "spread": 0.10629911965088965
+  },
+  "CopyWrapper<Line, 96>": {
+   "ns": 4.909350355178194,
+   "repetitions": 5,
+   "spread": 0.017002540387417157
+  },
+  "Direct/BSpline": {
+   "ns": 16.284038727541084,
+   "repetitions": 5,
+   "spread": 0.06870993974056529
+  },
+  "Direct/Circle": {
+   "ns": 9.410091810546383,
+   "repetitions": 5,
+   "spread": 0.05910538219671062
+  },
+  "Direct/Ellipse": {
+   "ns": 15.845019463931994,
+   "repetitions": 5,
+   "spread": 0.10552877664287709
+  },
+  "Direct/Line": {
+   "ns": 0.4702453156993741,
+   "repetitions": 5,
+   "spread": 0.026945078859519227
+  },
+  "DirectScalar/BSpline": {
+   "ns": 13.858714199805757,
+   "repetitions": 5,
+   "spread": 0.022374960641359524
+  },
+  "DirectScalar/Circle": {
+   "ns": 14.681270179056941,
+   "repetitions": 5,
+   "spread": 0.012476276713473624
+  },
+  "DirectScalar/Line": {
+   "ns": 0.47849629426579243,
+   "repetitions": 5,
+   "spread": 0.010880251501876487
+  },
+  "Erased/BSpline": {
+   "ns": 16.913361646386292,
+   "repetitions": 5,
+   "spread": 0.010799283914136749
+  },
+  "Erased/Circle": {
+   "ns": 11.149770692709314,
+   "repetitions": 5,
+   "spread": 0.005816665985251098
+  },
+  "Erased/Ellipse": {
+   "ns": 17.401276569980624,
+   "repetitions": 5,
+   "spread": 0.010807599458919783
+  },
+  "Erased/Line": {
+   "ns": 2.8273446951489265,
+   "repetitions": 5,
+   "spread": 0.017786074446301696
+  },
+  "HotPath/BasisFunctions/1": {
+   "ns": 3.958767777980364,
+   "repetitions": 5,
+   "spread": 0.04657472242208549
+  },
+  "HotPath/BasisFunctions/2": {
+   "ns": 5.0663386401919,
+   "repetitions": 5,
+   "spread": 0.04542941568383551
+  },
+  "HotPath/BasisFunctions/3": {
+   "ns": 7.374565126168717,
+   "repetitions": 5,
+   "spread": 0.027130490624179358
+  },
+  "HotPath/BasisFunctions/5": {
+   "ns": 21.339962010339676,
+   "repetitions": 5,
+   "spread": 0.07798969581698159
+  },
+  "HotPath/BasisFunctions/7": {
+   "ns": 40.094525169129426,
+   "repetitions": 5,
+   "spread": 0.015280528128385804
+  },
+  "HotPath/BezierSegments/cubic-24": {
+   "ns": 2459.5036971070745,
+   "repetitions": 5,
+   "spread": 0.05375976023052972
+  },
+  "HotPath/CurveEval/1": {
+   "ns": 7.540552310908761,
+   "repetitions": 5,
+   "spread": 0.032631415230163524
+  },
+  "HotPath/CurveEval/2": {
+   "ns": 13.030798036885557,
+   "repetitions": 5,
+   "spread": 0.005057878749180966
+  },
+  "HotPath/CurveEval/3": {
+   "ns": 14.399677567607814,
+   "repetitions": 5,
+   "spread": 0.06157272652359464
+  },
+  "HotPath/CurveEval/5": {
+   "ns": 31.27475388102402,
+   "repetitions": 5,
+   "spread": 0.01961725660939199
+  },
+  "HotPath/CurveEval/7": {
+   "ns": 53.686633608218685,
+   "repetitions": 5,
+   "spread": 0.038454698847633036
+  },
+  "HotPath/CurveEval/rational/3": {
+   "ns": 18.97142333442802,
+   "repetitions": 5,
+   "spread": 0.08869280783824815
+  },
+  "HotPath/CurveKnotInsertion": {
+   "ns": 148.75579560810795,
+   "repetitions": 5,
+   "spread": 0.04005590300019288
+  },
+  "HotPath/CurveProjection/rational-cubic": {
+   "ns": 4157.234588715801,
+   "repetitions": 5,
+   "spread": 0.007188903641054514
+  },
+  "HotPath/DegreeElevation/3to5": {
+   "ns": 7686.499983222781,
+   "repetitions": 5,
+   "spread": 0.016569441524663435
+  },
+  "HotPath/EvalGrid/256/bicubic": {
+   "ns": 6.026694951927395,
+   "repetitions": 5,
+   "spread": 0.010866102935905925
+  },
+  "HotPath/EvalGrid/256/bicubic-rational": {
+   "ns": 7.950591984207054,
+   "repetitions": 5,
+   "spread": 0.08586022771810174
+  },
+  "HotPath/Intersect/CylinderCylinder/parallel": {
+   "ns": 1820.8926402826298,
+   "repetitions": 5,
+   "spread": 0.02904987881004659
+  },
+  "HotPath/Intersect/CylinderCylinder/skew-crossing": {
+   "ns": 2174505.832817305,
+   "repetitions": 5,
+   "spread": 0.1967136367301497
+  },
+  "HotPath/Intersect/CylinderCylinder/skew-tangent": {
+   "ns": 4504774.070967744,
+   "repetitions": 5,
+   "spread": 0.016368620117730815
+  },
+  "HotPath/Intersect/PlaneCylinder/circle": {
+   "ns": 2614.2133264700915,
+   "repetitions": 5,
+   "spread": 0.03627478179357896
+  },
+  "HotPath/Intersect/PlaneCylinder/ellipse": {
+   "ns": 250564.15699537436,
+   "repetitions": 5,
+   "spread": 0.053972300715598824
+  },
+  "HotPath/Intersect/PlanePlane": {
+   "ns": 754.7099716478233,
+   "repetitions": 5,
+   "spread": 0.0477122553542343
+  },
+  "HotPath/RayMeets/cylinder": {
+   "ns": 476.98282588589257,
+   "repetitions": 5,
+   "spread": 0.016517500495511494
+  },
+  "HotPath/RayMeets/plane": {
+   "ns": 120.51468266953852,
+   "repetitions": 5,
+   "spread": 0.04000674140287652
+  },
+  "HotPath/SurfaceEval/bicubic": {
+   "ns": 35.047804173415635,
+   "repetitions": 5,
+   "spread": 0.010374483060014265
+  },
+  "HotPath/SurfaceEval/bicubic-rational": {
+   "ns": 37.83312139575591,
+   "repetitions": 5,
+   "spread": 0.06008893051681904
+  },
+  "HotPath/SurfaceKnotInsertion/U": {
+   "ns": 421.6408022197627,
+   "repetitions": 5,
+   "spread": 0.020873734479195036
+  },
+  "InCircleExactStage": {
+   "ns": 1667.8340360200698,
+   "repetitions": 5,
+   "spread": 0.008501280532864
+  },
+  "InCircleNaive": {
+   "ns": 2.240966118599438,
+   "repetitions": 5,
+   "spread": 0.036877233472927214
+  },
+  "InCircleNearlyCocircular": {
+   "ns": 2578.190630744662,
+   "repetitions": 5,
+   "spread": 0.016439584007841755
+  },
+  "InCircleRandom": {
+   "ns": 4.203471109503162,
+   "repetitions": 5,
+   "spread": 0.008009395913351364
+  },
+  "InSphereExactStage": {
+   "ns": 11468.488128663079,
+   "repetitions": 5,
+   "spread": 0.003971162339535841
+  },
+  "InSphereNaive": {
+   "ns": 6.527962445285488,
+   "repetitions": 5,
+   "spread": 0.01814495067662391
+  },
+  "InSphereNearlyCospherical": {
+   "ns": 16752.680297851413,
+   "repetitions": 5,
+   "spread": 0.015532423001650825
+  },
+  "InSphereRandom": {
+   "ns": 12.643367455861108,
+   "repetitions": 5,
+   "spread": 0.03902751632421298
+  },
+  "M10/Control/serial/iterations:1/real_time": {
+   "ns": 8043402087.000004,
+   "repetitions": 5,
+   "spread": 0.022188381119036128
+  },
+  "M10/Control/threads:4/iterations:1/real_time": {
+   "ns": 117585.99998756836,
+   "repetitions": 5,
+   "spread": 10.454161210885735
+  },
+  "M10/DrilledSlabCut/serial/iterations:1/real_time": {
+   "ns": 1115911985.0000253,
+   "repetitions": 5,
+   "spread": 0.010671911548653715
+  },
+  "M10/DrilledSlabCut/threads:4/iterations:1/real_time": {
+   "ns": 42724255.99998542,
+   "repetitions": 5,
+   "spread": 0.21992127844291656
+  },
+  "Orient2DExactStage": {
+   "ns": 169.05094665061043,
+   "repetitions": 5,
+   "spread": 0.03979074929934916
+  },
+  "Orient2DNaive": {
+   "ns": 0.8365179456054324,
+   "repetitions": 5,
+   "spread": 0.012779627524869507
+  },
+  "Orient2DNearlyCollinear": {
+   "ns": 45.317573056200885,
+   "repetitions": 5,
+   "spread": 0.005426708268995202
+  },
+  "Orient2DRandom": {
+   "ns": 1.8188798601182197,
+   "repetitions": 5,
+   "spread": 0.008242514159569884
+  },
+  "Orient3DExactStage": {
+   "ns": 1199.4221920437205,
+   "repetitions": 5,
+   "spread": 0.007537451569153625
+  },
+  "Orient3DNaive": {
+   "ns": 1.9877838546036892,
+   "repetitions": 5,
+   "spread": 0.012335835220211493
+  },
+  "Orient3DNearlyCoplanar": {
+   "ns": 279.99020104659667,
+   "repetitions": 5,
+   "spread": 0.07155305261415477
+  },
+  "Orient3DRandom": {
+   "ns": 5.835490430316566,
+   "repetitions": 5,
+   "spread": 0.0777265768583548
+  },
+  "ScalarSum/65536": {
+   "ns": 0.4715580859788052,
+   "repetitions": 5,
+   "spread": 0.014799963721661912
+  },
+  "SimdSum/65536": {
+   "ns": 0.2350325596441345,
+   "repetitions": 5,
+   "spread": 0.0034614562742586535
+  },
+  "SurfaceD2/Curvatures": {
+   "ns": 267.3209443016118,
+   "repetitions": 5,
+   "spread": 0.01718130403089667
+  },
+  "SurfaceD2/Curvatures-rational": {
+   "ns": 291.706824351171,
+   "repetitions": 5,
+   "spread": 0.02105123200295099
+  },
+  "SurfaceD2/D0": {
+   "ns": 35.89854195442101,
+   "repetitions": 5,
+   "spread": 0.015366449315161165
+  },
+  "SurfaceD2/D0-rational": {
+   "ns": 38.80904903184483,
+   "repetitions": 5,
+   "spread": 0.006534833798272742
+  },
+  "SurfaceD2/Spans": {
+   "ns": 4.268604356171721,
+   "repetitions": 5,
+   "spread": 0.05481578266171472
+  },
+  "SurfaceD2/SpansAndTriangles": {
+   "ns": 35.92309087821104,
+   "repetitions": 5,
+   "spread": 0.05305428893070726
+  },
+  "SurfaceD2/Square11": {
+   "ns": 167.56567055733856,
+   "repetitions": 5,
+   "spread": 0.04625215207275592
+  },
+  "SurfaceD2/Square22": {
+   "ns": 227.541782924105,
+   "repetitions": 5,
+   "spread": 0.047416100244129886
+  },
+  "SurfaceD2/Square22-rational": {
+   "ns": 282.11279177974825,
+   "repetitions": 5,
+   "spread": 0.020598662303098
+  },
+  "SurfaceD2/Total2": {
+   "ns": 206.34004283209902,
+   "repetitions": 5,
+   "spread": 0.060422165493194825
+  },
+  "SurfaceD2/Total2-rational": {
+   "ns": 232.56963746444814,
+   "repetitions": 5,
+   "spread": 0.03519037915027797
+  },
+  "VectorLocalEdits": {
+   "ns": 12250.011192171105,
+   "repetitions": 5,
+   "spread": 0.025660705729438477
+  },
+  "VectorPushBack": {
+   "ns": 1.0949513130841286,
+   "repetitions": 5,
+   "spread": 0.01123235620671862
+  },
+  "VectorRandomRead": {
+   "ns": 1.2561495643176532,
+   "repetitions": 5,
+   "spread": 0.06695604222932582
+  },
+  "VectorRead": {
+   "ns": 0.6256887980861323,
+   "repetitions": 5,
+   "spread": 0.08203129013515478
+  },
+  "VectorSnapshot": {
+   "ns": 1239603.5941780997,
+   "repetitions": 5,
+   "spread": 0.10226322641289362
+  },
+  "Visit/BSpline": {
+   "ns": 16.431457214353426,
+   "repetitions": 5,
+   "spread": 0.010680476538271385
+  },
+  "Visit/Circle": {
+   "ns": 9.49360155516935,
+   "repetitions": 5,
+   "spread": 0.04787764154415818
+  },
+  "Visit/Ellipse": {
+   "ns": 15.828968609247083,
+   "repetitions": 5,
+   "spread": 0.01816011312579735
+  },
+  "Visit/Line": {
+   "ns": 0.47420763660393866,
+   "repetitions": 5,
+   "spread": 0.04236288617694311
+  },
+  "VisitCopy/BSpline": {
+   "ns": 16.317963106779317,
+   "repetitions": 5,
+   "spread": 0.010721435074330809
+  },
+  "VisitPerCall/BSpline": {
+   "ns": 17.74215629116769,
+   "repetitions": 5,
+   "spread": 0.06552047949427713
+  },
+  "VisitPerCall/Circle": {
+   "ns": 11.026488017643814,
+   "repetitions": 5,
+   "spread": 0.011403029955016597
+  },
+  "VisitPerCall/Line": {
+   "ns": 2.8594021379523555,
+   "repetitions": 5,
+   "spread": 0.03148267300514403
+  }
+ },
+ "commit": "afa60d9b79c2d93bb9a56afecb49b7f724db1c9e",
+ "cpu": "AMD EPYC 9V45 96-Core Processor",
+ "date": "2026-11-01",
+ "machine": {
+  "commit": "afa60d9b79c2d93bb9a56afecb49b7f724db1c9e",
+  "compiler": "g++ (GCC) 16.2.0",
+  "cpu": "AMD EPYC 9V45 96-Core Processor",
+  "cpus": "4",
+  "date": "2026-11-01",
+  "runner": "GitHub Actions ubuntu-24.04 (Linux, X64), container gcc:16.2",
+  "workflow_run": "https://github.com/onurtuncer/Stereon/actions/runs/41322025748"
+ },
+ "schema": 1
+}
