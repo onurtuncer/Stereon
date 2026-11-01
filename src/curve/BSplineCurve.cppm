@@ -125,9 +125,14 @@ constexpr void CheckEvaluation(const BasicBSplineCurve<T, D>& curve, const doubl
 
 /// t as the evaluators use it: a parameter outside the domain of a curve in
 /// the periodic form is carried into the domain by whole periods
-/// (NearestInRange); any other is returned as it is, for CheckEvaluation to
-/// judge. Only a curve of doubles has a period; the others, interval and
-/// dual curves among them, are evaluated inside their domains.
+/// (NearestInRange), and the domain's end b is its start a, so that the
+/// seam is right-continuous like every interior knot and t and t + T give
+/// the same derivatives of every order there (at b the evaluators would
+/// otherwise take the last span's, which differ from the first's in the
+/// orders the seam's multiplicity leaves discontinuous). Any other t is
+/// returned as it is, for CheckEvaluation to judge. Only a curve of doubles
+/// has a period; the others, interval and dual curves among them, are
+/// evaluated inside their domains.
 template <Scalar T, std::size_t D>
 [[nodiscard]] double IntoDomain(const BasicBSplineCurve<T, D>& curve, const double t)
 {
@@ -135,24 +140,28 @@ template <Scalar T, std::size_t D>
         const Interval domain = Domain(curve);
         if (!Contains(domain, t) && std::isfinite(t)) {
             if (const double period = Period(curve); period > 0.0) {
-                return NearestInRange(t, domain, period);
+                const double inside = NearestInRange(t, domain, period);
+                return inside == domain.GetUpper() ? domain.GetLower() : inside;
             }
+        } else if (t == domain.GetUpper() && Period(curve) > 0.0) {
+            return domain.GetLower();
         }
     }
     return t;
 }
 
 /// The parameters as the batch evaluators use them: when some lie outside
-/// the domain of a curve in the periodic form, all carried into the domain,
-/// in `storage`; otherwise the parameters themselves, with nothing copied.
+/// the domain of a curve in the periodic form, or on its end, all carried
+/// as IntoDomain carries one, in `storage`; otherwise the parameters
+/// themselves, with nothing copied.
 template <std::size_t D>
 [[nodiscard]] std::span<const double> IntoDomain(const BasicBSplineCurve<double, D>& curve,
                                                  const std::span<const double> parameters,
                                                  std::vector<double>& storage)
 {
     const Interval domain = Domain(curve);
-    const bool outside =
-        std::ranges::any_of(parameters, [&](const double t) { return !Contains(domain, t); });
+    const bool outside = std::ranges::any_of(
+        parameters, [&](const double t) { return !Contains(domain, t) || t == domain.GetUpper(); });
     if (!outside || !(Period(curve) > 0.0)) {
         return parameters;
     }
