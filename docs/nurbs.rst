@@ -694,11 +694,17 @@ patch, keeping the best candidate so far:
    other moves. It is kept inside the Bezier patch, not the leaf: a step
    clamped to a leaf edge can settle there, pinned at a point that is no
    stationary point, which is how a property test once found a surface point
-   projecting 3.2e-3 mm away from itself. A run that stalls, stopping
-   strictly inside the patch at no stationary point, subdivides its leaf up
-   to two more levels (``ExtraLeafDepth``) and restarts from the quarters'
-   centres; a run that ends on the patch boundary does not, since the
-   boundary's minima come from the certified edge projections.
+   projecting 3.2e-3 mm away from itself. A run that settles strictly
+   inside the patch has found a stationary point and ends the leaf. Any
+   other run subdivides its leaf up to two more levels (``ExtraLeafDepth``)
+   and restarts from the quarters' centres: one that stalls, stopping
+   strictly inside the patch at no stationary point, and one that walks onto
+   the patch boundary. The edge projections find the boundary's own minima,
+   but a minimum just inside the boundary is none of them. The B1.3
+   convergence corpus found one 2.4e-4 inside a rational bilinear patch,
+   which the projector answered with the boundary point ten times farther
+   away (``tests/surface/BSplineSurfaceTests.cpp``, case 9441 of
+   ``b13-v1``); the corpus has had no incorrect success since.
 
 The boundary part is certified like the curve projection. The interior part
 is certified in what it excludes: a sub-patch is discarded only when it
@@ -709,9 +715,13 @@ small fraction of a Bezier patch, but no bound on the basin is computed. The
 tests require the projected point to be no farther than the closest of
 6 561 grid samples on random surfaces, and every surface point to project
 to itself within 1e-8 mm; the OCCT differential tests require it to be no
-farther than ``GeomAPI_ProjectPointOnSurf``'s on 1 029 probes. The one
-counterexample found so far, the pinned Newton run above, is a regression
-test.
+farther than ``GeomAPI_ProjectPointOnSurf``'s on 1 029 probes; and the
+B1.3 corpus (``bench/convergence/ProjectionCorpus.cpp``) requires it to be
+no farther than an independent reference that calls ``Eval`` alone, on
+10 000 surface cases, every reference run. The two counterexamples found so
+far, the pinned Newton run and the minimum just inside the boundary, both
+above, are regression tests. The leaves stay uncertified: the corpus is
+evidence, not a proof.
 
 **Preparation and order.** As for curves, the point enters :math:`F` and
 :math:`G` linearly,
