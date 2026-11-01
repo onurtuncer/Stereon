@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <numbers>
 #include <span>
 #include <string>
@@ -456,4 +457,223 @@ TEST_CASE("the arc length of a periodic B-spline is the same a period on",
         const double there = ArcLength(c, Interval{start + shift, start + shift + width})->Length;
         RC_ASSERT(std::abs(here - there) <= 1e-10 * (1.0 + here));
     });
+}
+
+namespace {
+
+/// The knots of a curve of degree p in the periodic form over [0, 1], period
+/// 1, from the distinct knots of one period, u[0] = 0 < ... < u[m-1] < 1: one
+/// period's knots with p of their images on each side. Every knot is dyadic,
+/// so a parameter moved by whole periods stays exact in doubles and the seam
+/// can be checked bit for bit, not to a tolerance.
+std::vector<double> PeriodicKnots(const int p, const std::vector<double>& u)
+{
+    const auto m = u.size();
+    const auto q = static_cast<std::size_t>(p);
+    std::vector<double> knots;
+    for (std::size_t i = q; i >= 1; --i) {
+        knots.push_back(u[m - i] - 1.0);
+    }
+    knots.insert(knots.end(), u.begin(), u.end());
+    knots.push_back(1.0);
+    for (std::size_t i = 1; i <= q; ++i) {
+        knots.push_back(u[i] + 1.0);
+    }
+    return knots;
+}
+
+/// m distinct poles and their first p repeated: the periodic form, whose seam
+/// at 0 = 1 has multiplicity 1, so only its derivatives up to order p - 1 are
+/// continuous there.
+template <typename P>
+std::vector<P> PeriodicPoles(const int p, const std::vector<P>& distinct)
+{
+    std::vector<P> poles = distinct;
+    for (int i = 0; i < p; ++i) {
+        poles.push_back(distinct[static_cast<std::size_t>(i)]);
+    }
+    return poles;
+}
+
+/// Nonuniform knots of one period: spans of 1/8, 3/8, 1/4, 1/4.
+const std::vector<double> OnePeriod{0.0, 0.125, 0.5, 0.75};
+
+/// A curve in the periodic form over [0, 1] of degree p, rational or not.
+BSplineCurve SeamCurve(const int p, const bool rational)
+{
+    const std::vector<Point3> distinct{
+        {0.0, 0.0, 0.0}, {4.0, 1.0, -1.0}, {5.0, 6.0, 2.0}, {-1.0, 4.0, 0.5}};
+    std::vector<double> weights;
+    if (rational) {
+        weights = PeriodicPoles<double>(p, {1.0, 2.5, 0.75, 1.5});
+    }
+    return *Stereon::MakeBSplineCurve(p, PeriodicKnots(p, OnePeriod), PeriodicPoles(p, distinct),
+                                      weights);
+}
+
+BSplineCurve2d SeamCurve2d(const int p)
+{
+    const std::vector<Point2> distinct{{0.0, 0.0}, {4.0, 1.0}, {5.0, 6.0}, {-1.0, 4.0}};
+    return *Stereon::MakeBSplineCurve(p, PeriodicKnots(p, OnePeriod), PeriodicPoles(p, distinct),
+                                      std::vector<double>{});
+}
+
+/// The seam fixtures: degrees 1, 2 and 3, polynomial and rational. Degree 5
+/// is covered by Loop(5) in the seam test above.
+std::vector<BSplineCurve> SeamCurves()
+{
+    std::vector<BSplineCurve> curves;
+    for (const int p : {1, 2, 3}) {
+        curves.push_back(SeamCurve(p, false));
+        curves.push_back(SeamCurve(p, true));
+    }
+    return curves;
+}
+
+} // namespace
+
+TEST_CASE("the seam of a periodic B-spline is right-continuous at every degree, bit for bit",
+          "[curve][periodic][seam]")
+{
+    for (const BSplineCurve& c : SeamCurves()) {
+        INFO("degree " << c.Degree << (c.Weights.empty() ? "" : ", rational"));
+        REQUIRE(Stereon::IsPeriodic(c));
+        REQUIRE(Stereon::Period(c) == 1.0);
+        // The seam's own derivative of order p differs from side to side:
+        // the fixture is one where the convention matters.
+        if (c.Degree >= 2) {
+            REQUIRE(Deriv(c, std::nextafter(1.0, 0.0), c.Degree) != Deriv(c, 0.0, c.Degree));
+        }
+        // At the end, at the start and a whole number of periods away, every
+        // order is the start's, exactly: the parameters are dyadic, so moving
+        // them by periods rounds nothing.
+        for (const double t : {0.0, 0.375, 0.875}) {
+            for (const double k : {-2.0, -1.0, 1.0, 2.0}) {
+                INFO("t = " << t << ", shifted by " << k);
+                REQUIRE(Eval(c, t + k) == Eval(c, t));
+                for (int n = 1; n <= c.Degree + 1; ++n) {
+                    REQUIRE(Deriv(c, t + k, n) == Deriv(c, t, n));
+                }
+            }
+        }
+        REQUIRE(Eval(c, 1.0) == Eval(c, 0.0));
+        for (int n = 1; n <= c.Degree + 1; ++n) {
+            REQUIRE(Deriv(c, 1.0, n) == Deriv(c, 0.0, n));
+        }
+        // Next to the seam on either side: the point is continuous, so the
+        // neighbours of b and of a lie within rounding of each other.
+        const double scale = 1e-12 * 8.0;
+        REQUIRE(Distance(Eval(c, std::nextafter(1.0, 2.0)), Eval(c, std::nextafter(0.0, 1.0))) <=
+                scale);
+        REQUIRE(Distance(Eval(c, std::nextafter(0.0, -1.0)), Eval(c, std::nextafter(1.0, 0.0))) <=
+                scale);
+    }
+}
+
+TEST_CASE("the batch evaluators follow the seam's convention on mixed batches",
+          "[curve][periodic][seam][batch]")
+{
+    // Inside, outside, on both ends and beside them, in no particular order.
+    const std::vector<double> t{0.375, 1.0,    -2.0, 0.0, std::nextafter(1.0, 0.0), 3.0,
+                                1.875, -0.125, 0.5,  2.0, std::nextafter(0.0, 1.0), 1.0,
+                                0.75};
+    for (const BSplineCurve& c : SeamCurves()) {
+        INFO("degree " << c.Degree << (c.Weights.empty() ? "" : ", rational"));
+        std::vector<Point3> all(t.size());
+        Stereon::EvalAll(c, t, all);
+        for (std::size_t i = 0; i < t.size(); ++i) {
+            INFO("t = " << t[i]);
+            REQUIRE(all[i] == Eval(c, t[i]));
+        }
+        // The fast overloads agree with each other bit for bit, and with Eval
+        // within their documented bound (docs/nurbs.rst, *Fast batch
+        // evaluation*), with S the largest pole times the weight ratio.
+        std::vector<Point3> converting(t.size());
+        std::vector<Point3> prepared(t.size());
+        Stereon::EvalAllFast(c, t, converting);
+        Stereon::EvalAllFast(Stereon::ToSpanPolynomials(c), t, prepared);
+        REQUIRE(converting == prepared);
+        double s = 0.0;
+        for (const Point3& pole : c.Poles) {
+            s = std::max(s, Length(Stereon::ToVec(pole)));
+        }
+        if (!c.Weights.empty()) {
+            const auto [low, high] = std::ranges::minmax(c.Weights);
+            s *= high / low;
+        }
+        const double bound = (8.0 * (c.Degree + 1) + std::ldexp(1.0, c.Degree - 1)) *
+                             std::numeric_limits<double>::epsilon() * s;
+        for (std::size_t i = 0; i < t.size(); ++i) {
+            INFO("t = " << t[i]);
+            REQUIRE(Distance(converting[i], Eval(c, t[i])) <= bound);
+        }
+    }
+}
+
+TEST_CASE("a periodic plane B-spline's seam follows the same convention", "[curve][periodic][seam]")
+{
+    for (const int p : {1, 2, 3}) {
+        const BSplineCurve2d c = SeamCurve2d(p);
+        INFO("degree " << p);
+        REQUIRE(Stereon::IsPeriodic(c));
+        REQUIRE(Eval(c, 1.0) == Eval(c, 0.0));
+        REQUIRE(Eval(c, -2.0) == Eval(c, 0.0));
+        for (int n = 1; n <= p + 1; ++n) {
+            REQUIRE(Deriv(c, 1.0, n) == Deriv(c, 0.0, n));
+            REQUIRE(Deriv(c, 2.375, n) == Deriv(c, 0.375, n));
+        }
+        const std::vector<double> t{1.0, 0.0, -1.0, 0.375};
+        std::vector<Point2> all(t.size());
+        Stereon::EvalAll(c, t, all);
+        for (std::size_t i = 0; i < t.size(); ++i) {
+            REQUIRE(all[i] == Eval(c, t[i]));
+        }
+    }
+}
+
+TEST_CASE("splitting at the seam leaves no sliver; elsewhere it splits at the image",
+          "[curve][periodic][seam]")
+{
+    for (const BSplineCurve& c : SeamCurves()) {
+        INFO("degree " << c.Degree << (c.Weights.empty() ? "" : ", rational"));
+        // The seam and its images: nothing on one side, so a refusal, never a
+        // piece of zero length.
+        for (const double t : {0.0, 1.0, -1.0, 3.0}) {
+            const auto refused = Stereon::Split(c, t);
+            REQUIRE_FALSE(refused.has_value());
+            REQUIRE(refused.error().GetCode() == ErrorCode::InvalidInput);
+        }
+        // An image of an interior parameter splits there, two pieces covering the domain.
+        const auto pieces = Stereon::Split(c, 2.375);
+        REQUIRE(pieces.has_value());
+        REQUIRE(Stereon::Domain(pieces->first) == Interval{0.0, 0.375});
+        REQUIRE(Stereon::Domain(pieces->second) == Interval{0.375, 1.0});
+        REQUIRE(Distance(Eval(pieces->first, 0.375), Eval(c, 0.375)) <= 1e-12);
+    }
+}
+
+TEST_CASE("a curve not in the periodic form keeps its domain's end as it is",
+          "[curve][periodic][seam]")
+{
+    for (const BSplineCurve& periodic : SeamCurves()) {
+        // The same closed curve, clamped: not periodic, so its end is the end
+        // of a bounded domain, evaluated in the last span, and no parameter is
+        // carried anywhere.
+        const BSplineCurve c = Stereon::Clamped(periodic);
+        INFO("degree " << c.Degree << (c.Weights.empty() ? "" : ", rational"));
+        REQUIRE(Stereon::Period(c) == 0.0);
+        const Interval domain = Stereon::Domain(c);
+        const double b = domain.GetUpper();
+        REQUIRE(Distance(Eval(c, b), Stereon::ToPoint(Stereon::ToVec(c.Poles.back()))) <= 1e-12);
+        if (c.Degree >= 2 && c.Weights.empty()) {
+            // The order-p derivative at b is the last span's, not the first's:
+            // a polynomial's is constant on a span, so the bits agree.
+            REQUIRE(Deriv(c, b, c.Degree) == Deriv(c, std::nextafter(b, 0.0), c.Degree));
+        }
+        const std::vector<double> t{domain.GetLower(), b};
+        std::vector<Point3> all(t.size());
+        Stereon::EvalAll(c, t, all);
+        REQUIRE(all[0] == Eval(c, t[0]));
+        REQUIRE(all[1] == Eval(c, t[1]));
+    }
 }
