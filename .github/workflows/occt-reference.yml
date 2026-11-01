@@ -29,6 +29,7 @@ on:
   pull_request:
     paths:
       - bench/occt/**
+      - bench/convergence/**
       - bench/TopoBench.cpp
       - bench/BooleanBench.cpp
       - bench/Memory.*
@@ -106,7 +107,7 @@ jobs:
           cmake --preset bench -DSTEREON_WARNINGS_AS_ERRORS=ON
           -DSTEREON_WITH_OCCT=ON -DCMAKE_PREFIX_PATH="$OCCT_PREFIX"
       - name: Build
-        run: cmake --build --preset bench --target stereon_occt_bench stereon_bench
+        run: cmake --build --preset bench --target stereon_occt_bench stereon_bench stereon_b13_convergence
       # The run's files go under the workspace: the upload step executes in
       # the container, and GitHub maps the host path of ${{ runner.temp }}
       # into it for the first line of a multi-line input only, so an upload
@@ -203,6 +204,11 @@ jobs:
       # uploaded on every run, and fails the run only when it is dispatched
       # to qualify a release candidate. Timings cannot gate a merge on a
       # shared runner; they gate a release.
+      # B1.3's convergence on the declared corpus (bench/convergence/
+      # ProjectionCorpus.cpp): 10 000 curve and 10 000 surface cases against a
+      # reference that calls Eval alone. Its JSON is the gate check's evidence.
+      - name: Measure projection convergence on the corpus (B1.3)
+        run: ./build/bench/bench/stereon_b13_convergence --cases 10000 --out build/reference/convergence.json
       - name: Check the release gates
         env:
           ENFORCE: ${{ inputs.release_candidate && '--enforce' || '' }}
