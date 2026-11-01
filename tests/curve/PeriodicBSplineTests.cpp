@@ -126,6 +126,37 @@ TEST_CASE("a B-spline curve in the periodic form has its domain's width as its p
     REQUIRE(Stereon::Period(Loop2d()) == Width(Stereon::Domain(Loop2d())));
 }
 
+TEST_CASE("a periodic B-spline's seam is right-continuous: its end evaluates as its start",
+          "[curve][periodic]")
+{
+    // The property below found it with its 89th sample: at t = a and
+    // a + T = b, the quadratic loop's second derivative came from the first
+    // span at a and from the last at b, 246 apart, since the seam of a
+    // periodic interpolation is only C^(p-1). Every order now repeats.
+    for (const BSplineCurve& c : Fixtures()) {
+        const Interval domain = Stereon::Domain(c);
+        const double a = domain.GetLower();
+        const double b = domain.GetUpper();
+        INFO("degree " << c.Degree);
+        REQUIRE(Eval(c, b) == Eval(c, a));
+        for (int n = 1; n <= c.Degree + 1; ++n) {
+            INFO("order " << n);
+            REQUIRE(Deriv(c, b, n) == Deriv(c, a, n));
+        }
+        // The batch evaluators carry b the same way, so they keep Eval's bits.
+        const std::vector<double> t{a, b, b + Stereon::Period(c)};
+        std::vector<Point3> batch(t.size());
+        Stereon::EvalAll(c, t, batch);
+        for (std::size_t i = 0; i < t.size(); ++i) {
+            REQUIRE(batch[i] == Eval(c, t[i]));
+        }
+        std::vector<Point3> fast(t.size());
+        Stereon::EvalAllFast(Stereon::ToSpanPolynomials(c), t, fast);
+        Stereon::EvalAllFast(c, t, batch);
+        REQUIRE(fast == batch);
+    }
+}
+
 TEST_CASE("a periodic B-spline evaluates at every parameter, a period apart alike",
           "[curve][periodic][property]")
 {

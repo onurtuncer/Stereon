@@ -276,18 +276,25 @@ void EvalPrepared(const BasicSpanPolynomials<D>& polynomials,
         return SpanForm{polynomials.Midpoints[slot], polynomials.InverseWidths[slot],
                         polynomials.Coefficients.data() + slot * stride};
     };
-    // A periodic curve's parameters outside the domain, carried in as
-    // Detail::IntoDomain carries them for the curve itself.
+    // A periodic curve's parameters outside the domain or on its end, carried
+    // in as Detail::IntoDomain carries them for the curve itself: by whole
+    // periods, and the end b to the start a.
     const auto p = static_cast<std::size_t>(polynomials.Degree);
     const Interval domain{polynomials.Knots[p], polynomials.Knots[polynomials.PoleCount]};
+    const auto offSeam = [&](const double t) {
+        return !Contains(domain, t) || t == domain.GetUpper();
+    };
     std::vector<double> storage;
     std::span<const double> inside = parameters;
-    if (polynomials.Period > 0.0 &&
-        std::ranges::any_of(parameters, [&](const double t) { return !Contains(domain, t); })) {
+    if (polynomials.Period > 0.0 && std::ranges::any_of(parameters, offSeam)) {
         storage.reserve(parameters.size());
         for (const double t : parameters) {
-            const bool carried = std::isfinite(t) && !Contains(domain, t);
-            storage.push_back(carried ? NearestInRange(t, domain, polynomials.Period) : t);
+            double carried = t;
+            if (std::isfinite(t) && offSeam(t)) {
+                carried = NearestInRange(t, domain, polynomials.Period);
+                carried = carried == domain.GetUpper() ? domain.GetLower() : carried;
+            }
+            storage.push_back(carried);
         }
         inside = storage;
     }
