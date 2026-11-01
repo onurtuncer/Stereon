@@ -26,7 +26,9 @@ from its median (the noise of the row), the target of docs/benchmarks.md and
 whether it is met. A ratio within 10 % of 1 is parity, unless the row has a
 ratio target of its own (B0.3: at least 5x) or must lead outright (B0.2:
 VisitBuiltin faster than OCCT's virtual call); B0.2's other target, VisitBuiltin
-within 1.1x of Stereon's direct call, has a table of its own. The memory and copying gates
+within 1.1x of the same loop on a local copy of the geometry (ADR-0003, revised
+2026-11-01), has a table of its own, which also reports the ratio to Stereon's
+direct call. The memory and copying gates
 (B0.4, B0.5, ADR-0005) are counters, not times, and have a table of their
 own: the median of each counter over the repetitions, and its target.
 
@@ -95,12 +97,17 @@ for _curve, _name in DISPATCH_CURVES.items():
         f"B0.2/Direct/{_curve}": (f"Direct call, {_name}, 10⁸ evaluations", "report"),
         f"B0.2/Dispatch/{_curve}": (f"VisitBuiltin against OCCT's virtual call, {_name}", "faster than OCCT"),
         f"B0.2/Virtual/{_curve}": (f"Virtual call per evaluation, {_name}", "report"),
+        f"B0.2/DispatchCopy/{_curve}": (f"VisitBuiltin on a local copy, {_name}", "report"),
     })
 
 # Rows that must beat OCCT outright, the parity band notwithstanding (B0.2).
 MUST_LEAD = {f"B0.2/Dispatch/{_curve}" for _curve in DISPATCH_CURVES}
 
-# B0.2's other target: VisitBuiltin within this of a direct call on the concrete type.
+# B0.2's other target (ADR-0003, revised 2026-11-01): VisitBuiltin within this of
+# the same loop run through VisitBuiltin on a local copy of the geometry, which
+# isolates what type erasure and dispatch cost. The ratio to the direct call on
+# the concrete type is reported beside it, not gated: for a B-spline it also
+# moves with how the compiler lays out the same evaluator in two contexts.
 DISPATCH_OVERHEAD = 1.10
 
 # The topology rows (B0.3 to B0.5) at both sheet sizes: 10^4 faces for a quick
@@ -409,18 +416,19 @@ def counter_rows(rows: list[Row]) -> list[str]:
 
 
 def dispatch_rows(rows: list[Row]) -> list[str]:
-    """The lines of B0.2's dispatch table: Stereon's VisitBuiltin over its direct call, per curve."""
+    """The lines of B0.2's dispatch table, per curve: Stereon's VisitBuiltin over the same loop
+    on a local copy (the gate), and over the direct call (reported)."""
     by_key = {row.key: row for row in rows}
     out = []
     for curve, name in DISPATCH_CURVES.items():
-        direct, visit = by_key.get(f"B0.2/Direct/{curve}"), by_key.get(f"B0.2/Dispatch/{curve}")
-        if direct is None or visit is None or "Stereon" not in direct.sides or "Stereon" not in visit.sides:
+        sides = [by_key.get(f"B0.2/{path}/{curve}") for path in ("Direct", "DispatchCopy", "Dispatch")]
+        if any(row is None or "Stereon" not in row.sides for row in sides):
             continue
-        d, v = direct.sides["Stereon"].median, visit.sides["Stereon"].median
-        overhead = v / d
+        d, c, v = (row.sides["Stereon"].median for row in sides)
+        overhead = v / c
         met = "yes" if overhead <= DISPATCH_OVERHEAD else "no"
-        out.append(f"| B0.2 | {name} | {format_time(d)} | {format_time(v)} | {overhead:.2f}× "
-                   f"| ≤ {DISPATCH_OVERHEAD:.2f}× | {met} |")
+        out.append(f"| B0.2 | {name} | {format_time(d)} | {format_time(c)} | {format_time(v)} "
+                   f"| {overhead:.2f}× | {v / d:.2f}× | ≤ {DISPATCH_OVERHEAD:.2f}× | {met} |")
     return out
 
 
@@ -468,11 +476,14 @@ def render(rows: list[Row], machine: dict[str, str], title: str) -> str:
             "",
             "## Dispatch overhead",
             "",
-            "B0.2's second target, from the Stereon side of two rows above: the median time per evaluation "
-            "through `VisitBuiltin` over the direct call on the concrete type (ADR-0003).",
+            "B0.2's second target, from the Stereon side of the rows above (ADR-0003, revised 2026-11-01): "
+            "the median time per evaluation through `VisitBuiltin` over the same loop run through "
+            "`VisitBuiltin` on a local copy of the geometry, which isolates what type erasure and dispatch "
+            "cost. The ratio to the direct call on the concrete type is reported, not gated.",
             "",
-            "| ID | Curve | Direct | VisitBuiltin | VisitBuiltin / direct | Target | Met |",
-            "| --- | --- | --- | --- | --- | --- | --- |",
+            "| ID | Curve | Direct | Local copy | VisitBuiltin | VisitBuiltin / copy | VisitBuiltin / direct "
+            "| Target | Met |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
             *dispatch,
         ]
     memory = counter_rows(rows)
@@ -653,7 +664,8 @@ def _self_test_topology() -> None:
 
 
 def _self_test_dispatch() -> None:
-    """B0.2: the Dispatch row must beat OCCT outright, and VisitBuiltin is held to 1.1x of direct."""
+    """B0.2: the Dispatch row must beat OCCT outright, and VisitBuiltin is held to 1.1x of the same
+    loop on a local copy, its ratio to the direct call reported."""
     n = 65536
     # The rows fix their iterations, which Google Benchmark appends to the name.
     assert split_name("B0.2/Direct/line/OCCT/iterations:1526") == ("B0.2/Direct/line", "OCCT")
@@ -665,9 +677,15 @@ def _self_test_dispatch() -> None:
         _entry("B0.2/Direct/line/OCCT", 0, 2.4 * n, n, sum_x_mm=1.5),
         _entry("B0.2/Dispatch/line/Stereon", 0, 2.1 * n, n),
         _entry("B0.2/Dispatch/line/OCCT", 0, 2.184 * n, n),
-        # Circle: VisitBuiltin 1.2x direct (not met) and slower than OCCT (not met).
+        _entry("B0.2/DispatchCopy/line/Stereon", 0, 2.0 * n, n),
+        # Circle: VisitBuiltin 1.2x the copy (not met) and slower than OCCT (not met).
         _entry("B0.2/Direct/circle/Stereon", 0, 10.0 * n, n),
+        _entry("B0.2/DispatchCopy/circle/Stereon", 0, 10.0 * n, n),
         _entry("B0.2/Dispatch/circle/Stereon", 0, 12.0 * n, n),
+        # B-spline: 1.28x the direct call but 1.0x the copy (met; the direct ratio is reported).
+        _entry("B0.2/Direct/bspline/Stereon", 0, 12.6 * n, n),
+        _entry("B0.2/DispatchCopy/bspline/Stereon", 0, 16.2 * n, n),
+        _entry("B0.2/Dispatch/bspline/Stereon", 0, 16.1 * n, n),
         _entry("B0.2/Dispatch/circle/OCCT", 0, 11.0 * n, n),
         _entry("B0.2/Virtual/circle/Stereon", 0, 13.0 * n, n),
         _entry("B0.2/Virtual/circle/OCCT", 0, 11.0 * n, n),
@@ -679,8 +697,9 @@ def _self_test_dispatch() -> None:
     assert verdict(by_key["B0.2/Virtual/circle"]) == ("0.85", "—")
     dispatch = dispatch_rows(rows)
     assert dispatch == [
-        "| B0.2 | line | 2 ns | 2.1 ns | 1.05× | ≤ 1.10× | yes |",
-        "| B0.2 | circle | 10 ns | 12 ns | 1.20× | ≤ 1.10× | no |",
+        "| B0.2 | line | 2 ns | 2 ns | 2.1 ns | 1.05× | 1.05× | ≤ 1.10× | yes |",
+        "| B0.2 | circle | 10 ns | 10 ns | 12 ns | 1.20× | 1.20× | ≤ 1.10× | no |",
+        "| B0.2 | cubic B-spline | 12.6 ns | 16.2 ns | 16.1 ns | 0.99× | 1.28× | ≤ 1.10× | yes |",
     ], dispatch
     report = render(rows, {}, "Dispatch")
     assert "## Dispatch overhead" in report
