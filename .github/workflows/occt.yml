@@ -39,10 +39,10 @@ jobs:
         run: |
           apt-get update -qq
           apt-get install -y -qq --no-install-recommends cmake ninja-build zstd
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Restore the OCCT build
         id: cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.OCCT_PREFIX }}
           key: occt-gcc16.2-${{ hashFiles('tools/occt/build_occt.sh') }}
@@ -53,7 +53,7 @@ jobs:
       # failing Stereon step does not throw the build away.
       - name: Save the OCCT build
         if: steps.cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ${{ env.OCCT_PREFIX }}
           key: ${{ steps.cache.outputs.cache-primary-key }}

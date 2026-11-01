@@ -84,7 +84,7 @@ jobs:
           xvfb-run -a -s "-screen 0 1600x1000x24" build/gcc16-debug/viewer/app/stn-view dumps/topology \
             --screenshot screenshots/viewer-topology.png --size 1280x800 --no-panel
           ls -l screenshots
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: viewer-screenshots
           path: screenshots/
