@@ -115,15 +115,19 @@ void RequireAgreesWithConicQuad(const Line& line, const S& surface, const double
     REQUIRE(static_cast<int>(ours->Points.size()) == occt.NbPoints());
     const double speed = Length(line.Direction);
     for (const Stereon::CurveSurfacePoint& p : ours->Points) {
+        // OCCT's points come in its own order: find the one that matches
+        // first, then compare the parameters of that pair only.
         double nearest = std::numeric_limits<double>::infinity();
+        int match = 0;
         for (int i = 1; i <= occt.NbPoints(); ++i) {
             const double apart = occt.Point(i).Distance(ToOcct(p.Position));
             if (apart < nearest) {
                 nearest = apart;
-                REQUIRE(std::abs(p.Parameter * speed - occt.ParamOnConic(i)) <= within);
+                match = i;
             }
         }
         REQUIRE(nearest <= within);
+        REQUIRE(std::abs(p.Parameter * speed - occt.ParamOnConic(match)) <= within);
     }
 }
 
