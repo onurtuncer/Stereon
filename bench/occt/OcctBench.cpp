@@ -54,6 +54,7 @@
 #include <gp_Pnt.hxx>
 #include <gp_Vec.hxx>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -777,6 +778,10 @@ void Interpolation(benchmark::State& state)
         benchmark::DoNotOptimize(Stereon::Interpolate(points, 3));
     }
     Items(state, points.size());
+    // The task's correctness, once and outside the timing: the interpolant's
+    // largest distance from the data points. The release-gate check counts
+    // the speed ratio only when both libraries interpolated.
+    state.counters["fit_residual"] = Stereon::Interpolate(points, 3)->MaxDeviation;
 }
 
 void OcctInterpolation(benchmark::State& state)
@@ -796,6 +801,17 @@ void OcctInterpolation(benchmark::State& state)
         benchmark::DoNotOptimize(curve);
     }
     Items(state, points.size());
+    // As for Stereon: the interpolant's largest distance from the data
+    // points, each projected onto it.
+    GeomAPI_Interpolate interpolate(occtPoints, false, 1e-7);
+    interpolate.Perform();
+    const auto curve = interpolate.Curve();
+    double residual = 0.0;
+    for (const Point3& p : points) {
+        residual =
+            std::max(residual, GeomAPI_ProjectPointOnCurve(ToOcct(p), curve).LowerDistance());
+    }
+    state.counters["fit_residual"] = residual;
 }
 
 void Approximation(benchmark::State& state)

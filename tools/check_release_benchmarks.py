@@ -75,6 +75,12 @@ FALLBACK_NS = 5.0
 # speed comparison is not of the same computation (the *_mm counters).
 AGREEMENT = 1e-9
 
+# B1.4's interpolation is the same task in both libraries (a cubic through the
+# same points, chord-length parameters) only if both interpolated: each side's
+# largest distance from the data points (fit_residual) within the tolerance the
+# benchmark gives OCCT's GeomAPI_Interpolate, in millimetres.
+FIT_CHECKED = {"B1.4/Interpolation/1000": 1e-7}
+
 # B1.3's convergence target (docs/benchmarks.md): measured on a declared corpus
 # and supplied as an evidence file; no timing proves it.
 CONVERGENCE_TARGET = 0.9999
@@ -139,6 +145,20 @@ def disagreement(row: br.Row) -> str:
     return ""
 
 
+def unfitted(row: br.Row) -> str:
+    """For a fitting row, the side whose fit missed the data points, or ''."""
+    tolerance = FIT_CHECKED.get(row.key)
+    if tolerance is None:
+        return ""
+    for lib in br.LIBRARIES:
+        residual = row.sides[lib].counter("fit_residual")
+        if residual is None:
+            return f"{lib} recorded no fit_residual"
+        if not (math.isfinite(residual) and residual <= tolerance):
+            return f"{lib}'s fit is {residual!r} mm from its points, beyond {tolerance}"
+    return ""
+
+
 def judged(margin: float, spread: float, met: bool) -> str:
     """PASS or FAIL, or INCONCLUSIVE when the spread is excessive and could turn it."""
     if spread > MAX_SPREAD and abs(margin) <= spread:
@@ -173,7 +193,7 @@ def time_gate(row: br.Row | None, key: str) -> Gate:
     if missing:
         gate.note = f"no {', '.join(missing)} run"
         return gate
-    reason = disagreement(row)
+    reason = disagreement(row) or unfitted(row)
     if reason:
         gate.status, gate.note = "FAIL", f"not the same result: {reason}"
         return gate
@@ -382,7 +402,9 @@ def _passing_run() -> dict:
     for key in required_time_keys():
         reps = expected_repetitions(key)
         threshold = br.MIN_RATIO.get(key, 1.0 if key in br.MUST_LEAD else PARITY_FLOOR)
-        entries += _series(f"{key}/Stereon", 10.0, reps) + _series(f"{key}/OCCT", 10.0 * threshold * 1.5, reps)
+        fit = {"fit_residual": 1e-12} if key in FIT_CHECKED else {}
+        entries += _series(f"{key}/Stereon", 10.0, reps, **fit)
+        entries += _series(f"{key}/OCCT", 10.0 * threshold * 1.5, reps, **fit)
     for curve in br.DISPATCH_CURVES:
         for path, ns in (("Direct", 10.0), ("DispatchCopy", 12.0), ("Dispatch", 12.0), ("Virtual", 13.0)):
             entries += _series(f"B0.2/{path}/{curve}/Stereon", ns, CURVE_REPETITIONS)
@@ -434,6 +456,15 @@ def self_test() -> int:
         assert _status(gates, "B1.1/CurveD0BatchFast/cubic-rational") == "FAIL"
         assert _status(gates, "B1.6/SurfaceProperties/bicubic") == "FAIL"
         assert not released(gates)
+
+        # The interpolation row counts only when both libraries interpolated.
+        fit = [e for e in run["benchmarks"] if not e["name"].startswith("B1.4/Interpolation/")]
+        unfit = fit + _series("B1.4/Interpolation/1000/Stereon", 10.0, 15, fit_residual=1e-12)
+        unfit += _series("B1.4/Interpolation/1000/OCCT", 20.0, 15, fit_residual=1e-3)
+        assert _status(check({"benchmarks": unfit}, machine, "abc", evidence), "B1.4/Interpolation/1000") == "FAIL"
+        silent = fit + _series("B1.4/Interpolation/1000/Stereon", 10.0, 15)
+        silent += _series("B1.4/Interpolation/1000/OCCT", 20.0, 15, fit_residual=1e-12)
+        assert _status(check({"benchmarks": silent}, machine, "abc", evidence), "B1.4/Interpolation/1000") == "FAIL"
 
         # A row or a twin omitted; a timing that is not a positive finite number; too few repetitions.
         omitted = {"benchmarks": [e for e in run["benchmarks"]
