@@ -382,6 +382,26 @@ void DispatchVisit(benchmark::State& state, const G geometry)
     DispatchItems(state, pass());
 }
 
+/// DispatchVisit evaluating a local copy of the geometry: the same dispatch
+/// and loop, the geometry no longer reached through the wrapper's storage.
+/// An experiment for ADR-0003's B-spline row (report only, no OCCT twin).
+template <typename G>
+void DispatchVisitCopy(benchmark::State& state, const G geometry)
+{
+    const Stereon::Curve curve(geometry);
+    const std::vector<double> t = DispatchParameters(1.0);
+    const auto pass = [&] {
+        return VisitBuiltin(curve, [&t](const auto& g) {
+            const auto local = g;
+            return SumX(local, t);
+        });
+    };
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(pass());
+    }
+    DispatchItems(state, pass());
+}
+
 template <typename G>
 void DispatchErased(benchmark::State& state, const G geometry)
 {
@@ -1043,6 +1063,9 @@ void OcctPointAtLength(benchmark::State& state)
         ->Iterations(HundredMillion);                                                              \
     BENCHMARK_CAPTURE(OcctDispatchVirtual, curve, make())                                          \
         ->Name("B0.2/Dispatch/" #curve "/OCCT")                                                    \
+        ->Iterations(HundredMillion);                                                              \
+    BENCHMARK_CAPTURE(DispatchVisitCopy, curve, make())                                            \
+        ->Name("B0.2/DispatchCopy/" #curve "/Stereon")                                             \
         ->Iterations(HundredMillion);                                                              \
     BENCHMARK_CAPTURE(DispatchErased, curve, make())                                               \
         ->Name("B0.2/Virtual/" #curve "/Stereon")                                                  \

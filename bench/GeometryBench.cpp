@@ -155,6 +155,21 @@ void Visit(benchmark::State& state, const Curve curve)
     SetItems(state);
 }
 
+/// Visit, but evaluating a local copy of the geometry: the same dispatch
+/// and the same loop, with the geometry no longer reached through the
+/// wrapper's storage. An experiment for ADR-0003's B-spline row.
+void VisitCopy(benchmark::State& state, const Curve curve)
+{
+    const std::vector<double> params = Parameters();
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(VisitBuiltin(curve, [&params](const auto& g) {
+            const auto local = g;
+            return SumX(local, params);
+        }));
+    }
+    SetItems(state);
+}
+
 void VisitPerCall(benchmark::State& state, const Curve curve)
 {
     const std::vector<double> params = Parameters();
@@ -231,6 +246,7 @@ BENCHMARK_CAPTURE(VisitPerCall, Circle, Curve(SomeCircle()));
 BENCHMARK_CAPTURE(Erased, Circle, Curve(SomeCircle()));
 BENCHMARK_CAPTURE(Direct, BSpline, SomeBSpline());
 BENCHMARK_CAPTURE(Visit, BSpline, Curve(SomeBSpline()));
+BENCHMARK_CAPTURE(VisitCopy, BSpline, Curve(SomeBSpline()));
 BENCHMARK_CAPTURE(VisitPerCall, BSpline, Curve(SomeBSpline()));
 BENCHMARK_CAPTURE(Erased, BSpline, Curve(SomeBSpline()));
 BENCHMARK_CAPTURE(Direct, Ellipse, SomeEllipse());
