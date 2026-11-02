@@ -527,6 +527,19 @@ target; grid evaluation at 3.4 on both runs; degree elevation at 3.3, then
 up to about 1.5× in absolute time on both sides, so a ratio is read within
 one run, and one within a few percent of 1 is parity.
 
+The run of 2026-11-02 (``bench/reports/phase1-reference-2026-11-02.md``,
+on ``91dff8e``, AMD EPYC 7763, run 41424965507) is the report of record
+since: every v0.1 gate passes, ``EvalAllFast`` at 2.27 and 2.32, degree
+elevation at 1.28, principal curvatures at 0.95, and B1.3's convergence
+at 20 000 of 20 000 with no incorrect success after #180. The same code on
+an Intel Xeon runner (``bench/reports/phase1-reference-2026-11-02-intel.md``,
+``ab41d1a``, run 41434476419) does not: ``EvalAllFast`` reads 1.79 and
+1.77 and degree elevation 0.78, and the run of ``2219942`` on another Xeon
+1.86, 1.74 and 0.79. The workflow does not choose the hosted runner's CPU,
+so the machine record says which one a run had; the Intel results are an
+open item, and the two rows' claims hold on the AMD EPYC 7763 until a
+profile on Intel says why they move.
+
 Where OCCT gets it wrong
 ------------------------
 
