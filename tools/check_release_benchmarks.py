@@ -67,8 +67,9 @@ MAX_SPREAD = 0.10
 # a "≥ parity" target (docs/benchmarks.md; bench_report.PARITY_BAND).
 PARITY_FLOOR = 1.0 - br.PARITY_BAND
 
-# ADR-0003's virtual fallback: at most this many nanoseconds per call over the
-# direct call on the concrete type.
+# ADR-0003's virtual fallback (revised 2026-11-02): at most this many nanoseconds
+# per call over the same loop through VisitBuiltin on a local copy of the
+# geometry. The excess over the direct call on the concrete type is reported.
 FALLBACK_NS = 5.0
 
 # Two libraries' results of the same case agree to this, relative, or the
@@ -227,9 +228,9 @@ def stereon_median(by_key: dict[str, br.Row], key: str) -> tuple[float | None, s
 
 
 def dispatch_gates(by_key: dict[str, br.Row]) -> list[Gate]:
-    """ADR-0003 (revised 2026-11-01): VisitBuiltin over the same loop on a local copy, at most
-    1.10, and the virtual fallback at most 5 ns per call over the direct call. The direct ratio
-    is reported beside them."""
+    """ADR-0003 (revised 2026-11-01 and 2026-11-02): VisitBuiltin over the same loop on a local
+    copy, at most 1.10, and the virtual fallback at most 5 ns per call over that local copy. The
+    ratio and the excess over the direct call are reported beside them."""
     gates: list[Gate] = []
     for curve, name in br.DISPATCH_CURVES.items():
         times: dict[str, float] = {}
@@ -254,12 +255,14 @@ def dispatch_gates(by_key: dict[str, br.Row]) -> list[Gate]:
                 overhead.note = f"VisitBuiltin / direct {times['Dispatch'] / times['Direct']:.4f} (reported)"
         else:
             overhead.note = "; ".join(problems)
-        fallback = Gate(f"B0.2/FallbackOverhead/{curve}", f"Virtual call over the direct call, {name}",
+        fallback = Gate(f"B0.2/FallbackOverhead/{curve}", f"Virtual call over the local copy, {name}",
                         f"≤ {FALLBACK_NS:.0f} ns per call", "MISSING", spread=spread, threshold=FALLBACK_NS)
-        if "Virtual" in times and "Direct" in times:
-            fallback.value = times["Virtual"] - times["Direct"]
+        if "Virtual" in times and "DispatchCopy" in times:
+            fallback.value = times["Virtual"] - times["DispatchCopy"]
             fallback.status = judged((FALLBACK_NS - fallback.value) / FALLBACK_NS, spread,
                                      fallback.value <= FALLBACK_NS)
+            if "Direct" in times:
+                fallback.note = f"virtual - direct {times['Virtual'] - times['Direct']:.4f} ns (reported)"
         else:
             fallback.note = "; ".join(problems)
         gates += [overhead, fallback]
@@ -566,8 +569,22 @@ def self_test() -> int:
         old = {"benchmarks": [e for e in run["benchmarks"] if "/DispatchCopy/" not in e["name"]]}
         gates = check(old, machine, "abc", evidence)
         assert _status(gates, "B0.2/DispatchOverhead/bspline") == "MISSING"
+        assert _status(gates, "B0.2/FallbackOverhead/bspline") == "MISSING"
         assert not released(gates)
+
+        # The fallback is held to 5 ns over the local copy, not the direct call (ADR-0003, revised
+        # 2026-11-02): a B-spline whose direct loop leads both by more than 5 ns passes, and a
+        # virtual call more than 5 ns over the copy fails.
+        paths = (("Direct", 12.6), ("DispatchCopy", 18.0), ("Dispatch", 18.0), ("Virtual", 18.5))
+        bspline = [e for e in run["benchmarks"]
+                   if not e["name"].startswith(tuple(f"B0.2/{path}/bspline/Stereon" for path, _ in paths))]
+        for path, ns in paths:
+            bspline += _series(f"B0.2/{path}/bspline/Stereon", ns, CURVE_REPETITIONS)
+        gates = check({"benchmarks": bspline}, machine, "abc", evidence)
         assert _status(gates, "B0.2/FallbackOverhead/bspline") == "PASS"
+        slow = [e for e in bspline if not e["name"].startswith("B0.2/Virtual/bspline/")]
+        slow += _series("B0.2/Virtual/bspline/Stereon", 23.5, CURVE_REPETITIONS)
+        assert _status(check({"benchmarks": slow}, machine, "abc", evidence), "B0.2/FallbackOverhead/bspline") == "FAIL"
 
         # Excessive spread near the target is inconclusive; far from it, it is not.
         noisy = [e for e in run["benchmarks"] if not e["name"].startswith("B1.5/BezierDecomposition/")]
