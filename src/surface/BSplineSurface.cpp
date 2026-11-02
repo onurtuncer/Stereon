@@ -850,7 +850,15 @@ void Search(const BSplineSurface& s, const Point3& p, const SearchPatch& patch, 
         const Point2 centre{Midpoint(patch.Range.X), Midpoint(patch.Range.Y)};
         const NewtonResult newton = Newton(s, p, centre, range);
         Consider(s, p, newton.Parameter, best);
-        if (!newton.Stalled || depth >= LeafDepth + ExtraLeafDepth) {
+        // A run that settled strictly inside the patch found a stationary
+        // point. One that stalled, or that walked onto the patch's boundary,
+        // did not account for the leaf: the edge projections cover the
+        // boundary's own minima, but a minimum just inside it, which the leaf
+        // may hold, is no boundary minimum (case 9441 of the B1.3 corpus,
+        // 2.4e-4 inside). Both get the leaf's quarters, Newton from closer
+        // centres, a bounded number of levels deeper.
+        const bool settledInside = !newton.Stalled && StrictlyInside(newton.Parameter, range);
+        if (settledInside || depth >= LeafDepth + ExtraLeafDepth) {
             return;
         }
     }
