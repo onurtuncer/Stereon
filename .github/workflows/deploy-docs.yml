@@ -121,7 +121,11 @@ jobs:
           if grep -q "Unable to parse xml" build/sphinx.log; then
             echo "::error::Breathe could not read the Doxygen XML"; exit 1
           fi
-          grep -q "PagedArena" build/html/api.html
+          # The reference is one page per library (docs/_ext/stereon_api.py);
+          # each of these must have its declarations, not only the overview.
+          grep -q "PagedArena" build/html/api/core.html
+          grep -q "BasicBSplineCurve" build/html/api/curve.html
+          grep -q "ShapeBuilder" build/html/api/topo.html
           echo "Pages built: $(find build/html -name '*.html' | wc -l)"
 
       # The trend page lives on the bench-data branch, written by the

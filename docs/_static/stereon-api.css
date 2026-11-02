@@ -1,0 +1,25 @@
+/* SPDX-FileCopyrightText: 2026 Onur Tuncer and Stereon contributors
+   SPDX-License-Identifier: MPL-2.0
+
+   The API reference (docs/api, built by docs/_ext/stereon_api.py). */
+
+/* The theme keeps table cells on one line, which pushes the summaries of
+   the reference tables off the page; let them wrap instead. */
+.rst-content table.stereon-summary td,
+.rst-content table.stereon-ops td,
+.rst-content table.docutils td {
+    white-space: normal;
+    vertical-align: top;
+}
+
+/* Overload sets: a little air between consecutive declarations. */
+.rst-content dl.cpp.function {
+    margin-bottom: 0.9em;
+}
+
+/* Graphs scale down on narrow screens rather than scrolling sideways. */
+.rst-content .graphviz object,
+.rst-content .graphviz img {
+    max-width: 100%;
+    height: auto;
+}
