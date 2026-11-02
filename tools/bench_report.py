@@ -306,7 +306,7 @@ def read_rows(results: dict) -> list[Row]:
         # the medians below are ours, so aggregates are skipped.
         if entry.get("run_type", "iteration") != "iteration":
             continue
-        if "error_occurred" in entry:
+        if entry.get("error_occurred"):
             continue
         parts = split_name(entry["name"])
         if parts is None:
