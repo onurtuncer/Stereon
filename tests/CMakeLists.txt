@@ -325,6 +325,10 @@ if(Python3_Interpreter_FOUND)
                 --root "${PROJECT_SOURCE_DIR}")
     add_test(NAME "tools: benchmark report self-test"
         COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/bench_report.py" --self-test)
+    add_test(NAME "tools: release benchmark checker self-test"
+        COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/check_release_benchmarks.py" --self-test)
+    add_test(NAME "tools: release benchmark evidence regressions"
+        COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/test_release_benchmarks.py")
     add_test(NAME "tools: benchmark trend self-test"
         COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/bench_trend.py" --self-test)
     set_tests_properties("tools: complexity self-test" "tools: complexity"
