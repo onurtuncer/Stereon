@@ -8,7 +8,7 @@
 cmake_minimum_required(VERSION 3.30)
 
 project(Stereon
-    VERSION 0.0.6
+    VERSION 0.1.0
     DESCRIPTION "A modern C++26 B-rep geometric modeling kernel"
     HOMEPAGE_URL "https://github.com/onurtuncer/Stereon"
     LANGUAGES CXX)
