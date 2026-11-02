@@ -9,18 +9,24 @@
 
 The manual is built by the ``Stereon_Docs_Sphinx`` CMake target
 (``-DSTEREON_BUILD_DOCS=ON``) or directly with
-``sphinx-build -b html docs <out>``. API pages come from Doxygen XML through
-Breathe. When the XML is missing (no Doxygen on the machine) the API page
-shows a notice instead, so the rest of the manual still builds.
+``sphinx-build -b html docs <out>``. The API reference (api.rst and api/)
+is organised by _ext/stereon_api.py from the sources and the Doxygen XML,
+with the declarations rendered through Breathe. When the XML is missing (no
+Doxygen on the machine) the reference shows a notice instead, so the rest of
+the manual still builds.
 """
 
 import os
 import re
 import shutil
 import subprocess
+import sys
 
 _DOCS_DIR = os.path.abspath(os.path.dirname(__file__))
 _ROOT_DIR = os.path.abspath(os.path.join(_DOCS_DIR, '..'))
+
+# Local extensions: _ext/stereon_api.py builds the API reference (api/*.rst).
+sys.path.insert(0, os.path.join(_DOCS_DIR, '_ext'))
 
 
 def _read_project_version():
@@ -48,6 +54,7 @@ extensions = [
     'sphinx.ext.ifconfig',
     'sphinx.ext.githubpages',
     'sphinxcontrib.bibtex',
+    'stereon_api',
 ]
 
 source_encoding = 'utf-8'
@@ -61,11 +68,15 @@ todo_include_todos = True
 # Figures are numbered, so chapters can refer to them with :numref:.
 numfig = True
 
+# Graphs as SVG, so their nodes link to the pages they name.
+graphviz_output_format = 'svg'
+
 # -- Options for HTML output -------------------------------------------------
 
 html_theme = 'sphinx_rtd_theme'
 html_logo = '../assets/stereon_logo.png'
-html_static_path = []  # add 'docs/_static' here once there are files to ship
+html_static_path = ['_static']
+html_css_files = ['stereon-api.css']
 html_theme_options = {
     'logo_only': False,
     'navigation_depth': 3,
@@ -115,27 +126,15 @@ breathe_default_project = project
 breathe_default_members = ('members',)
 add_function_parentheses = True
 
-# ``api.rst`` wraps its Breathe directives in ``.. only:: have_doxygen``.
-# Breathe still parses directives inside a false ``only`` block and fails on
-# missing XML, so without XML the block between the ``stereon-api-begin`` and
-# ``stereon-api-end`` comments is also cut from the page source.
+# The reference pages (api/*.rst) render through the ``stereon-api``
+# directive of _ext/stereon_api.py, which shows a notice instead when there is
+# no XML, so the rest of the manual still builds.
 _HAVE_DOXYGEN = os.path.isfile(os.path.join(_doxygen_xml, 'index.xml'))
 if _HAVE_DOXYGEN:
     tags.add('have_doxygen')  # noqa: F821  (``tags`` is injected by Sphinx)
     print('conf.py: Doxygen XML found at', _doxygen_xml)
 else:
-    print('conf.py: no Doxygen XML at', _doxygen_xml, '- API pages skipped')
-
-_API_BLOCK = re.compile(r'^\.\. stereon-api-begin$.*?^\.\. stereon-api-end$', re.M | re.S)
-
-
-def _strip_api_block(app, docname, source):
-    if not _HAVE_DOXYGEN:
-        source[0] = _API_BLOCK.sub('', source[0])
-
-
-def setup(app):
-    app.connect('source-read', _strip_api_block)
+    print('conf.py: no Doxygen XML at', _doxygen_xml, '- API reference skipped')
 
 # -- MathJax macros ----------------------------------------------------------
 
