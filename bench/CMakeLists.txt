@@ -16,6 +16,13 @@ target_link_libraries(stereon_bench
 target_include_directories(stereon_bench PRIVATE "${PROJECT_SOURCE_DIR}/tests/support")
 stereon_anchor_contracts(stereon_bench)
 
+# B1.3's convergence on a declared corpus (bench/convergence/ProjectionCorpus.cpp):
+# a measurement with its own main, so not one of stereon_bench's benchmarks. The
+# OCCT reference workflow runs it and hands its JSON to the release-gate check.
+add_executable(stereon_b13_convergence convergence/ProjectionCorpus.cpp)
+target_link_libraries(stereon_b13_convergence PRIVATE stereon::surface stereon_options)
+stereon_anchor_contracts(stereon_b13_convergence)
+
 # The comparison with OpenCASCADE (docs/benchmarks.md, B0.3-B0.5 and
 # B1.1-B1.6): built when OCCT is available, -DSTEREON_WITH_OCCT=ON with
 # OCCT's install directory in CMAKE_PREFIX_PATH (tools/occt/build_occt.sh).

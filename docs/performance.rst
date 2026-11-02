@@ -516,7 +516,7 @@ farther from the right answer is not on offer at any speed. Surface first
 derivatives (1.33) and interpolation (1.34) were below parity on that run
 too and have the kernels described under *Evaluation* and *Fitting*.
 
-Not yet measured: B1.3's convergence rate over a corpus. B1.1's batch
+B1.3's convergence measured on the declared corpus ``b13-v1`` (``bench/convergence/ProjectionCorpus.cpp``, 2026-11-01, development build): 19 999 of 20 000 cases converged (curves 10 000 of 10 000, surfaces 9 999 of 10 000), one-sided 95 % lower bound 0.99976, and one incorrect success: surface case 9441, a rational bilinear surface, where ``Project`` returned the point on the knot line v = 0.97234686 at 1.37e-3 while a point 1.32e-4 away lies 2.4e-4 inside the neighbouring patch. The B1.3 gate requires no incorrect success, so it fails until the repair; the reference run measures it on every run. B1.1's batch
 rows, grid evaluation (B1.2) and degree elevation (B1.5) have their
 reference results since 28 October: ``EvalAllFast`` at 2.6 and 2.5 times
 ``GeomGridEval_BSplineCurve`` (cubic, rational cubic) on 28 October and 2.3
