@@ -146,7 +146,7 @@ COUNTER_ONLY_PREFIXES = ("B0.4/",)
 REPORTED_COUNTERS = {
     "heap_bytes_per_face", "heap_bytes_per_edge", "bytes_per_face", "bytes_per_edge",
     "copied_fraction", "pages_copied", "pages", "memory_ratio", "heap_delta_bytes",
-    "compacted_over_body",
+    "compacted_over_body", "fit_residual",
     "vertex_bytes_per_face", "edge_bytes_per_face", "coedge_bytes_per_face",
     "loop_face_bytes_per_face", "curve_bytes_per_face", "pcurve_bytes_per_face",
     "surface_bytes_per_face",
