@@ -88,7 +88,7 @@ jobs:
           echo "seed $seed (rerun with --seed $seed to reproduce)"
           ../build/gcc16-asan/tests/stereon_fuzz_StnReadFuzz --runs 200000 --seed "$seed" ../tests/io/data
           ../build/gcc16-asan/tests/stereon_fuzz_BSplineFuzz --runs 200000 --seed "$seed"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: fuzz-findings
