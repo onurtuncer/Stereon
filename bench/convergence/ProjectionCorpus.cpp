@@ -179,6 +179,38 @@ double Size(const std::vector<Point3>& poles, const Point3& p)
 
 // --- The reference: sampled, then refined with Eval alone -----------------------
 
+/// The indices of the sampled local minima of f, smallest value first: a sample
+/// no greater than either neighbour, the ends counting as having one.
+std::vector<std::size_t> LocalMinima(const std::vector<double>& f)
+{
+    std::vector<std::pair<double, std::size_t>> minima;
+    for (std::size_t i = 0; i < f.size(); ++i) {
+        const bool left = i == 0 || f[i] <= f[i - 1];
+        const bool right = i + 1 == f.size() || f[i] <= f[i + 1];
+        if (left && right) {
+            minima.emplace_back(f[i], i);
+        }
+    }
+    std::ranges::sort(minima);
+    std::vector<std::size_t> order;
+    for (const auto& [value, i] : minima) {
+        order.push_back(i);
+    }
+    return order;
+}
+
+/// The smallest of `at` on [a, b], by golden sections, at the bracket's ends.
+template <typename At>
+double GoldenSection(const At& at, double a, double b)
+{
+    for (int step = 0; step < 200 && b - a > 1e-16 * (1.0 + std::abs(a)); ++step) {
+        const double x1 = b - InverseGolden * (b - a);
+        const double x2 = a + InverseGolden * (b - a);
+        (at(x1) <= at(x2) ? b : a) = at(x1) <= at(x2) ? x2 : x1;
+    }
+    return std::min(at(a), at(b));
+}
+
 double CurveReference(const BSplineCurve& c, const Point3& p)
 {
     const Stereon::Interval d = Domain(c);
@@ -194,31 +226,92 @@ double CurveReference(const BSplineCurve& c, const Point3& p)
     for (std::size_t i = 0; i < t.size(); ++i) {
         f[i] = at(t[i]);
     }
-    std::vector<std::pair<double, std::size_t>> minima;
-    for (std::size_t i = 0; i < t.size(); ++i) {
-        const bool left = i == 0 || f[i] <= f[i - 1];
-        const bool right = i + 1 == t.size() || f[i] <= f[i + 1];
-        if (left && right) {
-            minima.emplace_back(f[i], i);
-        }
-    }
-    std::ranges::sort(minima);
-    double best = std::numeric_limits<double>::infinity();
-    for (const double v : f) {
-        best = std::min(best, v);
-    }
+    double best = std::ranges::min(f);
+    const std::vector<std::size_t> minima = LocalMinima(f);
     for (std::size_t m = 0; m < std::min(RefinedMinima, minima.size()); ++m) {
-        const std::size_t i = minima[m].second;
-        double a = t[i == 0 ? 0 : i - 1];
-        double b = t[i + 1 == t.size() ? i : i + 1];
-        for (int step = 0; step < 200 && b - a > 1e-16 * (1.0 + std::abs(a)); ++step) {
-            const double x1 = b - InverseGolden * (b - a);
-            const double x2 = a + InverseGolden * (b - a);
-            (at(x1) <= at(x2) ? b : a) = at(x1) <= at(x2) ? x2 : x1;
-        }
-        best = std::min({best, at(a), at(b)});
+        const std::size_t i = minima[m];
+        best = std::min(best,
+                        GoldenSection(at, t[i == 0 ? 0 : i - 1], t[i + 1 == t.size() ? i : i + 1]));
     }
     return best;
+}
+
+/// A surface's distance from p sampled on a grid of its domain.
+struct SampledGrid {
+    Stereon::Box2 Domain;
+    double Du;
+    double Dv;
+    std::vector<double> F;
+
+    [[nodiscard]] static std::size_t Index(const int i, const int j)
+    {
+        return static_cast<std::size_t>(i * (SurfaceSamples + 1) + j);
+    }
+    [[nodiscard]] Point2 Node(const int i, const int j) const
+    {
+        return Point2{Domain.X.GetLower() + Du * i, Domain.Y.GetLower() + Dv * j};
+    }
+    /// No neighbour of the node, diagonal ones included, is lower.
+    [[nodiscard]] bool IsLocalMinimum(const int i, const int j) const
+    {
+        for (int a = -1; a <= 1; ++a) {
+            for (int b = -1; b <= 1; ++b) {
+                const int ii = i + a;
+                const int jj = j + b;
+                const bool neighbour = (a != 0 || b != 0) && ii >= 0 && jj >= 0 &&
+                                       ii <= SurfaceSamples && jj <= SurfaceSamples;
+                if (neighbour && F[Index(i, j)] > F[Index(ii, jj)]) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+    /// The nodes that are local minima, smallest value first.
+    [[nodiscard]] std::vector<Point2> Minima() const
+    {
+        std::vector<std::pair<double, Point2>> minima;
+        for (int i = 0; i <= SurfaceSamples; ++i) {
+            for (int j = 0; j <= SurfaceSamples; ++j) {
+                if (IsLocalMinimum(i, j)) {
+                    minima.emplace_back(F[Index(i, j)], Node(i, j));
+                }
+            }
+        }
+        std::ranges::sort(minima, {}, &std::pair<double, Point2>::first);
+        std::vector<Point2> nodes;
+        for (const auto& [value, uv] : minima) {
+            nodes.push_back(uv);
+        }
+        return nodes;
+    }
+};
+
+/// A compass search from x: try the four neighbours at the current steps,
+/// move to a better one or halve the steps. The point reached and its value.
+template <typename At, typename Clamp>
+std::pair<Point2, double> CompassSearch(const At& at, const Clamp& clamp, Point2 x, double hu,
+                                        double hv)
+{
+    double fx = at(x);
+    for (int step = 0; step < 400 && (hu > 1e-15 || hv > 1e-15); ++step) {
+        bool moved = false;
+        for (const Point2 delta :
+             {Point2{hu, 0.0}, Point2{-hu, 0.0}, Point2{0.0, hv}, Point2{0.0, -hv}}) {
+            const Point2 y = clamp(Point2{x.X + delta.X, x.Y + delta.Y});
+            const double fy = at(y);
+            if (fy < fx) {
+                x = y;
+                fx = fy;
+                moved = true;
+            }
+        }
+        if (!moved) {
+            hu *= 0.5;
+            hv *= 0.5;
+        }
+    }
+    return {x, fx};
 }
 
 double SurfaceReference(const BSplineSurface& s, const Point3& p, Point2* where = nullptr)
@@ -229,68 +322,18 @@ double SurfaceReference(const BSplineSurface& s, const Point3& p, Point2* where 
                       std::clamp(uv.Y, d.Y.GetLower(), d.Y.GetUpper())};
     };
     const auto at = [&](const Point2& uv) { return Distance(Eval(s, clamp(uv)), p); };
-    const double du = (d.X.GetUpper() - d.X.GetLower()) / SurfaceSamples;
-    const double dv = (d.Y.GetUpper() - d.Y.GetLower()) / SurfaceSamples;
-    const auto node = [&](const int i, const int j) {
-        return Point2{d.X.GetLower() + du * i, d.Y.GetLower() + dv * j};
-    };
-    std::vector<double> f((SurfaceSamples + 1) * (SurfaceSamples + 1));
-    const auto index = [](const int i, const int j) {
-        return static_cast<std::size_t>(i * (SurfaceSamples + 1) + j);
-    };
+    SampledGrid grid{d, (d.X.GetUpper() - d.X.GetLower()) / SurfaceSamples,
+                     (d.Y.GetUpper() - d.Y.GetLower()) / SurfaceSamples,
+                     std::vector<double>((SurfaceSamples + 1) * (SurfaceSamples + 1))};
     for (int i = 0; i <= SurfaceSamples; ++i) {
         for (int j = 0; j <= SurfaceSamples; ++j) {
-            f[index(i, j)] = at(node(i, j));
+            grid.F[SampledGrid::Index(i, j)] = at(grid.Node(i, j));
         }
     }
-    std::vector<std::pair<double, Point2>> minima;
-    for (int i = 0; i <= SurfaceSamples; ++i) {
-        for (int j = 0; j <= SurfaceSamples; ++j) {
-            bool lowest = true;
-            for (int a = -1; a <= 1 && lowest; ++a) {
-                for (int b = -1; b <= 1 && lowest; ++b) {
-                    const int ii = i + a;
-                    const int jj = j + b;
-                    if ((a != 0 || b != 0) && ii >= 0 && jj >= 0 && ii <= SurfaceSamples &&
-                        jj <= SurfaceSamples) {
-                        lowest = f[index(i, j)] <= f[index(ii, jj)];
-                    }
-                }
-            }
-            if (lowest) {
-                minima.emplace_back(f[index(i, j)], node(i, j));
-            }
-        }
-    }
-    std::ranges::sort(minima, {}, &std::pair<double, Point2>::first);
-    double best = std::numeric_limits<double>::infinity();
-    for (const double v : f) {
-        best = std::min(best, v);
-    }
+    double best = std::ranges::min(grid.F);
+    const std::vector<Point2> minima = grid.Minima();
     for (std::size_t m = 0; m < std::min(RefinedMinima, minima.size()); ++m) {
-        // A compass search: try the four neighbours at the current step, move
-        // to a better one or halve the step.
-        Point2 x = minima[m].second;
-        double fx = at(x);
-        double hu = du;
-        double hv = dv;
-        for (int step = 0; step < 400 && (hu > 1e-15 || hv > 1e-15); ++step) {
-            bool moved = false;
-            for (const Point2 delta :
-                 {Point2{hu, 0.0}, Point2{-hu, 0.0}, Point2{0.0, hv}, Point2{0.0, -hv}}) {
-                const Point2 y = clamp(Point2{x.X + delta.X, x.Y + delta.Y});
-                const double fy = at(y);
-                if (fy < fx) {
-                    x = y;
-                    fx = fy;
-                    moved = true;
-                }
-            }
-            if (!moved) {
-                hu *= 0.5;
-                hv *= 0.5;
-            }
-        }
+        const auto [x, fx] = CompassSearch(at, clamp, minima[m], grid.Du, grid.Dv);
         if (fx < best) {
             best = fx;
             if (where != nullptr) {
