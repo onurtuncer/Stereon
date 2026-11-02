@@ -29,11 +29,13 @@ on:
   pull_request:
     paths:
       - bench/occt/**
+      - bench/convergence/**
       - bench/TopoBench.cpp
       - bench/BooleanBench.cpp
       - bench/Memory.*
       - bench/CMakeLists.txt
       - tools/bench_report.py
+      - tools/check_release_benchmarks.py
       - tools/occt/build_occt.sh
       - .github/workflows/occt-reference.yml
   workflow_dispatch:
@@ -54,6 +56,10 @@ on:
         description: Google Benchmark regex of the topology benchmarks (empty for all of them)
         type: string
         default: ""
+      release_candidate:
+        description: Qualify this commit for release — the run fails unless every benchmark gate passes
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -81,7 +87,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Restore the OCCT build
         id: cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.OCCT_PREFIX }}
           key: occt-gcc16.2-${{ hashFiles('tools/occt/build_occt.sh') }}
@@ -90,7 +96,7 @@ jobs:
         run: bash tools/occt/build_occt.sh "$OCCT_PREFIX" "$RUNNER_TEMP/occt"
       - name: Save the OCCT build
         if: steps.cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ${{ env.OCCT_PREFIX }}
           key: ${{ steps.cache.outputs.cache-primary-key }}
@@ -101,7 +107,7 @@ jobs:
           cmake --preset bench -DSTEREON_WARNINGS_AS_ERRORS=ON
           -DSTEREON_WITH_OCCT=ON -DCMAKE_PREFIX_PATH="$OCCT_PREFIX"
       - name: Build
-        run: cmake --build --preset bench --target stereon_occt_bench stereon_bench
+        run: cmake --build --preset bench --target stereon_occt_bench stereon_bench stereon_b13_convergence
       # The run's files go under the workspace: the upload step executes in
       # the container, and GitHub maps the host path of ${{ runner.temp }}
       # into it for the first line of a multi-line input only, so an upload
@@ -193,8 +199,34 @@ jobs:
             --title "Benchmark reference run — dispatch (B0.2), topology (B0.3–B0.5), curves and surfaces (B1.1–B1.6)" \
             --machine build/reference/machine.txt --out build/reference/report.md
           cat build/reference/report.md >> "$GITHUB_STEP_SUMMARY"
+      # The release gates, decided on full-precision medians
+      # (tools/check_release_benchmarks.py): the verdict is written and
+      # uploaded on every run, and fails the run only when it is dispatched
+      # to qualify a release candidate. Timings cannot gate a merge on a
+      # shared runner; they gate a release.
+      # B1.3's convergence on the declared corpus (bench/convergence/
+      # ProjectionCorpus.cpp): 10 000 curve and 10 000 surface cases against a
+      # reference that calls Eval alone. Its JSON is the gate check's evidence.
+      - name: Measure projection convergence on the corpus (B1.3)
+        run: ./build/bench/bench/stereon_b13_convergence --cases 10000 --out build/reference/convergence.json
+      - name: Check the release gates
+        env:
+          ENFORCE: ${{ inputs.release_candidate && '--enforce' || '' }}
+        run: |
+          CONVERGENCE=""
+          if [ -f build/reference/convergence.json ]; then
+            CONVERGENCE="--convergence build/reference/convergence.json"
+          fi
+          status=0
+          python3 tools/check_release_benchmarks.py build/reference/results.json \
+            build/reference/results-topology.json --machine build/reference/machine.txt \
+            --candidate "${{ github.sha }}" $CONVERGENCE --json build/reference/gates.json \
+            --out build/reference/gates.md $ENFORCE || status=$?
+          { echo; cat build/reference/gates.md; } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
       - name: Upload the run
-        uses: actions/upload-artifact@v4
+        if: always()
+        uses: actions/upload-artifact@v7
         with:
           name: occt-reference-run-${{ github.sha }}
           path: build/reference/
