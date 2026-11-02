@@ -179,6 +179,18 @@ double Size(const std::vector<Point3>& poles, const Point3& p)
 
 // --- The reference: sampled, then refined with Eval alone -----------------------
 
+/// The smallest value, from infinity rather than from the first element:
+/// GCC 16 reads std::ranges::min or front() on a vector it cannot prove
+/// non-empty as a null dereference (-Werror=null-dereference).
+double Smallest(const std::vector<double>& values)
+{
+    double smallest = std::numeric_limits<double>::infinity();
+    for (const double v : values) {
+        smallest = std::min(smallest, v);
+    }
+    return smallest;
+}
+
 /// The indices of the sampled local minima of f, smallest value first: a sample
 /// no greater than either neighbour, the ends counting as having one.
 std::vector<std::size_t> LocalMinima(const std::vector<double>& f)
@@ -226,7 +238,7 @@ double CurveReference(const BSplineCurve& c, const Point3& p)
     for (std::size_t i = 0; i < t.size(); ++i) {
         f[i] = at(t[i]);
     }
-    double best = std::ranges::min(f);
+    double best = Smallest(f);
     const std::vector<std::size_t> minima = LocalMinima(f);
     for (std::size_t m = 0; m < std::min(RefinedMinima, minima.size()); ++m) {
         const std::size_t i = minima[m];
@@ -330,7 +342,7 @@ double SurfaceReference(const BSplineSurface& s, const Point3& p, Point2* where 
             grid.F[SampledGrid::Index(i, j)] = at(grid.Node(i, j));
         }
     }
-    double best = std::ranges::min(grid.F);
+    double best = Smallest(grid.F);
     const std::vector<Point2> minima = grid.Minima();
     for (std::size_t m = 0; m < std::min(RefinedMinima, minima.size()); ++m) {
         const auto [x, fx] = CompassSearch(at, clamp, minima[m], grid.Du, grid.Dv);
