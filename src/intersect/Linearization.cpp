@@ -304,6 +304,23 @@ template <typename Side>
     return {};
 }
 
+/// An intersection passed to the derivative API is an external primal
+/// result. Check both its stored location and its current geometric residual
+/// before using the inverse Jacobian; otherwise a stale result can produce a
+/// plausible but incorrect sensitivity. The budget is for roundoff in the
+/// geometry coordinates, not a geometric modelling tolerance.
+[[nodiscard]] bool ConsistentContact(const Point3& stored, const Point3& onCurve,
+                                     const Point3& onSurface)
+{
+    const auto size = [](const Point3& p) {
+        return std::max({std::abs(p.X), std::abs(p.Y), std::abs(p.Z)});
+    };
+    const double scale = std::max({1.0, size(stored), size(onCurve), size(onSurface)});
+    const double budget = 512.0 * std::numeric_limits<double>::epsilon() * scale;
+    return std::isfinite(budget) && Distance(stored, onCurve) <= budget &&
+           Distance(stored, onSurface) <= budget;
+}
+
 /// The curve's bindings, the surface's, and every point on the curve's
 /// domain.
 template <typename Side>
@@ -315,9 +332,15 @@ CheckInput(const Side& curve, const std::span<const SurfaceBinding> surfaceBindi
     STEREON_TRY_VOID(curve.Check(set, where));
     STEREON_TRY_VOID(CheckSurfaceBindings(surfaceBindings, surface, set, where));
     for (const CurveSurfacePoint& p : intersection.Points) {
-        if (!curve.Covers(p.Parameter)) {
+        if (!std::isfinite(p.Parameter) || !std::isfinite(p.OnSurface.X) ||
+            !std::isfinite(p.OnSurface.Y) || !curve.Covers(p.Parameter)) {
             return Fail(ErrorCode::InvalidInput,
-                        std::string(where) + ": a point outside the curve's domain");
+                        std::string(where) + ": point parameters are non-finite or out of domain");
+        }
+        if (!ConsistentContact(p.Point, curve.At(p.Parameter), Eval(surface, p.OnSurface))) {
+            return Fail(ErrorCode::InvalidInput,
+                        std::string(where) +
+                            ": stale intersection point does not lie on both current geometries");
         }
     }
     return {};
