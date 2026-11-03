@@ -1113,7 +1113,8 @@ namespace {
     if (context != nullptr) {
         Detail::ValidateTolerances(tables, *context, report);
     }
-    if (level == ValidityLevel::Solid) {
+    // The Solid rules measure what the Geometric ones vouch for.
+    if (level == ValidityLevel::Solid && report.IsValid()) {
         Detail::ValidateSolid(tables, report);
     }
     return report;

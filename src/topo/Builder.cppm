@@ -11,6 +11,7 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -691,9 +692,11 @@ public:
 /// its face's parameter space (G03); a Trim edge's faces share a surface
 /// and an Intersection edge's do not (G05); and an edge's cached curve
 /// stays in its tube and within its certified bound (G06). It runs only on
-/// a structurally valid shape. Solid has no rules yet: each solid of the
-/// shape is reported unchecked (L01), never valid by default. An empty
-/// Shape is valid at every level.
+/// a structurally valid shape. Solid, on a geometrically valid one, adds
+/// closed (L01), consistently oriented (L02) shells, one outer shell and
+/// voids by signed volume (L03), voids inside the outer shell (L04), and
+/// L05 for every solid: self-intersection is not checked yet, so no solid
+/// is reported valid at that level. An empty Shape is valid at every level.
 [[nodiscard]] ValidityReport ValidateTopology(const Shape& shape, ValidityLevel level);
 
 /// The same, with the rules that need the Context: every tolerance between
@@ -766,9 +769,16 @@ export namespace Stereon::Detail {
 void ValidateTolerances(const TopologyTables& tables, const Context& context,
                         ValidityReport& report);
 
-/// The Solid level, which has no rules yet: an L01 finding for each live
-/// solid, added to `report`, so that it is never reported valid unchecked.
+/// The Solid level on structurally and geometrically valid tables, added
+/// to `report`: each shell of each solid closed (L01) and consistently
+/// oriented (L02), one outer shell of positive volume and voids of
+/// negative volume (L03) inside it (L04), and L05 for each solid, whose
+/// self-intersection is not checked yet.
 void ValidateSolid(const TopologyTables& tables, ValidityReport& report);
+
+/// The signed volume a shell's faces enclose, by Green's theorem over
+/// their loops, or nothing when a coedge has no pcurve. For the tests.
+[[nodiscard]] std::optional<double> ShellVolume(const TopologyTables& tables, std::uint32_t shell);
 
 /// Describe() over raw tables, safe on corrupt ones: it checks every index
 /// and bounds every walk, for the validator's findings.

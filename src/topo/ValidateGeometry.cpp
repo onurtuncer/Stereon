@@ -591,18 +591,4 @@ void ValidateTolerances(const TopologyTables& tables, const Context& context,
     }
 }
 
-void ValidateSolid(const TopologyTables& tables, ValidityReport& report)
-{
-    for (std::uint32_t s = 0; s < tables.Solids.GetSize(); ++s) {
-        if (tables.IsLive<EntityKind::Solid>(s)) {
-            report.Add({.Rule = TopologyRule::SolidUnchecked,
-                        .Entities = {DescribeEntity(tables, EntityKind::Solid, s)},
-                        .Message = "the Solid level's rules (ADR-0018) are not implemented: "
-                                   "closed shells, orientation, signed volume, nesting and "
-                                   "self-intersection are unchecked, so the solid is not "
-                                   "reported valid at this level"});
-        }
-    }
-}
-
 } // namespace Stereon::Detail

@@ -8,17 +8,22 @@
 // ADR-0018's verification: a seeded-fault corpus in which each fault is found
 // by its intended rule at its intended level and is invisible to the levels
 // below it, and a valid corpus with no finding at any implemented level. The
-// Geometric rules G03 to G06 and the Solid level's L01 are tested here too:
-// a jump of a period across a seam, a tolerance outside the Context's
+// Geometric rules G03 to G06 and the Solid rules L01 to L05 are tested here
+// too: a jump of a period across a seam, a tolerance outside the Context's
 // bounds, a Trim or Intersection edge on the wrong surfaces, a cached curve
-// out of its tube or past its certified bound, and a solid that the Solid
-// level cannot yet check, which is refused rather than passed.
+// out of its tube or past its certified bound; an open shell, a flipped
+// face, a solid inside out, two outer shells, a void outside its outer
+// shell, signed volumes against their closed forms; and self-intersection,
+// which the Solid level cannot check yet and refuses rather than passes.
 
 #include "BodiesStd.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <limits>
 #include <numbers>
@@ -164,6 +169,50 @@ ShapeBuilder OpenShell()
     return std::move(MakePolyhedron(points, faces).Builder);
 }
 
+/// The corners of the cube [lo, hi]^3: 0-3 at z = lo, 4-7 above them.
+std::vector<Point3> Cube(const double lo, const double hi)
+{
+    return {{lo, lo, lo}, {hi, lo, lo}, {hi, hi, lo}, {lo, hi, lo},
+            {lo, lo, hi}, {hi, lo, hi}, {hi, hi, hi}, {lo, hi, hi}};
+}
+
+/// A cube's faces counter-clockwise seen from outside: normals outward.
+const std::vector<std::vector<std::size_t>> Outward{{0, 3, 2, 1}, {4, 5, 6, 7}, {0, 1, 5, 4},
+                                                    {2, 3, 7, 6}, {0, 4, 7, 3}, {1, 2, 6, 5}};
+
+/// The same faces clockwise: normals inward, as a void's are.
+std::vector<std::vector<std::size_t>> Inward()
+{
+    std::vector<std::vector<std::size_t>> faces = Outward;
+    for (std::vector<std::size_t>& face : faces) {
+        std::ranges::reverse(face);
+    }
+    return faces;
+}
+
+/// The cube [0, 10]^3 with a second shell: the cube [lo, hi]^3, its faces
+/// listed as `faces`.
+ShapeBuilder CubeWithShell(const double lo, const double hi,
+                           const std::vector<std::vector<std::size_t>>& faces)
+{
+    Body body = MakePolyhedron(Cube(0.0, 10.0), Outward);
+    AddPolyhedronShell(body, body.Solids[0], Cube(lo, hi), faces);
+    return std::move(body.Builder);
+}
+
+/// The box turned inside out: every face clockwise, consistently, so every
+/// normal points in and the one shell has negative volume.
+ShapeBuilder InsideOut()
+{
+    return std::move(MakePolyhedron(Cube(0.0, 2.0), Inward()).Builder);
+}
+
+/// A void shell beyond the outer shell, not inside it.
+ShapeBuilder VoidOutside()
+{
+    return CubeWithShell(20.0, 22.0, Inward());
+}
+
 /// A seeded fault: what it is, how to make it, the rule that must find it
 /// and the level at which it must be found.
 struct SeededFault {
@@ -209,10 +258,12 @@ std::vector<SeededFault> Corpus()
          R::EdgeSurfaces, L::Geometric},
         {"an Intersection edge with a stale certificate",
          [] { return HingeWithCache(1e-3, C::Certified, 1e-9); }, R::CacheDeviation, L::Geometric},
-        // The Solid level has no rules yet: its faults are refused by L01,
-        // never passed, until orientation and closure rules replace it.
-        {"a flipped face", FlippedFace, R::SolidUnchecked, L::Solid},
-        {"an open shell", OpenShell, R::SolidUnchecked, L::Solid},
+        {"a flipped face", FlippedFace, R::ShellOrientation, L::Solid},
+        {"an open shell", OpenShell, R::ShellOpen, L::Solid},
+        {"a solid turned inside out", InsideOut, R::ShellVolume, L::Solid},
+        {"a void shell outside the outer shell", VoidOutside, R::ShellNesting, L::Solid},
+        // A self-intersecting shell joins with ADR-0010's generic path; until
+        // then L05 refuses every solid at this level rather than pass it.
     };
 }
 
@@ -265,6 +316,8 @@ TEST_CASE("no finding on the valid corpus at any implemented level", "[topo][val
     bodies.emplace_back("wire", MakeWire(3).Freeze());
     bodies.emplace_back("pole cap", MakePoleCap().Freeze());
     bodies.emplace_back("hinge", MakeHinge().Freeze());
+    bodies.emplace_back("cube with a void",
+                        Must(Stereon::Freeze(CubeWithShell(4.0, 6.0, Inward()))));
     bodies.emplace_back(
         "hinge with a cache in its tube",
         Must(Stereon::Freeze(HingeWithCache(1e-6, Stereon::CacheCertificate::Certified, 2e-6))));
@@ -274,10 +327,12 @@ TEST_CASE("no finding on the valid corpus at any implemented level", "[topo][val
         INFO(geometric.ToText());
         REQUIRE(geometric.IsValid());
         // At the Solid level a shape with no solid has nothing unchecked; one
-        // with solids has exactly one L01 per solid and nothing else.
+        // with solids passes L01-L04 and has only L05, self-intersection
+        // being unchecked.
         const ValidityReport solid = At(shape, ValidityLevel::Solid);
+        INFO(solid.ToText());
         for (const Stereon::ValidityFinding& finding : solid.GetFindings()) {
-            REQUIRE(finding.Rule == TopologyRule::SolidUnchecked);
+            REQUIRE(finding.Rule == TopologyRule::SelfIntersectionUnchecked);
         }
     }
 }
@@ -400,19 +455,61 @@ TEST_CASE("G06: a cached curve out of its tube or past its certified bound", "[t
                 .IsValid());
 }
 
-TEST_CASE("L01: the Solid level refuses what it cannot check", "[topo][validity]")
+TEST_CASE("signed volumes come from the loops, reversed faces included", "[topo][validity]")
 {
-    // A box has one solid: unchecked at the Solid level, never valid by
-    // default; Geometric still passes it.
-    const Shape box = MakeBox().Freeze();
-    const ValidityReport solid = At(box, ValidityLevel::Solid);
-    REQUIRE(solid.GetCount() == 1);
-    REQUIRE(solid.GetFindings()[0].Rule == TopologyRule::SolidUnchecked);
-    REQUIRE(solid.GetFindings()[0].Entities.at(0).starts_with("Solid#0"));
-    REQUIRE(Stereon::ValidateTopology(box, ValidityLevel::Solid).Has(TopologyRule::SolidUnchecked));
-    REQUIRE(At(box, ValidityLevel::Geometric).IsValid());
+    const auto volume = [](const Shape& shape, const std::uint32_t shell) {
+        return Stereon::Detail::ShellVolume(shape.GetSnapshot()->GetTables(), shell).value();
+    };
+    REQUIRE(std::abs(volume(MakeBox().Freeze(), 0) - 30.0) <= 1e-12);
+    REQUIRE(std::abs(volume(MakePrism(7).Freeze(), 0) -
+                     1.5 * 3.5 * std::sin(2.0 * std::numbers::pi / 7.0)) <= 1e-12);
+    // The lateral face of a cylinder through its seam, and two disks, one on
+    // a plane whose axes face down.
+    REQUIRE(std::abs(volume(MakeCylinder(1.5, 4.0).Freeze(), 0) -
+                     std::numbers::pi * 1.5 * 1.5 * 4.0) <= 1e-9);
+    // Inside out, and a void: negative.
+    REQUIRE(std::abs(volume(Must(Stereon::Freeze(InsideOut())), 0) + 8.0) <= 1e-12);
+    const Shape hollow = Must(Stereon::Freeze(CubeWithShell(4.0, 6.0, Inward())));
+    REQUIRE(std::abs(volume(hollow, 0) - 1000.0) <= 1e-9);
+    REQUIRE(std::abs(volume(hollow, 1) + 8.0) <= 1e-12);
+}
+
+TEST_CASE("L01-L05: the Solid level's rules", "[topo][validity]")
+{
+    // A box passes every rule it can check; self-intersection it cannot, and
+    // says so for its one solid rather than passing it.
+    const ValidityReport box = At(MakeBox().Freeze(), ValidityLevel::Solid);
+    REQUIRE(box.GetCount() == 1);
+    REQUIRE(box.GetFindings()[0].Rule == TopologyRule::SelfIntersectionUnchecked);
+    REQUIRE(box.GetFindings()[0].Entities.at(0).starts_with("Solid#0"));
     // A sheet has no solid, so nothing is left unchecked.
     REQUIRE(At(MakeSquareSheet().Freeze(), ValidityLevel::Solid).IsValid());
+
+    // A void inside the outer shell is nested; L05 alone remains.
+    const ValidityReport hollow =
+        At(Must(Stereon::Freeze(CubeWithShell(4.0, 6.0, Inward()))), ValidityLevel::Solid);
+    INFO(hollow.ToText());
+    REQUIRE(hollow.GetCount() == 1);
+    REQUIRE(hollow.Has(TopologyRule::SelfIntersectionUnchecked));
+
+    // A second shell with outward normals: two outer shells.
+    const ValidityReport twice =
+        At(Must(Stereon::Freeze(CubeWithShell(4.0, 6.0, Outward))), ValidityLevel::Solid);
+    INFO(twice.ToText());
+    REQUIRE(twice.Has(TopologyRule::ShellVolume));
+    REQUIRE_FALSE(twice.Has(TopologyRule::ShellNesting));
+
+    // The void outside: found, and said to be outside, not undecided.
+    const ValidityReport outside = At(Must(Stereon::Freeze(VoidOutside())), ValidityLevel::Solid);
+    INFO(outside.ToText());
+    REQUIRE(outside.Has(TopologyRule::ShellNesting));
+    REQUIRE(outside.ToText().find("lies outside") != std::string::npos);
+
+    // An open shell is not measured: its volume would mean nothing.
+    const ValidityReport open = At(Must(Stereon::Freeze(OpenShell())), ValidityLevel::Solid);
+    INFO(open.ToText());
+    REQUIRE(open.Has(TopologyRule::ShellOpen));
+    REQUIRE_FALSE(open.Has(TopologyRule::ShellVolume));
 }
 
 TEST_CASE("the new rules have stable IDs and names", "[topo][validity]")
@@ -421,8 +518,12 @@ TEST_CASE("the new rules have stable IDs and names", "[topo][validity]")
     REQUIRE(Stereon::RuleId(TopologyRule::ToleranceBounds) == "G04");
     REQUIRE(Stereon::RuleId(TopologyRule::EdgeSurfaces) == "G05");
     REQUIRE(Stereon::RuleId(TopologyRule::CacheDeviation) == "G06");
-    REQUIRE(Stereon::RuleId(TopologyRule::SolidUnchecked) == "L01");
+    REQUIRE(Stereon::RuleId(TopologyRule::ShellOpen) == "L01");
+    REQUIRE(Stereon::RuleId(TopologyRule::ShellNesting) == "L04");
+    REQUIRE(Stereon::RuleId(TopologyRule::SelfIntersectionUnchecked) == "L05");
     REQUIRE(Stereon::RuleName(TopologyRule::LoopParameterGap) == "LoopParameterGap");
     REQUIRE(Stereon::RuleName(TopologyRule::CacheDeviation) == "CacheDeviation");
-    REQUIRE(Stereon::RuleName(TopologyRule::SolidUnchecked) == "SolidUnchecked");
+    REQUIRE(Stereon::RuleName(TopologyRule::ShellOrientation) == "ShellOrientation");
+    REQUIRE(Stereon::RuleName(TopologyRule::SelfIntersectionUnchecked) ==
+            "SelfIntersectionUnchecked");
 }

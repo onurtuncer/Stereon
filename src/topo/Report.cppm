@@ -26,8 +26,7 @@ export namespace Stereon {
 /// The rules of the validity checker (ADR-0018). The number is the stable
 /// rule ID: the Structural rules (ADR-0038's Freeze invariants) from 1, S01
 /// being DanglingLink; the Geometric rules from 101, G01 being
-/// VertexContainment; the Solid rules from 201, L01 being SolidUnchecked,
-/// which stands for the level until its rules arrive.
+/// VertexContainment; the Solid rules from 201, L01 being ShellOpen.
 enum class TopologyRule : std::uint8_t {
     /// A link names a slot out of range or a dead one.
     DanglingLink = 1,
@@ -98,13 +97,27 @@ enum class TopologyRule : std::uint8_t {
     /// is stale.
     CacheDeviation,
 
-    /// L01: the Solid level's rules are not implemented, so a solid is not
-    /// reported valid at that level. Never a silent pass.
-    SolidUnchecked = 201,
+    /// L01: a shell of a solid is not closed: an edge its faces use is not
+    /// used exactly twice by them (a Degenerate edge excepted).
+    ShellOpen = 201,
+    /// L02: an edge's two uses in a shell run it the same way: the faces on
+    /// either side are oriented against each other.
+    ShellOrientation,
+    /// L03: a shell's signed volume cannot be decided, or the solid does not
+    /// have exactly one outer shell of positive volume with every other
+    /// shell a void of negative volume.
+    ShellVolume,
+    /// L04: a void shell does not lie inside the outer shell, or whether it
+    /// does could not be decided.
+    ShellNesting,
+    /// L05: face–face self-intersection is not checked yet (it needs
+    /// ADR-0010's generic path), so no solid is reported valid at the Solid
+    /// level. Never a silent pass.
+    SelfIntersectionUnchecked,
 };
 
 /// "S01", "S02", ...
-/// The stable ID of a rule: S01 to S17, G01 to G06, L01.
+/// The stable ID of a rule: S01 to S17, G01 to G06, L01 to L05.
 [[nodiscard]] std::string RuleId(TopologyRule rule);
 
 /// The Geometric rules are numbered from one past this.

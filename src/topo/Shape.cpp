@@ -240,8 +240,8 @@ std::string_view RuleName(const TopologyRule rule) noexcept
         "VertexContainment", "EdgeContainment", "LoopParameterGap",
         "ToleranceBounds",   "EdgeSurfaces",    "CacheDeviation",
     };
-    static constexpr std::array<std::string_view, 1> SolidNames{
-        "SolidUnchecked",
+    static constexpr std::array<std::string_view, 5> SolidNames{
+        "ShellOpen", "ShellOrientation", "ShellVolume", "ShellNesting", "SelfIntersectionUnchecked",
     };
     const auto number = static_cast<std::size_t>(rule);
     constexpr auto geometric = static_cast<std::size_t>(GeometricRuleBase);

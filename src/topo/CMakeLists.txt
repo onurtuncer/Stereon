@@ -25,6 +25,7 @@ stereon_add_library(topo
         Shape.cpp
         Validate.cpp
         ValidateGeometry.cpp
+        ValidateSolid.cpp
     DEPENDS
         intersect
         robust)
