@@ -119,8 +119,8 @@ TEST_CASE("direct NURBS construction cannot bypass factory weight bounds",
 {
     BSplineSurface invalid = Patch(0.0, true);
     invalid.Weights[0] = 0x1p257;
-    const auto result = Intersect(Surface{invalid}, middle,
-                                  Surface{Patch(100.0)}, middle, 0.0, ctx);
+    const auto result =
+        Intersect(Surface{invalid}, middle, Surface{Patch(100.0)}, middle, 0.0, ctx);
     REQUIRE_FALSE(result.has_value());
     REQUIRE(result.error().GetCode() == ErrorCode::InvalidInput);
 }
