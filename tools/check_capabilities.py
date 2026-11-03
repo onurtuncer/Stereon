@@ -96,6 +96,11 @@ NOT_OPERATIONS: dict[str, str] = {
         ("EvalJvp", "EvalVjp"),
         "a derivative product of Eval, declared with Eval's capability (ADR-0021, section 7)",
     ),
+    **dict.fromkeys(
+        ("IntersectJvp", "IntersectVjp", "Linearize"),
+        "a derivative product of Intersect, or the linearisation it is computed from, declared "
+        "with Intersect's capability (ADR-0021, sections 6 and 7)",
+    ),
     "Describe": "a diagnostic text of a shape",
     "ToString": "the name of an enumerator",
     "ValidateTopology": "a validator: it reports on a shape and makes nothing (ADR-0018)",
