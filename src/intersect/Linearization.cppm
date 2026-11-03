@@ -36,9 +36,11 @@ import :Dispatch;
 /// the solver left undecided is Indeterminate. A result with any point that
 /// carries no derivative carries none as a whole (ADR-0021, section 5).
 ///
-/// The pairs so far are a line against a plane, a sphere or a cylinder, the
-/// parameters bound to coordinates of the line's origin and direction and
-/// to the surface's origin or radius. The surface's partials come from its
+/// The pairs so far are a line or a B-spline curve against a plane, a
+/// sphere or a cylinder, the parameters bound to coordinates of the line's
+/// origin and direction, to the curve's poles and weights (PoleBinding, as
+/// EvalJvp takes them), and to the surface's origin or radius. The
+/// surface's partials come from its
 /// own Deriv, so a new surface needs only the velocities of its defining
 /// values; the others answer NotSupported until they bind theirs.
 
@@ -112,6 +114,10 @@ struct CurveSurfaceLinearization {
 /// are not finite.
 [[nodiscard]] Result<CurveSurfaceLinearization> Linearize(const Line& line, const Surface& surface,
                                                           const CurveSurfacePoint& point);
+/// The same for a point of Intersect(curve, surface). InvalidInput also for
+/// a point outside the curve's domain.
+[[nodiscard]] Result<CurveSurfaceLinearization>
+Linearize(const BSplineCurve& curve, const Surface& surface, const CurveSurfacePoint& point);
 
 /// The forward product of Intersect(line, surface) for the seed of
 /// `sensitivity`: for each point of `intersection`, in its order,
@@ -124,6 +130,14 @@ struct CurveSurfaceLinearization {
 IntersectJvp(const Line& line, std::span<const LineBinding> lineBindings, const Surface& surface,
              std::span<const SurfaceBinding> surfaceBindings,
              const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
+/// The same for a B-spline curve, its poles and weights moved by
+/// `poleBindings` as EvalJvp moves them. InvalidInput also for a binding
+/// naming a pole the curve does not have, a weight moved by anything but a
+/// dimensionless parameter, or a point outside the curve's domain.
+[[nodiscard]] Result<SensitivityResult>
+IntersectJvp(const BSplineCurve& curve, std::span<const PoleBinding> poleBindings,
+             const Surface& surface, std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
 
 /// The reverse product: for the adjoint of `sensitivity`, a covector of
 /// CurveSurfacePointValues components per point under the Euclidean
@@ -133,6 +147,10 @@ IntersectJvp(const Line& line, std::span<const LineBinding> lineBindings, const 
 [[nodiscard]] Result<SensitivityResult>
 IntersectVjp(const Line& line, std::span<const LineBinding> lineBindings, const Surface& surface,
              std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
+[[nodiscard]] Result<SensitivityResult>
+IntersectVjp(const BSplineCurve& curve, std::span<const PoleBinding> poleBindings,
+             const Surface& surface, std::span<const SurfaceBinding> surfaceBindings,
              const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
 
 } // namespace Stereon

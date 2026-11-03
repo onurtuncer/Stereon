@@ -93,7 +93,7 @@ NOT_OPERATIONS: dict[str, str] = {
         _ACCESSOR,
     ),
     **dict.fromkeys(
-        ("EvalJvp", "EvalVjp"),
+        ("EvalJvp", "EvalVjp", "PoleVelocity"),
         "a derivative product of Eval, declared with Eval's capability (ADR-0021, section 7)",
     ),
     **dict.fromkeys(

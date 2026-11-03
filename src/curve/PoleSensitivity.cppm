@@ -66,6 +66,14 @@ struct PoleBinding {
                                                 std::span<const double> parameters,
                                                 const SensitivityContext& sensitivity);
 
+/// The velocity of Eval(curve, t) with respect to one binding's component,
+/// per unit of the component (no reference scale): the term EvalJvp sums
+/// over the bindings, for constructions that solve with the curve's points
+/// (the linearisation of an intersection). The binding's pole must exist
+/// and t must lie in the curve's domain; the caller has checked both, as
+/// EvalJvp does.
+[[nodiscard]] Vec3 PoleVelocity(const BSplineCurve& curve, const PoleBinding& binding, double t);
+
 /// The reverse product J^T x' for the adjoint of `sensitivity`, a covector
 /// of three components per point in the order EvalJvp gives them under the
 /// Euclidean pairing: one value per parameter of the set, in its order.

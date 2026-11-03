@@ -215,9 +215,23 @@ that the VJP is the JVP's transpose, and every status: an overlap, a touch,
 an undecided point and a grazing crossing never carry an unqualified
 derivative. The sphere and the cylinder are checked against the closed form
 of a line crossing a circle, :math:`x' = r / x` for a growing radius, and
-the Taylor and transpose properties run on random lines through both. Other
-pairs answer ``NotSupported``; each new curve–surface
-handler binds its geometry's parameters to the same system.
+the Taylor and transpose properties run on random lines through both.
+
+A ``BSplineCurve`` has the same products, its poles and weights moved by
+``PoleBinding`` exactly as ``EvalJvp`` moves them (a coordinate by a
+``Length``, a weight by a ``Dimensionless`` parameter, at fixed knots). The
+curve's side of the system is its derivative :math:`C'(t)` and
+``PoleVelocity(curve, binding, t)``, the velocity of the point at fixed
+:math:`t` that ``EvalJvp`` sums; the rest is written once for every curve.
+A degree-1 B-spline from :math:`P_0` to :math:`P_1` is checked against the
+line from :math:`P_0` along :math:`P_1 - P_0`, moving :math:`P_1` against
+moving the line's direction, through every surface; the Taylor and
+transpose properties run on random cubic B-splines, rational half the
+time with weight bindings, through spheres, cylinders and planes; and a
+B-spline touching a plane, the undecided touch the B-spline handler
+reports, is ``Nondifferentiable``. Other pairs answer ``NotSupported``; each
+new curve–surface handler binds its geometry's parameters to the same
+system.
 
 The AD backend: CppAD
 ---------------------

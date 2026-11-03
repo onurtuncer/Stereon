@@ -117,10 +117,10 @@ std::pair<Line, S> Moved(Line line, S surface, const std::vector<double>& seed,
     return {line, surface};
 }
 
-template <typename S>
-CurveSurfaceIntersection Meet(const Line& line, const S& surface)
+template <typename C, typename S>
+CurveSurfaceIntersection Meet(const C& curve, const S& surface)
 {
-    auto result = Intersect(Stereon::Curve{line}, Surface{surface}, ctx);
+    auto result = Intersect(Stereon::Curve{curve}, Surface{surface}, ctx);
     if (!result) {
         RC_FAIL(IntersectTest::ErrorText(result));
     }
@@ -128,11 +128,11 @@ CurveSurfaceIntersection Meet(const Line& line, const S& surface)
 }
 
 /// The points as the product's values are laid out: x, then t, u, v.
-template <typename S>
-std::vector<double> Points(const Line& line, const S& surface)
+template <typename C, typename S>
+std::vector<double> Points(const C& curve, const S& surface)
 {
     std::vector<double> values;
-    for (const CurveSurfacePoint& p : Meet(line, surface).Points) {
+    for (const CurveSurfacePoint& p : Meet(curve, surface).Points) {
         values.insert(values.end(), {p.Position.X, p.Position.Y, p.Position.Z, p.Parameter,
                                      p.OnSurface.X, p.OnSurface.Y});
     }
@@ -535,6 +535,279 @@ TEST_CASE("invalid sensitivity input is refused, and other surfaces are NotSuppo
     REQUIRE(unsupported.has_value());
     REQUIRE(unsupported->GetStatus() == DerivativeStatus::NotSupported);
     REQUIRE_FALSE(unsupported->GetValues().has_value());
+}
+
+namespace {
+
+using Stereon::BSplineCurve;
+using Stereon::PoleBinding;
+using Stereon::PoleComponent;
+
+/// A B-spline model: parameters bound to poles and weights, then to the
+/// surface's origin and radius.
+struct SplineModel {
+    SensitivityContext Sensitivity{ParameterSet{}};
+    std::vector<PoleBinding> PoleBindings;
+    std::vector<SurfaceBinding> SurfaceBindings;
+};
+
+SplineModel MakeSplineModel(const std::vector<PoleBinding>& poles, const std::size_t surface,
+                            const std::vector<double>& references)
+{
+    ParameterSet set;
+    std::vector<ParameterId> ids;
+    for (std::size_t k = 0; k < references.size(); ++k) {
+        const bool weight = k < poles.size() && poles[k].Component == PoleComponent::Weight;
+        ids.push_back(*set.Add(
+            "p" + std::to_string(k),
+            weight ? ParameterQuantity::Dimensionless : ParameterQuantity::Length, references[k]));
+    }
+    SplineModel model{SensitivityContext(std::move(set)), {}, {}};
+    for (std::size_t k = 0; k < poles.size(); ++k) {
+        model.PoleBindings.push_back({ids[k], poles[k].Pole, poles[k].Component});
+    }
+    for (std::size_t k = 0; k < surface; ++k) {
+        model.SurfaceBindings.push_back({ids[poles.size() + k], static_cast<SurfaceComponent>(k)});
+    }
+    return model;
+}
+
+/// The curve and surface moved by `step` times the seed.
+template <typename S>
+std::pair<BSplineCurve, S> MovedSpline(BSplineCurve curve, S surface, const SplineModel& model,
+                                       const std::vector<double>& seed,
+                                       const std::vector<double>& references, const double step)
+{
+    const auto d = [&](const std::size_t k) { return step * seed[k] * references[k]; };
+    for (std::size_t k = 0; k < model.PoleBindings.size(); ++k) {
+        const PoleBinding& b = model.PoleBindings[k];
+        Point3& pole = curve.Poles[b.Pole];
+        switch (b.Component) {
+        case PoleComponent::X:
+            pole.X += d(k);
+            break;
+        case PoleComponent::Y:
+            pole.Y += d(k);
+            break;
+        case PoleComponent::Z:
+            pole.Z += d(k);
+            break;
+        case PoleComponent::Weight:
+            curve.Weights[b.Pole] += d(k);
+            break;
+        }
+    }
+    const std::size_t s = model.PoleBindings.size();
+    OriginOf(surface) = OriginOf(surface) + Vec3{d(s), d(s + 1), d(s + 2)};
+    if constexpr (SurfaceParameters<S> == 4) {
+        surface.Radius += d(s + 3);
+    }
+    return {curve, surface};
+}
+
+template <typename S>
+std::vector<double> SplineJvp(SplineModel& model, const BSplineCurve& curve, const S& surface,
+                              const std::vector<double>& seed)
+{
+    RC_ASSERT(model.Sensitivity.SetSeed(seed).has_value());
+    const auto jvp =
+        Stereon::IntersectJvp(curve, model.PoleBindings, Surface{surface}, model.SurfaceBindings,
+                              Meet(curve, surface), model.Sensitivity);
+    RC_ASSERT(jvp.has_value());
+    RC_ASSERT(jvp->GetStatus() == DerivativeStatus::Valid);
+    const auto values = jvp->GetValues();
+    return {values->begin(), values->end()};
+}
+
+/// A random cubic B-spline wandering through `center` along `direction`,
+/// rational half the time, with random bindings to its poles and weights.
+std::pair<BSplineCurve, std::vector<PoleBinding>>
+RandomSplineThrough(const Point3& center, const Vec3& direction, const double spread)
+{
+    const bool rational = *rc::gen::arbitrary<bool>();
+    std::vector<Point3> poles;
+    std::vector<double> weights;
+    for (int i = 0; i < 5; ++i) {
+        const auto wiggle = [&] { return *rc::gen::inRange(-4, 5) / 16.0 * spread; };
+        poles.push_back(center + static_cast<double>(i - 2) * direction +
+                        Vec3{wiggle(), wiggle(), wiggle()});
+        if (rational) {
+            weights.push_back(*rc::gen::inRange(6, 15) / 10.0);
+        }
+    }
+    const auto made =
+        Stereon::MakeBSplineCurve(3, {0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 2.0, 2.0, 2.0}, poles, weights);
+    RC_PRE(made.has_value());
+    std::vector<PoleBinding> bindings;
+    const int count = *rc::gen::inRange(1, 5);
+    for (int k = 0; k < count; ++k) {
+        const int top = rational ? 4 : 3;
+        bindings.push_back({ParameterId{}, *rc::gen::inRange<std::size_t>(0, 5),
+                            static_cast<PoleComponent>(*rc::gen::inRange(0, top))});
+    }
+    return {*made, bindings};
+}
+
+/// Every point of a B-spline's intersection decided and well conditioned,
+/// and off a sphere's poles.
+template <typename S>
+bool SplineWellConditioned(const BSplineCurve& curve, const S& surface)
+{
+    const CurveSurfaceIntersection at = Meet(curve, surface);
+    if (at.Points.empty() || !at.Overlaps.empty()) {
+        return false;
+    }
+    return std::ranges::all_of(at.Points, [&](const CurveSurfacePoint& p) {
+        const auto lin = Stereon::Linearize(curve, Surface{surface}, p);
+        const bool offPole = !std::is_same_v<S, Sphere> || std::abs(p.OnSurface.Y) <= 1.2;
+        return p.Decided && offPole && lin && lin->Conditioning >= 0.25;
+    });
+}
+
+/// Taylor decay and the transpose identity for a B-spline against a surface.
+template <typename S>
+void RequireSplineProducts(const BSplineCurve& curve, const std::vector<PoleBinding>& poles,
+                           const S& surface)
+{
+    RC_PRE(SplineWellConditioned(curve, surface));
+    const std::size_t count = poles.size() + SurfaceParameters<S>;
+    const auto [references, seed] = RandomSeed(count);
+    SplineModel model = MakeSplineModel(poles, SurfaceParameters<S>, references);
+    const std::vector<double> jv = SplineJvp(model, curve, surface, seed);
+    const std::vector<double> base = Points(curve, surface);
+    const auto residual = [&](const double h) {
+        const auto [c, s] = MovedSpline(curve, surface, model, seed, references, h);
+        const std::vector<double> moved = Points(c, s);
+        RC_ASSERT(moved.size() == base.size());
+        std::vector<double> r(base.size());
+        for (std::size_t i = 0; i < base.size(); ++i) {
+            const double difference = moved[i] - base[i];
+            r[i] = (i % Values == 4 ? std::remainder(difference, tau) : difference) - h * jv[i];
+        }
+        return Norm(r);
+    };
+    RC_ASSERT(residual(1e-3) <= residual(1e-2) / 30.0 + 1e-9 * (1.0 + Norm(base)));
+    // The transpose, on the same model.
+    std::vector<double> w;
+    for (std::size_t i = 0; i < jv.size(); ++i) {
+        w.push_back(*rc::gen::inRange(-10, 11) / 10.0);
+    }
+    RC_ASSERT(model.Sensitivity.SetAdjoint(w).has_value());
+    const auto vjp =
+        Stereon::IntersectVjp(curve, model.PoleBindings, Surface{surface}, model.SurfaceBindings,
+                              Meet(curve, surface), model.Sensitivity);
+    RC_ASSERT(vjp.has_value());
+    const auto jtw = *vjp->GetValues();
+    double left = 0.0;
+    double right = 0.0;
+    double scale = 0.0;
+    for (std::size_t i = 0; i < jv.size(); ++i) {
+        left += jv[i] * w[i];
+        scale += std::abs(jv[i] * w[i]);
+    }
+    for (std::size_t k = 0; k < seed.size(); ++k) {
+        right += seed[k] * jtw[k];
+        scale += std::abs(seed[k] * jtw[k]);
+    }
+    RC_ASSERT(std::abs(left - right) <= 1e-12 * (1.0 + scale));
+}
+
+} // namespace
+
+TEST_CASE("a straight B-spline moves as the line it draws", "[intersect][linearization]")
+{
+    // Poles P0 and P1 on [0, 1] draw the line from P0 along P1 - P0: moving
+    // P1 is moving the line's direction, through every surface.
+    const Point3 p0{-2.0, 0.25, 0.125};
+    const Point3 p1{2.0, -0.5, 0.375};
+    const auto made = Stereon::MakeBSplineCurve(1, {0.0, 0.0, 1.0, 1.0}, {p0, p1});
+    REQUIRE(made.has_value());
+    const Line line{p0, p1 - p0};
+    const auto compare = [&](const auto& surface) {
+        for (std::size_t k = 0; k < 3; ++k) {
+            ParameterSet set;
+            const ParameterId id = *set.Add("p", ParameterQuantity::Length);
+            SensitivityContext sensitivity(std::move(set));
+            REQUIRE(sensitivity.SetSeed(std::vector<double>{1.0}).has_value());
+            const std::vector<PoleBinding> pole{{id, 1, static_cast<PoleComponent>(k)}};
+            const std::vector<LineBinding> direction{{id, static_cast<LineComponent>(3 + k)}};
+            const auto fromSpline = Stereon::IntersectJvp(*made, pole, Surface{surface}, {},
+                                                          Meet(*made, surface), sensitivity);
+            const auto fromLine = Stereon::IntersectJvp(line, direction, Surface{surface}, {},
+                                                        Meet(line, surface), sensitivity);
+            REQUIRE(fromSpline->GetStatus() == DerivativeStatus::Valid);
+            const auto a = *fromSpline->GetValues();
+            const auto b = *fromLine->GetValues();
+            REQUIRE(a.size() == b.size());
+            for (std::size_t i = 0; i < a.size(); ++i) {
+                REQUIRE(std::abs(a[i] - b[i]) <= 1e-12);
+            }
+        }
+    };
+    compare(Plane{Point3{0.0, 0.0, 0.25}, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}});
+    compare(Sphere{Point3{}, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}});
+    compare(Cylinder{Point3{}, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}});
+}
+
+TEST_CASE("B-spline crossings: second-order Taylor decay and the transpose",
+          "[intersect][linearization][property]")
+{
+    rc::prop("for random cubic B-splines through spheres, cylinders and planes", [] {
+        const Point3 center{Coordinate(), Coordinate(), Coordinate()};
+        const double radius = *rc::gen::inRange(8, 33) / 8.0;
+        const Vec3 direction{Coordinate(), Coordinate(), Coordinate()};
+        // The end poles lie two steps from the centre, well outside the
+        // radius, so a small step never changes how many crossings there are.
+        RC_PRE(Length(direction) >= radius);
+        const auto [curve, poles] = RandomSplineThrough(center, direction, radius);
+        const Vec3 axis = Cross(direction, Vec3{Coordinate(), Coordinate(), Coordinate()});
+        RC_PRE(Length(axis) >= 0.25 * Length(direction));
+        switch (*rc::gen::inRange(0, 3)) {
+        case 0:
+            RequireSplineProducts(curve, poles,
+                                  Sphere{center, radius, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}});
+            break;
+        case 1:
+            RequireSplineProducts(curve, poles, IntersectTest::CylinderAbout(center, axis, radius));
+            break;
+        default:
+            RequireSplineProducts(curve, poles, IntersectTest::PlaneWithNormal(center, direction));
+            break;
+        }
+    });
+}
+
+TEST_CASE("a B-spline's touch and bad pole bindings", "[intersect][linearization]")
+{
+    // z = (2 s - 1)²: the touch the B-spline handler reports undecided.
+    const auto made = Stereon::MakeBSplineCurve(
+        2, {0.0, 0.0, 0.0, 1.0, 1.0, 1.0}, {{0.0, 0.0, 1.0}, {1.0, 0.0, -1.0}, {2.0, 0.0, 1.0}});
+    REQUIRE(made.has_value());
+    const Plane ground{Point3{}, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+    ParameterSet set;
+    const ParameterId lift = *set.Add("lift", ParameterQuantity::Length);
+    SensitivityContext sensitivity(std::move(set));
+    REQUIRE(sensitivity.SetSeed(std::vector<double>{1.0}).has_value());
+    const std::vector<PoleBinding> middle{{lift, 1, PoleComponent::Z}};
+    const auto touch =
+        Stereon::IntersectJvp(*made, middle, Surface{ground}, {}, Meet(*made, ground), sensitivity);
+    REQUIRE(touch.has_value());
+    REQUIRE(touch->GetStatus() == DerivativeStatus::Nondifferentiable);
+    REQUIRE_FALSE(touch->GetValues().has_value());
+    // A pole the curve does not have, and a weight moved by a length.
+    for (const PoleBinding& bad :
+         {PoleBinding{lift, 7, PoleComponent::Z}, PoleBinding{lift, 1, PoleComponent::Weight}}) {
+        const std::vector<PoleBinding> one{bad};
+        REQUIRE(
+            Stereon::IntersectJvp(*made, one, Surface{ground}, {}, Meet(*made, ground), sensitivity)
+                .error()
+                .GetCode() == ErrorCode::InvalidInput);
+    }
+    // A point off the curve's domain.
+    CurveSurfacePoint outside = Meet(*made, ground).Points.front();
+    outside.Parameter = 5.0;
+    REQUIRE(Stereon::Linearize(*made, Surface{ground}, outside).error().GetCode() ==
+            ErrorCode::InvalidInput);
 }
 
 TEST_CASE("Intersect declares its forward and reverse products", "[intersect][linearization]")
