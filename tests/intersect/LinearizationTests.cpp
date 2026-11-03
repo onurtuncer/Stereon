@@ -791,8 +791,13 @@ TEST_CASE("a B-spline's touch and bad pole bindings", "[intersect][linearization
     REQUIRE(sensitivity.SetSeed(std::vector<double>{1.0}).has_value());
     const std::vector<PoleBinding> middle{{lift, 1, PoleComponent::Z}};
     CurveSurfaceIntersection primal;
-    primal.Points.push_back({0.5, {1.0, 0.0}, {1.0, 0.0, 0.0},
-                             Stereon::ContactType::Tangential, false});
+    CurveSurfacePoint tangency{};
+    tangency.Parameter = 0.5;
+    tangency.OnSurface = {1.0, 0.0};
+    tangency.Point = {1.0, 0.0, 0.0};
+    tangency.Contact = Stereon::ContactType::Tangential;
+    tangency.Decided = false;
+    primal.Points.push_back(tangency);
     const auto touch =
         Stereon::IntersectJvp(*made, middle, Surface{ground}, {}, primal, sensitivity);
     REQUIRE(touch.has_value());
@@ -802,10 +807,10 @@ TEST_CASE("a B-spline's touch and bad pole bindings", "[intersect][linearization
     for (const PoleBinding& bad :
          {PoleBinding{lift, 7, PoleComponent::Z}, PoleBinding{lift, 1, PoleComponent::Weight}}) {
         const std::vector<PoleBinding> one{bad};
-        REQUIRE(
-            Stereon::IntersectJvp(*made, one, Surface{ground}, {}, primal, sensitivity)
-                .error()
-                .GetCode() == ErrorCode::InvalidInput);
+        const auto invalid =
+            Stereon::IntersectJvp(*made, one, Surface{ground}, {}, primal, sensitivity);
+        REQUIRE_FALSE(invalid.has_value());
+        REQUIRE(invalid.error().GetCode() == ErrorCode::InvalidInput);
     }
     // A point off the curve's domain.
     CurveSurfacePoint outside = primal.Points.front();
