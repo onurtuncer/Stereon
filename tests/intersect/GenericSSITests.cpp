@@ -10,8 +10,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <array>
-#include <utility>
 #include <limits>
 #include <vector>
 
@@ -33,12 +31,14 @@ const Context ctx = Context::Default();
 /// diagonal pole deliberately moved to stretch the convex hull.
 BSplineSurface Patch(const double z, const bool rational = false)
 {
-    const std::vector<Point3> poles{{0.0, 0.0, z}, {0.0, 1.0, z},
-                                     {1.0, 0.0, z}, {1.0, 1.0, z}};
+    const std::vector<Point3> poles{{0.0, 0.0, z},
+                                    {0.0, 1.0, z},
+                                    {1.0, 0.0, z},
+                                    {1.0, 1.0, z}};
     const std::vector<double> weights =
         rational ? std::vector<double>{1.0, 3.0, 2.0, 4.0} : std::vector<double>{};
-    const auto made = Stereon::MakeBSplineSurface(
-        1, 1, {0.0, 0.0, 1.0, 1.0}, {0.0, 0.0, 1.0, 1.0}, poles, weights);
+    const auto made = Stereon::MakeBSplineSurface(1, 1, {0.0, 0.0, 1.0, 1.0},
+                                                  {0.0, 0.0, 1.0, 1.0}, poles, weights);
     REQUIRE(made.has_value());
     return *made;
 }
@@ -54,11 +54,9 @@ TEST_CASE("separated polynomial and rational NURBS control nets prove empty SSI"
         for (const bool rationalB : {false, true}) {
             const Surface a{Patch(0.0, rationalA)};
             const Surface b{Patch(10.0, rationalB)};
-            for (const auto& [boxA, boxB] :
-                 {std::pair{Box2::Everything(), Box2::Everything()},
-                  std::pair{middle, middle}}) {
-                const auto forward = Intersect(a, boxA, b, boxB, 1e-6, ctx);
-                const auto reverse = Intersect(b, boxB, a, boxA, 1e-6, ctx);
+            for (const Box2 box : {Box2::Everything(), middle}) {
+                const auto forward = Intersect(a, box, b, box, 1e-6, ctx);
+                const auto reverse = Intersect(b, box, a, box, 1e-6, ctx);
                 REQUIRE(forward.has_value());
                 REQUIRE(reverse.has_value());
                 REQUIRE(forward->IsEmpty());
@@ -72,12 +70,15 @@ TEST_CASE("touching or overlapping NURBS hulls never masquerade as proved separa
           "[intersect][generic][broadphase]")
 {
     const Surface base{Patch(0.0)};
-    for (const Surface other : {Surface{Patch(0.0)}, Surface{Patch(1e-7)},
-                                Surface{Patch(0.0, true)}}) {
+    for (const double z : {0.0, 1e-7}) {
+        const Surface other{Patch(z)};
         const auto result = Intersect(base, middle, other, middle, 1e-6, ctx);
         REQUIRE_FALSE(result.has_value());
         REQUIRE(result.error().GetCode() == ErrorCode::NotImplemented);
     }
+    const auto rational = Intersect(base, middle, Surface{Patch(0.0, true)}, middle, 1e-6, ctx);
+    REQUIRE_FALSE(rational.has_value());
+    REQUIRE(rational.error().GetCode() == ErrorCode::NotImplemented);
 }
 
 TEST_CASE("tolerance prevents premature disjoint classification",
