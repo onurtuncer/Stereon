@@ -295,9 +295,8 @@ Result<SurfaceSurfaceIntersection> CylinderCylinderSkew(const Surface&, const Bo
 
 /// Certified convex-hull rejection for positive-weight NURBS pairs;
 /// unknown overlaps fail closed until the Phase 2 solver is implemented.
-Result<SurfaceSurfaceIntersection> BSplineBSplineBroadPhase(const Surface&, const Box2&,
-                                                             const Surface&, const Box2&, double,
-                                                             const Context&);
+Result<SurfaceSurfaceIntersection> NurbsHull(const Surface&, const Box2&, const Surface&,
+                                             const Box2&, double, const Context&);
 
 /// The plane curve handlers (the Boolean prototype's M6, face clipping):
 /// lines, circles and ellipses against each other, every configuration
@@ -436,7 +435,7 @@ consteval SurfaceHandler SurfaceHandlerFor()
     } else if constexpr (std::same_as<A, Cylinder> && std::same_as<B, Cylinder>) {
         return &CylinderCylinder;
     } else if constexpr (std::same_as<A, BSplineSurface> && std::same_as<B, BSplineSurface>) {
-        return &BSplineBSplineBroadPhase;
+        return &NurbsHull;
     } else {
         return &SurfaceStub<A, B>;
     }
