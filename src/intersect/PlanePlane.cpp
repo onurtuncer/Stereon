@@ -92,6 +92,13 @@ Coincident(const PlaneFrame& a, const Box2& boxA, const PlaneFrame& b, const Box
     // A rotated, bounded coincidence needs a polygonal domain. Refuse
     // rather than returning a false positive AABB overlap.
     if (!BoxPreserving(overlap.AToB) && !(Entire(boxA) && Entire(boxB))) {
+        // The interval image is an enclosure: disjointness in either
+        // coordinate frame proves that the bounded patches cannot meet.
+        // Overlapping enclosures do not prove a polygonal overlap.
+        if (!Intersects(boxB, ImageBox(overlap.AToB, boxA)) ||
+            !Intersects(boxA, ImageBox(Inverse(overlap.AToB), boxB))) {
+            return SurfaceSurfaceIntersection{};
+        }
         return Fail(ErrorCode::NotImplemented,
                     "PlanePlane: rotated bounded overlap needs polygonal parameter regions");
     }
