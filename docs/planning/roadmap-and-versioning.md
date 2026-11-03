@@ -1,6 +1,6 @@
 # Stereon roadmap and versioning
 
-**Planning revision:** 0.3 • 28 October 2026 (M7 machining services added)
+**Planning revision:** 0.4 • 3 November 2026 (intersection linearisation for sensitivities moved to v0.2, ADR-0021 §9)
 
 **Owner:** Onur Tuncer  
 **Status:** Proposed release plan; acceptance evidence is required before tagging a release.
@@ -13,7 +13,7 @@ This plan embeds six modelling milestones derived from Ian Stroud's *Boundary Re
 | --- | --- | --- |
 | Phase 0 / 0.0.x | M1: executable modelling foundations, initial subset | Debug viewer, controlled builder prototype, separate validity checks, numerical policies, diagnostic dumps, replayable fixtures, and a minimal persistence prototype. Existing Phase 0 gates remain binding. |
 | v0.1 Geometry / Phase 1 | M1 completion for available geometry; M4 geometry groundwork | Analytic and NURBS evaluation, fitting, projection and parameter-domain handling. Record tolerances and approximation limits; support save/load of the declared geometry subset. |
-| v0.2 Intersections / Phase 2 | M2/M3 planar intersection services; M4 curved intersection groundwork | Inspectable intersection/classification results, including tangency, coincidence, overlap and unresolved/unsupported outcomes. Satisfy the applicable SSI gates before consuming these services in broad Booleans. |
+| v0.2 Intersections / Phase 2 | M2/M3 planar intersection services; M4 curved intersection groundwork | Inspectable intersection/classification results, including tangency, coincidence, overlap and unresolved/unsupported outcomes. Satisfy the applicable SSI gates before consuming these services in broad Booleans. Every intersection handler exposes the residual linearisation of its results and a regularity classification for sensitivities, with a first intersection JVP (ADR-0021 §9, stage 4). |
 | v0.3 Solids / Phase 3 | M2: planar construction and interrogation; M4: curved and trimmed construction; M7: analytic machining queries | Planar faces with holes, polyhedral solids, extrusion, sectioning, imprinting and classification; then the advertised primitives, revolve, sweep and loft, trimming and sewing. Deliver operation history and native shape persistence for this supported subset. Certified curve discretisation and batched ray–face intersection for analytic faces; tri-dexel conversion of analytic solids (ADR-0044). |
 | v0.4 Planar Booleans / Phase 4a | M3: planar Boolean pipeline | Union, intersection and difference for the declared planar/polyhedral domain, using inspectable splitting/imprinting, classification and assembly; validate lineage and attribute propagation. |
 | v0.5 Curved Booleans / Phase 4b | M4: bounded curved Boolean integration; M7: trimmed-spline machining queries | Extend the validated planar pipeline to a declared analytic and trimmed-spline subset; check seams, poles, tangencies, overlap and intersection certificates. No broad real-part robustness claim yet. Tri-dexel conversion and trim-aware closest-point queries extended to trimmed B-spline faces. |
@@ -80,6 +80,7 @@ The book motivates these acceptance requirements, not an automatic change of ADR
 | --- | --- |
 | Numerical policy and purpose-specific tolerances | ADR-0001/0002 and [ADR-0028](../adr/0028-purpose-specific-numerical-tolerances.md): purpose-specific controls, dimensional conversions, observable changes and persisted numerical context; policy in M1/v0.1, intersection use in v0.2, native shape context by v0.3. |
 | Intersection/classification outcomes | ADR-0010/0013 and [ADR-0029](../adr/0029-intersection-and-classification-outcomes.md): dimension-aware results and independent side-transition evidence; v0.2 intersection gate, v0.3 queries and v0.4–v0.6 Booleans. RS-0001 remains research. |
+| Intersection sensitivities | ADR-0021 §6 and §9: residuals, tracking constraints, `F_z`/`F_p` and a regularity classification in every intersection handler from v0.2, before the generic SSI is built; projections and moving trims after; shape sensitivities by v0.9. |
 | Entity lineage | ADR-0011 and [ADR-0030](../adr/0030-entity-lineage-in-operation-results.md): qualified many-to-many relations, explicit split/merge events and composition by v0.3, extended through v0.4–v0.6. |
 | Attribute propagation | [ADR-0031](../adr/0031-attribute-propagation-and-conflicts.md): per-key split/merge/revalidation rules and conflict diagnostics in v0.3–v0.6; tagged engineering mesh gate in v0.7. |
 | Coincidence versus topology identification | ADR-0004/0009/0018 plus construction/sewing contracts; record identification rules before expanding sewing or simplification. |
