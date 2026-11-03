@@ -104,8 +104,7 @@ using Bounds = std::array<Interval, 3>;
 [[nodiscard]] bool ProvedApart(const Bounds& a, const Bounds& b, const double tolerance)
 {
     for (std::size_t i = 0; i < a.size(); ++i) {
-        if ((b[i] - a[i]).GetLower() > tolerance ||
-            (a[i] - b[i]).GetLower() > tolerance) {
+        if ((b[i] - a[i]).GetLower() > tolerance || (a[i] - b[i]).GetLower() > tolerance) {
             return true;
         }
     }
@@ -115,8 +114,8 @@ using Bounds = std::array<Interval, 3>;
 } // namespace
 
 Result<SurfaceSurfaceIntersection> BSplineBSplineBroadPhase(
-    const Surface& a, const Box2& /*domainA*/, const Surface& b,
-    const Box2& /*domainB*/, const double tolerance, const Context& /*ctx*/)
+    const Surface& a, const Box2& /*domainA*/, const Surface& b, const Box2& /*domainB*/,
+    const double tolerance, const Context& /*ctx*/)
 {
     const BSplineSurface* sa = a.Target<BSplineSurface>();
     const BSplineSurface* sb = b.Target<BSplineSurface>();
