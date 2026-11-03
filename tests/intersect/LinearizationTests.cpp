@@ -537,6 +537,40 @@ TEST_CASE("invalid sensitivity input is refused, and other surfaces are NotSuppo
     REQUIRE_FALSE(unsupported->GetValues().has_value());
 }
 
+TEST_CASE("JVP and VJP reject intersection results from stale geometry",
+          "[intersect][linearization][regression]")
+{
+    const Plane ground{Point3{}, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+    const Plane shifted{Point3{0.0, 0.0, 0.01}, Vec3{1.0, 0.0, 0.0},
+                        Vec3{0.0, 1.0, 0.0}};
+    const Line up{Point3{0.0, 0.0, -1.0}, Vec3{0.0, 0.0, 1.0}};
+    const CurveSurfaceIntersection at = Meet(up, ground);
+    Model model = FullModel(std::vector<double>(9, 1.0));
+    REQUIRE(model.Sensitivity.SetSeed(std::vector<double>(9, 1.0)).has_value());
+    REQUIRE(model.Sensitivity.SetAdjoint(std::vector<double>(6, 1.0)).has_value());
+
+    const auto jvp = Stereon::IntersectJvp(up, model.LineBindings, Surface{shifted},
+                                           model.SurfaceBindings, at, model.Sensitivity);
+    REQUIRE_FALSE(jvp.has_value());
+    REQUIRE(jvp.error().GetCode() == ErrorCode::InvalidInput);
+    const auto vjp = Stereon::IntersectVjp(up, model.LineBindings, Surface{shifted},
+                                           model.SurfaceBindings, at, model.Sensitivity);
+    REQUIRE_FALSE(vjp.has_value());
+    REQUIRE(vjp.error().GetCode() == ErrorCode::InvalidInput);
+
+    CurveSurfaceIntersection altered = at;
+    altered.Points.front().Point.Z = 0.01;
+    const auto stored = Stereon::IntersectJvp(up, model.LineBindings, Surface{ground},
+                                              model.SurfaceBindings, altered, model.Sensitivity);
+    REQUIRE_FALSE(stored.has_value());
+    REQUIRE(stored.error().GetCode() == ErrorCode::InvalidInput);
+
+    const auto good = Stereon::IntersectJvp(up, model.LineBindings, Surface{ground},
+                                            model.SurfaceBindings, at, model.Sensitivity);
+    REQUIRE(good.has_value());
+    REQUIRE(good->GetStatus() == DerivativeStatus::Valid);
+}
+
 namespace {
 
 using Stereon::BSplineCurve;
