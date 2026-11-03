@@ -5,7 +5,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-// What the plane curve handlers share: a formula written once over a
+// What the plane curve and curve–surface handlers share: a formula written once over a
 // scalar field and read as its enclosure, as its rounded value or exactly,
 // so that a configuration decision is the sign of a polynomial in the
 // input doubles (RS-0001 G5) settled on the heap only when the enclosure
@@ -114,6 +114,40 @@ template <typename F>
 [[nodiscard]] typename F::Scalar Cross2(F, const Pair2<F>& a, const Pair2<F>& b)
 {
     return F::Sub(F::Mul(a.X, b.Y), F::Mul(a.Y, b.X));
+}
+
+/// A 3-vector over a field, for the curve–surface handlers.
+template <typename F>
+struct Triple {
+    typename F::Scalar X;
+    typename F::Scalar Y;
+    typename F::Scalar Z;
+};
+
+template <typename F>
+[[nodiscard]] Triple<F> Of3(F, const Vec3& v)
+{
+    return {F::Of(v.X), F::Of(v.Y), F::Of(v.Z)};
+}
+
+/// p - q exactly.
+template <typename F>
+[[nodiscard]] Triple<F> Diff3(F, const Point3& p, const Point3& q)
+{
+    return {F::Diff(p.X, q.X), F::Diff(p.Y, q.Y), F::Diff(p.Z, q.Z)};
+}
+
+template <typename F>
+[[nodiscard]] typename F::Scalar Dot3(F, const Triple<F>& a, const Triple<F>& b)
+{
+    return F::Add(F::Add(F::Mul(a.X, b.X), F::Mul(a.Y, b.Y)), F::Mul(a.Z, b.Z));
+}
+
+template <typename F>
+[[nodiscard]] Triple<F> Cross3(F, const Triple<F>& a, const Triple<F>& b)
+{
+    return {F::Sub(F::Mul(a.Y, b.Z), F::Mul(a.Z, b.Y)), F::Sub(F::Mul(a.Z, b.X), F::Mul(a.X, b.Z)),
+            F::Sub(F::Mul(a.X, b.Y), F::Mul(a.Y, b.X))};
 }
 
 // --- Parameters in their domains ----------------------------------------
