@@ -11,6 +11,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <utility>
 #include <limits>
 #include <vector>
 
@@ -84,7 +85,9 @@ TEST_CASE("tolerance prevents premature disjoint classification",
 {
     const Surface a{Patch(0.0)};
     const Surface b{Patch(2.0)};
-    REQUIRE(Intersect(a, middle, b, middle, 0.01, ctx)->IsEmpty());
+    const auto separate = Intersect(a, middle, b, middle, 0.01, ctx);
+    REQUIRE(separate.has_value());
+    REQUIRE(separate->IsEmpty());
     const auto uncertain = Intersect(a, middle, b, middle, 3.0, ctx);
     REQUIRE_FALSE(uncertain.has_value());
     REQUIRE(uncertain.error().GetCode() == ErrorCode::NotImplemented);
