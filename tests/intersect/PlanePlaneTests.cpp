@@ -216,8 +216,8 @@ TEST_CASE("rotated bounded coincidence cannot be encoded as an AABB overlap",
     const Box2 a{Interval{0.0, 1.0}, Interval{0.0, 1.0}};
     const Box2 b{Interval{-0.35, 0.35}, Interval{-0.35, 0.35}};
     const auto rotated = [&](const double center) {
-        const Plane rotatedPlane{Point3{center, center, 0.0}, Vec3{c, c, 0.0},
-                                 Vec3{-c, c, 0.0}};
+        const Point3 origin{center, center, 0.0};
+        const Plane rotatedPlane{origin, Vec3{c, c, 0.0}, Vec3{-c, c, 0.0}};
         return Surface{rotatedPlane};
     };
     // Disjoint world-space squares, though their AABBs overlap.
