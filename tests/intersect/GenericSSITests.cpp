@@ -31,14 +31,15 @@ const Context ctx = Context::Default();
 /// diagonal pole deliberately moved to stretch the convex hull.
 BSplineSurface Patch(const double z, const bool rational = false)
 {
-    const std::vector<Point3> poles{{0.0, 0.0, z},
-                                    {0.0, 1.0, z},
-                                    {1.0, 0.0, z},
-                                    {1.0, 1.0, z}};
+    std::vector<Point3> poles;
+    poles.push_back({0.0, 0.0, z});
+    poles.push_back({0.0, 1.0, z});
+    poles.push_back({1.0, 0.0, z});
+    poles.push_back({1.0, 1.0, z});
     const std::vector<double> weights =
         rational ? std::vector<double>{1.0, 3.0, 2.0, 4.0} : std::vector<double>{};
-    const auto made = Stereon::MakeBSplineSurface(1, 1, {0.0, 0.0, 1.0, 1.0},
-                                                  {0.0, 0.0, 1.0, 1.0}, poles, weights);
+    const std::vector<double> knots{0.0, 0.0, 1.0, 1.0};
+    const auto made = Stereon::MakeBSplineSurface(1, 1, knots, knots, poles, weights);
     REQUIRE(made.has_value());
     return *made;
 }
