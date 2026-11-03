@@ -222,8 +222,8 @@ TEST_CASE("rotated bounded coincidence cannot be encoded as an AABB overlap",
     };
     // Disjoint world-space squares, though their AABBs overlap.
     const auto disjoint = Intersect(xy, a, rotated(1.4), b, ctx);
-    REQUIRE_FALSE(disjoint.has_value());
-    REQUIRE(disjoint.error().GetCode() == ErrorCode::NotImplemented);
+    REQUIRE(disjoint.has_value());
+    REQUIRE(disjoint->IsEmpty());
     // Even a true partial rotated overlap cannot use a rectangular proxy.
     const auto partial = Intersect(xy, a, rotated(0.7), b, ctx);
     REQUIRE_FALSE(partial.has_value());
