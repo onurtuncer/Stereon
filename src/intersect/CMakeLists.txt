@@ -14,6 +14,7 @@ stereon_add_library(intersect
         CylinderCylinder.cpp
         CylinderCylinderSkew.cpp
         Dispatch.cpp
+        GenericSSI.cpp
         LineLine.cpp
         LineSurface.cpp
         PlanarConics.cpp
