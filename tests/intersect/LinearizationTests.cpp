@@ -541,8 +541,8 @@ TEST_CASE("JVP and VJP reject intersection results from stale geometry",
           "[intersect][linearization][regression]")
 {
     const Plane ground{Point3{}, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
-    const Plane shifted{Point3{0.0, 0.0, 0.01}, Vec3{1.0, 0.0, 0.0},
-                        Vec3{0.0, 1.0, 0.0}};
+    const Point3 offset{0.0, 0.0, 0.01};
+    const Plane shifted{offset, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
     const Line up{Point3{0.0, 0.0, -1.0}, Vec3{0.0, 0.0, 1.0}};
     const CurveSurfaceIntersection at = Meet(up, ground);
     Model model = FullModel(std::vector<double>(9, 1.0));
