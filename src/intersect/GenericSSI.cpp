@@ -84,9 +84,11 @@ using Bounds = std::array<Interval, 3>;
 
 [[nodiscard]] bool ValidNet(const BSplineSurface& s)
 {
-    return ValidKnotVector(s.KnotsU, s.DegreeU) &&
-           ValidKnotVector(s.KnotsV, s.DegreeV) && ValidPoleLayout(s) && ValidWeights(s) &&
-           ValidPoles(s);
+    const bool u = ValidKnotVector(s.KnotsU, s.DegreeU);
+    const bool v = ValidKnotVector(s.KnotsV, s.DegreeV);
+    const bool layout = ValidPoleLayout(s);
+    const bool weights = ValidWeights(s);
+    return u && v && layout && weights && ValidPoles(s);
 }
 
 /// Bound each coordinate by the control points. Widen once by a floating
