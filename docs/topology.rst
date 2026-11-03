@@ -453,8 +453,9 @@ always in checked builds. A ``Commit`` result that fails it is
 ``InvalidResult``. A shape ``CompactShape`` is given that fails it is
 ``InvalidInput``, because compaction changes no geometry. ``Checked`` says
 which level ran. ``Freeze`` certifies structure only, so a builder can
-publish geometry that is still being repaired. The Solid level does not
-exist yet; asking for it checks the Geometric level.
+publish geometry that is still being repaired. ``Commit`` does not run
+the Solid level (below), which reports every solid until it can check
+self-intersection.
 
 The structural validator
 ------------------------
@@ -495,9 +496,10 @@ S17   ``EdgeCache``           a cached curve on a kind that keeps none or naming
 The geometric validator
 -----------------------
 
-The Geometric level checks ADR-0001's containment invariant on a
-structurally valid shape (``ValidateTopology(shape,
-ValidityLevel::Geometric)``):
+The Geometric level checks ADR-0001's containment invariant and the
+geometric rules of ADR-0009 on a structurally valid shape
+(``ValidateTopology(shape, ValidityLevel::Geometric, ctx)``, ADR-0018's
+``Check(shape, level, ctx)``; without the ``Context``, G04 is not checked):
 
 ====  ======================  ===================================================================
 ID    Rule                    Finding
@@ -507,7 +509,70 @@ G02   ``EdgeContainment``     a pcurve on its surface, or the edge's 3D curve, l
                               tolerance tube; a trace does not cover the edge's range or a
                               pcurve leaves its surface's domain; or a ``Degenerate`` edge's
                               trace moves away from its vertex
+G03   ``LoopParameterGap``    consecutive coedges of a loop do not meet in the face's parameter
+                              space: one pcurve's end and the next one's start are further apart,
+                              carried onto the surface by its first derivatives, than the
+                              junction's tolerances allow; a jump of a period across a seam is one
+G04   ``ToleranceBounds``     a vertex or edge tolerance below the ``Context``'s resolution or above
+                              its ceiling (ADR-0001)
+G05   ``EdgeSurfaces``        the faces of a ``Trim`` edge are not on one surface, or those of an
+                              ``Intersection`` edge all are
+G06   ``CacheDeviation``      an edge's cached curve leaves its tolerance tube, or a ``Certified``
+                              cache deviates beyond its proven bound: a stale certificate
 ====  ======================  ===================================================================
+
+
+G03 is not taken modulo a period. A loop crosses a seam through the seam's
+edge, whose two uses carry its two sides, so consecutive pcurves meet
+exactly in the parameters even on a periodic surface, and a jump of a
+period is a finding though its two ends are one point in space. A jump
+across a pole costs nothing, the derivative along it being zero; a
+``Degenerate`` edge carries the loop there. G06 samples the cache against
+the edge's reference trace, so a deviation beyond a ``Certified`` bound is
+a proof that the certificate is wrong or stale. A cache is not required:
+an edge with no cache (``CacheCertificate::None``) has nothing to check.
+
+The solid validator
+-------------------
+
+The Solid level (``ValidateTopology(shape, ValidityLevel::Solid, ctx)``)
+runs on a geometrically valid shape, over each shell of each solid:
+
+====  ===============================  ==========================================================
+ID    Rule                             Finding
+====  ===============================  ==========================================================
+L01   ``ShellOpen``                    an edge the shell's faces use is not used exactly twice by
+                                       them: the shell is not closed (a ``Degenerate`` edge, a
+                                       pole, is exempt)
+L02   ``ShellOrientation``             an edge's two uses run it the same way: the faces on either
+                                       side are oriented against each other
+L03   ``ShellVolume``                  a shell's signed volume cannot be decided, or the solid has
+                                       not exactly one outer shell of positive volume, every other
+                                       shell a void of negative volume
+L04   ``ShellNesting``                 a void shell does not lie inside the outer shell, or whether
+                                       it does could not be decided
+L05   ``SelfIntersectionUnchecked``    face–face self-intersection is not checked yet: it needs
+                                       ADR-0010's generic surface–surface path
+====  ===============================  ==========================================================
+
+L05 is reported for every solid, so no solid is reported valid at the Solid
+level until self-intersection is checked: a level never passes what it did
+not check. L03 and L04 are measured only on shells that L01 and L02 pass.
+
+The volume and the winding number are surface integrals over each face,
+turned by Green's theorem into integrals over its loops in the face's
+parameter space. A loop runs counter-clockwise about its face's own
+normal, reversed or not, so in the parameters it runs counter-clockwise
+exactly when that normal is :math:`S_u \times S_v`: the orientation is in
+the loops, and a reversed face needs no sign of its own. Both integrals
+use 16-point Gauss–Legendre quadrature in the edge's parameter and in u,
+once over each range and once over its halves. Their difference, with
+the rounding of the sum, is the error estimate a sign is decided against:
+a volume must exceed four estimates, and a winding number must lie within
+a half of 0 or 1, error included. It is an estimate, not a certified
+bound, so a decision it cannot make is a finding, never a pass. The void's
+point is a vertex of its shell, and the outer shell is the one shell of
+positive volume.
 
 A ``Degenerate`` edge is a pole or an apex with no 3D extent. Each of its
 traces must stay at its vertex over the whole range, within the larger of
@@ -527,6 +592,20 @@ valid, which is what ADR-0001's local tolerances are for.
 ``Testing::TopologyFaults`` writes link fields directly, for the
 validator's seeded-fault tests (ADR-0027, section 8); production code has
 no other way to reach the tables.
+
+ADR-0018's seeded-fault corpus is ``tests/topo/ValidityCorpusTests.cpp``.
+Each fault is found by its intended rule at its intended level and is
+invisible to the levels below it: a coedge missing from its ring (S06), a
+coedge claimed by two loops (S04), a vertex off its edge (G01), an edge
+tolerance below the measured gap and a pcurve outside its surface's domain
+(G02), a seam use on the wrong side (G03), a tolerance above the ceiling
+(G04), a ``Trim`` edge across surfaces and an ``Intersection`` edge on one
+(G05), a stale certificate (G06), an open shell (L01), a flipped face
+(L02), a solid turned inside out (L03) and a void shell outside its outer
+shell (L04). The valid corpus, a cube with a void among it, has no finding
+at the Structural and Geometric levels and only L05 at the Solid level. A
+self-intersecting shell joins the corpus with ADR-0010's generic path. ``bench/TopoBench.cpp`` times the
+checker per face on the 10⁶-face sheet (``ADR-0018/Validate*``).
 
 The seeded-fault suite of ADR-0004 (``tests/topo/FaultTests.cpp``) feeds
 stale handles, handles from another builder or shape, off-by-one indices
