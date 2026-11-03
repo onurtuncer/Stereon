@@ -15,15 +15,24 @@ import Stereon.Surface;
 
 /// The derivative capabilities of the intersection library's operations
 /// (ADR-0021, section 5), as Stereon.Curve:Capabilities declares the curve
-/// library's: none implements a product yet.
+/// library's. Intersect implements the forward and reverse products for a
+/// line or a B-spline curve against a plane, a sphere or a cylinder
+/// (IntersectJvp, IntersectVjp, through Linearize); every other pair answers
+/// NotSupported.
 
 export namespace Stereon {
 
 inline constexpr OperationCapability IntersectCatalogue[] = {
     Declare("Intersect", {Dependency::InputGeometry, Dependency::Tolerances},
             {TrackingConvention::MovingTrimCoordinates, TrackingConvention::UniqueProjection},
-            "transversal contact only: Tangential and Overlap contacts (ADR-0010) are "
-            "nondifferentiable; the branch count and the tolerance stay fixed"),
+            "a line or a B-spline curve against a plane, a sphere or a cylinder, through "
+            "IntersectJvp and IntersectVjp, in the line's origin and direction, the curve's poles "
+            "and weights at fixed knots, and the surface's origin and radius: decided transversal "
+            "crossings only, NearEvent below NearEventSine; "
+            "Tangential and Overlap contacts (ADR-0010) are nondifferentiable, undecided points "
+            "and poles of the surface's parameters indeterminate; the point count and the "
+            "tolerance stay fixed; other pairs answer NotSupported",
+            {DerivativeProduct::Jvp, DerivativeProduct::Vjp}),
 };
 
 /// The intersection library's declarations.
