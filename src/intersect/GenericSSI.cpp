@@ -113,15 +113,13 @@ using Bounds = std::array<Interval, 3>;
 
 } // namespace
 
-Result<SurfaceSurfaceIntersection> NurbsHull(const Surface& a, const Box2&,
-                                              const Surface& b, const Box2&,
-                                              const double tolerance, const Context&)
+Result<SurfaceSurfaceIntersection> NurbsHull(const Surface& a, const Box2&, const Surface& b,
+                                              const Box2&, const double tolerance, const Context&)
 {
     const BSplineSurface* sa = a.Target<BSplineSurface>();
     const BSplineSurface* sb = b.Target<BSplineSurface>();
     if (sa == nullptr || sb == nullptr || !ValidNet(*sa) || !ValidNet(*sb)) {
-        return Fail(ErrorCode::InvalidInput,
-                    "NurbsHull: expected valid B-spline surfaces");
+        return Fail(ErrorCode::InvalidInput, "NurbsHull: expected valid B-spline surfaces");
     }
     if (ProvedApart(NetBounds(*sa), NetBounds(*sb), tolerance)) {
         return SurfaceSurfaceIntersection{}; // Proven empty, including trims.
