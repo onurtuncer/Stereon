@@ -779,7 +779,8 @@ TEST_CASE("B-spline crossings: second-order Taylor decay and the transpose",
 
 TEST_CASE("a B-spline's touch and bad pole bindings", "[intersect][linearization]")
 {
-    // z = (2 s - 1)²: the touch the B-spline handler reports undecided.
+    // z = (2 s - 1)²: the primal now fails closed on unresolved touches.
+    // Check derivative status with an explicitly supplied candidate.
     const auto made = Stereon::MakeBSplineCurve(
         2, {0.0, 0.0, 0.0, 1.0, 1.0, 1.0}, {{0.0, 0.0, 1.0}, {1.0, 0.0, -1.0}, {2.0, 0.0, 1.0}});
     REQUIRE(made.has_value());
@@ -789,8 +790,11 @@ TEST_CASE("a B-spline's touch and bad pole bindings", "[intersect][linearization
     SensitivityContext sensitivity(std::move(set));
     REQUIRE(sensitivity.SetSeed(std::vector<double>{1.0}).has_value());
     const std::vector<PoleBinding> middle{{lift, 1, PoleComponent::Z}};
+    CurveSurfaceIntersection primal;
+    primal.Points.push_back({0.5, {1.0, 0.0}, {1.0, 0.0, 0.0},
+                             Stereon::ContactType::Tangential, false});
     const auto touch =
-        Stereon::IntersectJvp(*made, middle, Surface{ground}, {}, Meet(*made, ground), sensitivity);
+        Stereon::IntersectJvp(*made, middle, Surface{ground}, {}, primal, sensitivity);
     REQUIRE(touch.has_value());
     REQUIRE(touch->GetStatus() == DerivativeStatus::Nondifferentiable);
     REQUIRE_FALSE(touch->GetValues().has_value());
@@ -799,12 +803,12 @@ TEST_CASE("a B-spline's touch and bad pole bindings", "[intersect][linearization
          {PoleBinding{lift, 7, PoleComponent::Z}, PoleBinding{lift, 1, PoleComponent::Weight}}) {
         const std::vector<PoleBinding> one{bad};
         REQUIRE(
-            Stereon::IntersectJvp(*made, one, Surface{ground}, {}, Meet(*made, ground), sensitivity)
+            Stereon::IntersectJvp(*made, one, Surface{ground}, {}, primal, sensitivity)
                 .error()
                 .GetCode() == ErrorCode::InvalidInput);
     }
     // A point off the curve's domain.
-    CurveSurfacePoint outside = Meet(*made, ground).Points.front();
+    CurveSurfacePoint outside = primal.Points.front();
     outside.Parameter = 5.0;
     REQUIRE(Stereon::Linearize(*made, Surface{ground}, outside).error().GetCode() ==
             ErrorCode::InvalidInput);

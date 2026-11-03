@@ -67,6 +67,19 @@ struct PlaneFrame {
     return map;
 }
 
+/// OverlapRegion stores parameter rectangles, not rotated polygons.
+/// Encoding a rotated bounded patch as its AABB can invent intersections.
+[[nodiscard]] bool BoxPreserving(const ParameterMap& map) noexcept
+{
+    return (map.U.Y == 0.0 && map.V.X == 0.0) ||
+           (map.U.X == 0.0 && map.V.Y == 0.0);
+}
+
+[[nodiscard]] bool Entire(const Box2& box) noexcept
+{
+    return box.X == Interval::Everything() && box.Y == Interval::Everything();
+}
+
 /// Parallel planes within the pair tolerance: an overlap, exact when the
 /// height is exactly zero and declared otherwise (ADR-0029 section 6).
 [[nodiscard]] Result<SurfaceSurfaceIntersection>
@@ -75,6 +88,12 @@ Coincident(const PlaneFrame& a, const Box2& boxA, const PlaneFrame& b, const Box
 {
     OverlapRegion overlap;
     overlap.AToB = MapBetween(a.Geometry, b.Geometry);
+    // A rotated, bounded coincidence needs a polygonal domain. Refuse
+    // rather than returning a false positive AABB overlap.
+    if (!BoxPreserving(overlap.AToB) && !(Entire(boxA) && Entire(boxB))) {
+        return Fail(ErrorCode::NotImplemented,
+                    "PlanePlane: rotated bounded overlap needs polygonal parameter regions");
+    }
     overlap.OnA = Intersection(boxA, ImageBox(Inverse(overlap.AToB), boxB));
     overlap.OnB = Intersection(boxB, ImageBox(overlap.AToB, overlap.OnA));
     SurfaceSurfaceIntersection result;
@@ -102,10 +121,21 @@ Coincident(const PlaneFrame& a, const Box2& boxA, const PlaneFrame& b, const Box
                                                           const PlaneFrame& b, const Box2& boxB,
                                                           const Context& ctx)
 {
-    const Vec3 direction = Normalized(Cross(a.Normal, b.Normal));
+    // An exactly nonzero cross can have a squared norm that underflows.
+    const Vec3 cross = Cross(a.Normal, b.Normal);
+    const double magnitude = std::hypot(cross.X, cross.Y, cross.Z);
+    if (!(magnitude > 0.0 && std::isfinite(magnitude))) {
+        return Fail(ErrorCode::CertificationFailed,
+                    "PlanePlane: nonparallel direction is not representable");
+    }
+    const Vec3 direction = cross / magnitude;
     // In plane A and across the line: where B's plane equation vanishes.
     const Vec3 across = Cross(direction, a.Normal);
     const double s = Dot(b.Geometry.Origin - a.Geometry.Origin, b.Normal) / Dot(across, b.Normal);
+    if (!std::isfinite(s)) {
+        return Fail(ErrorCode::CertificationFailed,
+                    "PlanePlane: crossing origin is not representable");
+    }
     const Point3 point = a.Geometry.Origin + s * across;
     const Line2d onA{Project(a.Geometry, point),
                      Vec2{Dot(direction, a.Geometry.XAxis), Dot(direction, a.Geometry.YAxis)}};

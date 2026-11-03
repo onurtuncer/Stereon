@@ -220,3 +220,22 @@ TEST_CASE("the cylinder first gives the same branches with the sides swapped",
     REQUIRE(PcurveDeviation(swapped->Branches.front(), aboutZ, oblique, 300) <=
             ctx.GetResolution());
 }
+
+TEST_CASE("bounded plane patches cannot receive uncut conic branches",
+          "[intersect][cylinder][regression]")
+{
+    const Box2 central{Interval{-0.1, 0.1}, Interval{-0.1, 0.1}};
+    const auto inside = Intersect(Horizontal(0.0), central, aboutZ, Box2::Everything(), ctx);
+    REQUIRE(inside.has_value());
+    REQUIRE(inside->IsEmpty());
+
+    const Box2 partial{Interval{-1.0, 1.0}, Interval{4.0, 6.0}};
+    const auto circle = Intersect(Horizontal(0.0), partial, aboutZ, Box2::Everything(), ctx);
+    REQUIRE_FALSE(circle.has_value());
+    REQUIRE(circle.error().GetCode() == Stereon::ErrorCode::NotImplemented);
+
+    const Surface oblique{IntersectTest::PlaneWithNormal(Point3{}, Vec3{0.0, 1.0, 1.0})};
+    const auto ellipse = Intersect(oblique, central, aboutZ, Box2::Everything(), ctx);
+    REQUIRE(ellipse.has_value());
+    REQUIRE(ellipse->IsEmpty());
+}

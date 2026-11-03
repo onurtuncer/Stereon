@@ -126,23 +126,23 @@ TEST_CASE("a B-spline crosses a plane at each simple root", "[intersect][spline-
     REQUIRE(half->Points.front().Parameter < 0.5);
 }
 
-TEST_CASE("a B-spline touching a plane is one undecided touch", "[intersect][spline-surface]")
+TEST_CASE("unresolved spline tangency and near miss never become successful contacts",
+          "[intersect][spline-surface][regression]")
 {
-    // z(s) = (2 s - 1)², zero only at s = 1/2, where the curve turns back.
-    const BSplineCurve touch = Bezier({{0.0, 0.0, 1.0}, {1.0, 0.0, -1.0}, {2.0, 0.0, 1.0}});
+    const BSplineCurve touch = Bezier({{0.0, 0.0, 1.0}, {1.0, 0.0, -1.0},
+                                      {2.0, 0.0, 1.0}});
     const auto result = Meet(touch, ground);
-    INFO(IntersectTest::ErrorText(result));
-    REQUIRE(result.has_value());
-    REQUIRE(result->Points.size() == 1);
-    const CurveSurfacePoint& p = result->Points.front();
-    REQUIRE(p.Contact == ContactType::Tangential);
-    REQUIRE_FALSE(p.Decided);
-    // A double root is placed to the square root of rounding: z = 4 (s -
-    // 1/2)² is within rounding of zero for |s - 1/2| up to about 1e-8. The
-    // point is on the plane all the same.
-    REQUIRE(std::abs(p.Parameter - 0.5) <= 1e-7);
-    REQUIRE(std::abs(p.Position.Z) <= 1e-14);
-    RequireOnBoth(*result, touch, ground);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error().GetCode() == ErrorCode::IntersectionFailed);
+    const double eps = std::numeric_limits<double>::epsilon();
+    const BSplineCurve nearMiss = Bezier({{0.0, 0.0, 1.0 + eps},
+                                         {1.0, 0.0, -1.0 + eps},
+                                         {2.0, 0.0, 1.0 + eps}});
+    const auto missed = Meet(nearMiss, ground);
+    REQUIRE(!missed.has_value() || missed->IsEmpty());
+    if (!missed) {
+        REQUIRE(missed.error().GetCode() == ErrorCode::IntersectionFailed);
+    }
 }
 
 TEST_CASE("an empty result is a proof: 3 2^-40 above is apart, 3 2^-40 below crosses twice",
@@ -171,15 +171,15 @@ TEST_CASE("an empty result is a proof: 3 2^-40 above is apart, 3 2^-40 below cro
     REQUIRE(twice->Points[1].Parameter - twice->Points[0].Parameter > 0x1p-21);
 }
 
-TEST_CASE("a root at a knot, seen from both segments, is one point", "[intersect][spline-surface]")
+TEST_CASE("an undecided spline root at a knot fails closed",
+          "[intersect][spline-surface][regression]")
 {
     const BSplineCurve polyline =
-        Spline(1, {0.0, 0.0, 1.0, 2.0, 2.0}, {{0.0, 0.0, -1.0}, {1.0, 0.0, 0.0}, {2.0, 0.0, 1.0}});
+        Spline(1, {0.0, 0.0, 1.0, 2.0, 2.0},
+               {{0.0, 0.0, -1.0}, {1.0, 0.0, 0.0}, {2.0, 0.0, 1.0}});
     const auto result = Meet(polyline, ground);
-    REQUIRE(result.has_value());
-    REQUIRE(result->Points.size() == 1);
-    REQUIRE(result->Points.front().Parameter == 1.0);
-    RequireOnBoth(*result, polyline, ground);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error().GetCode() == ErrorCode::IntersectionFailed);
 }
 
 TEST_CASE("a B-spline in the plane is an overlap whose pcurve traces it",

@@ -81,6 +81,22 @@ struct Sides {
     return {Dot(v, plane.XAxis), Dot(v, plane.YAxis)};
 }
 
+/// A box deeply inside a convex conic disk provably misses its boundary.
+/// The 1/2-radius margin accommodates allowed tiny frame errors.
+template <typename Conic>
+[[nodiscard]] bool ProvenInteriorBox(const Conic& c, const double rx, const double ry,
+                                      const Box2& box)
+{
+    if (!IsBounded(box)) {
+        return false;
+    }
+    const Interval dx = box.X - Interval{c.Center.X};
+    const Interval dy = box.Y - Interval{c.Center.Y};
+    const Interval u = (dx * Interval{c.XAxis.X} + dy * Interval{c.XAxis.Y}) / Interval{rx};
+    const Interval v = (dx * Interval{c.YAxis.X} + dy * Interval{c.YAxis.Y}) / Interval{ry};
+    return (Squared(u) + Squared(v)).GetUpper() < 0.25;
+}
+
 /// The axis is perpendicular to the plane: the section circle at the
 /// plane's height, on the cylinder's angle.
 [[nodiscard]] Result<SurfaceSurfaceIntersection> CircleSection(const Sides& s, const Box2& boxA,
@@ -96,11 +112,17 @@ struct Sides {
                         Around(onPlane.Center.Y, circle.Radius)};
     const Interval range = Intersection(Domain(circle), boxB.X);
     SurfaceSurfaceIntersection result;
-    if (!range.IsEmpty() && Contains(boxB.Y, v) && Intersects(planeBox, boxA)) {
-        STEREON_TRY_VOID(Keep(result,
-                              Crossing(Curve(circle), Curve2d(onPlane), Curve2d(onCylinder), range),
-                              s.A, s.B, ctx));
+    if (range.IsEmpty() || !Contains(boxB.Y, v) || !Intersects(planeBox, boxA) ||
+        ProvenInteriorBox(onPlane, circle.Radius, circle.Radius, boxA)) {
+        return result;
     }
+    if (!Contains(boxA, planeBox)) {
+        return Fail(ErrorCode::NotImplemented,
+                    "PlaneCylinder: partial circle needs certified clipping against plane box");
+    }
+    STEREON_TRY_VOID(Keep(result,
+                          Crossing(Curve(circle), Curve2d(onPlane), Curve2d(onCylinder), range),
+                          s.A, s.B, ctx));
     return result;
 }
 
@@ -215,8 +237,13 @@ EllipseSection(const Sides& s, const Box2& boxA, const Box2& boxB, const Context
                         Around(onPlane.Center.Y, majorRadius)};
     SurfaceSurfaceIntersection result;
     if (range.IsEmpty() || !Intersects(boxB.Y, Around(vCenter, std::abs(amplitude))) ||
-        !Intersects(planeBox, boxA)) {
+        !Intersects(planeBox, boxA) ||
+        ProvenInteriorBox(onPlane, majorRadius, s.C.Radius, boxA)) {
         return result;
+    }
+    if (!Contains(boxA, planeBox)) {
+        return Fail(ErrorCode::NotImplemented,
+                    "PlaneCylinder: partial ellipse needs certified clipping against plane box");
     }
     STEREON_TRY(Curve2d onCylinder, SinusoidPcurve(u0, vCenter, amplitude, range, ctx));
     STEREON_TRY_VOID(Keep(result,
