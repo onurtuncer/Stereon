@@ -172,8 +172,7 @@ TEST_CASE("an empty result is a proof: 3 2^-40 above is apart, 3 2^-40 below cro
 TEST_CASE("an undecided spline root at a knot fails closed",
           "[intersect][spline-surface][regression]")
 {
-    const std::vector<Point3> poles{
-        {0.0, 0.0, -1.0}, {1.0, 0.0, 0.0}, {2.0, 0.0, 1.0}};
+    const std::vector<Point3> poles{{0.0, 0.0, -1.0}, {1.0, 0.0, 0.0}, {2.0, 0.0, 1.0}};
     const BSplineCurve polyline = Spline(1, {0.0, 0.0, 1.0, 2.0, 2.0}, poles);
     const auto result = Meet(polyline, ground);
     REQUIRE_FALSE(result.has_value());
