@@ -155,6 +155,84 @@ the scalar-generic ``Eval``, an independent derivative, and check that
 of batch and grid evaluation are not implemented yet; they answer
 ``NotSupported``.
 
+Products of intersections
+-------------------------
+
+An intersection is differentiated through the equations that define its
+result, never through the solver that found it (ADR-0021, section 6; the
+v0.2 gate of section 9's stage 4). A point where a curve meets a surface
+solves :math:`F(z; p) = C(t; p) - S(u, v; p) = 0` in :math:`z = (t, u, v)`:
+three equations in three unknowns, so a point needs no tracking constraint.
+With :math:`F_z = [C', -S_u, -S_v]`, a design change :math:`\dot p` moves it
+by :math:`F_z \dot z = S_p \dot p - C_p \dot p` and its position by
+:math:`\dot x = C_p \dot p + C' \dot t`. The determinant
+:math:`C' \cdot (S_u \times S_v)` vanishes exactly at a tangency, and
+:math:`|\det F_z| / (|C'| |S_u \times S_v|)`, the sine of the angle between
+curve and surface, is the conditioning.
+
+``Linearize(line, surface, point)`` exposes this for one point of
+``Intersect``: the residual :math:`F`, the columns of :math:`F_z` (``Tangent``,
+``Su``, ``Sv``), the conditioning and the status. Whether a derivative exists
+is read from what the primal solver proved:
+
+=====================================  ================================================
+Point                                  Status
+=====================================  ================================================
+a crossing the solver decided          ``Valid``, or ``NearEvent`` below ``NearEventSine``
+                                       (2\ :sup:`-20`), qualified
+a ``Tangential`` point, or an overlap  ``Nondifferentiable``: the points merge, vanish
+                                       or stop being isolated as the geometry moves
+a point the solver left undecided      ``Indeterminate``
+a crossing at a pole of the surface's  ``Indeterminate``: the angle there has no
+parameters (a sphere's)                derivative, though the geometry is regular
+=====================================  ================================================
+
+A result takes its worst point's status, and carries values only for
+``Valid`` and ``NearEvent``.
+
+``IntersectJvp`` and ``IntersectVjp`` implement the products for a line
+against a plane, a sphere or a cylinder, with ``LineBinding`` binding a
+parameter to a coordinate of the line's origin or direction and
+``SurfaceBinding`` to a coordinate of the surface's origin (a sphere's
+centre) or to its radius, each a ``Length``. The surface's partials come
+from its own ``Deriv``; at fixed :math:`(u, v)` the origin moves every point
+alike, and the radius moves a sphere's point along :math:`(S - C) / r` and a
+cylinder's along its radial direction. A pole is detected on its own: the
+conditioning, the sine of an angle, scales out the vanishing :math:`S_u`, so
+a partial within rounding of zero against the other (below 2\ :sup:`-50` of
+it) makes the point ``Indeterminate``. Each point gives six values,
+``CurveSurfacePointValues``: :math:`\dot x` (three), then :math:`\dot t`,
+:math:`\dot u` and :math:`\dot v`. The VJP takes an adjoint of six components
+per point and returns one value per parameter, accumulated point by point in
+order. The 3 × 3 system is solved by Cramer's rule, transposed for the VJP.
+Both report the largest residual and the smallest conditioning over the
+points, and a signature of the point count and contacts.
+
+The tests check the forward product against the crossing's closed form,
+the second-order decay of the Taylor residual
+:math:`\lVert y(p + h v) - y(p) - h J v \rVert` on random lines and planes,
+that the VJP is the JVP's transpose, and every status: an overlap, a touch,
+an undecided point and a grazing crossing never carry an unqualified
+derivative. The sphere and the cylinder are checked against the closed form
+of a line crossing a circle, :math:`x' = r / x` for a growing radius, and
+the Taylor and transpose properties run on random lines through both.
+
+A ``BSplineCurve`` has the same products, its poles and weights moved by
+``PoleBinding`` exactly as ``EvalJvp`` moves them (a coordinate by a
+``Length``, a weight by a ``Dimensionless`` parameter, at fixed knots). The
+curve's side of the system is its derivative :math:`C'(t)` and
+``PoleVelocity(curve, binding, t)``, the velocity of the point at fixed
+:math:`t` that ``EvalJvp`` sums; the rest is written once for every curve.
+A degree-1 B-spline from :math:`P_0` to :math:`P_1` is checked against the
+line from :math:`P_0` along :math:`P_1 - P_0`, moving :math:`P_1` against
+moving the line's direction, through every surface; the Taylor and
+transpose properties run on random cubic B-splines, rational half the
+time with weight bindings, through spheres, cylinders and planes; and a
+B-spline touching a plane, the undecided touch the B-spline handler
+reports, is ``Nondifferentiable``. Other pairs answer ``NotSupported``; each
+new curve–surface handler binds its geometry's parameters to the same
+system.
+
 The AD backend: CppAD
 ---------------------
 

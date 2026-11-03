@@ -76,3 +76,5 @@ __pycache__/
 
 # Sphinx / Doxygen output from local manual builds
 docs/_build/
+# TikZ figures, rendered by CI (and locally) from docs/tikz/*.tex
+docs/_static/tikz/

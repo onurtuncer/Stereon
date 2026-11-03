@@ -10,6 +10,7 @@ stereon_add_library(intersect
         Capabilities.cppm
         Dispatch.cppm
         Intersect.cppm
+        Linearization.cppm
     SOURCES
         CylinderCylinder.cpp
         CylinderCylinderSkew.cpp
@@ -17,6 +18,7 @@ stereon_add_library(intersect
         GenericSSI.cpp
         LineLine.cpp
         LineSurface.cpp
+        Linearization.cpp
         PlanarConics.cpp
         PlanarLines.cpp
         PlanarSpline.cpp

@@ -213,7 +213,10 @@ stretches where the curve lies in the surface, each the parameter interval
 on the curve and the pcurve on the surface on the curve's own parameter
 (ADR-0009). A point is kept when its parameters lie in the requested
 domains, a periodic surface's angle taken modulo its period and placed in
-the box. ``Intersect(curve, surface, ctx)`` takes the whole domains.
+the box. ``Intersect(curve, surface, ctx)`` takes the whole domains. How a
+result moves with design parameters, and when it has no derivative, is in
+:doc:`sensitivity` (*Products of intersections*): the ``Contact`` and
+``Decided`` of a point decide its derivative's status.
 
 The first handlers are a ``Line`` against a ``Plane``, a ``Sphere`` and a
 ``Cylinder``: ADR-0010's analytic table carried to the line–quadric pairs.
