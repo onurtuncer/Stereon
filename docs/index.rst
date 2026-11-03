@@ -16,12 +16,14 @@ Stereon
    :alt: Stereon logo
    :width: 240px
 
-.. warning::
+.. note::
 
-   Stereon is pre-alpha (Phase 0, foundations). This manual is a skeleton:
-   most chapters are placeholders listed under *Open documentation tasks*
-   below. The design decisions themselves are recorded as ADRs in
-   `docs/adr <https://github.com/onurtuncer/Stereon/tree/main/docs/adr>`_.
+   Stereon is pre-alpha software at version 0.1.0, the v0.1 "Geometry"
+   release; v0.2 "Intersections" is in progress. Its APIs change between
+   minor versions until 1.0. :doc:`intro` says what exists today and how
+   this manual is organised; chapters still being written are listed under
+   *Open documentation tasks* below. The design decisions are recorded as
+   ADRs in `docs/adr <https://github.com/onurtuncer/Stereon/tree/main/docs/adr>`_.
 
 .. toctree::
    :maxdepth: 2
