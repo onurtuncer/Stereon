@@ -687,10 +687,20 @@ public:
 /// adds ADR-0001's containment invariant, sampled: each vertex's tolerance
 /// sphere holds its edges' ends (G01), and each edge's tolerance tube holds
 /// its 3D curve and its pcurves mapped through their surfaces (G02), and a
-/// Degenerate edge's traces stay at its vertex (G02). It runs only on a
-/// structurally valid shape. Solid has no rules yet and checks as Geometric.
-/// An empty Shape is valid at every level.
+/// Degenerate edge's traces stay at its vertex (G02); each loop closes in
+/// its face's parameter space (G03); a Trim edge's faces share a surface
+/// and an Intersection edge's do not (G05); and an edge's cached curve
+/// stays in its tube and within its certified bound (G06). It runs only on
+/// a structurally valid shape. Solid has no rules yet: each solid of the
+/// shape is reported unchecked (L01), never valid by default. An empty
+/// Shape is valid at every level.
 [[nodiscard]] ValidityReport ValidateTopology(const Shape& shape, ValidityLevel level);
+
+/// The same, with the rules that need the Context: every tolerance between
+/// its resolution and its ceiling (G04, ADR-0001). This is the full check
+/// of ADR-0018's Check(shape, level, ctx).
+[[nodiscard]] ValidityReport ValidateTopology(const Shape& shape, ValidityLevel level,
+                                              const Context& context);
 
 /// Publishes the builder's tables as a shape-producing operation does
 /// (ADR-0006, ADR-0026): Freeze() and its structural certification, then the
@@ -746,8 +756,19 @@ export namespace Stereon::Detail {
 [[nodiscard]] ValidityReport ValidateStructure(const TopologyTables& tables);
 
 /// The Geometric checks of ADR-0018 on structurally valid tables: ADR-0001's
-/// containment invariant, sampled (G01, G02).
+/// containment invariant, sampled (G01, G02), loop closure in parameter
+/// space (G03), the surfaces of Trim and Intersection edges (G05) and
+/// cached curves (G06).
 [[nodiscard]] ValidityReport ValidateGeometry(const TopologyTables& tables);
+
+/// G04: every live tolerance within the Context's [resolution, ceiling],
+/// added to `report`.
+void ValidateTolerances(const TopologyTables& tables, const Context& context,
+                        ValidityReport& report);
+
+/// The Solid level, which has no rules yet: an L01 finding for each live
+/// solid, added to `report`, so that it is never reported valid unchecked.
+void ValidateSolid(const TopologyTables& tables, ValidityReport& report);
 
 /// Describe() over raw tables, safe on corrupt ones: it checks every index
 /// and bounds every walk, for the validator's findings.

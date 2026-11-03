@@ -26,7 +26,8 @@ export namespace Stereon {
 /// The rules of the validity checker (ADR-0018). The number is the stable
 /// rule ID: the Structural rules (ADR-0038's Freeze invariants) from 1, S01
 /// being DanglingLink; the Geometric rules from 101, G01 being
-/// VertexContainment. Solid (L) rules join as that level arrives.
+/// VertexContainment; the Solid rules from 201, L01 being SolidUnchecked,
+/// which stands for the level until its rules arrive.
 enum class TopologyRule : std::uint8_t {
     /// A link names a slot out of range or a dead one.
     DanglingLink = 1,
@@ -81,14 +82,35 @@ enum class TopologyRule : std::uint8_t {
     /// its pcurves mapped through its face's surface leaves the edge's
     /// tolerance tube, or does not cover the edge's range.
     EdgeContainment,
+    /// G03: consecutive coedges of a loop do not meet in their face's
+    /// parameter space: one pcurve's end and the next one's start are
+    /// apart, carried onto the surface, by more than the junction's
+    /// tolerances (a jump of a period across a seam included).
+    LoopParameterGap,
+    /// G04 (ADR-0001): a tolerance below the Context's resolution or above
+    /// its ceiling. Checked when the Context is given.
+    ToleranceBounds,
+    /// G05 (ADR-0009): the faces of a Trim edge are not on one surface, or
+    /// those of an Intersection edge all are.
+    EdgeSurfaces,
+    /// G06 (ADR-0009): an edge's cached curve leaves its tolerance tube, or
+    /// a Certified cache deviates beyond its proven bound: the certificate
+    /// is stale.
+    CacheDeviation,
+
+    /// L01: the Solid level's rules are not implemented, so a solid is not
+    /// reported valid at that level. Never a silent pass.
+    SolidUnchecked = 201,
 };
 
 /// "S01", "S02", ...
-/// The stable ID of a rule: S01 to S17, G01 and G02.
+/// The stable ID of a rule: S01 to S17, G01 to G06, L01.
 [[nodiscard]] std::string RuleId(TopologyRule rule);
 
 /// The Geometric rules are numbered from one past this.
 inline constexpr int GeometricRuleBase = 100;
+/// The Solid rules are numbered from one past this.
+inline constexpr int SolidRuleBase = 200;
 /// "DanglingLink", ...
 [[nodiscard]] std::string_view RuleName(TopologyRule rule) noexcept;
 
