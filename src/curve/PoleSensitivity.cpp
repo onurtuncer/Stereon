@@ -161,6 +161,11 @@ Published(std::vector<double> values, const std::uint64_t signature, const std::
 
 } // namespace
 
+Vec3 PoleVelocity(const BSplineCurve& curve, const PoleBinding& binding, const double t)
+{
+    return Partial(curve, BasisAt(curve, t), binding);
+}
+
 Result<SensitivityResult> EvalJvp(const BSplineCurve& curve,
                                   const std::span<const PoleBinding> bindings,
                                   const std::span<const double> parameters,
