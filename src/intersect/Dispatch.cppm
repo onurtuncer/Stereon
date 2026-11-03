@@ -424,7 +424,7 @@ consteval auto MakePairTable(TypeList<Ts...> types)
 /// rather than specialisations: GCC 16.2 and MSVC mishandle explicit
 /// specialisations in module interfaces (docs/toolchain/gcc16-feature-probe.md).
 template <typename A, typename B>
-consteval SurfaceHandler SurfaceHandlerFor()
+consteval SurfaceHandler AnalyticSurfaceHandlerFor()
 {
     if constexpr (std::same_as<A, Plane> && std::same_as<B, Plane>) {
         return &PlanePlane;
@@ -434,10 +434,18 @@ consteval SurfaceHandler SurfaceHandlerFor()
         return &CylinderPlane;
     } else if constexpr (std::same_as<A, Cylinder> && std::same_as<B, Cylinder>) {
         return &CylinderCylinder;
-    } else if constexpr (std::same_as<A, BSplineSurface> && std::same_as<B, BSplineSurface>) {
-        return &NurbsHull;
     } else {
         return &SurfaceStub<A, B>;
+    }
+}
+
+template <typename A, typename B>
+consteval SurfaceHandler SurfaceHandlerFor()
+{
+    if constexpr (std::same_as<A, BSplineSurface> && std::same_as<B, BSplineSurface>) {
+        return &NurbsHull;
+    } else {
+        return AnalyticSurfaceHandlerFor<A, B>();
     }
 }
 
