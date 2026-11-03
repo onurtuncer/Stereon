@@ -71,8 +71,9 @@ struct PlaneFrame {
 /// Encoding a rotated bounded patch as its AABB can invent intersections.
 [[nodiscard]] bool BoxPreserving(const ParameterMap& map) noexcept
 {
-    return (map.U.Y == 0.0 && map.V.X == 0.0) ||
-           (map.U.X == 0.0 && map.V.Y == 0.0);
+    const bool aligned = map.U.Y == 0.0 && map.V.X == 0.0;
+    const bool swapped = map.U.X == 0.0 && map.V.Y == 0.0;
+    return aligned || swapped;
 }
 
 [[nodiscard]] bool Entire(const Box2& box) noexcept
