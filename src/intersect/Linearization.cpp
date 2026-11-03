@@ -282,8 +282,13 @@ template <typename Side>
     if (const Sphere* sphere = surface.Target<Sphere>()) {
         return (Eval(*sphere, uv) - sphere->Center) / sphere->Radius;
     }
-    const Cylinder* cylinder = surface.Target<Cylinder>();
-    return (Eval(*cylinder, uv) - cylinder->Origin - uv.Y * Axis(*cylinder)) / cylinder->Radius;
+    if (const Cylinder* cylinder = surface.Target<Cylinder>()) {
+        return (Eval(*cylinder, uv) - cylinder->Origin - uv.Y * Axis(*cylinder)) /
+               cylinder->Radius;
+    }
+    // A radius binding on a surface without one was refused by
+    // CheckSurfaceBindings; nothing moves here.
+    return {};
 }
 
 [[nodiscard]] Result<void> CheckSurfaceBindings(const std::span<const SurfaceBinding> bindings,
