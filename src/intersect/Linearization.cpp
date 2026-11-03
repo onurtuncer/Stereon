@@ -45,27 +45,57 @@ struct PointSystem {
     Vec3 Residual;
     double Det;
     double Conditioning;
+    /// One partial is zero within rounding against the other: a pole of
+    /// the surface's parameters.
+    bool AtPole;
 };
 
-[[nodiscard]] PointSystem SystemOf(const Line& line, const Plane& plane,
+/// A partial shorter than this fraction of the other is zero within the
+/// rounding of its trigonometry: cos(pi/2) is 6e-17, not 0. Well below any
+/// real surface's ratio of partials, well above that rounding.
+constexpr double PoleRatio = 0x1p-50;
+
+/// The surface's partials come from its own Deriv, so any surface fits. At
+/// a pole of a sphere S_u vanishes, within rounding: the conditioning, the
+/// sine of an angle, scales that out and stays near 1, so the pole is
+/// detected on its own and the point is Indeterminate, a singularity of the
+/// parameters, not of the geometry (ADR-0021, section 5).
+[[nodiscard]] PointSystem SystemOf(const Line& line, const Surface& surface,
                                    const CurveSurfacePoint& point)
 {
+    const Point2& uv = point.OnSurface;
     PointSystem s{line.Direction,
-                  plane.XAxis,
-                  plane.YAxis,
-                  Eval(line, point.Parameter) - Eval(plane, point.OnSurface),
+                  Deriv(surface, uv, 1, 0),
+                  Deriv(surface, uv, 0, 1),
+                  Eval(line, point.Parameter) - Eval(surface, uv),
                   0.0,
-                  0.0};
+                  0.0,
+                  false};
     const Vec3 normal = Cross(s.Su, s.Sv);
     s.Det = Dot(s.Tangent, normal);
     s.Conditioning = std::abs(s.Det) / (Length(s.Tangent) * Length(normal));
+    const double shorter = std::min(Length(s.Su), Length(s.Sv));
+    s.AtPole = !(shorter > PoleRatio * std::max(Length(s.Su), Length(s.Sv)));
     return s;
+}
+
+/// The surfaces whose defining values a SurfaceBinding can move.
+[[nodiscard]] bool IsSupported(const Surface& surface)
+{
+    return surface.Target<Plane>() != nullptr || surface.Target<Sphere>() != nullptr ||
+           surface.Target<Cylinder>() != nullptr;
+}
+
+[[nodiscard]] bool HasRadius(const Surface& surface)
+{
+    return surface.Target<Sphere>() != nullptr || surface.Target<Cylinder>() != nullptr;
 }
 
 /// Whether a point has a derivative, and why not when it has none.
 [[nodiscard]] std::pair<DerivativeStatus, std::string_view> Classify(const CurveSurfacePoint& point,
-                                                                     const double conditioning)
+                                                                     const PointSystem& system)
 {
+    const double conditioning = system.Conditioning;
     if (point.Contact != ContactType::Crossing) {
         return {DerivativeStatus::Nondifferentiable,
                 "a tangential contact: the points merge or vanish as the geometry moves"};
@@ -74,9 +104,15 @@ struct PointSystem {
         return {DerivativeStatus::Indeterminate,
                 "a point the solver did not decide: its contact is not established"};
     }
+    if (system.AtPole) {
+        return {DerivativeStatus::Indeterminate,
+                "a crossing at a pole of the surface's parameters: the angle there has no "
+                "derivative"};
+    }
     if (!(conditioning > 0.0) || !std::isfinite(conditioning)) { // STEREON-LINT-ALLOW(epsilon)
         return {DerivativeStatus::Indeterminate,
-                "a decided crossing whose system is singular in double precision"};
+                "a decided crossing whose system is singular: at a pole of the surface's "
+                "parameters, or tangent within rounding"};
     }
     if (conditioning < NearEventSine) {
         return {DerivativeStatus::NearEvent, "a crossing at a grazing angle"};
@@ -111,18 +147,18 @@ struct Analysis {
     double Conditioning = 1.0;
 };
 
-[[nodiscard]] Analysis Analyze(const Line& line, const Plane& plane,
+[[nodiscard]] Analysis Analyze(const Line& line, const Surface& surface,
                                const CurveSurfaceIntersection& intersection)
 {
     Analysis a;
     if (!intersection.Overlaps.empty()) {
         a.Status = DerivativeStatus::Nondifferentiable;
-        a.Reason = "the line lies in the plane: its points are not isolated";
+        a.Reason = "the line lies in the surface: its points are not isolated";
         return a;
     }
     for (std::size_t k = 0; k < intersection.Points.size(); ++k) {
-        const PointSystem s = SystemOf(line, plane, intersection.Points[k]);
-        const auto [status, why] = Classify(intersection.Points[k], s.Conditioning);
+        const PointSystem s = SystemOf(line, surface, intersection.Points[k]);
+        const auto [status, why] = Classify(intersection.Points[k], s);
         if (Rank(status) > Rank(a.Status)) {
             a.Status = status;
             a.Reason = "point " + std::to_string(k) + ": " + std::string(why);
@@ -162,14 +198,26 @@ struct Analysis {
     return k < 3 ? UnitAlong(k) : t * UnitAlong(k - 3);
 }
 
-[[nodiscard]] Vec3 PlanePartial(const PlaneComponent component)
+/// dS/d(component) at fixed (u, v), per unit of the component: the origin
+/// moves every point alike; the radius moves a sphere's point along
+/// (S - C) / r and a cylinder's along its radial direction.
+[[nodiscard]] Vec3 SurfacePartial(const Surface& surface, const Point2& uv,
+                                  const SurfaceComponent component)
 {
-    return UnitAlong(static_cast<int>(component));
+    if (component != SurfaceComponent::Radius) {
+        return UnitAlong(static_cast<int>(component));
+    }
+    if (const Sphere* sphere = surface.Target<Sphere>()) {
+        return (Eval(*sphere, uv) - sphere->Center) / sphere->Radius;
+    }
+    const Cylinder* cylinder = surface.Target<Cylinder>();
+    return (Eval(*cylinder, uv) - cylinder->Origin - uv.Y * Axis(*cylinder)) / cylinder->Radius;
 }
 
 [[nodiscard]] Result<void> CheckBindings(const std::span<const LineBinding> lineBindings,
-                                         const std::span<const PlaneBinding> planeBindings,
-                                         const ParameterSet& set, const std::string_view where)
+                                         const std::span<const SurfaceBinding> surfaceBindings,
+                                         const Surface& surface, const ParameterSet& set,
+                                         const std::string_view where)
 {
     const auto check = [&](const ParameterId parameter) -> Result<void> {
         if (!set.Contains(parameter)) {
@@ -185,13 +233,26 @@ struct Analysis {
     for (const LineBinding& b : lineBindings) {
         STEREON_TRY_VOID(check(b.Parameter));
     }
-    for (const PlaneBinding& b : planeBindings) {
+    for (const SurfaceBinding& b : surfaceBindings) {
         STEREON_TRY_VOID(check(b.Parameter));
+        if (b.Component == SurfaceComponent::Radius && !HasRadius(surface)) {
+            return Fail(ErrorCode::InvalidInput,
+                        std::string(where) + ": a radius binding on a surface without one");
+        }
     }
     return {};
 }
 
-/// The regime: how many points, and how each meets the plane.
+/// The answer for a surface no binding can move yet.
+[[nodiscard]] Result<SensitivityResult> Unsupported(const std::string_view where)
+{
+    return SensitivityResult::Without(DerivativeStatus::NotSupported,
+                                      std::string(where) +
+                                          ": a line against this surface type has no products "
+                                          "yet; planes, spheres and cylinders have theirs");
+}
+
+/// The regime: how many points, and how each meets the surface.
 [[nodiscard]] std::uint64_t Signature(const CurveSurfaceIntersection& intersection)
 {
     std::uint64_t hash = 14695981039346656037ull; // FNV-1a
@@ -229,78 +290,87 @@ struct Analysis {
 }
 
 /// The point's velocity for the seed: C_p p' and S_p p'.
-[[nodiscard]] std::pair<Vec3, Vec3> Velocities(const std::span<const LineBinding> lineBindings,
-                                               const std::span<const PlaneBinding> planeBindings,
-                                               const SensitivityContext& sensitivity,
-                                               const double t)
+[[nodiscard]] std::pair<Vec3, Vec3>
+Velocities(const std::span<const LineBinding> lineBindings,
+           const std::span<const SurfaceBinding> surfaceBindings, const Surface& surface,
+           const SensitivityContext& sensitivity, const CurveSurfacePoint& point)
 {
     const ParameterSet& set = sensitivity.GetParameters();
     const std::span<const double> seed = sensitivity.GetSeed();
     const auto rate = [&](const ParameterId p) { return seed[p.GetIndex()] * set.GetReference(p); };
-    Vec3 curve{};
-    Vec3 surface{};
+    Vec3 onCurve{};
+    Vec3 onSurface{};
     for (const LineBinding& b : lineBindings) {
-        curve += rate(b.Parameter) * LinePartial(b.Component, t);
+        onCurve += rate(b.Parameter) * LinePartial(b.Component, point.Parameter);
     }
-    for (const PlaneBinding& b : planeBindings) {
-        surface += rate(b.Parameter) * PlanePartial(b.Component);
+    for (const SurfaceBinding& b : surfaceBindings) {
+        onSurface += rate(b.Parameter) * SurfacePartial(surface, point.OnSurface, b.Component);
     }
-    return {curve, surface};
+    return {onCurve, onSurface};
 }
 
 } // namespace
 
-Result<CurveSurfaceLinearization> Linearize(const Line& line, const Plane& plane,
+Result<CurveSurfaceLinearization> Linearize(const Line& line, const Surface& surface,
                                             const CurveSurfacePoint& point)
 {
     if (!std::isfinite(point.Parameter) || !std::isfinite(point.OnSurface.X) ||
         !std::isfinite(point.OnSurface.Y)) {
         return Fail(ErrorCode::InvalidInput, "Linearize: the point's parameters must be finite");
     }
-    const PointSystem s = SystemOf(line, plane, point);
-    return CurveSurfaceLinearization{
-        s.Residual, s.Tangent, s.Su, s.Sv, s.Conditioning, Classify(point, s.Conditioning).first};
+    if (surface.IsEmpty()) {
+        return Fail(ErrorCode::InvalidInput, "Linearize: an empty surface");
+    }
+    const PointSystem s = SystemOf(line, surface, point);
+    return CurveSurfaceLinearization{s.Residual, s.Tangent,      s.Su,
+                                     s.Sv,       s.Conditioning, Classify(point, s).first};
 }
 
 Result<SensitivityResult>
-IntersectJvp(const Line& line, const std::span<const LineBinding> lineBindings, const Plane& plane,
-             const std::span<const PlaneBinding> planeBindings,
+IntersectJvp(const Line& line, const std::span<const LineBinding> lineBindings,
+             const Surface& surface, const std::span<const SurfaceBinding> surfaceBindings,
              const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity)
 {
-    STEREON_TRY_VOID(
-        CheckBindings(lineBindings, planeBindings, sensitivity.GetParameters(), "IntersectJvp"));
+    if (surface.IsEmpty() || !IsSupported(surface)) {
+        return Unsupported("IntersectJvp");
+    }
+    STEREON_TRY_VOID(CheckBindings(lineBindings, surfaceBindings, surface,
+                                   sensitivity.GetParameters(), "IntersectJvp"));
     if (sensitivity.GetSeed().size() != sensitivity.GetParameters().GetSize()) {
         return Fail(ErrorCode::InvalidInput, "IntersectJvp: the context has no seed");
     }
-    const Analysis a = Analyze(line, plane, intersection);
+    const Analysis a = Analyze(line, surface, intersection);
     if (!HasDerivative(a.Status)) {
         return SensitivityResult::Without(a.Status, "IntersectJvp: " + a.Reason);
     }
     std::vector<double> values;
     for (std::size_t k = 0; k < intersection.Points.size(); ++k) {
         const PointSystem& s = a.Systems[k];
-        const auto [curve, surface] =
-            Velocities(lineBindings, planeBindings, sensitivity, intersection.Points[k].Parameter);
-        const std::array<double, 3> z = Solve(s, surface - curve);
-        const Vec3 x = curve + z[0] * s.Tangent;
+        const auto [onCurve, onSurface] =
+            Velocities(lineBindings, surfaceBindings, surface, sensitivity, intersection.Points[k]);
+        const std::array<double, 3> z = Solve(s, onSurface - onCurve);
+        const Vec3 x = onCurve + z[0] * s.Tangent;
         values.insert(values.end(), {x.X, x.Y, x.Z, z[0], z[1], z[2]});
     }
     return Published(a, std::move(values), Signature(intersection), "IntersectJvp");
 }
 
 Result<SensitivityResult>
-IntersectVjp(const Line& line, const std::span<const LineBinding> lineBindings, const Plane& plane,
-             const std::span<const PlaneBinding> planeBindings,
+IntersectVjp(const Line& line, const std::span<const LineBinding> lineBindings,
+             const Surface& surface, const std::span<const SurfaceBinding> surfaceBindings,
              const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity)
 {
+    if (surface.IsEmpty() || !IsSupported(surface)) {
+        return Unsupported("IntersectVjp");
+    }
     const ParameterSet& set = sensitivity.GetParameters();
-    STEREON_TRY_VOID(CheckBindings(lineBindings, planeBindings, set, "IntersectVjp"));
+    STEREON_TRY_VOID(CheckBindings(lineBindings, surfaceBindings, surface, set, "IntersectVjp"));
     const std::span<const double> adjoint = sensitivity.GetAdjoint();
     if (adjoint.size() != CurveSurfacePointValues * intersection.Points.size()) {
         return Fail(ErrorCode::InvalidInput,
                     "IntersectVjp: the adjoint must have six components per point");
     }
-    const Analysis a = Analyze(line, plane, intersection);
+    const Analysis a = Analyze(line, surface, intersection);
     if (!HasDerivative(a.Status)) {
         return SensitivityResult::Without(a.Status, "IntersectVjp: " + a.Reason);
     }
@@ -314,14 +384,16 @@ IntersectVjp(const Line& line, const std::span<const LineBinding> lineBindings, 
             adjoint.subspan(CurveSurfacePointValues * k, CurveSurfacePointValues);
         const Vec3 xBar{bar[0], bar[1], bar[2]};
         const Vec3 y = SolveTransposed(s, {bar[3] + Dot(s.Tangent, xBar), bar[4], bar[5]});
-        const double t = intersection.Points[k].Parameter;
+        const CurveSurfacePoint& point = intersection.Points[k];
         for (const LineBinding& b : lineBindings) {
             values[b.Parameter.GetIndex()] +=
-                set.GetReference(b.Parameter) * Dot(xBar - y, LinePartial(b.Component, t));
+                set.GetReference(b.Parameter) *
+                Dot(xBar - y, LinePartial(b.Component, point.Parameter));
         }
-        for (const PlaneBinding& b : planeBindings) {
+        for (const SurfaceBinding& b : surfaceBindings) {
             values[b.Parameter.GetIndex()] +=
-                set.GetReference(b.Parameter) * Dot(y, PlanePartial(b.Component));
+                set.GetReference(b.Parameter) *
+                Dot(y, SurfacePartial(surface, point.OnSurface, b.Component));
         }
     }
     return Published(a, std::move(values), Signature(intersection), "IntersectVjp");

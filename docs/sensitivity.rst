@@ -170,7 +170,7 @@ by :math:`F_z \dot z = S_p \dot p - C_p \dot p` and its position by
 :math:`|\det F_z| / (|C'| |S_u \times S_v|)`, the sine of the angle between
 curve and surface, is the conditioning.
 
-``Linearize(line, plane, point)`` exposes this for one point of
+``Linearize(line, surface, point)`` exposes this for one point of
 ``Intersect``: the residual :math:`F`, the columns of :math:`F_z` (``Tangent``,
 ``Su``, ``Sv``), the conditioning and the status. Whether a derivative exists
 is read from what the primal solver proved:
@@ -183,15 +183,24 @@ a crossing the solver decided          ``Valid``, or ``NearEvent`` below ``NearE
 a ``Tangential`` point, or an overlap  ``Nondifferentiable``: the points merge, vanish
                                        or stop being isolated as the geometry moves
 a point the solver left undecided      ``Indeterminate``
+a crossing at a pole of the surface's  ``Indeterminate``: the angle there has no
+parameters (a sphere's)                derivative, though the geometry is regular
 =====================================  ================================================
 
 A result takes its worst point's status, and carries values only for
 ``Valid`` and ``NearEvent``.
 
 ``IntersectJvp`` and ``IntersectVjp`` implement the products for a line
-against a plane, with ``LineBinding`` binding a parameter to a coordinate of
-the line's origin or direction and ``PlaneBinding`` to a coordinate of the
-plane's origin, each a ``Length``. Each point gives six values,
+against a plane, a sphere or a cylinder, with ``LineBinding`` binding a
+parameter to a coordinate of the line's origin or direction and
+``SurfaceBinding`` to a coordinate of the surface's origin (a sphere's
+centre) or to its radius, each a ``Length``. The surface's partials come
+from its own ``Deriv``; at fixed :math:`(u, v)` the origin moves every point
+alike, and the radius moves a sphere's point along :math:`(S - C) / r` and a
+cylinder's along its radial direction. A pole is detected on its own: the
+conditioning, the sine of an angle, scales out the vanishing :math:`S_u`, so
+a partial within rounding of zero against the other (below 2\ :sup:`-50` of
+it) makes the point ``Indeterminate``. Each point gives six values,
 ``CurveSurfacePointValues``: :math:`\dot x` (three), then :math:`\dot t`,
 :math:`\dot u` and :math:`\dot v`. The VJP takes an adjoint of six components
 per point and returns one value per parameter, accumulated point by point in
@@ -204,7 +213,10 @@ the second-order decay of the Taylor residual
 :math:`\lVert y(p + h v) - y(p) - h J v \rVert` on random lines and planes,
 that the VJP is the JVP's transpose, and every status: an overlap, a touch,
 an undecided point and a grazing crossing never carry an unqualified
-derivative. Other pairs answer ``NotSupported``; each new curve–surface
+derivative. The sphere and the cylinder are checked against the closed form
+of a line crossing a circle, :math:`x' = r / x` for a growing radius, and
+the Taylor and transpose properties run on random lines through both. Other
+pairs answer ``NotSupported``; each new curve–surface
 handler binds its geometry's parameters to the same system.
 
 The AD backend: CppAD

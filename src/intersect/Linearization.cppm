@@ -36,9 +36,11 @@ import :Dispatch;
 /// the solver left undecided is Indeterminate. A result with any point that
 /// carries no derivative carries none as a whole (ADR-0021, section 5).
 ///
-/// The first pair is a line against a plane, the parameters bound to
-/// coordinates of the line's origin and direction and of the plane's
-/// origin. The others answer NotSupported until they bind theirs.
+/// The pairs so far are a line against a plane, a sphere or a cylinder, the
+/// parameters bound to coordinates of the line's origin and direction and
+/// to the surface's origin or radius. The surface's partials come from its
+/// own Deriv, so a new surface needs only the velocities of its defining
+/// values; the others answer NotSupported until they bind theirs.
 
 export namespace Stereon {
 
@@ -60,17 +62,19 @@ struct LineBinding {
     LineComponent Component = LineComponent::OriginX;
 };
 
-/// What a design parameter moves on a plane: a coordinate of its origin, a
-/// Length. The frame is fixed: turning the plane is a later binding.
-enum class PlaneComponent : std::uint8_t {
+/// What a design parameter moves on a surface, each a Length: a coordinate
+/// of its origin (a sphere's centre), or its radius (a sphere's or a
+/// cylinder's). The frame is fixed: turning a surface is a later binding.
+enum class SurfaceComponent : std::uint8_t {
     OriginX,
     OriginY,
     OriginZ,
+    Radius,
 };
 
-struct PlaneBinding {
+struct SurfaceBinding {
     ParameterId Parameter;
-    PlaneComponent Component = PlaneComponent::OriginX;
+    SurfaceComponent Component = SurfaceComponent::OriginX;
 };
 
 /// The values a product gives per point of a curve–surface intersection,
@@ -103,20 +107,22 @@ struct CurveSurfaceLinearization {
     DerivativeStatus Status;
 };
 
-/// The linearisation of a point of Intersect(line, plane). InvalidInput for
-/// a point whose parameters are not finite.
-[[nodiscard]] Result<CurveSurfaceLinearization> Linearize(const Line& line, const Plane& plane,
+/// The linearisation of a point of Intersect(line, surface), for any
+/// surface. InvalidInput for an empty surface or a point whose parameters
+/// are not finite.
+[[nodiscard]] Result<CurveSurfaceLinearization> Linearize(const Line& line, const Surface& surface,
                                                           const CurveSurfacePoint& point);
 
-/// The forward product of Intersect(line, plane) for the seed of
+/// The forward product of Intersect(line, surface) for the seed of
 /// `sensitivity`: for each point of `intersection`, in its order,
 /// CurveSurfacePointValues values. `intersection` is the result of
-/// intersecting these two geometries. InvalidInput for a binding whose
-/// parameter is not of the context's set or is not a Length, or a seed
-/// that was never set.
+/// intersecting these two geometries. NotSupported (a status) for a
+/// surface other than a plane, a sphere or a cylinder. InvalidInput for a
+/// binding whose parameter is not of the context's set or is not a Length,
+/// a radius binding on a plane, or a seed that was never set.
 [[nodiscard]] Result<SensitivityResult>
-IntersectJvp(const Line& line, std::span<const LineBinding> lineBindings, const Plane& plane,
-             std::span<const PlaneBinding> planeBindings,
+IntersectJvp(const Line& line, std::span<const LineBinding> lineBindings, const Surface& surface,
+             std::span<const SurfaceBinding> surfaceBindings,
              const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
 
 /// The reverse product: for the adjoint of `sensitivity`, a covector of
@@ -125,8 +131,8 @@ IntersectJvp(const Line& line, std::span<const LineBinding> lineBindings, const 
 /// points in their order (ADR-0021, section 7). InvalidInput as
 /// IntersectJvp, and for an adjoint of another length.
 [[nodiscard]] Result<SensitivityResult>
-IntersectVjp(const Line& line, std::span<const LineBinding> lineBindings, const Plane& plane,
-             std::span<const PlaneBinding> planeBindings,
+IntersectVjp(const Line& line, std::span<const LineBinding> lineBindings, const Surface& surface,
+             std::span<const SurfaceBinding> surfaceBindings,
              const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
 
 } // namespace Stereon
