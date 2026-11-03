@@ -84,8 +84,7 @@ struct Sides {
 /// A box deeply inside a convex conic disk provably misses its boundary.
 /// The 1/2-radius margin accommodates allowed tiny frame errors.
 template <typename Conic>
-[[nodiscard]] bool ProvenInteriorBox(const Conic& c, const double rx, const double ry,
-                                      const Box2& box)
+[[nodiscard]] bool ProvenInteriorBox(const Conic& c, double rx, double ry, const Box2& box)
 {
     if (!IsBounded(box)) {
         return false;
@@ -236,9 +235,10 @@ EllipseSection(const Sides& s, const Box2& boxA, const Box2& boxB, const Context
     const Box2 planeBox{Around(onPlane.Center.X, majorRadius),
                         Around(onPlane.Center.Y, majorRadius)};
     SurfaceSurfaceIntersection result;
-    if (range.IsEmpty() || !Intersects(boxB.Y, Around(vCenter, std::abs(amplitude))) ||
-        !Intersects(planeBox, boxA) ||
-        ProvenInteriorBox(onPlane, majorRadius, s.C.Radius, boxA)) {
+    const bool heightMiss = !Intersects(boxB.Y, Around(vCenter, std::abs(amplitude)));
+    const bool planeBoundsMiss = !Intersects(planeBox, boxA);
+    const bool insideConic = ProvenInteriorBox(onPlane, majorRadius, s.C.Radius, boxA);
+    if (range.IsEmpty() || heightMiss || planeBoundsMiss || insideConic) {
         return result;
     }
     if (!Contains(boxA, planeBox)) {
