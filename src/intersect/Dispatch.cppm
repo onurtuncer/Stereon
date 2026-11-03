@@ -246,8 +246,9 @@ struct PlanarIntersection {
 /// BuiltinCurveTypes and BuiltinSurfaceTypes, and one per curve–surface
 /// pair, from both lists. A pair with a closed-form method gets an analytic
 /// handler (ADR-0010): plane–plane, plane–cylinder and cylinder–cylinder
-/// (the Boolean prototype's M3 and M3b), and a line against a plane, a
-/// sphere or a cylinder (v0.2's first curve–surface handlers) so far. Every
+/// (the Boolean prototype's M3 and M3b), and a line or a B-spline curve
+/// against a plane, a sphere or a cylinder (v0.2's curve–surface handlers)
+/// so far. Every
 /// other pair has a stub, which reports NotImplemented naming both types.
 /// Types that are not built in report NotSupported: the generic subdivision
 /// path needs tier 2 and 3 capabilities that no user type can declare yet.
@@ -350,6 +351,18 @@ Result<CurveSurfaceIntersection> LineSphere(const Curve&, const Interval&, const
                                             const Box2&, const Context&);
 Result<CurveSurfaceIntersection> LineCylinder(const Curve&, const Interval&, const Surface&,
                                               const Box2&, const Context&);
+
+/// A B-spline curve, polynomial or rational, against a plane, a sphere or
+/// a cylinder: the surface's implicit equation on each Bezier segment,
+/// enclosed in Bernstein form and subdivided until every piece is proved
+/// apart, a proved crossing, or an undecided root or touch; anything still
+/// open fails with IntersectionFailed. Defined in SplineSurface.cpp.
+Result<CurveSurfaceIntersection> SplinePlane(const Curve&, const Interval&, const Surface&,
+                                             const Box2&, const Context&);
+Result<CurveSurfaceIntersection> SplineSphere(const Curve&, const Interval&, const Surface&,
+                                              const Box2&, const Context&);
+Result<CurveSurfaceIntersection> SplineCylinder(const Curve&, const Interval&, const Surface&,
+                                                const Box2&, const Context&);
 
 template <typename A, typename B>
 Result<CurveCurveIntersection> CurveStub(const Curve&, const Interval&, const Curve&,
@@ -542,17 +555,32 @@ consteval PlanarHandler PlanarHandlerFor()
     }
 }
 
+/// The handlers of a curve of type A against a plane, a sphere or a
+/// cylinder, each given; the stub for any other surface.
+template <typename A, typename B, CurveSurfaceHandler OnPlane, CurveSurfaceHandler OnSphere,
+          CurveSurfaceHandler OnCylinder>
+consteval CurveSurfaceHandler AgainstQuadric()
+{
+    if constexpr (std::same_as<B, Plane>) {
+        return OnPlane;
+    } else if constexpr (std::same_as<B, Sphere>) {
+        return OnSphere;
+    } else if constexpr (std::same_as<B, Cylinder>) {
+        return OnCylinder;
+    } else {
+        return &CurveSurfaceStub<A, B>;
+    }
+}
+
 /// The handler of a curve of type A against a surface of type B; see
 /// SurfaceHandlerFor.
 template <typename A, typename B>
 consteval CurveSurfaceHandler CurveSurfaceHandlerFor()
 {
-    if constexpr (std::same_as<A, Line> && std::same_as<B, Plane>) {
-        return &LinePlane;
-    } else if constexpr (std::same_as<A, Line> && std::same_as<B, Sphere>) {
-        return &LineSphere;
-    } else if constexpr (std::same_as<A, Line> && std::same_as<B, Cylinder>) {
-        return &LineCylinder;
+    if constexpr (std::same_as<A, Line>) {
+        return AgainstQuadric<A, B, &LinePlane, &LineSphere, &LineCylinder>();
+    } else if constexpr (std::same_as<A, BSplineCurve>) {
+        return AgainstQuadric<A, B, &SplinePlane, &SplineSphere, &SplineCylinder>();
     } else {
         return &CurveSurfaceStub<A, B>;
     }
@@ -637,7 +665,9 @@ export namespace Stereon {
 /// period and placed in the box. InvalidInput for an empty curve or
 /// surface or a domain that is empty or NaN-bounded; NotSupported for a
 /// type that is not built in; NotImplemented for a pair without a handler
-/// yet: lines against planes, spheres and cylinders have theirs.
+/// yet: lines and B-spline curves against planes, spheres and cylinders
+/// have theirs. IntersectionFailed when a B-spline's roots cannot all be
+/// isolated: never an empty result that is not a proved separation.
 [[nodiscard]] Result<CurveSurfaceIntersection> Intersect(const Curve& curve, const Interval& domain,
                                                          const Surface& surface, const Box2& box,
                                                          const Context& ctx);
