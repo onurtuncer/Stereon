@@ -86,6 +86,9 @@ using Bounds = std::array<Interval, 3>;
 {
     const bool u = ValidKnotVector(s.KnotsU, s.DegreeU);
     const bool v = ValidKnotVector(s.KnotsV, s.DegreeV);
+    if (!u || !v) {
+        return false; // Do not compute pole counts from invalid knot vectors.
+    }
     const bool layout = ValidPoleLayout(s);
     const bool weights = ValidWeights(s);
     return u && v && layout && weights && ValidPoles(s);
