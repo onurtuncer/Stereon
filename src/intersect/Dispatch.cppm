@@ -293,6 +293,11 @@ Result<SurfaceSurfaceIntersection> CylinderCylinder(const Surface&, const Box2&,
 Result<SurfaceSurfaceIntersection> CylinderCylinderSkew(const Surface&, const Box2&, const Surface&,
                                                         const Box2&, double, const Context&);
 
+/// Certified convex-hull rejection for positive-weight NURBS pairs;
+/// unknown overlaps fail closed until the Phase 2 solver is implemented.
+Result<SurfaceSurfaceIntersection> NurbsHull(const Surface&, const Box2&, const Surface&,
+                                             const Box2&, double, const Context&);
+
 /// The plane curve handlers (the Boolean prototype's M6, face clipping):
 /// lines, circles and ellipses against each other, every configuration
 /// decision the sign of a polynomial in the input doubles, and B-splines
@@ -419,7 +424,7 @@ consteval auto MakePairTable(TypeList<Ts...> types)
 /// rather than specialisations: GCC 16.2 and MSVC mishandle explicit
 /// specialisations in module interfaces (docs/toolchain/gcc16-feature-probe.md).
 template <typename A, typename B>
-consteval SurfaceHandler SurfaceHandlerFor()
+consteval SurfaceHandler AnalyticSurfaceHandlerFor()
 {
     if constexpr (std::same_as<A, Plane> && std::same_as<B, Plane>) {
         return &PlanePlane;
@@ -431,6 +436,16 @@ consteval SurfaceHandler SurfaceHandlerFor()
         return &CylinderCylinder;
     } else {
         return &SurfaceStub<A, B>;
+    }
+}
+
+template <typename A, typename B>
+consteval SurfaceHandler SurfaceHandlerFor()
+{
+    if constexpr (std::same_as<A, BSplineSurface> && std::same_as<B, BSplineSurface>) {
+        return &NurbsHull;
+    } else {
+        return AnalyticSurfaceHandlerFor<A, B>();
     }
 }
 
