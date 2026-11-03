@@ -113,8 +113,10 @@ using Bounds = std::array<Interval, 3>;
 
 } // namespace
 
-Result<SurfaceSurfaceIntersection> NurbsHull(const Surface& a, const Box2&, const Surface& b,
-                                              const Box2&, const double tolerance, const Context&)
+using SSIResult = Result<SurfaceSurfaceIntersection>;
+
+SSIResult NurbsHull(const Surface& a, const Box2&, const Surface& b, const Box2&,
+                    const double tolerance, const Context&)
 {
     const BSplineSurface* sa = a.Target<BSplineSurface>();
     const BSplineSurface* sb = b.Target<BSplineSurface>();
