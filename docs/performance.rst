@@ -690,13 +690,13 @@ Topology (B0.3–B0.5)
 --------------------
 
 The topology benchmarks build a sheet of :math:`n \times n` planar quads
-with each library: Stereon's tables and TopoDS faces sharing their edges and
+with each library: Stereon's tables, and TopoDS faces sharing their edges and
 vertices. At 10⁶ faces this is the body that the gates of ADR-0004 and
-ADR-0005 name. The figures below come from the reference run of 2026-10-20
-(``bench/reports/phase0-topology-reference-2026-10-20.md``, run
-39399395722, commit ``2c24d79``): the same container and runner as above,
-5 interleaved repetitions for the topology rows, and both libraries in one
-process.
+ADR-0005 name. The figures below are from the reference run of record,
+2026-11-02 (``bench/reports/phase1-reference-2026-11-02.md``, workflow run
+41424965507, commit ``91dff8e``): an AMD EPYC 7763 with 4 CPUs, GCC 16.2,
+OCCT ``V8_0_1``, both libraries in one process, the median of 5
+interleaved repetitions.
 
 .. list-table::
    :header-rows: 1
@@ -709,64 +709,88 @@ process.
      - Gate
    * - B0.3
      - Faces of every edge (OCCT builds its ancestor map)
-     - 123 ms
-     - 2516 ms
-     - ≥ 5×: **20×, met**
+     - 116 ms
+     - 2493 ms
+     - ≥ 5×: **21×, met**
    * - B0.3
      - Edges of every vertex
-     - 53 ms
-     - 3158 ms
-     - ≥ 5×: **60×, met**
+     - 53.9 ms
+     - 3204 ms
+     - ≥ 5×: **59×, met**
+   * - B0.3
+     - Build the sheet
+     - 1085 ms
+     - 22 955 ms
+     - report: 21×
    * - B0.4
      - Live heap per face
-     - 1255 B
+     - 608 B
      - 1601 B
-     - < 50%: **38%, met** (78% at first; see below)
+     - < 50 %: **38 %, met**
    * - B0.5
-     - Pages copied by one surface replacement
-     - 0.003 %
-     - —
-     - < 1%: **met**
+     - Replace one face's surface: time
+     - 434 ms
+     - 1934 ms
+     - report: 4.5×
    * - B0.5
-     - Pages copied by one face deletion
-     - 0.014 %
+     - Replace one face's surface: pages copied
+     - 0.004 %
      - —
-     - < 1%: **met**
+     - < 1 %: **met**
+   * - B0.5
+     - Delete one face: time
+     - 436 ms
+     - 1987 ms
+     - report: 4.6×
+   * - B0.5
+     - Delete one face: pages copied
+     - 0.010 %
+     - —
+     - < 1 %: **met**
+   * - B0.5
+     - Split an edge (`SplitEdgeMakeVertex`)
+     - 444 ms
+     - —
+     - no OCCT twin yet
+   * - B0.5
+     - Split a face (`MakeEdgeFace`)
+     - 440 ms
+     - —
+     - no OCCT twin yet
    * - ADR-0005
      - Body and its copy after 100 edits, over the body
-     - 1.008×
+     - 1.005×
      - —
      - < 1.2×: **met**
+   * - ADR-0004
+     - ``Compact()`` after 50 deletions, over a fresh body
+     - 1.000×
+     - —
+     - < 1.05×: **met**
 
-The adjacency queries read Stereon's maintained incidence: ``EdgesOf``
-walks the vertex's list, and ``FacesOf`` walks the radial ring. OCCT has to
-build ``TopExp::MapShapesAndAncestors`` before it can answer the first
-query, and the comparison counts that build, as a query session must pay
-for it. A local edit opened on the frozen body copies a few pages of the
-tables and nothing else. The whole edit adds about 1 MB of heap against
-OCCT's 48 MB for ``BRepTools_ReShape``.
+**Adjacency.** The queries read Stereon's maintained incidence:
+``EdgesOf`` walks the vertex's list of edges, and ``FacesOf`` walks the
+edge's radial ring of coedges, both in time proportional to the answer.
+OCCT has to build ``TopExp::MapShapesAndAncestors`` before it can answer the
+first query, and the comparison counts that build, as a query session must
+pay for it.
 
-**Memory per face is not met.** The measure is the live heap the sheet
-holds with the shape alive, read through glibc's ``mallinfo2`` the same way
+**Local edits.** An edit opens a builder on the frozen body, which shares
+every page of its tables until it writes one (ADR-0005). Replacing one
+face's surface, or deleting a face, therefore copies a few pages: 0.004 %
+and 0.010 % of the body. That adds 1.3 MB of heap against the 48 MB of OCCT's
+``BRepTools_ReShape``. The time of an edit is dominated by freezing the
+result, whose structural certification walks the whole body (ADR-0038).
+
+**Memory.** The live heap is read through glibc's ``mallinfo2`` the same way
 for both libraries (``bench/Memory.hpp``), geometry included on both sides.
-Stereon's live heap per face is almost exactly its table pages per face
-(1253 B), so the cost is in the tables and geometry pools, not in anything
-else.
-
-The first run estimated that the geometry pools dominated: each of a face's
-four coedges has its own pcurve and each of its two edges its own curve, and
-every one was an erased ``Curve`` or ``Curve2d`` of 144 bytes (a 128-byte
-buffer and a pointer, aligned to 16). Two changes followed: smaller records
-(liveness folded into the generation word, fields ordered against padding)
-and one buffer size per wrapper kind, so that every built-in type still fits
-inline (:doc:`geometry`, *The buffer size, revisited*). B0.4 now reports its
-bytes per face by table. A run of only these rows on the reference image
-(run 39433824401, three repetitions) measured, at 10⁶ faces:
+Stereon's 608 bytes per face are almost exactly its table pages:
 
 .. list-table::
    :header-rows: 1
+   :widths: 60 40
 
-   * - Table
+   * - Table, 10⁶ faces
      - Bytes per face
    * - Vertices
      - 40
@@ -776,39 +800,22 @@ bytes per face by table. A run of only these rows on the reference image
      - 128
    * - Loops and faces
      - 44
-   * - Curve pool (2 lines)
-     - 208
-   * - Pcurve pool (4 plane lines)
-     - 320
-   * - Live heap, all of it
-     - 887, against OCCT's 1601: **55%, not met**
-
-The geometry pools were still 60% of the total, and their wrappers most of
-it: a ``Line2d`` is 32 bytes, its ``Curve2d`` 80. The pools now keep the
-built-in types by value, each in its own arena, with the erased wrapper kept
-for B-splines, composite and user geometry (``GeometryPool``,
-``src/topo/Records.cppm``). Run 39437110770, committed as
-``bench/reports/phase0-topology-reference-2026-10-20-memory.md``, measured
-at 10⁶ faces:
-
-.. list-table::
-   :header-rows: 1
-
-   * - Table
-     - Bytes per face
-   * - Records (vertices, edges, coedges, loops and faces)
-     - 356
-   * - Curve pool (2 lines and their slots)
+   * - Curve pool (2 lines per face)
      - 104
-   * - Pcurve pool (4 plane lines and their slots)
+   * - Pcurve pool (4 plane lines per face)
      - 144
-   * - Live heap, all of it
-     - 608, against OCCT's 1601: **38%, met**
-Splitting a face or an edge is part of ADR-0005's edit sequence and is not
-measured. It needs the Euler operators of ADR-0027, which do not exist yet.
+   * - Surface pool (one plane, shared)
+     - 0
+   * - All tables
+     - 604
 
-The run of 2026-10-20 predates the cached-curve fields of the edge record;
-the measurement above includes them.
+The records are packed: the liveness of a slot is folded into its generation
+word, and fields are ordered against padding (``src/topo/Records.cppm``;
+``tests/topo/RecordLayoutTests.cpp`` checks the sizes). The geometry pools
+store the built-in types by value, each in its own arena, and keep the
+erased wrapper only for B-splines and composite and user geometry
+(``GeometryPool``). A plane line is 32 bytes by value, against 80 as an
+erased ``Curve2d``.
 
 Booleans on the pool (M10)
 --------------------------
@@ -858,7 +865,8 @@ on main measured 1 761 ms serially and 860 ms on 4 threads, a speed-up of
 in parallel throughout. That runner has 2 physical cores with 2 threads
 each. ADR-0007 asks for at least half the control's speed-up; the Boolean
 reaches 59 %. Its remaining serial share, the network assembly and the
-classification after the parallel pair stage, is Phase 1 work.
+classification after the parallel pair stage, is work for the Boolean
+releases (v0.4–v0.6).
 
 These speed-ups compare Stereon with itself. How fast Stereon's Boolean is
 next to OCCT's ``BRepAlgoAPI`` is benchmark B4.1–B4.3, which has not run.

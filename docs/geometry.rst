@@ -221,9 +221,11 @@ code, and property tests require them to agree to the bit on every built-in
 type. ``BuiltinIndexOf`` gives a wrapped value's position in its type list,
 which the intersection tables of ``Stereon.Intersect`` use: ``Intersect(a,
 b, ctx)`` dispatches built-in pairs through a table generated at compile
-time, one handler per ordered pair. Every handler is a stub returning
-``NotImplemented`` until the analytic handlers of ADR-0010 arrive, and types
-that are not built in return ``NotSupported``.
+time, one handler per ordered pair. A pair with a handler uses it: the
+analytic surface pairs, lines and B-spline curves against planes, spheres
+and cylinders, and the plane curve pairs of face clipping
+(:doc:`intersection`). Other built-in pairs return ``NotImplemented``,
+naming both types, and types that are not built in return ``NotSupported``.
 
 Measured in ``bench/GeometryBench.cpp`` (GCC 16.2, -O3), in nanoseconds per
 evaluation:

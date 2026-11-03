@@ -12,7 +12,8 @@ Blending — ``Stereon.Blend``
 
 Fillets, chamfers and shelling. The module exists so that the layering is
 in place, between the Booleans it will build on and the meshing above it,
-but it has no API yet: blending is Phase 1 work (see the roadmap in
+but it has no API yet: fillets, chamfers and shelling are planned for v0.9,
+Phase 6a (see the roadmap in
 ``docs/planning/roadmap-and-versioning.md``).
 
 Where it sits

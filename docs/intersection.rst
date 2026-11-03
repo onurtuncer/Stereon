@@ -346,11 +346,30 @@ ellipses and non-rational B-splines are covered as curves and pcurves, and
 planes and cylinders as surfaces; anything else is ``NotSupported``, and a
 range outside a B-spline's domain is ``InvalidInput``.
 
-Every other pair reports ``NotImplemented`` until Phase 2.
+Two B-spline surfaces
+---------------------
+
+The general intersection of two B-spline surfaces, by subdivision and
+marching, is the generic path of ADR-0010. Its first stage exists. A
+positive-weight B-spline surface lies in the convex hull of its control
+net, so if the outward-rounded coordinate boxes of the two nets are further
+apart than the pair tolerance along some axis,
+
+.. math::
+
+   \min_i P^{A}_{i,x} - \max_j P^{B}_{j,x} > \tau_{AB}
+   \quad\text{(or the same with } A, B \text{ exchanged, or along } y \text{ or } z\text{)},
+
+the surfaces are proved disjoint and the result is empty. That proof holds
+over any requested domains. Otherwise the pair returns ``NotImplemented``,
+never an empty result it has not proved (``src/intersect/GenericSSI.cpp``).
+
+Every other pair reports ``NotImplemented``.
 
 .. todo::
 
-   The generic path (subdivision, marching) when Phase 2 builds it.
+   The rest of the generic path (Bézier subdivision, interval and
+   normal-cone pruning, marching) when Phase 2 builds it.
 
 Related design decisions
 ------------------------

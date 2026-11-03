@@ -21,10 +21,22 @@ OpenCASCADE. ``tools/occt/build_occt.sh`` builds a pinned OCCT, tag
 script, so it is rebuilt only when the pin or an option changes.
 
 Configuring with ``-DSTEREON_WITH_OCCT=ON`` and the OCCT install directory in
-``CMAKE_PREFIX_PATH`` builds ``stereon_occt_tests``: the same line, circle,
-plane and cylinder are built in both kernels and evaluated, with first and
-second derivatives, over two periods of parameters, and must agree to a
-relative 1e-13. The Boolean prototype's union, cut and common of the M10
+``CMAKE_PREFIX_PATH`` builds ``stereon_occt_tests``, four suites:
+
+- **Geometry** (``GeometryDifferentialTests.cpp``): lines, circles, ellipses,
+  hyperbolas and parabolas, B-spline curves and surfaces, planes, cylinders,
+  cones, spheres and tori are built in both kernels and evaluated, with
+  first and second derivatives, and must agree to a relative 1e-13. So must
+  projection, degree elevation, knot removal and concatenation.
+- **Intersection** (``IntersectionDifferentialTests.cpp``): lines against
+  planes, spheres and cylinders, plane–plane, plane–cylinder, and parallel
+  and skew cylinder–cylinder.
+- **Robustness** (``OcctRobustnessTests.cpp``, ``RobustnessHunt.cpp``):
+  inputs near the decisions of each algorithm, where the two kernels are
+  most likely to disagree.
+- **Booleans** (``BooleanDifferentialTests.cpp``), below.
+
+The Boolean prototype's union, cut and common of the M10
 fixtures (``tests/support/BooleanCases.hpp``) run through ``BRepAlgoAPI`` on
 OCCT twins of the operands, and their volumes, areas and face counts must
 agree: volumes and areas within 1e-6 relative (ADR-0013) plus a band as
@@ -204,6 +216,6 @@ puts the ratio of their medians in its summary.
 
 .. todo::
 
-   Write the rest of this chapter: unit and property tests, fuzzing,
-   regression cases and the corpus.
+   Write the rest of this chapter: unit and property tests, regression
+   cases and the corpus.
 

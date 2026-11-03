@@ -48,8 +48,8 @@ These are the first operations of the Boolean prototype
 
 .. todo::
 
-   Extrude, revolve, sweep, loft, sewing, Boolean operations, blends and
-   operation history.
+   Extrude, revolve, sweep, loft, sewing and blends, as the construction
+   and finishing releases build them (v0.3 and v0.9).
 
 Face clipping and imprinting
 ----------------------------

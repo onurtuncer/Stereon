@@ -52,6 +52,7 @@ endif()
 if(STEREON_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+add_subdirectory(examples)
 endif()
 
 if(STEREON_BUILD_BENCH)

@@ -71,7 +71,7 @@ Every public geometric operation declares, before any evaluation, an
 geometry, input points, the operation's own values, tolerances, topology),
 the conventions its samples may be tracked by, the assumptions under which a
 derivative would be valid, and the products it implements (JVP, VJP, dense
-Jacobian; none yet). Each library keeps a catalogue in its ``Capabilities``
+Jacobian; so far the JVP and VJP of B-spline curve evaluation). Each library keeps a catalogue in its ``Capabilities``
 partition: ``CurveCapabilities()``, ``SurfaceCapabilities()``,
 ``IntersectCapabilities()``, ``TopoCapabilities()``, ``BuildCapabilities()``
 and ``BooleanCapabilities()``. ``KernelCapabilities()``, in
