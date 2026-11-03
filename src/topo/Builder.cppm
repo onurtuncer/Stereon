@@ -11,6 +11,7 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -687,10 +688,22 @@ public:
 /// adds ADR-0001's containment invariant, sampled: each vertex's tolerance
 /// sphere holds its edges' ends (G01), and each edge's tolerance tube holds
 /// its 3D curve and its pcurves mapped through their surfaces (G02), and a
-/// Degenerate edge's traces stay at its vertex (G02). It runs only on a
-/// structurally valid shape. Solid has no rules yet and checks as Geometric.
-/// An empty Shape is valid at every level.
+/// Degenerate edge's traces stay at its vertex (G02); each loop closes in
+/// its face's parameter space (G03); a Trim edge's faces share a surface
+/// and an Intersection edge's do not (G05); and an edge's cached curve
+/// stays in its tube and within its certified bound (G06). It runs only on
+/// a structurally valid shape. Solid, on a geometrically valid one, adds
+/// closed (L01), consistently oriented (L02) shells, one outer shell and
+/// voids by signed volume (L03), voids inside the outer shell (L04), and
+/// L05 for every solid: self-intersection is not checked yet, so no solid
+/// is reported valid at that level. An empty Shape is valid at every level.
 [[nodiscard]] ValidityReport ValidateTopology(const Shape& shape, ValidityLevel level);
+
+/// The same, with the rules that need the Context: every tolerance between
+/// its resolution and its ceiling (G04, ADR-0001). This is the full check
+/// of ADR-0018's Check(shape, level, ctx).
+[[nodiscard]] ValidityReport ValidateTopology(const Shape& shape, ValidityLevel level,
+                                              const Context& context);
 
 /// Publishes the builder's tables as a shape-producing operation does
 /// (ADR-0006, ADR-0026): Freeze() and its structural certification, then the
@@ -746,8 +759,26 @@ export namespace Stereon::Detail {
 [[nodiscard]] ValidityReport ValidateStructure(const TopologyTables& tables);
 
 /// The Geometric checks of ADR-0018 on structurally valid tables: ADR-0001's
-/// containment invariant, sampled (G01, G02).
+/// containment invariant, sampled (G01, G02), loop closure in parameter
+/// space (G03), the surfaces of Trim and Intersection edges (G05) and
+/// cached curves (G06).
 [[nodiscard]] ValidityReport ValidateGeometry(const TopologyTables& tables);
+
+/// G04: every live tolerance within the Context's [resolution, ceiling],
+/// added to `report`.
+void ValidateTolerances(const TopologyTables& tables, const Context& context,
+                        ValidityReport& report);
+
+/// The Solid level on structurally and geometrically valid tables, added
+/// to `report`: each shell of each solid closed (L01) and consistently
+/// oriented (L02), one outer shell of positive volume and voids of
+/// negative volume (L03) inside it (L04), and L05 for each solid, whose
+/// self-intersection is not checked yet.
+void ValidateSolid(const TopologyTables& tables, ValidityReport& report);
+
+/// The signed volume a shell's faces enclose, by Green's theorem over
+/// their loops, or nothing when a coedge has no pcurve. For the tests.
+[[nodiscard]] std::optional<double> ShellVolume(const TopologyTables& tables, std::uint32_t shell);
 
 /// Describe() over raw tables, safe on corrupt ones: it checks every index
 /// and bounds every walk, for the validator's findings.

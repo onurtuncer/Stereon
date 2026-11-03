@@ -24,6 +24,7 @@ stereon_add_library(intersect
         PlanarSpline.cpp
         PlaneCylinder.cpp
         PlanePlane.cpp
+        SplineSurface.cpp
     DEPENDS
         surface)
 

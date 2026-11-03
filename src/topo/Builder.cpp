@@ -1096,7 +1096,11 @@ ValidityReport ValidateTopology(const Shape& shape)
     return Detail::ValidateStructure(shape.GetSnapshot()->GetTables());
 }
 
-ValidityReport ValidateTopology(const Shape& shape, const ValidityLevel level)
+namespace {
+
+/// The levels above Structural, with the Context's rules when it is given.
+[[nodiscard]] ValidityReport Checked(const Shape& shape, const ValidityLevel level,
+                                     const Context* context)
 {
     // An empty Shape, default-constructed or moved from, has no tables: it is
     // trivially valid at every level, as it is at the Structural one.
@@ -1104,7 +1108,29 @@ ValidityReport ValidateTopology(const Shape& shape, const ValidityLevel level)
     if (level == ValidityLevel::Structural || shape.IsEmpty() || !report.IsValid()) {
         return report;
     }
-    return Detail::ValidateGeometry(shape.GetSnapshot()->GetTables());
+    const Detail::TopologyTables& tables = shape.GetSnapshot()->GetTables();
+    report = Detail::ValidateGeometry(tables);
+    if (context != nullptr) {
+        Detail::ValidateTolerances(tables, *context, report);
+    }
+    // The Solid rules measure what the Geometric ones vouch for.
+    if (level == ValidityLevel::Solid && report.IsValid()) {
+        Detail::ValidateSolid(tables, report);
+    }
+    return report;
+}
+
+} // namespace
+
+ValidityReport ValidateTopology(const Shape& shape, const ValidityLevel level)
+{
+    return Checked(shape, level, nullptr);
+}
+
+ValidityReport ValidateTopology(const Shape& shape, const ValidityLevel level,
+                                const Context& context)
+{
+    return Checked(shape, level, &context);
 }
 
 // --- Shape-producing operations (ADR-0006) ------------------------------------

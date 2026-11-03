@@ -2,8 +2,9 @@
 
 - **Status:** Proposed
 - **Date:** 2026-10-11
+- **Revised:** 2026-11-03 (the implicit linearisation of intersections moves forward to v0.2, ahead of the generic SSI it must fit; see §9, stage 4)
 - **Owner:** Onur Tuncer
-- **Phase:** 0 (contract and stage 1, the foundation); stages 2–4 staged below, shipped with shape sensitivities at v0.9
+- **Phase:** 0 (contract and stage 1, the foundation); stage 4's intersection linearisation at v0.2; the other stages staged below, shipped with shape sensitivities at v0.9
 - **Related:** ADR-0001, ADR-0002, ADR-0003, ADR-0004, ADR-0005, ADR-0006, ADR-0007, ADR-0008, ADR-0009, ADR-0010, ADR-0011, ADR-0013, ADR-0014, ADR-0019, ADR-0020
 
 ## Context
@@ -129,7 +130,11 @@ vjp(x̄) = Jᵀ · x̄
 1. **Foundation:** parameter identities, capability declarations, correspondence types, statuses and sensitivity-context ownership; scalar-generic numerical primitives without a permanent public AD backend.
 2. **First vertical slice:** a parameterised primitive and a spline example, tracked boundary samples and JVPs, demonstrating the full parameter-to-sample dependency path.
 3. **Optimisation interface:** VJPs, a documented discrete adjoint pairing, area and volume derivatives for supported regular shapes, and Python exposure.
-4. **Implicit geometry:** projections and intersections with conditioning diagnostics and explicit tracking constraints, then moving trims and selected Boolean regimes.
+4. **Implicit geometry:** projections and intersections with conditioning diagnostics and explicit tracking constraints, then moving trims and selected Boolean regimes. **Intersections come first, at v0.2** (revised 2026-11-03), so that the generic surface–surface path is designed around its linearisation rather than retrofitted to it:
+   - Every v0.2 intersection handler exposes, for each component it returns, the residual `F(z, p) = 0` that defines it, the tracking constraint that makes a curve branch's system square (the shared edge parameter of ADR-0009), and `F_z` and `F_p` for the design parameters its geometry supports.
+   - Each component is classified for differentiation from what the primal solver proved, not from a fresh guess: a proved simple crossing is `Valid`, or `NearEvent` when its conditioning diagnostic says so; a `Tangential` contact or a point the solver left undecided is `Nondifferentiable` or `Indeterminate`; an `Overlap` is `Nondifferentiable`.
+   - The derivative comes from the converged equations (§6), never from differentiating subdivision, marching or Newton iterations.
+   - The v0.2 proof of the interface is a first JVP of an analytic intersection with the Taylor-convergence and status tests of the Verification section; VJPs, moving trims and the generic path's branches follow it.
 
 Each stage declares its supported operations and products. Existing operations are classified `NotSupported` while they are brought into compliance; no claim of complete kernel differentiability is made.
 

@@ -93,6 +93,12 @@ public:
         for (std::uint32_t e = 0; e < m_T.Edges.GetSize(); ++e) {
             if (m_T.IsLive<EntityKind::Edge>(e)) {
                 CheckEdge(e);
+                CheckSurfaces(e);
+            }
+        }
+        for (std::uint32_t l = 0; l < m_T.Loops.GetSize(); ++l) {
+            if (m_T.IsLive<EntityKind::Loop>(l)) {
+                CheckLoop(l);
             }
         }
         return std::move(m_Report);
@@ -262,12 +268,18 @@ private:
             }
             CheckTube(e, trace, *reference, *points);
         }
+        if (reference) {
+            CheckCache(e, *reference);
+        }
     }
 
-    void CheckTube(const std::uint32_t e, const Trace& trace, const std::vector<Point3>& reference,
-                   const std::vector<Point3>& points)
+    // --- G06: a cached curve stays in its tube and within its bound ---------
+
+    /// The largest distance between the points and the reference, the first
+    /// non-finite one stopping the search so that it is never erased.
+    [[nodiscard]] static std::pair<double, std::size_t> Worst(const std::vector<Point3>& points,
+                                                              const std::vector<Point3>& reference)
     {
-        const double tolerance = m_T.Edges[e].Tolerance;
         double worst = 0.0;
         std::size_t at = 0;
         for (std::size_t k = 0; k < points.size(); ++k) {
@@ -277,9 +289,188 @@ private:
                 at = k;
             }
             if (!std::isfinite(d)) {
-                break; // a later finite sample must never erase this failure
+                break;
             }
         }
+        return {worst, at};
+    }
+
+    /// An Intersection or Trim edge's cache approximates its primary side
+    /// S(c(t)) (ADR-0009, section 5): it must lie in the edge's tube, as
+    /// every trace of the edge does, and a Certified cache within its proven
+    /// bound. A sampled deviation beyond the bound proves the certificate
+    /// wrong or stale: the cache no longer matches the pcurve or surface it
+    /// was built from.
+    void CheckCache(const std::uint32_t e, const std::vector<Point3>& reference)
+    {
+        const EdgeRecord& edge = m_T.Edges[e];
+        if (!edge.Cached.IsValid()) {
+            return;
+        }
+        const Curve cache = m_T.Curves[edge.Cached.GetIndex()];
+        if (cache.IsEmpty()) {
+            return; // the structural check owns an empty cache (S17)
+        }
+        if (!Covers(Domain(cache), Period(cache), edge.Range)) {
+            Report(TopologyRule::CacheDeviation, {Name(EntityKind::Edge, e)},
+                   "the cached curve does not cover the edge's range");
+            return;
+        }
+        std::vector<Point3> points;
+        for (int k = 0; k <= SampleIntervals; ++k) {
+            points.push_back(Eval(cache, SampleAt(edge.Range, k)));
+        }
+        const auto [worst, at] = Worst(points, reference);
+        const double t = SampleAt(edge.Range, static_cast<int>(at));
+        if (edge.CacheStatus == CacheCertificate::Certified && !(worst <= edge.CacheBound)) {
+            Report(TopologyRule::CacheDeviation, {Name(EntityKind::Edge, e)},
+                   std::format("the certified cache is {} from the edge at t = {}, beyond its "
+                               "proven bound {}: the certificate is stale",
+                               worst, t, edge.CacheBound));
+        } else if (!(worst <= edge.Tolerance)) {
+            Report(TopologyRule::CacheDeviation, {Name(EntityKind::Edge, e)},
+                   std::format("the cached curve is {} from the edge at t = {}, outside its "
+                               "tolerance {}",
+                               worst, t, edge.Tolerance));
+        }
+    }
+
+    // --- G05: Trim and Intersection edges and their surfaces ----------------
+
+    /// The surfaces of the faces that use the edge, in ring order.
+    [[nodiscard]] std::vector<SurfaceRef> SurfacesOf(const std::uint32_t e) const
+    {
+        std::vector<SurfaceRef> surfaces;
+        const std::uint32_t anchor = m_T.Edges[e].RadialAnchor.GetIndex();
+        std::uint32_t c = anchor;
+        for (std::size_t steps = 0; c != CoedgeId::Invalid && steps < m_T.Coedges.GetSize();
+             ++steps) {
+            const std::uint32_t face = m_T.Loops[m_T.Coedges[c].Loop.GetIndex()].Face.GetIndex();
+            surfaces.push_back(m_T.Faces[face].Surface);
+            c = m_T.Coedges[c].Radial.GetIndex();
+            if (c == anchor) {
+                break;
+            }
+        }
+        return surfaces;
+    }
+
+    /// ADR-0009: a Trim edge's pcurve is shared by both its faces, so they
+    /// lie on the same surface; an Intersection edge joins different ones.
+    void CheckSurfaces(const std::uint32_t e)
+    {
+        const EdgeCurveKind kind = m_T.Edges[e].Kind;
+        if (kind != EdgeCurveKind::Trim && kind != EdgeCurveKind::Intersection) {
+            return;
+        }
+        const std::vector<SurfaceRef> surfaces = SurfacesOf(e);
+        if (surfaces.empty()) {
+            return;
+        }
+        const bool one = std::ranges::all_of(
+            surfaces, [&](const SurfaceRef s) { return s == surfaces.front(); });
+        if (kind == EdgeCurveKind::Trim && !one) {
+            Report(TopologyRule::EdgeSurfaces, {Name(EntityKind::Edge, e)},
+                   "the faces of a Trim edge lie on different surfaces");
+        } else if (kind == EdgeCurveKind::Intersection && one) {
+            Report(TopologyRule::EdgeSurfaces, {Name(EntityKind::Edge, e)},
+                   "the faces of an Intersection edge all lie on one surface");
+        }
+    }
+
+    // --- G03: loops closed in parameter space -------------------------------
+
+    /// The point where the coedge's pcurve ends (`atEnd`) or starts in its
+    /// loop's direction: the edge's range end for a use along the edge, its
+    /// start for one against it. Nothing where the pcurve is missing or does
+    /// not cover the range, which G02 reports.
+    [[nodiscard]] std::optional<Point2> PcurvePoint(const std::uint32_t c, const bool atEnd) const
+    {
+        const CoedgeRecord& use = m_T.Coedges[c];
+        if (!use.PCurve.IsValid()) {
+            return std::nullopt;
+        }
+        const Curve2d pcurve = m_T.PCurves[use.PCurve.GetIndex()];
+        const Interval range = m_T.Edges[use.Edge.GetIndex()].Range;
+        if (pcurve.IsEmpty() || range.IsEmpty() || !range.IsBounded() ||
+            !Covers(Domain(pcurve), Period(pcurve), range)) {
+            return std::nullopt;
+        }
+        const bool upper = atEnd == (use.Sense == EdgeUseSense::Same);
+        return Eval(pcurve, upper ? range.GetUpper() : range.GetLower());
+    }
+
+    /// How far the images of two pcurve ends meeting at a vertex may be
+    /// apart: each lies within its edge's tolerance of the edge's end, which
+    /// lies within the vertex's tolerance of the vertex (ADR-0001).
+    [[nodiscard]] double JunctionLimit(const std::uint32_t c, const std::uint32_t n) const
+    {
+        const CoedgeRecord& use = m_T.Coedges[c];
+        const EdgeRecord& edge = m_T.Edges[use.Edge.GetIndex()];
+        const VertexId at = use.Sense == EdgeUseSense::Same ? edge.End : edge.Start;
+        const double vertex = m_T.Vertices[at.GetIndex()].Tolerance;
+        return 2.0 * vertex + edge.Tolerance + m_T.Edges[m_T.Coedges[n].Edge.GetIndex()].Tolerance;
+    }
+
+    /// Consecutive coedges of a loop meet in the surface's parameters, not
+    /// only in space: the gap between one pcurve's end and the next one's
+    /// start, carried onto the surface by its first derivatives, stays
+    /// within the junction's tolerances. Not taken modulo a period: a loop
+    /// crosses a seam through the seam's edge, whose two uses carry its two
+    /// sides (ADR-0009), so a jump of a period is a finding, though its two
+    /// ends are one point in space. A jump across a pole costs nothing, the
+    /// derivative along it being zero; a Degenerate edge carries it there.
+    void CheckJunction(const Surface& surface, const std::uint32_t l, const std::uint32_t c,
+                       const std::uint32_t n)
+    {
+        const std::optional<Point2> end = PcurvePoint(c, true);
+        const std::optional<Point2> start = PcurvePoint(n, false);
+        if (!end || !start || !OnSurface(surface, *end)) {
+            return;
+        }
+        const Vec2 gap = *start - *end;
+        const double onSurface =
+            Length(Deriv(surface, *end, 1, 0) * gap.X + Deriv(surface, *end, 0, 1) * gap.Y);
+        const double limit = JunctionLimit(c, n);
+        if (!(onSurface <= limit)) {
+            Report(TopologyRule::LoopParameterGap,
+                   {Name(EntityKind::Loop, l), Name(EntityKind::Coedge, c),
+                    Name(EntityKind::Coedge, n)},
+                   std::format("consecutive pcurves are ({}, {}) apart in the surface's "
+                               "parameters, {} on the surface, beyond the junction's {}",
+                               gap.X, gap.Y, onSurface, limit));
+        }
+    }
+
+    void CheckLoop(const std::uint32_t l)
+    {
+        const LoopRecord& loop = m_T.Loops[l];
+        const SurfaceRef ref = m_T.Faces[loop.Face.GetIndex()].Surface;
+        if (!ref.IsValid()) {
+            return;
+        }
+        const Surface surface = m_T.Surfaces[ref.GetIndex()];
+        if (surface.IsEmpty()) {
+            return;
+        }
+        const std::uint32_t anchor = loop.Anchor.GetIndex();
+        std::uint32_t c = anchor;
+        for (std::size_t steps = 0; c != CoedgeId::Invalid && steps < m_T.Coedges.GetSize();
+             ++steps) {
+            const std::uint32_t n = m_T.Coedges[c].Next.GetIndex();
+            CheckJunction(surface, l, c, n);
+            c = n;
+            if (c == anchor) {
+                break;
+            }
+        }
+    }
+
+    void CheckTube(const std::uint32_t e, const Trace& trace, const std::vector<Point3>& reference,
+                   const std::vector<Point3>& points)
+    {
+        const double tolerance = m_T.Edges[e].Tolerance;
+        const auto [worst, at] = Worst(points, reference);
         if (!(worst <= tolerance)) {
             Report(TopologyRule::EdgeContainment,
                    {Name(EntityKind::Edge, e), Name(EntityKind::Coedge, trace.Coedge)},
@@ -362,6 +553,42 @@ ValidityReport ValidateGeometry(const TopologyTables& tables)
     STEREON_PROFILE_COUNTER("topo.geometric.face_slots", tables.Faces.GetSize());
     STEREON_PROFILE_COUNTER("topo.geometric.edge_slots", tables.Edges.GetSize());
     return GeometryValidator(tables).Run();
+}
+
+namespace {
+
+void CheckToleranceBound(ValidityReport& report, const TopologyTables& tables,
+                         const EntityKind kind, const std::uint32_t index, const double tolerance,
+                         const Context& context)
+{
+    if (tolerance >= context.GetResolution() && tolerance <= context.GetToleranceCeiling()) {
+        return;
+    }
+    report.Add({.Rule = TopologyRule::ToleranceBounds,
+                .Entities = {DescribeEntity(tables, kind, index)},
+                .Message = std::format("the tolerance {} is outside the Context's [resolution, "
+                                       "ceiling] of [{}, {}]",
+                                       tolerance, context.GetResolution(),
+                                       context.GetToleranceCeiling())});
+}
+
+} // namespace
+
+void ValidateTolerances(const TopologyTables& tables, const Context& context,
+                        ValidityReport& report)
+{
+    for (std::uint32_t v = 0; v < tables.Vertices.GetSize(); ++v) {
+        if (tables.IsLive<EntityKind::Vertex>(v)) {
+            CheckToleranceBound(report, tables, EntityKind::Vertex, v, tables.Vertices[v].Tolerance,
+                                context);
+        }
+    }
+    for (std::uint32_t e = 0; e < tables.Edges.GetSize(); ++e) {
+        if (tables.IsLive<EntityKind::Edge>(e)) {
+            CheckToleranceBound(report, tables, EntityKind::Edge, e, tables.Edges[e].Tolerance,
+                                context);
+        }
+    }
 }
 
 } // namespace Stereon::Detail

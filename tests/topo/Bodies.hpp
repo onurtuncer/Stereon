@@ -127,10 +127,14 @@ inline Point2 UvOn(const Stereon::Plane& plane, const Point3& p)
 /// from outside. Each pair of vertices joined by a face side becomes one
 /// Exact line edge from the lower index to the higher, on t in [0, 1]; each
 /// face side a coedge with the face's exact pcurve of that edge.
-inline Body MakePolyhedron(std::span<const Point3> points,
-                           std::span<const std::vector<std::size_t>> faces)
+/// Adds the polyhedron as a new shell of `solid`, with vertices of its own;
+/// MakePolyhedron's construction. A void shell lists its faces clockwise
+/// seen from outside it, so that their normals point into the void.
+inline void AddPolyhedronShell(Body& body, const BuilderSolidId solid,
+                               std::span<const Point3> points,
+                               std::span<const std::vector<std::size_t>> faces)
 {
-    Body body;
+    const std::size_t first = body.Vertices.size();
     for (const Point3& p : points) {
         body.AddVertex(p);
     }
@@ -144,8 +148,8 @@ inline Body MakePolyhedron(std::span<const Point3> points,
         const Point3 end = points[key.second];
         const BuilderEdgeId e = body.AddEdge({
             .Kind = EdgeCurveKind::Exact,
-            .Start = body.Vertices[key.first],
-            .End = body.Vertices[key.second],
+            .Start = body.Vertices[first + key.first],
+            .End = body.Vertices[first + key.second],
             .Curve = Must(body.Builder.AddCurve(Stereon::Curve(Stereon::Line{start, end - start}))),
             .Range = Interval(0.0, 1.0),
             .Tolerance = Tight,
@@ -154,7 +158,6 @@ inline Body MakePolyhedron(std::span<const Point3> points,
         return e;
     };
 
-    const BuilderSolidId solid = body.Solids.emplace_back(Must(body.Builder.AddSolid()));
     const BuilderShellId shell = body.Shells.emplace_back(Must(body.Builder.AddShell(solid)));
     for (const std::vector<std::size_t>& corners : faces) {
         const Stereon::Plane plane =
@@ -173,6 +176,14 @@ inline Body MakePolyhedron(std::span<const Point3> points,
                            Stereon::Curve2d(Stereon::Line2d{from, to - from}));
         }
     }
+}
+
+inline Body MakePolyhedron(std::span<const Point3> points,
+                           std::span<const std::vector<std::size_t>> faces)
+{
+    Body body;
+    const BuilderSolidId solid = body.Solids.emplace_back(Must(body.Builder.AddSolid()));
+    AddPolyhedronShell(body, solid, points, faces);
     return body;
 }
 

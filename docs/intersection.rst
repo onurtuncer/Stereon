@@ -237,11 +237,49 @@ of it. A touch of a quadric is a ``Tangential`` point: the line stays
 outside. A root that double precision cannot place, a line so nearly along
 the axis that the quadratic's leading coefficient rounds to zero while it
 is exactly positive, fails with ``IntersectionFailed`` rather than
-dropping the point. Every other pair reports ``NotImplemented``; the
-generic path for B-spline curves and surfaces waits for Phase 2 with the
-surface–surface one. ``tests/occt/IntersectionDifferentialTests.cpp``
+dropping the point. ``tests/occt/IntersectionDifferentialTests.cpp``
 compares the three handlers with OCCT's ``IntAna_IntConicQuad`` on
 generic lines.
+
+A ``BSplineCurve``, polynomial or rational, has handlers against the same
+three surfaces. The surface's implicit equation composed with the curve is,
+on each Bézier segment and in homogeneous coordinates, a polynomial
+:math:`g` of degree :math:`p` against the plane and :math:`2p` against a
+quadric, of the sign of the equation since every weight is positive. Its
+Bernstein coefficients are enclosed in outward-rounded interval arithmetic,
+from segments that are themselves enclosed: they come from Boehm's knot
+insertion done in intervals, so that what is proved holds for the curve as
+given, not for a rounded copy. The segment is subdivided at halves, and
+every piece ends in one of four ways:
+
+- **apart**, when :math:`g`'s coefficients all have one strict sign, a
+  proof that there is no root (the Bernstein convex hull);
+- **a crossing**, when the derivative's coefficients have one strict sign,
+  so that there is at most one root, a simple one: ``Decided`` when
+  :math:`g` has strictly opposite signs at the piece's ends, the root then
+  bisected to rounding, undecided when an end value straddles zero;
+- **a touch**, ``Tangential`` and undecided, when :math:`g` is proved
+  strictly convex or concave and the piece holding its extremum is within
+  rounding of it: a tangency, a near miss or two crossings within rounding.
+  A touch is placed only to the square root of rounding, as any double
+  root is;
+- **unresolved**, a contact of higher order, a curve along a quadric, or a
+  search past its budget: the intersection fails with
+  ``IntersectionFailed``.
+
+So an empty result is a proof that the curve misses the surface over the
+requested domain, and nothing unresolved becomes one. A curve 3·2⁻⁴⁰ off a
+plane is apart; a root that lands on a piece's end, a knot or a dyadic
+parameter, is seen from both sides and reported once, undecided; a root
+whose bracket reaches past the requested domain is kept, clamped into it,
+rather than dropped on its rounded parameter. A curve whose every pole lies
+exactly in the plane is an overlap, its pcurve the spline of the projected
+poles. A periodic curve is intersected within its own domain only, a
+curve in a plane that leaves the requested box is not clipped yet, and a
+point's surface parameters are those of its rounded position, kept or
+dropped against the box as the line handlers do. Every other pair reports
+``NotImplemented``; the generic path for curves against B-spline surfaces
+waits for Phase 2 with the surface–surface one.
 
 Plane curves
 ------------

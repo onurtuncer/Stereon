@@ -19,7 +19,9 @@
 //   the pages copied as a fraction of the body (B0.5, ADR-0004 asks < 1%);
 // - 100 local edits in a row without Compact(), reporting the memory of
 //   the body plus the edited copy relative to the body (ADR-0005 asks
-//   < 1.2x), then Compact() of the result.
+//   < 1.2x), then Compact() of the result;
+// - the validity checker over the whole body at the Structural and the
+//   Geometric level, per face (ADR-0018).
 //
 // The sheet has (n + 1)^2 vertices, 2 n (n + 1) edges and 4 n^2 coedges
 // for n^2 faces; every interior edge is shared by two faces. The size is
@@ -217,6 +219,41 @@ void SheetBuild(benchmark::State& state)
         benchmark::DoNotOptimize(shape.Count<EntityKind::Face>());
     }
     state.counters["faces"] = static_cast<double>(n * n);
+}
+
+/// ADR-0018's validity checker over the whole sheet at a level, with the
+/// Context's rules: its resolution is the sheet's tolerance, so the check
+/// finds nothing and every rule runs to completion. ADR-0018 bounds the
+/// Structural level at 5% and the Geometric one at 50% of a Boolean's run
+/// time on this body; the counter is the cost per face, to set against a
+/// Boolean of that size when one exists.
+void Validate(benchmark::State& state, const Stereon::ValidityLevel level)
+{
+    const std::size_t n = SideFor(static_cast<std::size_t>(state.range(0)));
+    const Shape shape = MakeSheet(n);
+    const Stereon::Context context = Stereon::Context::Default().WithResolution(1e-7);
+    bool valid = false;
+    for (auto _ : state) {
+        valid = Stereon::ValidateTopology(shape, level, context).IsValid();
+        benchmark::DoNotOptimize(valid);
+    }
+    if (!valid) {
+        state.SkipWithError("the sheet is not valid at this level");
+    }
+    state.counters["faces"] = static_cast<double>(n * n);
+    state.counters["ns_per_face"] = benchmark::Counter(
+        static_cast<double>(n * n),
+        benchmark::Counter::kIsIterationInvariantRate | benchmark::Counter::kInvert);
+}
+
+void ValidateStructural(benchmark::State& state)
+{
+    Validate(state, Stereon::ValidityLevel::Structural);
+}
+
+void ValidateGeometric(benchmark::State& state)
+{
+    Validate(state, Stereon::ValidityLevel::Geometric);
 }
 
 void FacesOfEdges(benchmark::State& state)
@@ -498,6 +535,16 @@ BENCHMARK(FacesOfEdges)
     ->Unit(benchmark::kMillisecond);
 BENCHMARK(EdgesOfVertices)
     ->Name("B0.3/EdgesOfVertices/Stereon")
+    ->Arg(Quick)
+    ->Arg(Body)
+    ->Unit(benchmark::kMillisecond);
+BENCHMARK(ValidateStructural)
+    ->Name("ADR-0018/ValidateStructural/Stereon")
+    ->Arg(Quick)
+    ->Arg(Body)
+    ->Unit(benchmark::kMillisecond);
+BENCHMARK(ValidateGeometric)
+    ->Name("ADR-0018/ValidateGeometric/Stereon")
     ->Arg(Quick)
     ->Arg(Body)
     ->Unit(benchmark::kMillisecond);

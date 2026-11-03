@@ -219,6 +219,9 @@ Result<std::vector<FaceId>> FacesOf(const Shape& shape, const EdgeId edge)
 std::string RuleId(const TopologyRule rule)
 {
     const int number = static_cast<int>(rule);
+    if (number > SolidRuleBase) {
+        return std::format("L{:02}", number - SolidRuleBase);
+    }
     return number > GeometricRuleBase ? std::format("G{:02}", number - GeometricRuleBase)
                                       : std::format("S{:02}", number);
 }
@@ -233,12 +236,20 @@ std::string_view RuleName(const TopologyRule rule) noexcept
         "EdgeEndpoints",   "EmptyLoop",         "ShellDisconnected", "VertexIncidence",
         "EdgeCache",
     };
-    static constexpr std::array<std::string_view, 2> GeometricNames{
-        "VertexContainment",
-        "EdgeContainment",
+    static constexpr std::array<std::string_view, 6> GeometricNames{
+        "VertexContainment", "EdgeContainment", "LoopParameterGap",
+        "ToleranceBounds",   "EdgeSurfaces",    "CacheDeviation",
+    };
+    static constexpr std::array<std::string_view, 5> SolidNames{
+        "ShellOpen", "ShellOrientation", "ShellVolume", "ShellNesting", "SelfIntersectionUnchecked",
     };
     const auto number = static_cast<std::size_t>(rule);
     constexpr auto geometric = static_cast<std::size_t>(GeometricRuleBase);
+    constexpr auto solid = static_cast<std::size_t>(SolidRuleBase);
+    if (number > solid) {
+        const std::size_t index = number - solid - 1;
+        return index < SolidNames.size() ? SolidNames[index] : std::string_view{"UnknownRule"};
+    }
     if (number > geometric) {
         const std::size_t index = number - geometric - 1;
         return index < GeometricNames.size() ? GeometricNames[index]
