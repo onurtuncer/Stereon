@@ -49,39 +49,6 @@ namespace Stereon::Detail {
 
 namespace {
 
-/// A 3-vector over a scalar field of Planar.hpp.
-template <typename F>
-struct Triple {
-    typename F::Scalar X;
-    typename F::Scalar Y;
-    typename F::Scalar Z;
-};
-
-template <typename F>
-[[nodiscard]] Triple<F> Of3(F, const Vec3& v)
-{
-    return {F::Of(v.X), F::Of(v.Y), F::Of(v.Z)};
-}
-
-template <typename F>
-[[nodiscard]] Triple<F> Diff3(F, const Point3& p, const Point3& q)
-{
-    return {F::Diff(p.X, q.X), F::Diff(p.Y, q.Y), F::Diff(p.Z, q.Z)};
-}
-
-template <typename F>
-[[nodiscard]] typename F::Scalar Dot3(F, const Triple<F>& a, const Triple<F>& b)
-{
-    return F::Add(F::Add(F::Mul(a.X, b.X), F::Mul(a.Y, b.Y)), F::Mul(a.Z, b.Z));
-}
-
-template <typename F>
-[[nodiscard]] Triple<F> Cross3(F, const Triple<F>& a, const Triple<F>& b)
-{
-    return {F::Sub(F::Mul(a.Y, b.Z), F::Mul(a.Z, b.Y)), F::Sub(F::Mul(a.Z, b.X), F::Mul(a.X, b.Z)),
-            F::Sub(F::Mul(a.X, b.Y), F::Mul(a.Y, b.X))};
-}
-
 /// Whether the rational num / den, den of sign `denSign`, lies in `range`:
 /// the sign of num - b den, turned by den's, against each finite bound b,
 /// decided exactly.
