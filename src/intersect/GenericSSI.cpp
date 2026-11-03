@@ -14,6 +14,7 @@ module;
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <vector>
 
 module Stereon.Intersect;
 
@@ -37,41 +38,55 @@ using Bounds = std::array<Interval, 3>;
 
 /// Reject direct aggregate construction that violates a factory invariant.
 /// Without those invariants the convex-hull proof does not apply.
-[[nodiscard]] bool ValidNet(const BSplineSurface& s)
+[[nodiscard]] bool ValidKnotVector(const std::vector<double>& knots, const int degree)
 {
-    if (s.DegreeU < 1 || s.DegreeV < 1 ||
-        s.KnotsU.size() <= static_cast<std::size_t>(s.DegreeU) + 1 ||
-        s.KnotsV.size() <= static_cast<std::size_t>(s.DegreeV) + 1) {
+    if (degree < 1 || knots.size() <= static_cast<std::size_t>(degree) + 1 ||
+        !std::ranges::is_sorted(knots)) {
         return false;
     }
+    for (const double knot : knots) {
+        if (!std::isfinite(knot)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] bool ValidPoleLayout(const BSplineSurface& s)
+{
     const std::size_t nu = PoleCountU(s);
     const std::size_t nv = PoleCountV(s);
-    if (nv == 0 || nu == 0 || s.Poles.size() % nv != 0 || s.Poles.size() / nv != nu ||
-        (!s.Weights.empty() && s.Weights.size() != s.Poles.size()) ||
-        !std::ranges::is_sorted(s.KnotsU) || !std::ranges::is_sorted(s.KnotsV)) {
+    return nv > 0 && nu > 0 && s.Poles.size() % nv == 0 && s.Poles.size() / nv == nu;
+}
+
+[[nodiscard]] bool ValidWeights(const BSplineSurface& s)
+{
+    if (!s.Weights.empty() && s.Weights.size() != s.Poles.size()) {
         return false;
-    }
-    for (const double knot : s.KnotsU) {
-        if (!std::isfinite(knot)) {
-            return false;
-        }
-    }
-    for (const double knot : s.KnotsV) {
-        if (!std::isfinite(knot)) {
-            return false;
-        }
     }
     for (const double weight : s.Weights) {
         if (!(std::isfinite(weight) && weight > 0.0)) {
             return false;
         }
     }
+    return true;
+}
+
+[[nodiscard]] bool ValidPoles(const BSplineSurface& s)
+{
     for (const Point3& pole : s.Poles) {
         if (!std::isfinite(pole.X) || !std::isfinite(pole.Y) || !std::isfinite(pole.Z)) {
             return false;
         }
     }
     return true;
+}
+
+[[nodiscard]] bool ValidNet(const BSplineSurface& s)
+{
+    return ValidKnotVector(s.KnotsU, s.DegreeU) &&
+           ValidKnotVector(s.KnotsV, s.DegreeV) && ValidPoleLayout(s) && ValidWeights(s) &&
+           ValidPoles(s);
 }
 
 /// Bound each coordinate by the control points. Widen once by a floating
