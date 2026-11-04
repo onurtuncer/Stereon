@@ -828,7 +828,7 @@ TEST_CASE("a B-spline's touch and bad pole bindings", "[intersect][linearization
     CurveSurfacePoint tangency{};
     tangency.Parameter = 0.5;
     tangency.OnSurface = {1.0, 0.0};
-    tangency.Point = {1.0, 0.0, 0.0};
+    tangency.Position = {1.0, 0.0, 0.0};
     tangency.Contact = Stereon::ContactType::Tangential;
     tangency.Decided = false;
     primal.Points.push_back(tangency);
