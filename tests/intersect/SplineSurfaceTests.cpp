@@ -137,7 +137,7 @@ TEST_CASE("unresolved spline tangency and near miss never become successful cont
     const BSplineCurve nearMiss =
         Bezier({{0.0, 0.0, 1.0 + eps}, {1.0, 0.0, -1.0 + eps}, {2.0, 0.0, 1.0 + eps}});
     const auto missed = Meet(nearMiss, ground);
-    REQUIRE(!missed.has_value() || missed->IsEmpty());
+    REQUIRE((!missed.has_value() || missed->IsEmpty()));
     if (!missed) {
         REQUIRE(missed.error().GetCode() == ErrorCode::IntersectionFailed);
     }
