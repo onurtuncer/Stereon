@@ -508,11 +508,11 @@ constexpr double Reach = 7.0;
 
 double LowerEnd(const double first)
 {
-    return std::abs(first) >= 1e100 ? -Reach : first;
+    return std::abs(first) >= Unbounded ? -Reach : first;
 }
 double UpperEnd(const double last)
 {
-    return std::abs(last) >= 1e100 ? Reach : last;
+    return std::abs(last) >= Unbounded ? Reach : last;
 }
 
 OcctBranch OcctBranchOf(const Stereon::IntersectionBranch& branch)
