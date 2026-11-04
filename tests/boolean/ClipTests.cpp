@@ -129,14 +129,14 @@ TEST_CASE("a circle inside a face is one closed piece; through its edges, four a
     REQUIRE_FALSE(inside->Inside.front().End.has_value());
 
     // Radius 8 reaches past the corners: the circle runs around the face.
-    const IntersectionBranch around = BranchOn(box, top, drill(8.0), faceBox);
+    const IntersectionBranch around = BranchOn(box, top, drill(8.0), Box2::Everything());
     const auto outside = ClipToFace(box, top, around, BranchSide::A, ctx);
     REQUIRE(outside.has_value());
     REQUIRE(outside->Crossings.empty());
     REQUIRE(outside->Inside.empty());
 
     // Radius 6 crosses every edge twice, 5 from the centre, and misses the corners.
-    const IntersectionBranch large = BranchOn(box, top, drill(6.0), faceBox);
+    const IntersectionBranch large = BranchOn(box, top, drill(6.0), Box2::Everything());
     const auto arcs = ClipToFace(box, top, large, BranchSide::A, ctx);
     REQUIRE(arcs.has_value());
     REQUIRE(arcs->Decided);

@@ -628,6 +628,13 @@ template <typename Form>
     std::vector<Found> kept;
     for (const Found& f : found) {
         if (const std::optional<Found> placed = InDomain(f, domain)) {
+            // An uncertain root enclosure may be a near miss or multiple
+            // crossings. It is not a certified intersection component.
+            if (!placed->Decided) {
+                return Fail(ErrorCode::IntersectionFailed,
+                            std::string(handler) +
+                                ": unresolved root existence or multiplicity in requested domain");
+            }
             kept.push_back(*placed);
         }
     }

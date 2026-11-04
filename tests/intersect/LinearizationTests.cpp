@@ -537,6 +537,40 @@ TEST_CASE("invalid sensitivity input is refused, and other surfaces are NotSuppo
     REQUIRE_FALSE(unsupported->GetValues().has_value());
 }
 
+TEST_CASE("JVP and VJP reject intersection results from stale geometry",
+          "[intersect][linearization][regression]")
+{
+    const Plane ground{Point3{}, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+    const Point3 offset{0.0, 0.0, 0.01};
+    const Plane shifted{offset, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+    const Line up{Point3{0.0, 0.0, -1.0}, Vec3{0.0, 0.0, 1.0}};
+    const CurveSurfaceIntersection at = Meet(up, ground);
+    Model model = FullModel(std::vector<double>(9, 1.0));
+    REQUIRE(model.Sensitivity.SetSeed(std::vector<double>(9, 1.0)).has_value());
+    REQUIRE(model.Sensitivity.SetAdjoint(std::vector<double>(6, 1.0)).has_value());
+
+    const auto jvp = Stereon::IntersectJvp(up, model.LineBindings, Surface{shifted},
+                                           model.SurfaceBindings, at, model.Sensitivity);
+    REQUIRE_FALSE(jvp.has_value());
+    REQUIRE(jvp.error().GetCode() == ErrorCode::InvalidInput);
+    const auto vjp = Stereon::IntersectVjp(up, model.LineBindings, Surface{shifted},
+                                           model.SurfaceBindings, at, model.Sensitivity);
+    REQUIRE_FALSE(vjp.has_value());
+    REQUIRE(vjp.error().GetCode() == ErrorCode::InvalidInput);
+
+    CurveSurfaceIntersection altered = at;
+    altered.Points.front().Position.Z = 0.01;
+    const auto stored = Stereon::IntersectJvp(up, model.LineBindings, Surface{ground},
+                                              model.SurfaceBindings, altered, model.Sensitivity);
+    REQUIRE_FALSE(stored.has_value());
+    REQUIRE(stored.error().GetCode() == ErrorCode::InvalidInput);
+
+    const auto good = Stereon::IntersectJvp(up, model.LineBindings, Surface{ground},
+                                            model.SurfaceBindings, at, model.Sensitivity);
+    REQUIRE(good.has_value());
+    REQUIRE(good->GetStatus() == DerivativeStatus::Valid);
+}
+
 namespace {
 
 using Stereon::BSplineCurve;
@@ -779,7 +813,8 @@ TEST_CASE("B-spline crossings: second-order Taylor decay and the transpose",
 
 TEST_CASE("a B-spline's touch and bad pole bindings", "[intersect][linearization]")
 {
-    // z = (2 s - 1)²: the touch the B-spline handler reports undecided.
+    // z = (2 s - 1)²: the primal now fails closed on unresolved touches.
+    // Check derivative status with an explicitly supplied candidate.
     const auto made = Stereon::MakeBSplineCurve(
         2, {0.0, 0.0, 0.0, 1.0, 1.0, 1.0}, {{0.0, 0.0, 1.0}, {1.0, 0.0, -1.0}, {2.0, 0.0, 1.0}});
     REQUIRE(made.has_value());
@@ -789,8 +824,16 @@ TEST_CASE("a B-spline's touch and bad pole bindings", "[intersect][linearization
     SensitivityContext sensitivity(std::move(set));
     REQUIRE(sensitivity.SetSeed(std::vector<double>{1.0}).has_value());
     const std::vector<PoleBinding> middle{{lift, 1, PoleComponent::Z}};
+    CurveSurfaceIntersection primal;
+    CurveSurfacePoint tangency{};
+    tangency.Parameter = 0.5;
+    tangency.OnSurface = {1.0, 0.0};
+    tangency.Position = {1.0, 0.0, 0.0};
+    tangency.Contact = Stereon::ContactType::Tangential;
+    tangency.Decided = false;
+    primal.Points.push_back(tangency);
     const auto touch =
-        Stereon::IntersectJvp(*made, middle, Surface{ground}, {}, Meet(*made, ground), sensitivity);
+        Stereon::IntersectJvp(*made, middle, Surface{ground}, {}, primal, sensitivity);
     REQUIRE(touch.has_value());
     REQUIRE(touch->GetStatus() == DerivativeStatus::Nondifferentiable);
     REQUIRE_FALSE(touch->GetValues().has_value());
@@ -798,13 +841,13 @@ TEST_CASE("a B-spline's touch and bad pole bindings", "[intersect][linearization
     for (const PoleBinding& bad :
          {PoleBinding{lift, 7, PoleComponent::Z}, PoleBinding{lift, 1, PoleComponent::Weight}}) {
         const std::vector<PoleBinding> one{bad};
-        REQUIRE(
-            Stereon::IntersectJvp(*made, one, Surface{ground}, {}, Meet(*made, ground), sensitivity)
-                .error()
-                .GetCode() == ErrorCode::InvalidInput);
+        const auto invalid =
+            Stereon::IntersectJvp(*made, one, Surface{ground}, {}, primal, sensitivity);
+        REQUIRE_FALSE(invalid.has_value());
+        REQUIRE(invalid.error().GetCode() == ErrorCode::InvalidInput);
     }
     // A point off the curve's domain.
-    CurveSurfacePoint outside = Meet(*made, ground).Points.front();
+    CurveSurfacePoint outside = primal.Points.front();
     outside.Parameter = 5.0;
     REQUIRE(Stereon::Linearize(*made, Surface{ground}, outside).error().GetCode() ==
             ErrorCode::InvalidInput);

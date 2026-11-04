@@ -14,6 +14,7 @@ module;
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <string_view>
 #include <vector>
 
 module Stereon.Intersect;
@@ -89,9 +90,17 @@ using Bounds = std::array<Interval, 3>;
     if (!u || !v) {
         return false; // Do not compute pole counts from invalid knot vectors.
     }
-    const bool layout = ValidPoleLayout(s);
-    const bool weights = ValidWeights(s);
-    return u && v && layout && weights && ValidPoles(s);
+    if (!ValidPoleLayout(s) || !ValidWeights(s) || !ValidPoles(s)) {
+        return false;
+    }
+    // Apply the same degree, multiplicity, span and weight constraints
+    // as the public B-spline factory before using the convex-hull theorem.
+    const std::size_t nu = PoleCountU(s);
+    const std::size_t nv = PoleCountV(s);
+    constexpr std::string_view where = "NurbsHull";
+    return CheckKnotVector(s.DegreeU, s.KnotsU, nu, where).has_value() &&
+           CheckKnotVector(s.DegreeV, s.KnotsV, nv, where).has_value() &&
+           CheckWeights(s.Weights, s.Poles.size(), where).has_value();
 }
 
 /// Bound each coordinate by the control points. Widen once by a floating

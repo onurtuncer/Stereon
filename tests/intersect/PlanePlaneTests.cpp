@@ -208,3 +208,40 @@ TEST_CASE("the pair tolerance must be finite and not negative", "[intersect][pla
         ErrorCode::InvalidInput);
     REQUIRE(Intersect(xy, Box2::Everything(), yz, Box2::Everything(), 0.0, ctx).has_value());
 }
+
+TEST_CASE("rotated bounded coincidence cannot be encoded as an AABB overlap",
+          "[intersect][plane][regression]")
+{
+    const double c = std::sqrt(0.5);
+    const Box2 a{Interval{0.0, 1.0}, Interval{0.0, 1.0}};
+    const Box2 b{Interval{-0.35, 0.35}, Interval{-0.35, 0.35}};
+    const auto rotated = [&](const double center) {
+        const Point3 origin{center, center, 0.0};
+        const Plane rotatedPlane{origin, Vec3{c, c, 0.0}, Vec3{-c, c, 0.0}};
+        return Surface{rotatedPlane};
+    };
+    // Disjoint world-space squares, though their AABBs overlap.
+    const auto disjoint = Intersect(xy, a, rotated(1.4), b, ctx);
+    REQUIRE(disjoint.has_value());
+    REQUIRE(disjoint->IsEmpty());
+    // Even a true partial rotated overlap cannot use a rectangular proxy.
+    const auto partial = Intersect(xy, a, rotated(0.7), b, ctx);
+    REQUIRE_FALSE(partial.has_value());
+    REQUIRE(partial.error().GetCode() == ErrorCode::NotImplemented);
+}
+
+TEST_CASE("near-parallel planes with an underflowed squared cross norm",
+          "[intersect][plane][regression]")
+{
+    const double tilt = std::ldexp(1.0, -600);
+    const Plane almost{Point3{}, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, tilt}};
+    const Surface tilted{almost};
+    const auto result = Intersect(xy, tilted, ctx);
+    INFO(IntersectTest::ErrorText(result));
+    REQUIRE(result.has_value());
+    REQUIRE(result->Branches.size() == 1);
+    const Vec3 d = result->Branches.front().Curve3d.Target<Stereon::Line>()->Direction;
+    REQUIRE(std::isfinite(d.X));
+    REQUIRE(std::isfinite(d.Y));
+    REQUIRE(std::isfinite(d.Z));
+}
