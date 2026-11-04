@@ -335,25 +335,31 @@ template <typename Point, typename Parameters>
     return d < -margin ? Strict::Negative : Strict::Unknown;
 }
 
+/// The axis whose edge a stretch runs along: x = const or y = const.
+enum class EdgeAxis : std::uint8_t { None, X, Y };
+
 /// Whether a point is in the closed box, Unknown within rounding of an edge.
-[[nodiscard]] Strict InBox(const Point2& p, const Box2& box)
+/// A point of a stretch along an edge of `onEdge`'s axis is on that edge's
+/// line, so only the other axis decides it.
+[[nodiscard]] Strict InBox(const Point2& p, const Box2& box, const EdgeAxis onEdge = EdgeAxis::None)
 {
     Strict side = Strict::Positive;
-    const auto bound = [&](const double x, const double b, const double inward) {
+    const auto bound = [&](const double x, const double b, const double inward,
+                           const bool boundary) {
         if (!std::isfinite(b)) {
             return;
         }
         const Strict s = SideOf(x, b, inward);
         if (s == Strict::Negative) {
             side = Strict::Negative;
-        } else if (s == Strict::Unknown && side == Strict::Positive) {
+        } else if (s == Strict::Unknown && !boundary && side == Strict::Positive) {
             side = Strict::Unknown;
         }
     };
-    bound(p.X, box.X.GetLower(), 1.0);
-    bound(p.X, box.X.GetUpper(), -1.0);
-    bound(p.Y, box.Y.GetLower(), 1.0);
-    bound(p.Y, box.Y.GetUpper(), -1.0);
+    bound(p.X, box.X.GetLower(), 1.0, onEdge == EdgeAxis::X);
+    bound(p.X, box.X.GetUpper(), -1.0, onEdge == EdgeAxis::X);
+    bound(p.Y, box.Y.GetLower(), 1.0, onEdge == EdgeAxis::Y);
+    bound(p.Y, box.Y.GetUpper(), -1.0, onEdge == EdgeAxis::Y);
     return side;
 }
 
@@ -373,17 +379,17 @@ template <typename Point, typename Parameters>
 /// edges are collected.
 struct BoxCuts {
     std::vector<double> At;
-    std::vector<Interval> Along;
+    std::vector<std::pair<Interval, EdgeAxis>> Along;
     std::vector<double> Touches;
 };
 
-/// The pcurve against the line of one finite edge: every contact, from a
-/// complete planar intersection, is a cut; a stretch along the line lies on
-/// the box's boundary; a contact in the box is kept even where both sides of
-/// it leave.
+/// The pcurve against the line of one finite edge, of the given axis: every
+/// contact, from a complete planar intersection, is a cut; a stretch along
+/// the line is on the boundary where the other axis keeps it in the box; a
+/// contact in the box is kept even where both sides of it leave.
 [[nodiscard]] Result<void> CutAtEdge(const Curve2d& pcurve, const Interval& range,
-                                     const Line2d& edge, const Box2& box, const Context& ctx,
-                                     BoxCuts& cuts)
+                                     const Line2d& edge, const EdgeAxis axis, const Box2& box,
+                                     const Context& ctx, BoxCuts& cuts)
 {
     STEREON_TRY(const PlanarIntersection meet,
                 Intersect(pcurve, range, Curve2d(edge), Interval::Everything(), ctx));
@@ -396,9 +402,65 @@ struct BoxCuts {
     for (const PlanarOverlap& o : meet.Overlaps) {
         cuts.At.push_back(o.OnA.GetLower());
         cuts.At.push_back(o.OnA.GetUpper());
-        cuts.Along.push_back(o.OnA);
+        cuts.Along.emplace_back(o.OnA, axis);
     }
     return {};
+}
+
+/// The cuts of the pcurve over the range against every finite edge's line,
+/// sorted, each once, the range's ends among them.
+[[nodiscard]] Result<BoxCuts> CutsOf(const Curve2d& pcurve, const Interval& range, const Box2& box,
+                                     const Context& ctx)
+{
+    BoxCuts cuts;
+    cuts.At = {range.GetLower(), range.GetUpper()};
+    const auto edge = [&](const double at, const EdgeAxis axis) -> Result<void> {
+        if (!std::isfinite(at)) {
+            return {};
+        }
+        const Line2d line = axis == EdgeAxis::X ? Line2d{Point2{at, 0.0}, Vec2{0.0, 1.0}}
+                                                : Line2d{Point2{0.0, at}, Vec2{1.0, 0.0}};
+        return CutAtEdge(pcurve, range, line, axis, box, ctx, cuts);
+    };
+    STEREON_TRY_VOID(edge(box.X.GetLower(), EdgeAxis::X));
+    STEREON_TRY_VOID(edge(box.X.GetUpper(), EdgeAxis::X));
+    STEREON_TRY_VOID(edge(box.Y.GetLower(), EdgeAxis::Y));
+    STEREON_TRY_VOID(edge(box.Y.GetUpper(), EdgeAxis::Y));
+    for (double& t : cuts.At) {
+        t = std::clamp(t, range.GetLower(), range.GetUpper());
+    }
+    std::ranges::sort(cuts.At);
+    const auto repeated = std::ranges::unique(cuts.At);
+    cuts.At.erase(repeated.begin(), repeated.end());
+    return cuts;
+}
+
+/// The axis of the edge whose line a piece runs along, if any.
+[[nodiscard]] EdgeAxis AlongEdge(const BoxCuts& cuts, const Interval& piece)
+{
+    EdgeAxis onEdge = EdgeAxis::None;
+    for (const auto& [stretch, axis] : cuts.Along) {
+        if (Contains(stretch, piece)) {
+            onEdge = axis;
+        }
+    }
+    return onEdge;
+}
+
+/// The stretches, sorted, with the ones that meet or overlap joined.
+[[nodiscard]] std::vector<Interval> Joined(std::vector<Interval> kept)
+{
+    std::ranges::sort(
+        kept, [](const Interval& a, const Interval& b) { return a.GetLower() < b.GetLower(); });
+    std::vector<Interval> joined;
+    for (const Interval& k : kept) {
+        if (!joined.empty() && k.GetLower() <= joined.back().GetUpper()) {
+            joined.back() = Hull(joined.back(), k);
+        } else {
+            joined.push_back(k);
+        }
+    }
+    return joined;
 }
 
 /// The parameter stretches over which a curve in the plane stays in the
@@ -406,45 +468,21 @@ struct BoxCuts {
 /// of a finite edge. Each planar intersection is complete: it reports every
 /// contact or fails. Between two cuts, then, the pcurve stays strictly on
 /// one side of every edge's line, and its middle point decides the piece. A
-/// piece along an edge lies on the boundary and is kept. A contact in the
-/// box between two pieces outside is kept as a stretch of one parameter, as
-/// the line handler keeps a corner. A middle point within rounding of an
-/// edge cannot be trusted, and the clip fails.
+/// piece along an edge's line is on the boundary, and is kept where the
+/// other axis keeps its middle point in the box. A contact in the box
+/// between two pieces outside is kept as a stretch of one parameter, as the
+/// line handler keeps a corner. A middle point within rounding of an edge
+/// cannot be trusted, and the clip fails.
 [[nodiscard]] Result<std::vector<Interval>> InsideBox(const Curve2d& pcurve, const Interval& range,
                                                       const Box2& box, const Context& ctx,
                                                       const std::string_view handler)
 {
-    BoxCuts cuts;
-    cuts.At = {range.GetLower(), range.GetUpper()};
-    for (const double x : {box.X.GetLower(), box.X.GetUpper()}) {
-        if (std::isfinite(x)) {
-            STEREON_TRY_VOID(
-                CutAtEdge(pcurve, range, Line2d{Point2{x, 0.0}, Vec2{0.0, 1.0}}, box, ctx, cuts));
-        }
-    }
-    for (const double y : {box.Y.GetLower(), box.Y.GetUpper()}) {
-        if (std::isfinite(y)) {
-            STEREON_TRY_VOID(
-                CutAtEdge(pcurve, range, Line2d{Point2{0.0, y}, Vec2{1.0, 0.0}}, box, ctx, cuts));
-        }
-    }
-    for (double& t : cuts.At) {
-        t = std::clamp(t, range.GetLower(), range.GetUpper());
-    }
-    std::ranges::sort(cuts.At);
-    const auto repeated = std::ranges::unique(cuts.At);
-    cuts.At.erase(repeated.begin(), repeated.end());
-
+    STEREON_TRY(const BoxCuts cuts, CutsOf(pcurve, range, box, ctx));
     std::vector<Interval> kept;
     for (std::size_t i = 0; i + 1 < cuts.At.size(); ++i) {
         const Interval piece{cuts.At[i], cuts.At[i + 1]};
-        const bool along = std::ranges::any_of(
-            cuts.Along, [&](const Interval& stretch) { return Contains(stretch, piece); });
-        if (along) {
-            kept.push_back(piece);
-            continue;
-        }
-        const Strict side = InBox(Eval(pcurve, 0.5 * (piece.GetLower() + piece.GetUpper())), box);
+        const Point2 middle = Eval(pcurve, 0.5 * (piece.GetLower() + piece.GetUpper()));
+        const Strict side = InBox(middle, box, AlongEdge(cuts, piece));
         if (side == Strict::Unknown) {
             return Fail(ErrorCode::IntersectionFailed,
                         std::string(handler) +
@@ -460,17 +498,7 @@ struct BoxCuts {
             kept.push_back(Interval{at});
         }
     }
-    std::ranges::sort(
-        kept, [](const Interval& a, const Interval& b) { return a.GetLower() < b.GetLower(); });
-    std::vector<Interval> merged;
-    for (const Interval& k : kept) {
-        if (!merged.empty() && k.GetLower() <= merged.back().GetUpper()) {
-            merged.back() = Hull(merged.back(), k);
-        } else {
-            merged.push_back(k);
-        }
-    }
-    return merged;
+    return Joined(std::move(kept));
 }
 
 /// The overlaps of a curve in the plane over the stretches in the box, all

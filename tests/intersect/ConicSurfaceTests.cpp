@@ -267,12 +267,7 @@ TEST_CASE("a curve along the box's edge keeps the stretch on the boundary",
     REQUIRE(made.has_value());
     const Stereon::Box2 box{Interval{0.0, 1.0}, Interval{0.5, 2.0}};
     const auto along = Intersect(Curve{*made}, Domain(*made), Surface{ground}, box, ctx);
-    if (!along.has_value()) {
-        // Never an empty success: a stretch the planar handlers cannot
-        // decide fails.
-        REQUIRE(along.error().GetCode() == ErrorCode::IntersectionFailed);
-        return;
-    }
+    REQUIRE(along.has_value());
     REQUIRE(along->Overlaps.size() == 1);
     REQUIRE(std::abs(along->Overlaps.front().Range.GetLower() - 0.5) <= 1e-12);
     REQUIRE(along->Overlaps.front().Range.GetUpper() == 1.0);

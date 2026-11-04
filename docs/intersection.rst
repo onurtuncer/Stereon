@@ -540,10 +540,10 @@ parameter, is seen from both sides and reported once, undecided; a root
 whose bracket reaches past the requested domain is kept, clamped into it,
 rather than dropped on its rounded parameter. A curve whose every pole lies
 exactly in the plane is an overlap, its pcurve the spline of the projected
-poles. A periodic curve is intersected within its own domain only, a
-curve in a plane that leaves the requested box is not clipped yet, and a
-point's surface parameters are those of its rounded position, kept or
-dropped against the box as the line handlers do.
+poles, clipped to the requested box as described below. A periodic curve
+is intersected within its own domain only, and a point's surface
+parameters are those of its rounded position, kept or dropped against the
+box as the line handlers do.
 
 A ``Circle`` or an ``Ellipse`` against the five elementary surfaces goes
 through the same proofs, on its exact rational form. The requested domain,
@@ -559,10 +559,28 @@ angle :math:`m + 2 \arctan(\tan(h/2)(2s - 1))`, its bracket mapped through
 that monotone map and widened by its rounding; points are reported on the
 conic's angle, which may run over several turns. A conic whose centre and
 axes lie exactly in a plane is an overlap there, its pcurve the same
-conic in the plane's parameters; one whose bounding square leaves the
-requested box is not clipped yet. A conic on a curved surface, the
-equator of a sphere or the meridian of a torus, fails with
-``IntersectionFailed``.
+conic in the plane's parameters. A conic on a curved surface, the equator
+of a sphere or the meridian of a torus, fails with ``IntersectionFailed``.
+
+A B-spline or a conic in a plane is kept whole when its control polygon,
+or its bounding square, lies in the requested box. Otherwise it is
+clipped to the box:
+
+- Its range is cut wherever its pcurve meets the line of a finite edge,
+  each found by the complete plane-curve intersection below
+  (*Plane curves*). Between two cuts, the pcurve stays strictly on one
+  side of every edge's line.
+- The middle point of each piece decides it. If that point lies within
+  rounding of an edge, the clip fails with ``IntersectionFailed`` rather
+  than guess.
+- A stretch along an edge's line is on the boundary. It is kept where the
+  other coordinate keeps it in the box.
+- A contact in the box with both neighbouring pieces outside, such as a
+  touch from outside or a pass through a corner, is kept as an overlap of
+  one parameter, as the line handlers keep one.
+- Adjacent kept pieces are merged.
+
+Every overlap shares the one pcurve and restricts its range.
 
 Every other pair reports ``NotImplemented``; the generic path for curves
 against B-spline surfaces waits for Phase 2 with the surface–surface one.
