@@ -567,7 +567,7 @@ struct EnclosedQuadratic {
     return 0.5 * (x.GetLower() + x.GetUpper());
 }
 
-[[nodiscard]] LineQuadratic Rounded(const EnclosedQuadratic& q)
+[[nodiscard]] LineQuadratic MiddleOf(const EnclosedQuadratic& q)
 {
     return {Middle(q.A), Middle(q.B), Middle(q.C)};
 }
@@ -579,7 +579,7 @@ struct EnclosedQuadratic {
 [[nodiscard]] double PolishedOnCone(const Line& line, const Cone& cone, const double t,
                                     const double other)
 {
-    const LineQuadratic q = Rounded(ConeQuadratic(line, Eval(line, t), cone));
+    const LineQuadratic q = MiddleOf(ConeQuadratic(line, Eval(line, t), cone));
     if (q.A == 0.0) {
         return t;
     }
@@ -610,7 +610,7 @@ struct EnclosedQuadratic {
                     "cone within rounding cannot be resolved over an unbounded domain; a bounded "
                     "one can be");
     }
-    const LineQuadratic rounded = Rounded(q);
+    const LineQuadratic rounded = MiddleOf(q);
     const std::array<double, 2> roots =
         RootsOf(rounded, std::max(0.0, rounded.B * rounded.B - rounded.A * rounded.C));
     std::vector<Found> found;
