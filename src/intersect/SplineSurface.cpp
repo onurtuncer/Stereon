@@ -322,35 +322,202 @@ template <typename Point, typename Parameters>
     });
 }
 
-/// The overlap of a curve in the plane: its pcurve is the spline of the
-/// projected poles, a plane's parameters being affine. Clipping it to a box
-/// its poles leave is not implemented.
-[[nodiscard]] Result<CurveSurfaceIntersection>
-AlongPlane(const BSplineCurve& spline, const Plane& plane, const Interval& domain, const Box2& box)
+/// Where a point lies against one bound of the box: inside, outside, or
+/// within a few roundings of it, where its side is not trusted.
+[[nodiscard]] Strict SideOf(const double x, const double bound, const double inward)
 {
-    BSplineCurve2d pcurve{spline.Degree, spline.Knots, {}, spline.Weights};
-    for (const Point3& pole : spline.Poles) {
-        const Point2 q = Project(plane, pole);
-        if (!Contains(box.X, q.X) || !Contains(box.Y, q.Y)) {
-            return Fail(ErrorCode::NotImplemented,
-                        "BSplineCurve x Plane: a curve in the plane that leaves the requested box "
-                        "is not clipped yet");
-        }
-        pcurve.Poles.push_back(q);
+    const double margin = 64.0 * std::numeric_limits<double>::epsilon() *
+                          std::max({1.0, std::abs(x), std::abs(bound)});
+    const double d = inward * (x - bound);
+    if (d > margin) {
+        return Strict::Positive;
     }
+    return d < -margin ? Strict::Negative : Strict::Unknown;
+}
+
+/// Whether a point is in the closed box, Unknown within rounding of an edge.
+[[nodiscard]] Strict InBox(const Point2& p, const Box2& box)
+{
+    Strict side = Strict::Positive;
+    const auto bound = [&](const double x, const double b, const double inward) {
+        if (!std::isfinite(b)) {
+            return;
+        }
+        const Strict s = SideOf(x, b, inward);
+        if (s == Strict::Negative) {
+            side = Strict::Negative;
+        } else if (s == Strict::Unknown && side == Strict::Positive) {
+            side = Strict::Unknown;
+        }
+    };
+    bound(p.X, box.X.GetLower(), 1.0);
+    bound(p.X, box.X.GetUpper(), -1.0);
+    bound(p.Y, box.Y.GetLower(), 1.0);
+    bound(p.Y, box.Y.GetUpper(), -1.0);
+    return side;
+}
+
+/// Whether a point found on an edge's line lies in the closed box: the
+/// rounded point, its distance outside within rounding counted in.
+[[nodiscard]] bool OnBoxBoundary(const Point2& p, const Box2& box)
+{
+    const auto within = [](const double x, const Interval& range) {
+        const double slack =
+            64.0 * std::numeric_limits<double>::epsilon() * std::max({1.0, std::abs(x)});
+        return x >= range.GetLower() - slack && x <= range.GetUpper() + slack;
+    };
+    return within(p.X, box.X) && within(p.Y, box.Y);
+}
+
+/// Where the cuts and the boundary stretches of a curve against the box's
+/// edges are collected.
+struct BoxCuts {
+    std::vector<double> At;
+    std::vector<Interval> Along;
+    std::vector<double> Touches;
+};
+
+/// The pcurve against the line of one finite edge: every contact, from a
+/// complete planar intersection, is a cut; a stretch along the line lies on
+/// the box's boundary; a contact in the box is kept even where both sides of
+/// it leave.
+[[nodiscard]] Result<void> CutAtEdge(const Curve2d& pcurve, const Interval& range,
+                                     const Line2d& edge, const Box2& box, const Context& ctx,
+                                     BoxCuts& cuts)
+{
+    STEREON_TRY(const PlanarIntersection meet,
+                Intersect(pcurve, range, Curve2d(edge), Interval::Everything(), ctx));
+    for (const PlanarPoint& p : meet.Points) {
+        cuts.At.push_back(p.ParameterA);
+        if (OnBoxBoundary(p.Position, box)) {
+            cuts.Touches.push_back(p.ParameterA);
+        }
+    }
+    for (const PlanarOverlap& o : meet.Overlaps) {
+        cuts.At.push_back(o.OnA.GetLower());
+        cuts.At.push_back(o.OnA.GetUpper());
+        cuts.Along.push_back(o.OnA);
+    }
+    return {};
+}
+
+/// The parameter stretches over which a curve in the plane stays in the
+/// closed box. The curve's range is cut wherever its pcurve meets the line
+/// of a finite edge. Each planar intersection is complete: it reports every
+/// contact or fails. Between two cuts, then, the pcurve stays strictly on
+/// one side of every edge's line, and its middle point decides the piece. A
+/// piece along an edge lies on the boundary and is kept. A contact in the
+/// box between two pieces outside is kept as a stretch of one parameter, as
+/// the line handler keeps a corner. A middle point within rounding of an
+/// edge cannot be trusted, and the clip fails.
+[[nodiscard]] Result<std::vector<Interval>> InsideBox(const Curve2d& pcurve, const Interval& range,
+                                                      const Box2& box, const Context& ctx,
+                                                      const std::string_view handler)
+{
+    BoxCuts cuts;
+    cuts.At = {range.GetLower(), range.GetUpper()};
+    for (const double x : {box.X.GetLower(), box.X.GetUpper()}) {
+        if (std::isfinite(x)) {
+            STEREON_TRY_VOID(
+                CutAtEdge(pcurve, range, Line2d{Point2{x, 0.0}, Vec2{0.0, 1.0}}, box, ctx, cuts));
+        }
+    }
+    for (const double y : {box.Y.GetLower(), box.Y.GetUpper()}) {
+        if (std::isfinite(y)) {
+            STEREON_TRY_VOID(
+                CutAtEdge(pcurve, range, Line2d{Point2{0.0, y}, Vec2{1.0, 0.0}}, box, ctx, cuts));
+        }
+    }
+    for (double& t : cuts.At) {
+        t = std::clamp(t, range.GetLower(), range.GetUpper());
+    }
+    std::ranges::sort(cuts.At);
+    const auto repeated = std::ranges::unique(cuts.At);
+    cuts.At.erase(repeated.begin(), repeated.end());
+
+    std::vector<Interval> kept;
+    for (std::size_t i = 0; i + 1 < cuts.At.size(); ++i) {
+        const Interval piece{cuts.At[i], cuts.At[i + 1]};
+        const bool along = std::ranges::any_of(
+            cuts.Along, [&](const Interval& stretch) { return Contains(stretch, piece); });
+        if (along) {
+            kept.push_back(piece);
+            continue;
+        }
+        const Strict side = InBox(Eval(pcurve, 0.5 * (piece.GetLower() + piece.GetUpper())), box);
+        if (side == Strict::Unknown) {
+            return Fail(ErrorCode::IntersectionFailed,
+                        std::string(handler) +
+                            ": a curve in the plane runs within rounding of the box's edge");
+        }
+        if (side == Strict::Positive) {
+            kept.push_back(piece);
+        }
+    }
+    for (const double t : cuts.Touches) {
+        const double at = std::clamp(t, range.GetLower(), range.GetUpper());
+        if (std::ranges::none_of(kept, [&](const Interval& k) { return Contains(k, at); })) {
+            kept.push_back(Interval{at});
+        }
+    }
+    std::ranges::sort(
+        kept, [](const Interval& a, const Interval& b) { return a.GetLower() < b.GetLower(); });
+    std::vector<Interval> merged;
+    for (const Interval& k : kept) {
+        if (!merged.empty() && k.GetLower() <= merged.back().GetUpper()) {
+            merged.back() = Hull(merged.back(), k);
+        } else {
+            merged.push_back(k);
+        }
+    }
+    return merged;
+}
+
+/// The overlaps of a curve in the plane over the stretches in the box, all
+/// on the one pcurve.
+[[nodiscard]] CurveSurfaceIntersection OverlapsOn(const Curve2d& pcurve,
+                                                  const std::vector<Interval>& stretches)
+{
     CurveSurfaceIntersection result;
-    const Interval range = Intersection(domain, Domain(spline));
-    if (!range.IsEmpty()) {
-        result.Overlaps.push_back({range, Curve2d(std::move(pcurve))});
+    for (const Interval& stretch : stretches) {
+        result.Overlaps.push_back({stretch, pcurve});
     }
     return result;
+}
+
+/// The overlap of a curve in the plane: its pcurve is the spline of the
+/// projected poles, a plane's parameters being affine. When every pole is
+/// in the box the curve is, in the hull of its poles; otherwise it is
+/// clipped to the box.
+[[nodiscard]] Result<CurveSurfaceIntersection> AlongPlane(const BSplineCurve& spline,
+                                                          const Plane& plane,
+                                                          const Interval& domain, const Box2& box,
+                                                          const Context& ctx)
+{
+    BSplineCurve2d onPlane{spline.Degree, spline.Knots, {}, spline.Weights};
+    bool inside = true;
+    for (const Point3& pole : spline.Poles) {
+        const Point2 q = Project(plane, pole);
+        inside = inside && Contains(box.X, q.X) && Contains(box.Y, q.Y);
+        onPlane.Poles.push_back(q);
+    }
+    const Interval range = Intersection(domain, Domain(spline));
+    if (range.IsEmpty()) {
+        return CurveSurfaceIntersection{};
+    }
+    const Curve2d pcurve(std::move(onPlane));
+    if (inside) {
+        return OverlapsOn(pcurve, {range});
+    }
+    STEREON_TRY(const std::vector<Interval> stretches,
+                InsideBox(pcurve, range, box, ctx, "BSplineCurve x Plane"));
+    return OverlapsOn(pcurve, stretches);
 }
 
 } // namespace
 
 Result<CurveSurfaceIntersection> SplinePlane(const Curve& a, const Interval& domain,
-                                             const Surface& b, const Box2& box,
-                                             const Context& /*ctx*/)
+                                             const Surface& b, const Box2& box, const Context& ctx)
 {
     const BSplineCurve* spline = a.Target<BSplineCurve>();
     const Plane* plane = b.Target<Plane>();
@@ -359,7 +526,7 @@ Result<CurveSurfaceIntersection> SplinePlane(const Curve& a, const Interval& dom
     }
     STEREON_TRY_VOID(CheckSpline(*spline));
     if (InPlane(*spline, *plane)) {
-        return AlongPlane(*spline, *plane, domain, box);
+        return AlongPlane(*spline, *plane, domain, box, ctx);
     }
     STEREON_TRY(const std::vector<Found> found,
                 RootsOf(
@@ -595,20 +762,20 @@ template <typename Form>
 
 /// The overlap of a conic in the plane over the requested domain: its
 /// pcurve the same conic in the plane's parameters, on the same angle. A
-/// conic whose bounding square leaves the box is not clipped yet.
+/// conic whose bounding square is in the box is kept whole; otherwise it is
+/// clipped to the box.
 [[nodiscard]] Result<CurveSurfaceIntersection>
 ConicAlongPlane(const Curve2d& pcurve, const Point2& center, const double reach,
-                const Interval& domain, const Box2& box, const std::string_view handler)
+                const Interval& domain, const Box2& box, const Context& ctx,
+                const std::string_view handler)
 {
     const Box2 square{Around(center.X, reach), Around(center.Y, reach)};
-    if (!Contains(box.X, square.X) || !Contains(box.Y, square.Y)) {
-        return Fail(ErrorCode::NotImplemented,
-                    std::string(handler) +
-                        ": a conic in the plane that leaves the requested box is not clipped yet");
+    if (Contains(box.X, square.X) && Contains(box.Y, square.Y)) {
+        return OverlapsOn(pcurve, {domain});
     }
-    CurveSurfaceIntersection result;
-    result.Overlaps.push_back({domain, pcurve});
-    return result;
+    STEREON_TRY(const std::vector<Interval> stretches,
+                InsideBox(pcurve, domain, box, ctx, handler));
+    return OverlapsOn(pcurve, stretches);
 }
 
 /// The conic against one elementary surface: its form, its parameters and
@@ -657,7 +824,7 @@ ConicAgainst(const Conic& conic, const ConicData& data, const Interval& domain, 
 template <typename Conic>
 [[nodiscard]] Result<CurveSurfaceIntersection>
 ConicOnSurface(const Conic& conic, const ConicData& data, const Interval& domain, const Surface& b,
-               const Box2& box, const std::string_view name)
+               const Box2& box, const Context& ctx, const std::string_view name)
 {
     const std::string prefix(name);
     if (!domain.IsBounded()) {
@@ -666,7 +833,7 @@ ConicOnSurface(const Conic& conic, const ConicData& data, const Interval& domain
     if (const Plane* plane = b.Target<Plane>()) {
         if (ConicInPlane(conic.Center, conic.XAxis, conic.YAxis, *plane)) {
             return ConicAlongPlane(InPlaneOf(conic, *plane), Project(*plane, conic.Center),
-                                   Reach(conic), domain, box, prefix + " x Plane");
+                                   Reach(conic), domain, box, ctx, prefix + " x Plane");
         }
         return ConicAgainst(conic, data, domain, *plane, box, PlaneForm, prefix + " x Plane", false,
                             false);
@@ -693,18 +860,17 @@ ConicOnSurface(const Conic& conic, const ConicData& data, const Interval& domain
 } // namespace
 
 Result<CurveSurfaceIntersection> ConicSurface(const Curve& a, const Interval& domain,
-                                              const Surface& b, const Box2& box,
-                                              const Context& /*ctx*/)
+                                              const Surface& b, const Box2& box, const Context& ctx)
 {
     if (const Circle* circle = a.Target<Circle>()) {
         const ConicData data{circle->Center, Times(circle->Radius, circle->XAxis),
                              Times(circle->Radius, circle->YAxis)};
-        return ConicOnSurface(*circle, data, domain, b, box, "Circle");
+        return ConicOnSurface(*circle, data, domain, b, box, ctx, "Circle");
     }
     if (const Ellipse* ellipse = a.Target<Ellipse>()) {
         const ConicData data{ellipse->Center, Times(ellipse->MajorRadius, ellipse->XAxis),
                              Times(ellipse->MinorRadius, ellipse->YAxis)};
-        return ConicOnSurface(*ellipse, data, domain, b, box, "Ellipse");
+        return ConicOnSurface(*ellipse, data, domain, b, box, ctx, "Ellipse");
     }
     return Fail(ErrorCode::InvalidInput, "ConicSurface: dispatched for other types");
 }
