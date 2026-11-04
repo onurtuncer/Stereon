@@ -447,6 +447,233 @@ Result<CurveSurfaceIntersection> SplineTorus(const Curve& a, const Interval& dom
                     [&](const Point3& p) { return Project(*torus, p); }, true, true);
 }
 
+// --- A line against the cone and the torus -------------------------------
+
+namespace {
+
+/// The line over [t0, t1] as one Bezier segment of degree 1, its poles
+/// enclosed from the input doubles.
+[[nodiscard]] Segment LineSegment(const Line& line, const double t0, const double t1)
+{
+    const auto at = [&](const double t) {
+        const Interval s{t};
+        return HPoint{Interval{line.Origin.X} + s * Interval{line.Direction.X},
+                      Interval{line.Origin.Y} + s * Interval{line.Direction.Y},
+                      Interval{line.Origin.Z} + s * Interval{line.Direction.Z}, Interval{1.0}};
+    };
+    return {t0, t1, {at(t0), at(t1)}};
+}
+
+/// Every root of the surface's form along the line over a bounded range,
+/// found and proved as a B-spline's are: a root left undecided fails.
+template <typename Form>
+[[nodiscard]] Result<std::vector<Found>> LineRootsOf(const Line& line, const Interval& range,
+                                                     Form&& form, const std::string_view handler)
+{
+    std::vector<Found> found;
+    if (range.IsEmpty()) {
+        return found;
+    }
+    const Segment segment = LineSegment(line, range.GetLower(), range.GetUpper());
+    STEREON_TRY_VOID(RootsOfSegment(segment, form(segment.Poles), handler, found));
+    Merge(found);
+    for (const Found& f : found) {
+        if (!f.Decided) {
+            return Fail(ErrorCode::IntersectionFailed,
+                        std::string(handler) +
+                            ": unresolved root existence or multiplicity in requested domain");
+        }
+    }
+    return found;
+}
+
+/// The enclosed coordinates of `p - c`, and of the line's direction.
+[[nodiscard]] IVec3 Offset(const Point3& p, const Point3& c)
+{
+    return {Interval{p.X} - Interval{c.X}, Interval{p.Y} - Interval{c.Y},
+            Interval{p.Z} - Interval{c.Z}};
+}
+
+[[nodiscard]] IVec3 Enclosed(const Vec3& v)
+{
+    return {Interval{v.X}, Interval{v.Y}, Interval{v.Z}};
+}
+
+[[nodiscard]] Interval DotOf(const IVec3& a, const IVec3& b)
+{
+    return a.X * b.X + a.Y * b.Y + a.Z * b.Z;
+}
+
+/// The stretch of the line within distance `radius` of c, outward-rounded:
+/// every enclosure taken on the side that widens it, so that no point of
+/// the line within the radius is left out; Empty when the line provably
+/// passes outside.
+[[nodiscard]] Interval WithinSphere(const Line& line, const Point3& c, const double radius)
+{
+    const IVec3 w = Offset(line.Origin, c);
+    const IVec3 d = Enclosed(line.Direction);
+    const Interval dd = DotOf(d, d);
+    const IVec3 n{w.Y * d.Z - w.Z * d.Y, w.Z * d.X - w.X * d.Z, w.X * d.Y - w.Y * d.X};
+    // The squared distance of the line from c, |w x d|² / |d|².
+    const Interval off = DotOf(n, n) / dd;
+    const Interval r{radius};
+    const double room = (r * r - off).GetUpper();
+    if (!(room > 0.0)) {
+        return Interval::Empty();
+    }
+    const double half = std::nextafter(std::sqrt((Interval{room} / dd).GetUpper()), Infinity);
+    const Interval centre = (Interval{0.0} - DotOf(w, d)) / dd;
+    return {std::nextafter(centre.GetLower() - half, -Infinity),
+            std::nextafter(centre.GetUpper() + half, Infinity)};
+}
+
+/// A t² + 2 B t + C, enclosed.
+struct EnclosedQuadratic {
+    Interval A;
+    Interval B;
+    Interval C;
+};
+
+/// The quadratic the line through `origin` with the line's direction cuts
+/// out of the cone, enclosed. With (P, Q, H) the coordinates of origin - O
+/// and (Pd, Qd, Hd) of the direction in the cone's frame, and K = R cos a +
+/// H sin a, the cone's cos² a (p² + q²) - (R cos a + h sin a)² gives
+/// A = cos² a (Pd² + Qd²) - sin² a Hd², B = cos² a (P Pd + Q Qd) - K sin a
+/// Hd, and C = cos² a (P² + Q²) - K².
+[[nodiscard]] EnclosedQuadratic ConeQuadratic(const Line& line, const Point3& origin,
+                                              const Cone& cone)
+{
+    const IVec3 w = Offset(origin, cone.Origin);
+    const IVec3 d = Enclosed(line.Direction);
+    const IVec3 x = Enclosed(cone.XAxis);
+    const IVec3 y = Enclosed(cone.YAxis);
+    const IVec3 h = Enclosed(Axis(cone));
+    const IntervalScalar angle{Interval{cone.SemiAngle}};
+    const Interval c = cos(angle).Value;
+    const Interval s = sin(angle).Value;
+    const Interval p = DotOf(w, x);
+    const Interval q = DotOf(w, y);
+    const Interval pd = DotOf(d, x);
+    const Interval qd = DotOf(d, y);
+    const Interval k = Interval{cone.Radius} * c + s * DotOf(w, h);
+    const Interval kd = s * DotOf(d, h);
+    const Interval cc = c * c;
+    return {cc * (pd * pd + qd * qd) - kd * kd, cc * (p * pd + q * qd) - k * kd,
+            cc * (p * p + q * q) - k * k};
+}
+
+[[nodiscard]] double Middle(const Interval& x)
+{
+    return 0.5 * (x.GetLower() + x.GetUpper());
+}
+
+[[nodiscard]] LineQuadratic Rounded(const EnclosedQuadratic& q)
+{
+    return {Middle(q.A), Middle(q.B), Middle(q.C)};
+}
+
+/// A crossing of the cone placed again from the line re-centred at its
+/// rounded point, where the quadratic is formed from a small offset and its
+/// root nearest zero is placed to the point's own rounding; a step reaching
+/// half way to the other crossing is refused.
+[[nodiscard]] double PolishedOnCone(const Line& line, const Cone& cone, const double t,
+                                    const double other)
+{
+    const LineQuadratic q = Rounded(ConeQuadratic(line, Eval(line, t), cone));
+    if (q.A == 0.0) {
+        return t;
+    }
+    const std::array<double, 2> roots = RootsOf(q, std::max(0.0, q.B * q.B - q.A * q.C));
+    const double s = std::abs(roots[0]) <= std::abs(roots[1]) ? roots[0] : roots[1];
+    const double polished = t + s;
+    return std::abs(s) < 0.5 * std::abs(other - t) && std::isfinite(polished) ? polished : t;
+}
+
+/// The crossings of the cone over an unbounded domain, from its quadratic.
+/// The count is decided on the enclosures: a discriminant below zero is a
+/// proved separation; one above zero with a leading coefficient of strict
+/// sign, two simple crossings, each placed and polished in doubles. Else a
+/// line along a generator, through the apex or tangent within rounding,
+/// which an unbounded domain gives no way to resolve, fails.
+[[nodiscard]] Result<std::vector<Found>> ConeQuadraticRoots(const Line& line, const Cone& cone,
+                                                            const Interval& domain)
+{
+    const EnclosedQuadratic q = ConeQuadratic(line, line.Origin, cone);
+    const Interval discriminant = q.B * q.B - q.A * q.C;
+    if (discriminant.GetUpper() < 0.0) {
+        return std::vector<Found>{};
+    }
+    const bool leading = q.A.GetLower() > 0.0 || q.A.GetUpper() < 0.0;
+    if (!(discriminant.GetLower() > 0.0) || !leading) {
+        return Fail(ErrorCode::IntersectionFailed,
+                    "Line x Cone: a line along a generator, through the apex or tangent to the "
+                    "cone within rounding cannot be resolved over an unbounded domain; a bounded "
+                    "one can be");
+    }
+    const LineQuadratic rounded = Rounded(q);
+    const std::array<double, 2> roots =
+        RootsOf(rounded, std::max(0.0, rounded.B * rounded.B - rounded.A * rounded.C));
+    std::vector<Found> found;
+    for (std::size_t k = 0; k < 2; ++k) {
+        const double t = PolishedOnCone(line, cone, roots[k], roots[1 - k]);
+        if (std::isfinite(t) && Contains(domain, t)) {
+            found.push_back({t, Interval{t}, ContactType::Crossing, true});
+        }
+    }
+    std::ranges::sort(found, [](const Found& a, const Found& b) { return a.T < b.T; });
+    return found;
+}
+
+} // namespace
+
+Result<CurveSurfaceIntersection> LineCone(const Curve& a, const Interval& domain, const Surface& b,
+                                          const Box2& box, const Context& /*ctx*/)
+{
+    const Line* line = a.Target<Line>();
+    const Cone* cone = b.Target<Cone>();
+    if (line == nullptr || cone == nullptr) {
+        return Fail(ErrorCode::InvalidInput, "LineCone: dispatched for other types");
+    }
+    std::vector<Found> found;
+    if (domain.IsBounded()) {
+        STEREON_TRY(found,
+                    LineRootsOf(
+                        *line, domain,
+                        [&](const std::vector<HPoint>& poles) { return ConeForm(poles, *cone); },
+                        "Line x Cone"));
+    } else {
+        STEREON_TRY(found, ConeQuadraticRoots(*line, *cone, domain));
+    }
+    return PointsOf([&](const double t) { return Eval(*line, t); }, found, box,
+                    [&](const Point3& p) { return Project(*cone, p); }, true);
+}
+
+Result<CurveSurfaceIntersection> LineTorus(const Curve& a, const Interval& domain, const Surface& b,
+                                           const Box2& box, const Context& /*ctx*/)
+{
+    const Line* line = a.Target<Line>();
+    const Torus* torus = b.Target<Torus>();
+    if (line == nullptr || torus == nullptr) {
+        return Fail(ErrorCode::InvalidInput, "LineTorus: dispatched for other types");
+    }
+    // Every point of the torus lies within R + r of its centre: the line
+    // need be searched only there, a bounded stretch whatever the domain.
+    // The sphere is taken half a tube wider, so that the stretch's ends lie
+    // well off the torus: a crossing on its outer equator, where the sphere
+    // touches it, would otherwise sit within rounding of an end, whose sign
+    // could not be decided.
+    const double reach =
+        (Interval{torus->MajorRadius} + Interval{1.5} * Interval{torus->MinorRadius}).GetUpper();
+    const Interval range = Intersection(domain, WithinSphere(*line, torus->Center, reach));
+    STEREON_TRY(const std::vector<Found> found,
+                LineRootsOf(
+                    *line, range,
+                    [&](const std::vector<HPoint>& poles) { return TorusForm(poles, *torus); },
+                    "Line x Torus"));
+    return PointsOf([&](const double t) { return Eval(*line, t); }, found, box,
+                    [&](const Point3& p) { return Project(*torus, p); }, true, true);
+}
+
 // --- Circles and ellipses ------------------------------------------------
 
 namespace {

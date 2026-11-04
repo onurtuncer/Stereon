@@ -394,6 +394,17 @@ Result<CurveSurfaceIntersection> SplineCone(const Curve&, const Interval&, const
 Result<CurveSurfaceIntersection> SplineTorus(const Curve&, const Interval&, const Surface&,
                                              const Box2&, const Context&);
 
+/// A line against a cone: over a bounded domain as a degree-1 Bezier segment
+/// through the cone's equation, proved as a B-spline's roots are; over an
+/// unbounded one through its quadratic, decided on enclosures, failing for
+/// a line along a generator, through the apex or tangent within rounding.
+/// Against a torus: over the stretch within the torus's bounding sphere, as
+/// a segment, its quartic proved the same way. Defined in SplineSurface.cpp.
+Result<CurveSurfaceIntersection> LineCone(const Curve&, const Interval&, const Surface&,
+                                          const Box2&, const Context&);
+Result<CurveSurfaceIntersection> LineTorus(const Curve&, const Interval&, const Surface&,
+                                           const Box2&, const Context&);
+
 /// A circle or an ellipse against a plane, a cylinder, a cone, a sphere or a
 /// torus: the conic cut into rational quadratic arcs of at most a quarter
 /// turn, their poles and middle weight enclosed, so that every proof holds
@@ -625,6 +636,19 @@ consteval CurveSurfaceHandler AgainstQuadric()
     }
 }
 
+/// The line's handlers: AgainstQuadric's three, the cone and the torus.
+template <typename B>
+consteval CurveSurfaceHandler LineAgainstSurface()
+{
+    if constexpr (std::same_as<B, Cone>) {
+        return &LineCone;
+    } else if constexpr (std::same_as<B, Torus>) {
+        return &LineTorus;
+    } else {
+        return AgainstQuadric<Line, B, &LinePlane, &LineSphere, &LineCylinder>();
+    }
+}
+
 /// The B-spline curve's handlers: AgainstQuadric's three, the cone and the
 /// torus.
 template <typename B>
@@ -658,7 +682,7 @@ template <typename A, typename B>
 consteval CurveSurfaceHandler CurveSurfaceHandlerFor()
 {
     if constexpr (std::same_as<A, Line>) {
-        return AgainstQuadric<A, B, &LinePlane, &LineSphere, &LineCylinder>();
+        return LineAgainstSurface<B>();
     } else if constexpr (std::same_as<A, BSplineCurve>) {
         return SplineAgainstSurface<B>();
     } else if constexpr (std::same_as<A, Circle> || std::same_as<A, Ellipse>) {
