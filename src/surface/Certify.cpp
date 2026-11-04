@@ -28,8 +28,11 @@ module;
 module Stereon.Surface;
 
 import :Certify;
+import :Cone;
 import :Cylinder;
 import :Plane;
+import :Sphere;
+import :Torus;
 
 namespace Stereon {
 
@@ -101,6 +104,14 @@ constexpr double TwoPi = 2.0 * std::numbers::pi;
     return Intersection(r, Interval{-1.0, 1.0});
 }
 
+/// [x, x] widened by four units in the last place each way: the hyperbolic
+/// functions of libm are less tightly specified than sin and cos.
+[[nodiscard]] Interval Loosely(const double x)
+{
+    return Hull(Around(std::nextafter(std::nextafter(x, -Infinity), -Infinity)),
+                Around(std::nextafter(std::nextafter(x, Infinity), Infinity)));
+}
+
 } // namespace
 
 IntervalScalar::IntervalScalar()
@@ -166,6 +177,25 @@ IntervalScalar sqrt(const IntervalScalar& x)
     return nonNegative.IsEmpty() ? IntervalScalar{} : IntervalScalar{Sqrt(nonNegative)};
 }
 
+/// sinh is increasing: the values at the ends.
+IntervalScalar sinh(const IntervalScalar& x)
+{
+    return IntervalScalar{
+        Hull(Loosely(std::sinh(x.Value.GetLower())), Loosely(std::sinh(x.Value.GetUpper())))};
+}
+
+/// cosh is even and increasing in |x|: the values at the ends, and 1 where
+/// the interval holds 0.
+IntervalScalar cosh(const IntervalScalar& x)
+{
+    Interval r =
+        Hull(Loosely(std::cosh(x.Value.GetLower())), Loosely(std::cosh(x.Value.GetUpper())));
+    if (Contains(x.Value, 0.0)) {
+        r = Hull(r, 1.0);
+    }
+    return IntervalScalar{Intersection(r, Interval{1.0, Infinity})};
+}
+
 namespace {
 
 using IPoint2 = BasicPoint2<IntervalScalar>;
@@ -215,6 +245,37 @@ template <std::size_t D>
 [[nodiscard]] BasicCylinder<IntervalScalar> Enclosed(const Cylinder& c)
 {
     return {Wide(c.Origin), IntervalScalar{c.Radius}, Wide(c.XAxis), Wide(c.YAxis), c.RightHanded};
+}
+[[nodiscard]] BasicCone<IntervalScalar> Enclosed(const Cone& c)
+{
+    return {Wide(c.Origin),
+            IntervalScalar{c.Radius},
+            IntervalScalar{c.SemiAngle},
+            Wide(c.XAxis),
+            Wide(c.YAxis),
+            c.RightHanded};
+}
+[[nodiscard]] BasicSphere<IntervalScalar> Enclosed(const Sphere& s)
+{
+    return {Wide(s.Center), IntervalScalar{s.Radius}, Wide(s.XAxis), Wide(s.YAxis), s.RightHanded};
+}
+[[nodiscard]] BasicTorus<IntervalScalar> Enclosed(const Torus& t)
+{
+    return {Wide(t.Center),
+            IntervalScalar{t.MajorRadius},
+            IntervalScalar{t.MinorRadius},
+            Wide(t.XAxis),
+            Wide(t.YAxis),
+            t.RightHanded};
+}
+[[nodiscard]] BasicParabola<IntervalScalar, 3> Enclosed(const Parabola& p)
+{
+    return {Wide(p.Vertex), IntervalScalar{p.FocalLength}, Wide(p.XAxis), Wide(p.YAxis)};
+}
+[[nodiscard]] BasicHyperbola<IntervalScalar, 3> Enclosed(const Hyperbola& h)
+{
+    return {Wide(h.Center), IntervalScalar{h.MajorRadius}, IntervalScalar{h.MinorRadius},
+            Wide(h.XAxis), Wide(h.YAxis)};
 }
 template <std::size_t D>
 [[nodiscard]] BasicBSplineCurve<IntervalScalar, D> Enclosed(const BasicBSplineCurve<double, D>& c)
@@ -592,6 +653,12 @@ template <std::size_t D>
     if (const Ellipse* ellipse = curve.Target<Ellipse>()) {
         return ClosedFormTrace<3>(Enclosed(*ellipse));
     }
+    if (const Parabola* parabola = curve.Target<Parabola>()) {
+        return ClosedFormTrace<3>(Enclosed(*parabola));
+    }
+    if (const Hyperbola* hyperbola = curve.Target<Hyperbola>()) {
+        return ClosedFormTrace<3>(Enclosed(*hyperbola));
+    }
     if (const BSplineCurve* spline = curve.Target<BSplineCurve>()) {
         return SplineTrace(*spline);
     }
@@ -622,6 +689,15 @@ template <std::size_t D>
     }
     if (const Cylinder* cylinder = surface.Target<Cylinder>()) {
         return SurfaceOf(Enclosed(*cylinder));
+    }
+    if (const Cone* cone = surface.Target<Cone>()) {
+        return SurfaceOf(Enclosed(*cone));
+    }
+    if (const Sphere* sphere = surface.Target<Sphere>()) {
+        return SurfaceOf(Enclosed(*sphere));
+    }
+    if (const Torus* torus = surface.Target<Torus>()) {
+        return SurfaceOf(Enclosed(*torus));
     }
     return std::nullopt;
 }
@@ -1092,8 +1168,8 @@ Result<DeviationCertificate> CertifyDeviation(const Curve& curve, const Surface&
     const std::optional<SurfaceTrace> s = TraceOf(surface);
     if (!c || !p || !s) {
         return Fail(ErrorCode::NotSupported,
-                    "CertifyDeviation: interval evaluation covers lines, circles, ellipses and "
-                    "non-rational B-splines on planes and cylinders");
+                    "CertifyDeviation: interval evaluation covers lines, conics and non-rational "
+                    "B-splines on planes, cylinders, cones, spheres and tori");
     }
     // Analytic curves on a plane, or on a cylinder along a ruling or a
     // unit-speed turn, have a bound over the whole range in one step; one

@@ -101,6 +101,10 @@ The configurations:
   pair tolerance.
 - **Cylinder–cylinder, skew or intersecting axes:** the quartic, as
   certified B-spline branches; see below.
+- **Every other pair of planes, cylinders, cones, spheres and tori:** exact
+  circles, lines and points where the surfaces share an axis or the plane
+  passes through a cone's apex or contains a torus's axis, and certified
+  B-spline branches traced otherwise; see *Elementary surfaces* below.
 
 Cylinders with skew axes
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -167,6 +171,261 @@ the branch's parameter box leaves the domain entirely. A face-level
 operation restricts a branch to its loops itself; a box should include the
 face's tolerance for the clip to keep every point within it. A declared
 coincidence is logged at ``Info`` with its distance and the tolerance.
+
+Elementary surfaces
+~~~~~~~~~~~~~~~~~~~
+
+Every other pair of planes, cylinders, cones, spheres and tori goes to
+``ElementaryPair`` (``src/intersect/ElementaryPairs.cpp``). It tries three
+closed forms in turn. The parametric–implicit trace takes every
+configuration that has none, which covers the quartic curves of off-axis
+pairs. The closed forms come first because they give exact geometry. They
+also take the configurations the trace cannot certify: tangencies along a
+curve, isolated points and coincidences.
+
+**Coaxial surfaces of revolution.** Cylinders, cones and tori whose axes are
+one line, a sphere centred on it, and a plane across it are all turns of a
+*meridian profile* about the axis :cite:p:`hoffmann1989geometric`. In the
+half-plane of the distance :math:`\rho` from the axis and the height
+:math:`z` along it:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 18 42 40
+
+   * - Surface
+     - Profile
+     - Parameters
+   * - Plane across the axis
+     - the line :math:`z = h`
+     - :math:`h` the plane's height
+   * - Cylinder
+     - the line :math:`\rho = r`
+     -
+   * - Cone
+     - the lines :math:`\rho = \pm k (z - z_a)`, :math:`k = |\tan a|`
+     - :math:`z_a` the apex's height; both nappes
+   * - Sphere
+     - the circle :math:`\rho^2 + (z - z_c)^2 = R^2`
+     - :math:`z_c` the centre's height
+   * - Torus
+     - the circle :math:`(\rho - R)^2 + (z - z_c)^2 = r^2`
+     - :math:`R \ge r`, so the circle stays in :math:`\rho \ge 0`
+
+Turning a point :math:`(\rho, z)` of both profiles about the axis gives a
+circle common to both surfaces. Where the profiles cross, the surfaces
+cross along that circle. Where the profiles touch, the surfaces touch along
+it: the circle is ``Tangential``, with ``SameSide`` evidence, which is the
+configuration of a fillet's torus on the cylinder and the plane it blends.
+A meeting on the axis, :math:`\rho = 0`, is an ``IntersectionPoint``, such
+as a sphere through a cone's apex. Profiles that coincide give coincident
+surfaces, which is possible only for two cones, two spheres or two tori
+alike; that is an ``OverlapRegion``, with the affine map that turns one
+angle into the other and carries one :math:`v` onto the other.
+
+.. _fig-coaxial-profiles:
+
+.. figure:: _static/tikz/coaxial-profiles.png
+   :width: 90%
+   :alt: The meridian half-plane with a torus's profile circle, a
+         cylinder's vertical line touching it, a horizontal plane line
+         crossing it twice and a cone's line through its apex crossing it
+         twice.
+
+   Coaxial surfaces in the meridian half-plane. The torus is a circle, the
+   cylinder a line touching it (open marker), the plane a line crossing it
+   twice and the cone a line from its apex crossing it twice (filled
+   markers). Turned about the axis, the touch is the circle along which a
+   fillet's torus meets its cylinder, and each crossing is a transverse
+   circle.
+
+The meetings are the elementary intersections of lines and circles
+(``MeetProfiles``). Every circle is an exact ``Circle``, framed about the
+axis. On a surface of revolution its pcurve is the line
+:math:`(u_0 + s t, v_0)` of constant :math:`v`, with :math:`s = \pm 1` the
+sense the surface's angle turns about the axis; on the plane it is an exact
+``Circle2d``. A branch is cut where either pcurve crosses its chart's seam
+and is clipped exactly to the requested angular and height ranges. A plane
+keeps the whole circle when its box holds it and drops it when its box
+misses it or lies inside the disk. Otherwise the plane would need a
+certified clip, and the result is ``NotImplemented``, as for plane–cylinder.
+
+Whether the axes coincide is decided exactly on the input doubles: the
+cross products of the frames' axes, and of the offset between origins with
+an axis, vanish or not. A sphere shares an axis with any line through its
+centre, so two spheres always share the line of their centres, and a plane
+and a sphere the normal through the centre. A sphere's circles are its
+parallels of latitude only when its poles lie on the common axis. Otherwise
+their pcurves are not lines, and such a pair is traced.
+
+The meetings themselves cannot be decided exactly. A cone's profile comes
+from the sine and cosine of its angle, which no double represents. So the
+meetings are decided on the profiles' nominal values. A configuration
+within the pair tolerance of a tangency is declared tangent and logged at
+``Info``, as a coincidence within it is declared (ADR-0029 section 6).
+
+**A sphere off a surface's axis** (``SphereTouch``). The points of a
+cylinder, cone or torus nearest a point off its axis lie in that point's
+meridian plane, where the surface is its profile. So the distance
+:math:`\delta` from the sphere's centre to the surface is the distance to
+the profile's nearest line or circle. When :math:`\delta` exceeds the radius
+by more than the pair tolerance, the sphere is a proved separation. When it
+equals the radius within the tolerance, the open ball misses the surface,
+and the intersection is the nearest points alone: ``IntersectionPoint``\ s
+of contact, logged as declared. This covers a ball against a wall, outside
+or inside a cylinder, on a cone's generator or on a torus's tube. Otherwise
+the sphere crosses the surface, and the pair is traced.
+
+**A plane through a cone's apex** meets the cone in the generators whose
+direction :math:`\sin a\, e(u) + \cos a\, \hat{A}` lies in the plane. With
+:math:`n_x, n_y` the unit normal's components along the cone's axes, those
+satisfy
+
+.. math::
+
+   n_x \cos u + n_y \sin u = -\cot a\, (n \cdot \hat{A}).
+
+When :math:`\sqrt{n_x^2 + n_y^2}` exceeds the right side's magnitude there
+are two crossing generators. At equality there is one tangent generator.
+Below it the apex alone remains, an ``IntersectionPoint``. A generator is
+an exact ``Line`` through the apex. Its pcurve on the cone is
+:math:`(u, v_a + t)`, since the generators are unit-speed lines in
+:math:`v`, and on the plane it is a ``Line2d``.
+
+**A plane containing a torus's axis** meets the torus in two meridian
+circles, of radius :math:`r` about :math:`C + R\, e(u)` at the two angles
+:math:`u` where the plane cuts the axis's normal plane. This is decided
+exactly. Their pcurves are :math:`(u, t)` on the torus and a ``Circle2d``
+on the plane.
+
+The parametric–implicit trace
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When no closed form applies, as for spheres, cones and tori off each
+other's axes, planes cutting tori obliquely (spiric sections) or tori
+crossing at an angle, the intersection is a curve of degree up to eight
+with no closed form. ``ImplicitTrace`` (``src/intersect/ImplicitTrace.cpp``)
+pairs one surface's parametrisation :math:`S(u, v)`, the *carrier*, with the
+other's implicit equation :math:`F(x) = 0` :cite:p:`hoffmann1989geometric`.
+The intersection is then the zero set of
+
+.. math::
+
+   f(u, v) = F(S(u, v))
+
+in the carrier's parameter plane. With :math:`(p, q, h)` the coordinates of
+:math:`x - O` along the implicit side's frame and
+:math:`\rho^2 = p^2 + q^2`, the implicit equations are those of
+``src/intersect/Implicit.hpp``:
+
+.. math::
+
+   F_{\text{plane}} = h, \qquad
+   F_{\text{cylinder}} = \rho^2 - r^2, \qquad
+   F_{\text{sphere}} = \rho^2 + h^2 - R^2,
+
+   F_{\text{cone}} = \rho^2 \cos^2 a - (R \cos a + h \sin a)^2, \qquad
+   F_{\text{torus}} = (\rho^2 + h^2 + R^2 - r^2)^2 - 4 R^2 \rho^2.
+
+The local coordinates are a linear map :math:`L` of :math:`x`. So the
+chain rule gives :math:`f_u = \nabla F \cdot L(S_u)` and
+:math:`f_v = \nabla F \cdot L(S_v)` however the frame is rounded, and every
+interval evaluation of :math:`f` is a rigorous enclosure for the nominal
+:math:`F`.
+
+*The search box.* The carrier is chosen so that the search is over a
+bounded box. A torus or sphere is compact, so its chart is bounded. A plane,
+cylinder or cone carrier against a compact implicit side is bounded by the
+ball that holds that side. A cylinder or cone carrier against a cylinder or
+cone is bounded by Cauchy's bound on the roots of
+:math:`g(v) = F(P_0(u) + v\, w(u))`, a quadratic along each ruling, enclosed
+over pieces of the turn. That bound fails where its leading coefficient may
+vanish, along an asymptotic direction of the implicit side. There the
+intersection may reach infinity, and only a bounded parameter box on one of
+the surfaces makes the problem finite; without one the result is
+``NotImplemented``.
+
+*Certified subdivision.* The search box is subdivided in the manner of
+Snyder :cite:p:`snyder1992interval` and Plantinga and Vegter
+:cite:p:`plantinga2004isotopic`. Each box :math:`B` is enclosed with the
+meet of its natural interval extension and its mean-value form about the
+midpoint, and is then resolved in one of three ways:
+
+- **Excluded.** When :math:`0 \notin f(B)` the box holds no point of the
+  intersection. A box that provably lies outside the implicit side's
+  requested box is also dropped.
+- **Certified.** When :math:`f_v` keeps one sign over :math:`B`, the zero
+  set is the graph :math:`v = g(u)` of a function over part of the box's
+  :math:`u` range. Each edge across it, :math:`u` fixed, is monotone in
+  :math:`v`, so it holds a crossing exactly when the certain signs of
+  :math:`f` at its corners differ. An edge along it, :math:`v` fixed, is
+  accepted when :math:`f` keeps its sign there, so it holds no crossing, or
+  when :math:`f_u` does, so it holds one exactly when its corners' signs
+  differ. The graph exists exactly between consecutive crossings in order
+  of :math:`u`, so they pair into the box's arcs. The same holds with
+  :math:`u` and :math:`v` exchanged when :math:`f_u` keeps its sign.
+- **Split.** Otherwise the box is split a little off its middle, at
+  :math:`33/64`, along its longer side in space, so that children's corners
+  avoid the symmetric points of symmetric configurations.
+
+A box still unresolved at depth 56, or after :math:`2^{18}` boxes, ends the
+search with ``IntersectionFailed`` naming it. That happens at a tangency, at
+a singular point of the curve such as the node of a lemniscate, or for a
+branch through a pole of a parametrisation, and never yields an unproved
+result.
+
+Since :math:`f_u` or :math:`f_v` is nonzero on every certified box,
+:math:`\nabla F` is not normal to the carrier there. Every traced branch is
+therefore a *proved* transverse ``Crossing``, and its ``OppositeSide``
+evidence is a theorem, not an assumption. An empty result is a proof of
+separation over the search box.
+
+.. _fig-implicit-trace:
+
+.. figure:: _static/tikz/implicit-trace.png
+   :width: 100%
+   :alt: A flowchart: boxes from a stack are excluded, certified with their
+         arcs, or split, and an unresolvable box fails; the arcs are then
+         joined, guided, moved onto the curve, fitted and certified.
+
+   The parametric–implicit trace. Left, the certified subdivision of the
+   carrier's parameter box. Right, from arcs to certified branches.
+
+*From arcs to branches.* Arcs join where their crossings on a shared edge
+agree. The crossings come from opposite sides of the edge's line, each
+within the other's edge, and on any one edge there is at most one. The
+joined arcs are walked into branches, first from free ends, which lie on the
+search box's boundary or at a dropped box, then round the closed loops left.
+A branch's 3D curve and both pcurves must share one smooth parameter
+(ADR-0009). A chord-length cubic interpolant through the traced points
+serves as a *guide*. Each guide point is moved onto :math:`f = 0` by Newton's
+method along the fixed direction of :math:`\nabla f` at its projection on
+the carrier. Because the direction is fixed, the point found is a smooth
+function of the guide's parameter. Where the implicit side's angle,
+followed continuously with steps refined below an eighth of a turn, crosses
+a whole number of periods, the branch is cut, so that each pcurve keeps to
+one chart. A branch through a pole, where the angle turns a half turn in no
+distance, is refused. The pieces are fitted uniformly on the guide's
+parameter, scaled to arc length, with the samples doubled from 32 until the
+midpoints agree with the branch and ``CertifyDeviation`` proves the curve
+within the resolution of both surfaces. Beyond :math:`2^{14}` samples the
+result is ``CertificationFailed``.
+
+*Cost.* Pruning makes the number of boxes grow with the length of the
+intersection over the box size at which arcs certify, not with the area of
+the search box. In debug builds every configuration in
+``tests/intersect/ImplicitTraceTests.cpp`` runs in under half a second,
+fitting and certification included.
+
+*Verification.* ``tests/intersect/ImplicitTraceTests.cpp`` checks the number
+of curves where the topology is known: spiric sections of one oval, a
+waisted curve and two ovals, a cylinder leaving a sphere through one loop
+or two turns. It checks completeness against a dense-sampling oracle, which
+brackets every sign change of the implicit function along a
+:math:`121 \times 120` grid of the carrier's parameters and requires a
+traced point within :math:`10^{-2}` mm of each root. It also checks that the
+lemniscate's node fails closed. ``tests/intersect/ElementaryPairsTests.cpp``
+covers the closed forms.
 
 Space curves
 ------------
@@ -649,10 +908,13 @@ The search cannot be fooled and does not run away: a span whose midpoint
 provably deviates by more than the target (the least magnitude of its
 enclosure) ends it at once with that witness; a span that can no longer be
 split, or a budget of 2^18 spans, ends it with the bound reached, which is
-where a target below the rounding of the enclosures leads. Lines, circles,
-ellipses and non-rational B-splines are covered as curves and pcurves, and
-planes and cylinders as surfaces; anything else is ``NotSupported``, and a
-range outside a B-spline's domain is ``InvalidInput``.
+where a target below the rounding of the enclosures leads. Lines, conics
+and non-rational B-splines are covered as curves, lines, circles, ellipses
+and non-rational B-splines as pcurves, and planes, cylinders, cones,
+spheres and tori as surfaces; anything else is ``NotSupported``, and a
+range outside a B-spline's domain is ``InvalidInput``. A hyperbola's
+enclosure takes ``sinh`` and ``cosh`` over a span from their monotonicity,
+with the values at its ends widened by four units in the last place.
 
 Two B-spline surfaces
 ---------------------
@@ -672,7 +934,8 @@ the surfaces are proved disjoint and the result is empty. That proof holds
 over any requested domains. Otherwise the pair returns ``NotImplemented``,
 never an empty result it has not proved (``src/intersect/GenericSSI.cpp``).
 
-Every other pair reports ``NotImplemented``.
+A B-spline surface against a plane, cylinder, cone, sphere or torus reports
+``NotImplemented``.
 
 .. todo::
 

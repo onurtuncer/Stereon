@@ -297,6 +297,18 @@ Result<SurfaceSurfaceIntersection> CylinderCylinder(const Surface&, const Box2&,
 Result<SurfaceSurfaceIntersection> CylinderCylinderSkew(const Surface&, const Box2&, const Surface&,
                                                         const Box2&, double, const Context&);
 
+/// Every other pair of planes, cylinders, cones, spheres and tori (v0.2's
+/// analytic table): the closed forms where the configuration has one, the
+/// parametric-implicit trace otherwise. Defined in ElementaryPairs.cpp.
+Result<SurfaceSurfaceIntersection> ElementaryPair(const Surface&, const Box2&, const Surface&,
+                                                  const Box2&, double, const Context&);
+/// The parametric-implicit trace: one surface's parametrisation against the
+/// other's implicit equation, by certified interval subdivision, every
+/// branch a fitted and certified transverse crossing; IntersectionFailed
+/// where a box cannot be resolved. Defined in ImplicitTrace.cpp.
+Result<SurfaceSurfaceIntersection> ImplicitTrace(const Surface&, const Box2&, const Surface&,
+                                                 const Box2&, const Context&);
+
 /// Certified convex-hull rejection for positive-weight NURBS pairs;
 /// unknown overlaps fail closed until the Phase 2 solver is implemented.
 Result<SurfaceSurfaceIntersection> NurbsHull(const Surface&, const Box2&, const Surface&,
@@ -448,8 +460,14 @@ consteval auto MakePairTable(TypeList<Ts...> types)
 /// ADR-0010's table has it, the stub otherwise. A chain of if constexpr
 /// rather than specialisations: GCC 16.2 and MSVC mishandle explicit
 /// specialisations in module interfaces (docs/toolchain/gcc16-feature-probe.md).
+template <typename T>
+inline constexpr bool IsElementarySurface =
+    std::same_as<T, Plane> || std::same_as<T, Cylinder> || std::same_as<T, Cone> ||
+    std::same_as<T, Sphere> || std::same_as<T, Torus>;
+
+/// The Boolean prototype's handlers (M3, M3b): planes and cylinders.
 template <typename A, typename B>
-consteval SurfaceHandler AnalyticSurfaceHandlerFor()
+consteval SurfaceHandler PlanarCylindricalHandlerFor()
 {
     if constexpr (std::same_as<A, Plane> && std::same_as<B, Plane>) {
         return &PlanePlane;
@@ -457,8 +475,21 @@ consteval SurfaceHandler AnalyticSurfaceHandlerFor()
         return &PlaneCylinder;
     } else if constexpr (std::same_as<A, Cylinder> && std::same_as<B, Plane>) {
         return &CylinderPlane;
-    } else if constexpr (std::same_as<A, Cylinder> && std::same_as<B, Cylinder>) {
+    } else {
         return &CylinderCylinder;
+    }
+}
+
+template <typename T>
+inline constexpr bool IsPlanarOrCylindrical = std::same_as<T, Plane> || std::same_as<T, Cylinder>;
+
+template <typename A, typename B>
+consteval SurfaceHandler AnalyticSurfaceHandlerFor()
+{
+    if constexpr (IsPlanarOrCylindrical<A> && IsPlanarOrCylindrical<B>) {
+        return PlanarCylindricalHandlerFor<A, B>();
+    } else if constexpr (IsElementarySurface<A> && IsElementarySurface<B>) {
+        return &ElementaryPair;
     } else {
         return &SurfaceStub<A, B>;
     }
