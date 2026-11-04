@@ -33,11 +33,12 @@ import Stereon.Robust;
 #include "Bernstein.hpp"
 #include "Planar.hpp"
 
-/// A B-spline curve, polynomial or rational, against a plane, a sphere or a
-/// cylinder: the surface's implicit equation f = 0 composed with the curve.
-/// On each Bezier segment, in homogeneous coordinates (X, W) = (w P, w),
-/// W^k f(X / W) is a polynomial g of degree p for the plane and 2p for the
-/// quadrics, with the sign of f since every weight is positive. Its
+/// A B-spline curve, polynomial or rational, or a circle or an ellipse,
+/// against a plane, a cylinder, a cone, a sphere or a torus: the surface's
+/// implicit equation f = 0 composed with the curve. On each Bezier segment,
+/// in homogeneous coordinates (X, W) = (w P, w), W^k f(X / W) is a
+/// polynomial g of degree p for the plane, 2p for the quadrics and 4p for
+/// the torus, with the sign of f since every weight is positive. Its
 /// Bernstein coefficients are formed in outward-rounded interval
 /// arithmetic from the segment's poles, which are themselves enclosed:
 /// the segments come from Boehm's knot insertion done in intervals, not
@@ -65,6 +66,11 @@ import Stereon.Robust;
 /// overlap; along a quadric there is no such exact decision yet, and the
 /// search fails. The surface parameters of a point are those of its rounded
 /// position, kept or dropped against the box as the line handlers do.
+///
+/// A circle or an ellipse is searched on its exact rational form: its
+/// bounded domain cut into arcs of at most a quarter turn, each a rational
+/// quadratic Bezier segment enclosed from the input angles, and every root
+/// mapped back to the conic's angle (ConicSurface).
 
 namespace Stereon::Detail {
 
