@@ -46,6 +46,7 @@
 #include <gp_Ax2.hxx>
 #include <gp_Ax3.hxx>
 #include <gp_Circ.hxx>
+#include <gp_Cone.hxx>
 #include <gp_Cylinder.hxx>
 #include <gp_Dir.hxx>
 #include <gp_Elips.hxx>
@@ -697,4 +698,80 @@ TEST_CASE("spheres touching at a point agree with IntAna_QuadQuadGeo", "[occt][i
     REQUIRE(occt.IsDone());
     REQUIRE(occt.TypeInter() == IntAna_Point);
     REQUIRE(occt.Point(1).Distance(ToOcct(ours->Points.front().Position)) <= 1e-9);
+}
+
+// --- Circles and ellipses against the quadrics -------------------------------
+//
+// Against IntAna_IntConicQuad on generic conics, tilted and off the
+// surfaces' axes, where OCCT's tolerances cannot change the count: the same
+// count, every point within 1e-9 of one of OCCT's, and the angle the same
+// modulo a turn. A cone's implicit form covers both nappes in both kernels.
+
+namespace {
+
+gp_Cone ToOcct(const Cone& cone)
+{
+    return gp_Cone(FrameOf(cone.Origin, Axis(cone), cone.XAxis), cone.SemiAngle, cone.Radius);
+}
+
+gp_Ax2 ConicFrame(const Point3& center, const Vec3& x, const Vec3& y)
+{
+    return gp_Ax2(ToOcct(center), ToDir(Cross(x, y)), ToDir(x));
+}
+
+template <typename C, typename Conic, typename S>
+void RequireConicAgreesWithConicQuad(const C& conic, const Conic& occtConic, const S& surface)
+{
+    const auto ours = Intersect(Curve{conic}, Surface{surface}, ctx);
+    REQUIRE(ours.has_value());
+    const IntAna_IntConicQuad occt(occtConic, IntAna_Quadric(ToOcct(surface)));
+    REQUIRE(occt.IsDone());
+    REQUIRE_FALSE(occt.IsInQuadric());
+    REQUIRE(ours->Overlaps.empty());
+    REQUIRE(static_cast<int>(ours->Points.size()) == occt.NbPoints());
+    for (const Stereon::CurveSurfacePoint& p : ours->Points) {
+        double nearest = std::numeric_limits<double>::infinity();
+        int match = 0;
+        for (int i = 1; i <= occt.NbPoints(); ++i) {
+            const double apart = occt.Point(i).Distance(ToOcct(p.Position));
+            if (apart < nearest) {
+                nearest = apart;
+                match = i;
+            }
+        }
+        REQUIRE(nearest <= 1e-9);
+        const double turn = 2.0 * std::numbers::pi;
+        const double offset = std::remainder(p.Parameter - occt.ParamOnConic(match), turn);
+        REQUIRE(std::abs(offset) <= 1e-9);
+    }
+}
+
+} // namespace
+
+TEST_CASE("circles and ellipses against the quadrics agree with IntAna_IntConicQuad",
+          "[occt][intersect]")
+{
+    const Plane plane{Point3{1.0, -0.5, 0.5}, Normalized(Vec3{1.0, 1.0, 0.0}), ez};
+    const Sphere sphere{Point3{1.0, 0.5, -0.5}, 1.5, ex, ey, true};
+    const Cylinder cylinder{Point3{-0.5, 0.5, 1.0}, 1.25, Normalized(Vec3{1.0, 1.0, 0.0}), ez};
+    const Cone cone{Point3{0.5, 0.0, -0.5}, 0.75, 0.4, ex, ey, true};
+    for (int k = 0; k < 16; ++k) {
+        const double a = static_cast<double>(k) / 16.0 * 2.0 * std::numbers::pi;
+        // A frame turned about a tilted axis, centred near every surface.
+        const Vec3 x = Normalized(Vec3{std::cos(a), std::sin(a), 0.3});
+        const Vec3 y = Normalized(Cross(Normalized(Vec3{0.2, -0.3 + 0.05 * k, 1.0}), x));
+        const Point3 center{0.75 + 0.2 * std::sin(2.0 * a), 0.25 * std::cos(a), 0.1 * k / 16.0};
+        const Stereon::Circle circle{center, 1.75, x, y};
+        const Stereon::Ellipse ellipse{center, 2.25, 1.0, x, y};
+        const gp_Circ occtCircle(ConicFrame(center, x, y), 1.75);
+        const gp_Elips occtEllipse(ConicFrame(center, x, y), 2.25, 1.0);
+        RequireConicAgreesWithConicQuad(circle, occtCircle, plane);
+        RequireConicAgreesWithConicQuad(circle, occtCircle, sphere);
+        RequireConicAgreesWithConicQuad(circle, occtCircle, cylinder);
+        RequireConicAgreesWithConicQuad(circle, occtCircle, cone);
+        RequireConicAgreesWithConicQuad(ellipse, occtEllipse, plane);
+        RequireConicAgreesWithConicQuad(ellipse, occtEllipse, sphere);
+        RequireConicAgreesWithConicQuad(ellipse, occtEllipse, cylinder);
+        RequireConicAgreesWithConicQuad(ellipse, occtEllipse, cone);
+    }
 }
