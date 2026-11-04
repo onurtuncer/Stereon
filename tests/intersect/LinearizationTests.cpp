@@ -810,7 +810,9 @@ std::vector<double> SplineJvp(SplineModel& model, const BSplineCurve& curve, con
     const auto jvp =
         Stereon::IntersectJvp(curve, model.PoleBindings, Surface{surface}, model.SurfaceBindings,
                               Meet(curve, surface), model.Sensitivity);
-    RC_ASSERT(jvp.has_value());
+    if (!jvp) {
+        RC_FAIL(IntersectTest::ErrorText(jvp));
+    }
     RC_ASSERT(jvp->GetStatus() == DerivativeStatus::Valid);
     const auto values = jvp->GetValues();
     return {values->begin(), values->end()};
