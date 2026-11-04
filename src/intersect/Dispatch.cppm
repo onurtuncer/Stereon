@@ -211,9 +211,12 @@ struct CurveSurfaceIntersection {
 /// an intersection branch in the face's parameter space (ADR-0009): its
 /// parameter on each, where it is, how the curves meet there, and whether
 /// the count and the contact were decided exactly on the input doubles
-/// (RS-0001 G5). Lines, circles and ellipses decide their crossings and
-/// tangencies exactly, except that a tangency of two conics is bracketed to
-/// rounding; every meeting with a B-spline is bracketed to rounding.
+/// (RS-0001 G5). A line against a line or a conic, and two circles, decide
+/// their crossings and tangencies exactly. Two other conics, or a B-spline
+/// against anything, decide a crossing when it is proved a single simple
+/// root and a contact at a double exactly, and otherwise bracket it to
+/// rounding with Decided false. Contact says whether the curves change
+/// sides: a tangency of odd order, which crosses, is a Crossing.
 struct PlanarPoint {
     double ParameterA = 0.0;
     double ParameterB = 0.0;
@@ -311,11 +314,16 @@ Result<SurfaceSurfaceIntersection> ImplicitTrace(const Surface&, const Box2&, co
 Result<SurfaceSurfaceIntersection> NurbsHull(const Surface&, const Box2&, const Surface&,
                                              const Box2&, double, const Context&);
 
-/// The plane curve handlers (the Boolean prototype's M6, face clipping):
-/// lines, circles and ellipses against each other, every configuration
-/// decision the sign of a polynomial in the input doubles, and B-splines
-/// against lines and circles, bracketed to rounding. Defined in
-/// PlanarLines.cpp, PlanarConics.cpp and PlanarSpline.cpp.
+/// The plane curve handlers (the Boolean prototype's M6, face clipping),
+/// one for every ordered pair of built-in plane curves: lines against
+/// lines and conics, and circles against circles, with every configuration
+/// decision the sign of a polynomial in the input doubles (PlanarLines.cpp);
+/// two conics by the exact quartic of one's rational chart in the other's
+/// equation (PlanarConics.cpp); a B-spline, polynomial or rational, against
+/// any other curve by the Bernstein subdivision of the other's equation
+/// along it (PlanarSpline.cpp), and two B-splines by subdivision with
+/// Krawczyk's test (PlanarSplinePair.cpp). What cannot be proved fails
+/// with IntersectionFailed.
 using PlanarHandler = Result<PlanarIntersection> (*)(const Curve2d&, const Interval&,
                                                      const Curve2d&, const Interval&,
                                                      const Context&);
@@ -331,19 +339,23 @@ Result<PlanarIntersection> LineEllipse2d(const Curve2d&, const Interval&, const 
                                          const Interval&, const Context&);
 Result<PlanarIntersection> EllipseLine2d(const Curve2d&, const Interval&, const Curve2d&,
                                          const Interval&, const Context&);
-Result<PlanarIntersection> CircleEllipse2d(const Curve2d&, const Interval&, const Curve2d&,
+Result<PlanarIntersection> LineHyperbola2d(const Curve2d&, const Interval&, const Curve2d&,
                                            const Interval&, const Context&);
-Result<PlanarIntersection> EllipseCircle2d(const Curve2d&, const Interval&, const Curve2d&,
+Result<PlanarIntersection> HyperbolaLine2d(const Curve2d&, const Interval&, const Curve2d&,
                                            const Interval&, const Context&);
-Result<PlanarIntersection> EllipseEllipse2d(const Curve2d&, const Interval&, const Curve2d&,
-                                            const Interval&, const Context&);
-Result<PlanarIntersection> SplineLine2d(const Curve2d&, const Interval&, const Curve2d&,
-                                        const Interval&, const Context&);
-Result<PlanarIntersection> LineSpline2d(const Curve2d&, const Interval&, const Curve2d&,
-                                        const Interval&, const Context&);
-Result<PlanarIntersection> SplineCircle2d(const Curve2d&, const Interval&, const Curve2d&,
+Result<PlanarIntersection> LineParabola2d(const Curve2d&, const Interval&, const Curve2d&,
                                           const Interval&, const Context&);
-Result<PlanarIntersection> CircleSpline2d(const Curve2d&, const Interval&, const Curve2d&,
+Result<PlanarIntersection> ParabolaLine2d(const Curve2d&, const Interval&, const Curve2d&,
+                                          const Interval&, const Context&);
+/// Any two of circle, ellipse, hyperbola and parabola but two circles.
+Result<PlanarIntersection> ConicConic2d(const Curve2d&, const Interval&, const Curve2d&,
+                                        const Interval&, const Context&);
+/// A B-spline against a line or a conic, and the other way round.
+Result<PlanarIntersection> SplineCurve2d(const Curve2d&, const Interval&, const Curve2d&,
+                                         const Interval&, const Context&);
+Result<PlanarIntersection> CurveSpline2d(const Curve2d&, const Interval&, const Curve2d&,
+                                         const Interval&, const Context&);
+Result<PlanarIntersection> SplineSpline2d(const Curve2d&, const Interval&, const Curve2d&,
                                           const Interval&, const Context&);
 
 /// A curve against a surface: the curve with the parameter domain and the
@@ -523,7 +535,12 @@ Result<PlanarIntersection> PlanarStub(const Curve2d&, const Interval&, const Cur
     return Fail(ErrorCode::NotImplemented, std::move(message));
 }
 
-/// The handlers of a line against each B.
+/// The built-in conics in the plane.
+template <typename T>
+concept PlanarConic = std::same_as<T, Circle2d> || std::same_as<T, Ellipse2d> ||
+                      std::same_as<T, Hyperbola2d> || std::same_as<T, Parabola2d>;
+
+/// The handlers of a line against each B but a B-spline.
 template <typename B>
 consteval PlanarHandler LineAgainst()
 {
@@ -533,55 +550,46 @@ consteval PlanarHandler LineAgainst()
         return &LineCircle2d;
     } else if constexpr (std::same_as<B, Ellipse2d>) {
         return &LineEllipse2d;
-    } else if constexpr (std::same_as<B, BSplineCurve2d>) {
-        return &LineSpline2d;
+    } else if constexpr (std::same_as<B, Hyperbola2d>) {
+        return &LineHyperbola2d;
+    } else if constexpr (std::same_as<B, Parabola2d>) {
+        return &LineParabola2d;
     } else {
         return &PlanarStub<Line2d, B>;
     }
 }
 
-/// The handlers of a circle against each B.
-template <typename B>
-consteval PlanarHandler CircleAgainst()
+/// The handlers of each conic A against a line.
+template <typename A>
+consteval PlanarHandler AgainstLine()
 {
-    if constexpr (std::same_as<B, Line2d>) {
+    if constexpr (std::same_as<A, Circle2d>) {
         return &CircleLine2d;
-    } else if constexpr (std::same_as<B, Circle2d>) {
-        return &CircleCircle2d;
-    } else if constexpr (std::same_as<B, Ellipse2d>) {
-        return &CircleEllipse2d;
-    } else if constexpr (std::same_as<B, BSplineCurve2d>) {
-        return &CircleSpline2d;
-    } else {
-        return &PlanarStub<Circle2d, B>;
-    }
-}
-
-/// The handlers of an ellipse against each B.
-template <typename B>
-consteval PlanarHandler EllipseAgainst()
-{
-    if constexpr (std::same_as<B, Line2d>) {
+    } else if constexpr (std::same_as<A, Ellipse2d>) {
         return &EllipseLine2d;
-    } else if constexpr (std::same_as<B, Circle2d>) {
-        return &EllipseCircle2d;
-    } else if constexpr (std::same_as<B, Ellipse2d>) {
-        return &EllipseEllipse2d;
+    } else if constexpr (std::same_as<A, Hyperbola2d>) {
+        return &HyperbolaLine2d;
+    } else if constexpr (std::same_as<A, Parabola2d>) {
+        return &ParabolaLine2d;
     } else {
-        return &PlanarStub<Ellipse2d, B>;
+        return &PlanarStub<A, Line2d>;
     }
 }
 
-/// The handlers of a B-spline against each B.
-template <typename B>
-consteval PlanarHandler SplineAgainst()
+/// The handlers of two curves neither of which is a B-spline.
+template <typename A, typename B>
+consteval PlanarHandler AnalyticPlanarHandlerFor()
 {
-    if constexpr (std::same_as<B, Line2d>) {
-        return &SplineLine2d;
-    } else if constexpr (std::same_as<B, Circle2d>) {
-        return &SplineCircle2d;
+    if constexpr (std::same_as<A, Line2d>) {
+        return LineAgainst<B>();
+    } else if constexpr (std::same_as<B, Line2d>) {
+        return AgainstLine<A>();
+    } else if constexpr (std::same_as<A, Circle2d> && std::same_as<B, Circle2d>) {
+        return &CircleCircle2d;
+    } else if constexpr (PlanarConic<A> && PlanarConic<B>) {
+        return &ConicConic2d;
     } else {
-        return &PlanarStub<BSplineCurve2d, B>;
+        return &PlanarStub<A, B>;
     }
 }
 
@@ -589,16 +597,14 @@ consteval PlanarHandler SplineAgainst()
 template <typename A, typename B>
 consteval PlanarHandler PlanarHandlerFor()
 {
-    if constexpr (std::same_as<A, Line2d>) {
-        return LineAgainst<B>();
-    } else if constexpr (std::same_as<A, Circle2d>) {
-        return CircleAgainst<B>();
-    } else if constexpr (std::same_as<A, Ellipse2d>) {
-        return EllipseAgainst<B>();
+    if constexpr (std::same_as<A, BSplineCurve2d> && std::same_as<B, BSplineCurve2d>) {
+        return &SplineSpline2d;
     } else if constexpr (std::same_as<A, BSplineCurve2d>) {
-        return SplineAgainst<B>();
+        return &SplineCurve2d;
+    } else if constexpr (std::same_as<B, BSplineCurve2d>) {
+        return &CurveSpline2d;
     } else {
-        return &PlanarStub<A, B>;
+        return AnalyticPlanarHandlerFor<A, B>();
     }
 }
 
@@ -723,8 +729,11 @@ export namespace Stereon {
 /// parameters lie in the requested domains, a periodic curve's taken
 /// modulo its period and placed in its domain. InvalidInput for an empty
 /// curve or a domain that is empty or NaN-bounded; NotSupported for a
-/// type that is not built in or a rational B-spline; NotImplemented for a
-/// pair without a handler yet.
+/// type that is not built in, or a periodic B-spline asked beyond its own
+/// domain; IntersectionFailed where a meeting cannot be proved a crossing
+/// or isolated as a touch (a contact of higher order, a tangency or an
+/// overlap of two B-splines): never an empty result that is not a proved
+/// separation. Every pair of built-in types has a handler.
 [[nodiscard]] Result<PlanarIntersection> Intersect(const Curve2d& a, const Interval& domainA,
                                                    const Curve2d& b, const Interval& domainB,
                                                    const Context& ctx);
