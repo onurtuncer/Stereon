@@ -252,13 +252,36 @@ TEST_CASE("B-spline curves and pcurves are certified through their poles", "[sur
     REQUIRE(splineCurve->Bound < 1e-9);
 }
 
+TEST_CASE("certification covers parallels on cones, spheres and tori", "[surface][certify]")
+{
+    const Vec3 x{1.0, 0.0, 0.0};
+    const Vec3 y{0.0, 1.0, 0.0};
+    const Interval turn{0.0, 2.0 * std::numbers::pi};
+    const Curve2d parallel{Line2d{Point2{0.0, 0.5}, Vec2{1.0, 0.0}}};
+    const auto check = [&](const Surface& surface, const Circle& circle) {
+        const auto certificate = CertifyDeviation(Curve{circle}, surface, parallel, turn, 1e-9);
+        INFO((certificate ? std::string() : std::string(certificate.error().GetMessage())));
+        REQUIRE(certificate.has_value());
+        REQUIRE(certificate->Bound <= 1e-9);
+    };
+    // The sphere's latitude 0.5, the torus's tube angle 0.5, the cone's
+    // generator distance 0.5.
+    check(Surface{Stereon::Sphere{Point3{}, 2.0, x, y, true}},
+          Circle{Point3{0.0, 0.0, 2.0 * std::sin(0.5)}, 2.0 * std::cos(0.5), x, y});
+    check(Surface{Stereon::Torus{Point3{}, 3.0, 1.0, x, y, true}},
+          Circle{Point3{0.0, 0.0, std::sin(0.5)}, 3.0 + std::cos(0.5), x, y});
+    const double a = std::numbers::pi / 6.0;
+    check(Surface{Stereon::Cone{Point3{}, 1.0, a, x, y, true}},
+          Circle{Point3{0.0, 0.0, 0.5 * std::cos(a)}, 1.0 + 0.5 * std::sin(a), x, y});
+}
+
 TEST_CASE("certification refuses what it cannot bound", "[surface][certify]")
 {
     const Curve line{Line{Point3{}, Vec3{1.0, 0.0, 0.0}}};
     const Curve2d onPlane{Line2d{Point2{}, Vec2{1.0, 0.0}}};
-    const Surface sphere{
-        Stereon::Sphere{Point3{}, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}, true}};
-    REQUIRE(CertifyDeviation(line, sphere, onPlane, Interval{0.0, 1.0}, 1e-6).error().GetCode() ==
+    // A parabola as the pcurve has no interval trace.
+    const Curve2d parabola{Stereon::Parabola2d{Point2{}, 1.0, Vec2{1.0, 0.0}, Vec2{0.0, 1.0}}};
+    REQUIRE(CertifyDeviation(line, xy, parabola, Interval{0.0, 1.0}, 1e-6).error().GetCode() ==
             ErrorCode::NotSupported);
     REQUIRE(CertifyDeviation(line, xy, onPlane, Interval::Everything(), 1e-6).error().GetCode() ==
             ErrorCode::InvalidInput);

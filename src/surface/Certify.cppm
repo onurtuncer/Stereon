@@ -64,6 +64,9 @@ struct IntervalScalar {
     friend IntervalScalar cos(const IntervalScalar& x);
     /// Over the non-negative part of the interval.
     friend IntervalScalar sqrt(const IntervalScalar& x);
+    /// The hyperbolic functions of a hyperbola's parameter.
+    friend IntervalScalar sinh(const IntervalScalar& x);
+    friend IntervalScalar cosh(const IntervalScalar& x);
 };
 
 /// What CertifyDeviation proves: the bound, and the spans it took. Its own
@@ -96,9 +99,10 @@ struct DeviationCertificate {
 /// over IntervalScalar; a B-spline's derivatives over a span are the hulls
 /// of its derivative curves' poles, narrowed by mean-value forms.
 ///
-/// Covers lines, circles, ellipses and non-rational B-splines as the curve,
-/// lines, circles, ellipses and non-rational B-splines as the pcurve, and
-/// planes and cylinders as the surface; NotSupported otherwise. InvalidInput
+/// Covers lines, circles, ellipses, parabolas, hyperbolas and non-rational
+/// B-splines as the curve, lines, circles, ellipses and non-rational
+/// B-splines as the pcurve, and planes, cylinders, cones, spheres and tori
+/// as the surface; NotSupported otherwise. InvalidInput
 /// for an empty or unbounded range or a target that is not finite and
 /// positive. CertificationFailed when the span budget runs out before every
 /// span is within the target, with the message naming the span and the
