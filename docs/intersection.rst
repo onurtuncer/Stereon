@@ -490,7 +490,9 @@ cylinder, which settles whether there are two crossings, one touch or
 none. The crossing of a plane has a rational parameter, and whether it
 and the point's parameters on the plane lie in the requested domains is
 decided exactly on that rational, as the line–line handler decides; the
-roots of a quadric are irrational and are placed by their rounded values,
+roots of a quadric are irrational, each polished once from the line
+re-centred at it, so that its point lies on the quadric to its own rounding
+however far the line's origin is, and are placed by their rounded values,
 so a crossing within rounding of a domain's end may fall on either side
 of it. A touch of a quadric is a ``Tangential`` point: the line stays
 outside. A root that double precision cannot place, a line so nearly along
