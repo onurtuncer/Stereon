@@ -375,6 +375,22 @@ Result<CurveSurfaceIntersection> SplineSphere(const Curve&, const Interval&, con
                                               const Box2&, const Context&);
 Result<CurveSurfaceIntersection> SplineCylinder(const Curve&, const Interval&, const Surface&,
                                                 const Box2&, const Context&);
+/// The same against a cone, whose equation on a segment has degree 2p, and
+/// a torus, degree 4p. Defined in SplineSurface.cpp.
+Result<CurveSurfaceIntersection> SplineCone(const Curve&, const Interval&, const Surface&,
+                                            const Box2&, const Context&);
+Result<CurveSurfaceIntersection> SplineTorus(const Curve&, const Interval&, const Surface&,
+                                             const Box2&, const Context&);
+
+/// A circle or an ellipse against a plane, a cylinder, a cone, a sphere or a
+/// torus: the conic cut into rational quadratic arcs of at most a quarter
+/// turn, their poles and middle weight enclosed, so that every proof holds
+/// for the conic itself, and each arc searched as a B-spline's segment is.
+/// A conic exactly in a plane is an overlap with its exact pcurve; one along
+/// a curved surface fails with IntersectionFailed. Defined in
+/// SplineSurface.cpp.
+Result<CurveSurfaceIntersection> ConicSurface(const Curve&, const Interval&, const Surface&,
+                                              const Box2&, const Context&);
 
 template <typename A, typename B>
 Result<CurveCurveIntersection> CurveStub(const Curve&, const Interval&, const Curve&,
@@ -603,6 +619,33 @@ consteval CurveSurfaceHandler AgainstQuadric()
     }
 }
 
+/// The B-spline curve's handlers: AgainstQuadric's three, the cone and the
+/// torus.
+template <typename B>
+consteval CurveSurfaceHandler SplineAgainstSurface()
+{
+    if constexpr (std::same_as<B, Cone>) {
+        return &SplineCone;
+    } else if constexpr (std::same_as<B, Torus>) {
+        return &SplineTorus;
+    } else {
+        return AgainstQuadric<BSplineCurve, B, &SplinePlane, &SplineSphere, &SplineCylinder>();
+    }
+}
+
+/// A circle's or an ellipse's handler: ConicSurface for every elementary
+/// surface.
+template <typename A, typename B>
+consteval CurveSurfaceHandler ConicAgainstSurface()
+{
+    if constexpr (std::same_as<B, Plane> || std::same_as<B, Cylinder> || std::same_as<B, Cone> ||
+                  std::same_as<B, Sphere> || std::same_as<B, Torus>) {
+        return &ConicSurface;
+    } else {
+        return &CurveSurfaceStub<A, B>;
+    }
+}
+
 /// The handler of a curve of type A against a surface of type B; see
 /// SurfaceHandlerFor.
 template <typename A, typename B>
@@ -611,7 +654,9 @@ consteval CurveSurfaceHandler CurveSurfaceHandlerFor()
     if constexpr (std::same_as<A, Line>) {
         return AgainstQuadric<A, B, &LinePlane, &LineSphere, &LineCylinder>();
     } else if constexpr (std::same_as<A, BSplineCurve>) {
-        return AgainstQuadric<A, B, &SplinePlane, &SplineSphere, &SplineCylinder>();
+        return SplineAgainstSurface<B>();
+    } else if constexpr (std::same_as<A, Circle> || std::same_as<A, Ellipse>) {
+        return ConicAgainstSurface<A, B>();
     } else {
         return &CurveSurfaceStub<A, B>;
     }
