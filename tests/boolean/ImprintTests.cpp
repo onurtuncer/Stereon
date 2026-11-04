@@ -159,7 +159,7 @@ TEST_CASE("a circle through all four edges splits the face four times", "[boolea
 {
     const Shape box = Box();
     const FaceId top = PlaneFaceAlong(box, Vec3{0.0, 0.0, 1.0});
-    const IntersectionBranch branch = BranchOn(box, top, Drill(6.0), faceBox);
+    const IntersectionBranch branch = BranchOn(box, top, Drill(6.0), Box2::Everything());
     const Imprinted done = ImprintOn(box, top, branch, BranchSide::A);
     REQUIRE(done.Made.SplitVertices.size() == 8);
     REQUIRE(done.Made.Pieces.size() == 4);
