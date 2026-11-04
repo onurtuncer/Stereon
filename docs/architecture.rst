@@ -59,7 +59,7 @@ beneath it.
        robust    [label = "robust\nfloating-point filters, expansions,\nexact predicates"];
        curve     [label = "curve\nanalytic and B-spline curves,\nCurve, Curve2d, VisitBuiltin"];
        surface   [label = "surface\nanalytic, B-spline, swept surfaces,\nSurface, pcurve certification"];
-       intersect [label = "intersect\ncurve-curve and surface-surface\nintersection, certified outcomes"];
+       intersect [label = "intersect\ncurve-curve, curve-surface and\nsurface-surface intersection,\ncertified outcomes"];
        topo      [label = "topo\nShape, ShapeBuilder, Euler operators,\nCommit, History, validation"];
        build     [label = "build\nprimitive solids"];
        boolean   [label = "boolean\nimprint, classify, assemble"];
@@ -97,7 +97,7 @@ From the bottom:
    within the edge tolerance (ADR-0009).
 
 ``intersect``
-   Curve-curve, planar and surface-surface intersection, dispatched on the
+   Curve-curve, planar, curve-surface and surface-surface intersection, dispatched on the
    pair of concrete types to analytic handlers where they exist (ADR-0010).
    Every result says whether it is certified and, if not, why (ADR-0029); see
    :doc:`intersection`.
