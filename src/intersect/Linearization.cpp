@@ -338,7 +338,7 @@ CheckInput(const Side& curve, const std::span<const SurfaceBinding> surfaceBindi
             return Fail(ErrorCode::InvalidInput,
                         std::string(where) + ": point parameters are non-finite or out of domain");
         }
-        if (!ConsistentContact(p.Point, curve.At(p.Parameter), Eval(surface, p.OnSurface))) {
+        if (!ConsistentContact(p.Position, curve.At(p.Parameter), Eval(surface, p.OnSurface))) {
             return Fail(ErrorCode::InvalidInput,
                         std::string(where) +
                             ": stale intersection point does not lie on both current geometries");
