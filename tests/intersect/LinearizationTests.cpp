@@ -559,7 +559,7 @@ TEST_CASE("JVP and VJP reject intersection results from stale geometry",
     REQUIRE(vjp.error().GetCode() == ErrorCode::InvalidInput);
 
     CurveSurfaceIntersection altered = at;
-    altered.Points.front().Point.Z = 0.01;
+    altered.Points.front().Position.Z = 0.01;
     const auto stored = Stereon::IntersectJvp(up, model.LineBindings, Surface{ground},
                                               model.SurfaceBindings, altered, model.Sensitivity);
     REQUIRE_FALSE(stored.has_value());
