@@ -32,6 +32,7 @@
 #include <Geom_Plane.hxx>
 #include <Geom_SphericalSurface.hxx>
 #include <Geom_ToroidalSurface.hxx>
+#include <Geom_TrimmedCurve.hxx>
 #include <IntAna_Curve.hxx>
 #include <IntAna_IntConicQuad.hxx>
 #include <IntAna_IntQuadQuad.hxx>
@@ -41,6 +42,7 @@
 #include <NCollection_Array1.hxx>
 #include <NCollection_Array2.hxx>
 #include <Precision.hxx>
+#include <Standard_Failure.hxx>
 #include <gp_Ax2.hxx>
 #include <gp_Ax3.hxx>
 #include <gp_Circ.hxx>
@@ -537,6 +539,18 @@ OcctBranch OcctBranchOf(const Stereon::IntersectionBranch& branch)
     return {ToOcct(*spline), lower, upper};
 }
 
+/// The nearest foot of a perpendicular over [first, last], or the nearer end.
+double ProjectedDistance(const occ::handle<Geom_Curve>& curve, const double first,
+                         const double last, const gp_Pnt& q)
+{
+    double nearest = std::min(curve->Value(first).Distance(q), curve->Value(last).Distance(q));
+    GeomAPI_ProjectPointOnCurve projection(q, curve, first, last);
+    if (projection.NbPoints() > 0) {
+        nearest = std::min(nearest, projection.LowerDistance());
+    }
+    return nearest;
+}
+
 /// The distance from p to a curve over [first, last]: the nearest foot of a
 /// perpendicular, or the nearer end. A line is taken whole: the two kernels
 /// place its origin differently, so equal sampled stretches need not cover
@@ -545,15 +559,24 @@ double DistanceToCurve(const occ::handle<Geom_Curve>& curve, const double first,
                        const Point3& p)
 {
     const gp_Pnt q = ToOcct(p);
-    if (const auto* line = dynamic_cast<const Geom_Line*>(curve.get())) {
+    const Geom_Curve* basis = curve.get();
+    if (const auto* trimmed = dynamic_cast<const Geom_TrimmedCurve*>(basis)) {
+        basis = trimmed->BasisCurve().get();
+    }
+    if (const auto* line = dynamic_cast<const Geom_Line*>(basis)) {
         return line->Lin().Distance(q);
     }
-    double nearest = std::min(curve->Value(first).Distance(q), curve->Value(last).Distance(q));
-    GeomAPI_ProjectPointOnCurve projection(q, curve, first, last);
-    if (projection.NbPoints() > 0) {
-        nearest = std::min(nearest, projection.LowerDistance());
+    try {
+        return ProjectedDistance(curve, first, last, q);
+    } catch (const Standard_Failure&) {
+        // The projection's own failure: the nearest of dense samples.
+        double nearest = std::numeric_limits<double>::infinity();
+        for (int k = 0; k <= 20000; ++k) {
+            nearest =
+                std::min(nearest, curve->Value(first + (last - first) * k / 20000.0).Distance(q));
+        }
+        return nearest;
     }
-    return nearest;
 }
 
 /// OCCT's curves of the intersection, each with the range sampled.
