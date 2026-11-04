@@ -695,6 +695,109 @@ void LogTangency(const Meets& meets, const Context& ctx)
     return std::optional<SurfaceSurfaceIntersection>{std::move(result)};
 }
 
+// --- A sphere touching a surface off its axis ---------------------------------------
+
+/// The nearest points of a surface of revolution to a point off its axis,
+/// with their distance: by symmetry they lie in the point's meridian plane,
+/// where the surface is its profile, so the nearest points of the profile's
+/// lines or circle are the nearest of the surface. Two when the point is
+/// as near two of them, within the tolerance.
+struct Nearest {
+    double Distance = std::numeric_limits<double>::infinity();
+    std::inplace_vector<Point3, 2> Points;
+};
+
+/// The profile's nearest point to (rho, z) on one part, and its distance:
+/// the foot on a line, the point of a circle along the ray from its centre.
+[[nodiscard]] std::optional<std::pair<double, std::array<double, 2>>>
+NearestOnPart(const ProfilePart& part, const double rho, const double z)
+{
+    if (const ProfileLine* l = std::get_if<ProfileLine>(&part)) {
+        const double d = l->A * rho + l->B * z - l->C;
+        return std::pair{std::abs(d), std::array{rho - d * l->A, z - d * l->B}};
+    }
+    const ProfileCircle& c = std::get<ProfileCircle>(part);
+    const double reach = std::hypot(rho - c.Rho, z - c.Z);
+    if (!(reach > 0.0)) {
+        return std::nullopt; // The point at the circle's centre: every point is nearest.
+    }
+    const double s = c.R / reach;
+    return std::pair{std::abs(reach - c.R),
+                     std::array{c.Rho + s * (rho - c.Rho), c.Z + s * (z - c.Z)}};
+}
+
+/// The nearest points of a cylinder, cone or torus to the point, which lies
+/// off its axis; nothing where the nearest points are not isolated.
+[[nodiscard]] std::optional<Nearest> NearestPoints(const Elementary& e, const Point3& point,
+                                                   const double tol)
+{
+    const Axis3 axis{OriginOf(e), Normalized(QuadricOf(e).Axis)};
+    const double z = HeightOf(axis, point);
+    const Vec3 radial = (point - axis.Origin) - z * axis.Direction;
+    const double rho = Length(radial);
+    if (!(rho > 0.0)) {
+        return std::nullopt; // On the axis: a whole circle is nearest.
+    }
+    const Vec3 out = radial / rho;
+    Nearest nearest;
+    for (const ProfilePart& part : ProfileOf(e, axis)) {
+        const auto found = NearestOnPart(part, rho, z);
+        if (!found) {
+            return std::nullopt;
+        }
+        const auto& [distance, at] = *found;
+        const Point3 p = axis.Origin + at[1] * axis.Direction + at[0] * out;
+        if (distance < nearest.Distance - tol) {
+            nearest.Distance = distance;
+            nearest.Points = {p};
+        } else if (distance <= nearest.Distance + tol) {
+            nearest.Points.push_back(p);
+        }
+    }
+    return nearest;
+}
+
+/// The points of contact inside both requested boxes.
+void AddContacts(SurfaceSurfaceIntersection& result, const Pair& p,
+                 const std::inplace_vector<Point3, 2>& points)
+{
+    for (const Point3& at : points) {
+        const Point2 onA = ProjectOnto(p.A, at);
+        const Point2 onB = ProjectOnto(p.B, at);
+        if (ParametersIn(p.A, onA, p.BoxA) && ParametersIn(p.B, onB, p.BoxB)) {
+            result.Points.push_back({at, onA, onB});
+        }
+    }
+}
+
+/// A sphere against a cylinder, cone or torus whose axis misses its centre:
+/// a proved separation when the centre is further from the surface than
+/// the radius and the tolerance, and the points of contact when it is the
+/// radius away within the tolerance, since the open ball then misses the
+/// surface. Nothing otherwise: the sphere crosses the surface, for the
+/// trace.
+[[nodiscard]] Result<std::optional<SurfaceSurfaceIntersection>> SphereTouch(const Pair& p,
+                                                                            const Context& ctx)
+{
+    const bool aSphere = IsSphere(p.A);
+    const Elementary& other = aSphere ? p.B : p.A;
+    if (aSphere == IsSphere(p.B) || !HasOwnAxis(other)) {
+        return std::optional<SurfaceSurfaceIntersection>{};
+    }
+    const Sphere& sphere = std::get<Sphere>(aSphere ? p.A : p.B);
+    const std::optional<Nearest> nearest = NearestPoints(other, sphere.Center, p.Tolerance);
+    if (!nearest || nearest->Distance < sphere.Radius - p.Tolerance) {
+        return std::optional<SurfaceSurfaceIntersection>{};
+    }
+    SurfaceSurfaceIntersection result;
+    if (nearest->Distance <= sphere.Radius + p.Tolerance) {
+        ctx.Log(LogLevel::Info, "Intersect: a sphere touches a surface off its axis within the "
+                                "pair tolerance: declared points of contact (ADR-0029)");
+        AddContacts(result, p, nearest->Points);
+    }
+    return std::optional<SurfaceSurfaceIntersection>{std::move(result)};
+}
+
 // --- A plane through a cone's apex ---------------------------------------------
 
 /// The generator of the cone at angle u as a line from the apex, with its
@@ -861,7 +964,7 @@ Result<SurfaceSurfaceIntersection> ElementaryPair(const Surface& a, const Box2& 
     const Pair p{a, b, *ea, *eb, boxA, boxB, std::max(tolerance, ctx.GetResolution())};
     using Closed =
         Result<std::optional<SurfaceSurfaceIntersection>> (*)(const Pair&, const Context&);
-    for (const Closed closed : {&Coaxial, &PlaneThroughApex, &PlaneThroughAxis}) {
+    for (const Closed closed : {&Coaxial, &SphereTouch, &PlaneThroughApex, &PlaneThroughAxis}) {
         STEREON_TRY(std::optional<SurfaceSurfaceIntersection> result, closed(p, ctx));
         if (result) {
             return std::move(*result);

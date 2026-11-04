@@ -299,6 +299,41 @@ TEST_CASE("coaxial cones cross in circles and coincide when alike", "[intersect]
     REQUIRE(same->Overlaps.size() == 1);
 }
 
+TEST_CASE("a sphere off the axis touches a cylinder, a cone or a torus at a point",
+          "[intersect][elementary]")
+{
+    // Against the wall of a cylinder of radius 3, outside and inside.
+    const Surface cylinder = CylinderZ(3.0);
+    for (const auto& [x, r] : {std::pair{4.0, 1.0}, std::pair{2.0, 1.0}}) {
+        const Surface ball{Sphere{Point3{x, 0.0, 1.0}, r, X, Y, true}};
+        const auto result = Intersect(ball, cylinder, ctx);
+        INFO("x = " << x << ": " << IntersectTest::ErrorText(result));
+        REQUIRE(result.has_value());
+        REQUIRE(result->Branches.empty());
+        REQUIRE(result->Points.size() == 1);
+        REQUIRE(Distance(result->Points.front().Position, Point3{3.0, 0.0, 1.0}) <= 1e-14);
+    }
+    // Clear of the wall: proved separate.
+    REQUIRE(Intersect(Surface{Sphere{Point3{4.5, 0.0, 1.0}, 1.0, X, Y, true}}, cylinder, ctx)
+                ->IsEmpty());
+    // On the tube of the torus, from outside it, beside the axis.
+    const Surface onTube{Sphere{Point3{0.0, 5.5, 0.0}, 1.5, X, Y, true}};
+    const auto tube = Intersect(torus, onTube, ctx);
+    INFO(IntersectTest::ErrorText(tube));
+    REQUIRE(tube.has_value());
+    REQUIRE(tube->Points.size() == 1);
+    REQUIRE(Distance(tube->Points.front().Position, Point3{0.0, 4.0, 0.0}) <= 1e-14);
+    // Against a generator of a cone, the apex at the origin.
+    const Surface cone{Cone{Point3{}, 0.0, pi / 4.0, X, Y, true}};
+    const Point3 foot{2.0, 0.0, 2.0};
+    const Surface ball{Sphere{foot + 0.5 * Normalized(Vec3{1.0, 0.0, -1.0}), 0.5, X, Y, true}};
+    const auto touch = Intersect(cone, ball, ctx);
+    INFO(IntersectTest::ErrorText(touch));
+    REQUIRE(touch.has_value());
+    REQUIRE(touch->Points.size() == 1);
+    REQUIRE(Distance(touch->Points.front().Position, foot) <= 1e-14);
+}
+
 TEST_CASE("boxes clip the circles of coaxial surfaces", "[intersect][elementary]")
 {
     const Surface cylinder = CylinderZ(3.5);

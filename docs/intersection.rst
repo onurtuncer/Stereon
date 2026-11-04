@@ -264,6 +264,18 @@ meetings are decided on the profiles' nominal values. A configuration
 within the pair tolerance of a tangency is declared tangent and logged at
 ``Info``, as a coincidence within it is declared (ADR-0029 section 6).
 
+**A sphere off a surface's axis** (``SphereTouch``). The points of a
+cylinder, cone or torus nearest a point off its axis lie in that point's
+meridian plane, where the surface is its profile. So the distance
+:math:`\delta` from the sphere's centre to the surface is the distance to
+the profile's nearest line or circle. When :math:`\delta` exceeds the radius
+by more than the pair tolerance, the sphere is a proved separation. When it
+equals the radius within the tolerance, the open ball misses the surface,
+and the intersection is the nearest points alone: ``IntersectionPoint``\ s
+of contact, logged as declared. This covers a ball against a wall, outside
+or inside a cylinder, on a cone's generator or on a torus's tube. Otherwise
+the sphere crosses the surface, and the pair is traced.
+
 **A plane through a cone's apex** meets the cone in the generators whose
 direction :math:`\sin a\, e(u) + \cos a\, \hat{A}` lies in the plane. With
 :math:`n_x, n_y` the unit normal's components along the cone's axes, those
