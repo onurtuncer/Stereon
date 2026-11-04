@@ -503,13 +503,22 @@ struct OcctBranch {
     double Last;
 };
 
-/// Unbounded ranges are sampled over [-7, 7] in Stereon's parameter.
+/// An unbounded end of a range is sampled at -7 or 7; a bounded one is kept.
 constexpr double Reach = 7.0;
+
+double LowerEnd(const double first)
+{
+    return std::abs(first) >= 1e100 ? -Reach : first;
+}
+double UpperEnd(const double last)
+{
+    return std::abs(last) >= 1e100 ? Reach : last;
+}
 
 OcctBranch OcctBranchOf(const Stereon::IntersectionBranch& branch)
 {
-    const double lower = std::max(branch.Range.GetLower(), -Reach);
-    const double upper = std::min(branch.Range.GetUpper(), Reach);
+    const double lower = LowerEnd(branch.Range.GetLower());
+    const double upper = UpperEnd(branch.Range.GetUpper());
     if (const auto* line = branch.Curve3d.Target<Line>()) {
         const double speed = Length(line->Direction);
         return {new Geom_Line(ToOcct(*line)), lower* speed, upper* speed};
@@ -552,8 +561,7 @@ std::vector<OcctBranch> OcctCurves(const occ::handle<Geom_Surface>& a,
     std::vector<OcctBranch> curves;
     for (int i = 1; i <= occt.NbLines(); ++i) {
         const occ::handle<Geom_Curve>& c = occt.Line(i);
-        curves.push_back(
-            {c, std::max(c->FirstParameter(), -Reach), std::min(c->LastParameter(), Reach)});
+        curves.push_back({c, LowerEnd(c->FirstParameter()), UpperEnd(c->LastParameter())});
     }
     return curves;
 }
