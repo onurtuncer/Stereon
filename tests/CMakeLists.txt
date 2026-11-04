@@ -188,10 +188,10 @@ if(STEREON_WITH_OCCT)
     add_executable(stereon_occt_tests occt/GeometryDifferentialTests.cpp
                                       occt/IntersectionDifferentialTests.cpp
                                       occt/OcctRobustnessTests.cpp occt/RobustnessHunt.cpp
-                                      occt/BooleanDifferentialTests.cpp)
+                                      occt/BooleanDifferentialTests.cpp occt/PlanarDifferentialTests.cpp)
     target_link_libraries(stereon_occt_tests
         PRIVATE stereon::intersect stereon::boolean stereon_options Catch2::Catch2WithMain
-                TKernel TKMath TKG3d TKGeomBase TKGeomAlgo TKBRep TKTopAlgo TKPrim TKBO)
+                TKernel TKMath TKG2d TKG3d TKGeomBase TKGeomAlgo TKBRep TKTopAlgo TKPrim TKBO)
     target_include_directories(stereon_occt_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/support")
     stereon_anchor_contracts(stereon_occt_tests)
     catch_discover_tests(stereon_occt_tests TEST_PREFIX "occt: " DISCOVERY_MODE PRE_TEST)
