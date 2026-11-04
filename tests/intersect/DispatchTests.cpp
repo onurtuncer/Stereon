@@ -118,12 +118,17 @@ TEST_CASE("every built-in pair has a handler that names both types", "[intersect
     REQUIRE(MessageOf(Intersect(SomeCircle(), SomeCircle(), ctx).error())
                 .starts_with("Circle x Circle"));
 
-    // Planes and cylinders have their analytic handlers (M3); spheres wait.
-    const auto planeSphere = Intersect(SomePlane(), SomeSphere(), ctx);
-    REQUIRE(planeSphere.error().GetCode() == ErrorCode::NotImplemented);
-    REQUIRE(MessageOf(planeSphere.error()).starts_with("Plane x Sphere"));
-    REQUIRE(MessageOf(Intersect(SomeSphere(), SomeCylinder(), ctx).error())
-                .starts_with("Sphere x Cylinder"));
+    // Every pair of planes, cylinders, cones, spheres and tori has its
+    // analytic handler (M3, v0.2); a B-spline surface against an analytic
+    // one still names both types.
+    REQUIRE(Intersect(SomePlane(), SomeSphere(), ctx).has_value());
+    REQUIRE(Intersect(SomeSphere(), SomeCylinder(), ctx).has_value());
+    constexpr std::size_t spline = Stereon::BuiltinSurfaceTypes::Size - 1;
+    const auto splinePlane = Stereon::Detail::SurfacePairTable[spline][0](
+        SomePlane(), Stereon::Box2::Everything(), SomePlane(), Stereon::Box2::Everything(), 0.0,
+        ctx);
+    REQUIRE(splinePlane.error().GetCode() == ErrorCode::NotImplemented);
+    REQUIRE(MessageOf(splinePlane.error()).starts_with("BSplineSurface x Plane"));
     REQUIRE(Intersect(SomePlane(), SomeCylinder(), ctx).has_value());
     REQUIRE(Intersect(SomeCylinder(), SomePlane(), ctx).has_value());
     REQUIRE(Intersect(SomePlane(), SomePlane(), ctx).has_value());
