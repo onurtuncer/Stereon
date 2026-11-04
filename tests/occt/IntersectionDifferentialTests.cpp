@@ -504,7 +504,11 @@ struct OcctBranch {
 };
 
 /// An unbounded end of a range is sampled at -7 or 7; a bounded one is kept.
+/// OCCT trims the lines of its analytic intersections at about 1.5e9, where
+/// a sample's rounding alone exceeds the tolerance: anything past 1e6 counts
+/// as unbounded.
 constexpr double Reach = 7.0;
+constexpr double Unbounded = 1e6;
 
 double LowerEnd(const double first)
 {
