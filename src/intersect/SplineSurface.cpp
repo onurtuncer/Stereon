@@ -284,6 +284,38 @@ template <typename Form>
     return Contains(range, x) ? std::optional<double>{x} : std::nullopt;
 }
 
+/// The roots polished once each. The subdivision places a decided
+/// crossing to the rounding of the enclosed form, whose coefficients carry
+/// the scale of its degree: for a torus's quartic, a point 1.2e-13 off the
+/// surface, hundreds of units in the last place of its coordinates. One
+/// Newton step on the signed distance from the surface along the curve,
+/// (C(t) - S(uv)) . n over C'(t) . n at the projection uv of the rounded
+/// point, places it to the point's own rounding. The step is kept only
+/// inside the root's proved bracket, and skipped where the normal vanishes,
+/// at a pole of the surface's parameters.
+template <typename C, typename S>
+[[nodiscard]] std::vector<Found> Polished(std::vector<Found> found, const C& curve,
+                                          const S& surface)
+{
+    for (Found& f : found) {
+        if (!f.Decided || f.Contact != ContactType::Crossing) {
+            continue;
+        }
+        const Point3 p = Eval(curve, f.T);
+        const Point2 uv = Project(surface, p);
+        const Vec3 n = Cross(Deriv(surface, uv, 1, 0), Deriv(surface, uv, 0, 1));
+        const double slope = Dot(Deriv(curve, f.T, 1), n);
+        if (!(std::abs(slope) > 0.0) || !std::isfinite(slope)) { // STEREON-LINT-ALLOW(epsilon)
+            continue;
+        }
+        const double t = f.T - Dot(p - Eval(surface, uv), n) / slope;
+        if (std::isfinite(t) && Contains(f.Bracket, t)) {
+            f.T = t;
+        }
+    }
+    return found;
+}
+
 /// The points of the roots whose surface parameters lie in the box, a
 /// periodic surface's angles placed there: u for every surface of
 /// revolution, v as well for the torus. `point` is the curve's point at a
@@ -366,7 +398,8 @@ Result<CurveSurfaceIntersection> SplinePlane(const Curve& a, const Interval& dom
                     *spline, domain,
                     [&](const std::vector<HPoint>& poles) { return PlaneForm(poles, *plane); },
                     "BSplineCurve x Plane"));
-    return PointsOf([&](const double t) { return Eval(*spline, t); }, found, box,
+    return PointsOf([&](const double t) { return Eval(*spline, t); },
+                    Polished(found, *spline, *plane), box,
                     [&](const Point3& p) { return Project(*plane, p); }, false);
 }
 
@@ -385,7 +418,8 @@ Result<CurveSurfaceIntersection> SplineSphere(const Curve& a, const Interval& do
                     *spline, domain,
                     [&](const std::vector<HPoint>& poles) { return SphereForm(poles, *sphere); },
                     "BSplineCurve x Sphere"));
-    return PointsOf([&](const double t) { return Eval(*spline, t); }, found, box,
+    return PointsOf([&](const double t) { return Eval(*spline, t); },
+                    Polished(found, *spline, *sphere), box,
                     [&](const Point3& p) { return Project(*sphere, p); }, true);
 }
 
@@ -405,7 +439,8 @@ Result<CurveSurfaceIntersection> SplineCylinder(const Curve& a, const Interval& 
                                                         return CylinderForm(poles, *cylinder);
                                                     },
                                                     "BSplineCurve x Cylinder"));
-    return PointsOf([&](const double t) { return Eval(*spline, t); }, found, box,
+    return PointsOf([&](const double t) { return Eval(*spline, t); },
+                    Polished(found, *spline, *cylinder), box,
                     [&](const Point3& p) { return Project(*cylinder, p); }, true);
 }
 
@@ -424,7 +459,8 @@ Result<CurveSurfaceIntersection> SplineCone(const Curve& a, const Interval& doma
                     *spline, domain,
                     [&](const std::vector<HPoint>& poles) { return ConeForm(poles, *cone); },
                     "BSplineCurve x Cone"));
-    return PointsOf([&](const double t) { return Eval(*spline, t); }, found, box,
+    return PointsOf([&](const double t) { return Eval(*spline, t); },
+                    Polished(found, *spline, *cone), box,
                     [&](const Point3& p) { return Project(*cone, p); }, true);
 }
 
@@ -443,7 +479,8 @@ Result<CurveSurfaceIntersection> SplineTorus(const Curve& a, const Interval& dom
                     *spline, domain,
                     [&](const std::vector<HPoint>& poles) { return TorusForm(poles, *torus); },
                     "BSplineCurve x Torus"));
-    return PointsOf([&](const double t) { return Eval(*spline, t); }, found, box,
+    return PointsOf([&](const double t) { return Eval(*spline, t); },
+                    Polished(found, *spline, *torus), box,
                     [&](const Point3& p) { return Project(*torus, p); }, true, true);
 }
 
@@ -624,8 +661,9 @@ ConicAgainst(const Conic& conic, const ConicData& data, const Interval& domain, 
                     data, domain,
                     [&](const std::vector<HPoint>& poles) { return form(poles, surface); },
                     handler));
-    return PointsOf([&](const double t) { return Eval(conic, t); }, found, box,
-                    [&](const Point3& p) { return Project(surface, p); }, periodicU, periodicV);
+    return PointsOf([&](const double t) { return Eval(conic, t); }, Polished(found, conic, surface),
+                    box, [&](const Point3& p) { return Project(surface, p); }, periodicU,
+                    periodicV);
 }
 
 /// The conic in the plane's parameters: the same conic on the same angle,
