@@ -10,13 +10,15 @@
 // so that a configuration decision is the sign of a polynomial in the
 // input doubles (RS-0001 G5) settled on the heap only when the enclosure
 // straddles zero; the placement of a periodic parameter in a requested
-// domain; the ordering of a result; and its two sides exchanged.
+// domain; the overlaps of coincident curves; the ordering of a result; and
+// its two sides exchanged.
 //
 // Included in the purview of the handlers' implementation units, after
 // `import :Dispatch;` and `import Stereon.Robust;`, with <algorithm>,
-// <cmath>, <cstddef>, <optional>, <utility> and <vector> in their global
-// module fragment, and with Analytic.hpp. Everything is in an anonymous
-// namespace, so each unit gets its own copy.
+// <array>, <cmath>, <cstddef>, <optional>, <string>, <string_view>,
+// <utility> and <vector> in their global module fragment, and after
+// Analytic.hpp. Everything is in an anonymous namespace, so each unit gets
+// its own copy.
 
 #pragma once
 
@@ -211,6 +213,25 @@ inline void Order(PlanarIntersection& result)
     });
 }
 
+/// The diagnostic name of a built-in plane curve's type, for messages.
+[[nodiscard]] inline std::string_view PlanarNameOf(const Curve2d& curve)
+{
+    constexpr auto names = []<typename... Ts>(TypeList<Ts...>) {
+        return std::array<std::string_view, sizeof...(Ts)>{GeometryTypeName<Ts>...};
+    }(BuiltinCurve2dTypes{});
+    const std::size_t i = BuiltinIndexOf(curve);
+    return i < names.size() ? names[i] : std::string_view{"Curve2d"};
+}
+
+/// "A x B", naming a pair's handler in messages.
+[[nodiscard]] inline std::string PairName(const Curve2d& a, const Curve2d& b)
+{
+    std::string name(PlanarNameOf(a));
+    name += " x ";
+    name += PlanarNameOf(b);
+    return name;
+}
+
 /// The same result seen from the other side: A and B exchanged.
 [[nodiscard]] inline PlanarIntersection SwappedPlanar(PlanarIntersection result)
 {
@@ -222,6 +243,55 @@ inline void Order(PlanarIntersection& result)
     }
     Order(result);
     return result;
+}
+
+// --- Coincident curves --------------------------------------------------
+
+/// The stretch where coincident curves with the affine correspondence
+/// t = t0 + k s of B's parameter s to A's t share their domains (k = ±1
+/// for conics, any non-zero k for lines).
+inline void AffineOverlap(PlanarIntersection& result, const double t0, const double k,
+                          const Interval& domainA, const Interval& domainB)
+{
+    const Interval onB = Intersection(domainB, AxisRange(t0, k, domainA));
+    if (onB.IsEmpty()) {
+        return;
+    }
+    const Interval onA = Intersection(domainA, Interval{t0} + Interval{k} * onB);
+    result.Overlaps.push_back({onA, onB, k > 0.0});
+}
+
+/// Coincident closed curves, circles or ellipses: B's angle is
+/// sense * t + offset for A's angle t, the sense that of their turns
+/// against each other, the offset B's angle of A's point at 0. The overlaps
+/// are the requested domains' common stretches modulo the period, one per
+/// period shift.
+inline void PeriodicOverlaps(PlanarIntersection& result, const double sense, const double offset,
+                             const Interval& domainA, const Interval& domainB)
+{
+    // One turn of each domain describes it; an unbounded one is a turn from 0.
+    const auto turnOf = [](const Interval& domain) {
+        const double start = std::isfinite(domain.GetLower()) ? domain.GetLower() : 0.0;
+        return Intersection(domain, Interval{start, start + CirclePeriod});
+    };
+    const Interval arcA = turnOf(domainA);
+    const Interval arcB = turnOf(domainB);
+    // s = sense t + offset + 2 pi k: the shifts whose image can meet arcB.
+    const Interval image = Interval{sense} * arcA + Interval{offset};
+    const double first = std::floor((arcB.GetLower() - image.GetUpper()) / CirclePeriod);
+    const double last = std::ceil((arcB.GetUpper() - image.GetLower()) / CirclePeriod);
+    for (double k = first; k <= last; k += 1.0) {
+        const Interval onB = Intersection(arcB, image + Interval{k} * Interval{CirclePeriod});
+        if (onB.IsEmpty()) {
+            continue;
+        }
+        const Interval onA =
+            Intersection(arcA, Interval{sense} *
+                                   (onB - Interval{offset} - Interval{k} * Interval{CirclePeriod}));
+        if (!onA.IsEmpty()) {
+            result.Overlaps.push_back({onA, onB, sense > 0.0});
+        }
+    }
 }
 
 /// The angle of p in the frame (center, x, y) of a circle or an ellipse

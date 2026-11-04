@@ -7,9 +7,10 @@
 
 // Plane curve intersection (the Boolean prototype's M6, face clipping):
 // lines, circles and ellipses against each other with every configuration
-// decided exactly, and B-splines against lines and circles bracketed to
-// rounding; parameters placed in the requested domains, points in order of
-// the first curve's parameter, overlaps of coincident lines and circles.
+// decided exactly, and B-splines against lines and circles by proved
+// subdivision; parameters placed in the requested domains, points in order
+// of the first curve's parameter, overlaps of coincident lines and circles.
+// The other pairs are in PlanarPairTests.cpp.
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -243,13 +244,14 @@ TEST_CASE("two conics meet in up to four points, crossings certified exactly",
             REQUIRE_THAT(p.Position.X, WithinAbs(2.0 / 3.0, 1e-9));
             ++crossings;
         } else {
-            // The touch is bracketed to rounding, not decided; it may also be
-            // missed, as a root of even multiplicity.
-            REQUIRE_FALSE(p.Decided);
-            REQUIRE(Distance(p.Position, Point2{2.0, 0.0}) <= 1e-6);
+            // The touch is at the circle's angle 0, a double of the chart:
+            // settled exactly, a double root, never missed.
+            REQUIRE(p.Decided);
+            REQUIRE(Distance(p.Position, Point2{2.0, 0.0}) == 0.0);
         }
     }
     REQUIRE(crossings == 2);
+    REQUIRE(mixed->Points.size() == 3);
     REQUIRE(Intersect(ellipse, circle, ctx)->Points.size() == mixed->Points.size());
 
     // The same ellipse turned a quarter: four crossings at x = ±y.
@@ -296,13 +298,15 @@ TEST_CASE("a B-spline meets lines and circles to rounding", "[intersect][planar]
     REQUIRE_THAT(half->Points[0].Position.X, WithinAbs(pi / 6.0, 1e-4));
     REQUIRE_THAT(half->Points[1].Position.X, WithinAbs(5.0 * pi / 6.0, 1e-4));
     for (const PlanarPoint& p : half->Points) {
+        // Proved single simple roots of the line's equation along the
+        // enclosed segments.
         REQUIRE(p.Contact == ContactType::Crossing);
-        REQUIRE_FALSE(p.Decided);
+        REQUIRE(p.Decided);
     }
     // Through the middle, at a segment join: one point, not doubled. The
-    // crossings at the very ends of the spline's domain are roots at the
-    // ends of the isolation range, which may be missed (a face's vertices
-    // are met by their tolerances, not by roots).
+    // crossings at the very ends of the spline's domain are within rounding
+    // of the ends of the isolation range: reported undecided, never
+    // dropped.
     const auto axis = Intersect(spline, Horizontal(0.0), ctx);
     REQUIRE_FALSE(axis->Points.empty());
     REQUIRE(axis->Points.size() <= 3);
@@ -335,12 +339,15 @@ TEST_CASE("a B-spline meets lines and circles to rounding", "[intersect][planar]
 TEST_CASE("plane curve pairs dispatch like the others", "[intersect][planar][dispatch]")
 {
     STATIC_REQUIRE(Stereon::Detail::PlanarPairTable.size() == Stereon::BuiltinCurve2dTypes::Size);
+    // Every built-in pair has a handler: the x axis crosses x² - y² = 1 at
+    // its vertex.
     const Curve2d hyperbola{
         Stereon::Hyperbola2d{Point2{}, 1.0, 1.0, Vec2{1.0, 0.0}, Vec2{0.0, 1.0}}};
-    const auto stub = Intersect(hyperbola, xAxis, ctx);
-    REQUIRE_FALSE(stub.has_value());
-    REQUIRE(stub.error().GetCode() == ErrorCode::NotImplemented);
-    REQUIRE(std::string(stub.error().GetMessage()).starts_with("Hyperbola2d x Line2d"));
+    const auto handled = Intersect(hyperbola, xAxis, ctx);
+    REQUIRE(handled.has_value());
+    REQUIRE(handled->Points.size() == 1);
+    REQUIRE(handled->Points.front().ParameterA == 0.0);
+    REQUIRE(handled->Points.front().Decided);
     REQUIRE(Intersect(Curve2d{}, xAxis, ctx).error().GetCode() == ErrorCode::InvalidInput);
     REQUIRE(
         Intersect(xAxis, Interval::Empty(), xAxis, Interval::Everything(), ctx).error().GetCode() ==
