@@ -151,11 +151,8 @@ TEST_CASE("every curve-surface pair has a handler; lines against planes, spheres
     REQUIRE(Intersect(SomeLine(), SomePlane(), ctx).has_value());
     REQUIRE(Intersect(SomeLine(), SomeSphere(), ctx).has_value());
     REQUIRE(Intersect(SomeLine(), SomeCylinder(), ctx).has_value());
+    REQUIRE(Intersect(SomeCircle(), SomePlane(), ctx).has_value());
     // The other pairs name their types, the curve first.
-    const auto circlePlane = Intersect(SomeCircle(), SomePlane(), ctx);
-    REQUIRE_FALSE(circlePlane.has_value());
-    REQUIRE(circlePlane.error().GetCode() == ErrorCode::NotImplemented);
-    REQUIRE(MessageOf(circlePlane.error()).starts_with("Circle x Plane"));
     const Surface torus(
         Stereon::Torus{Point3{}, 2.0, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}});
     REQUIRE(MessageOf(Intersect(SomeLine(), torus, ctx).error()).starts_with("Line x Torus"));

@@ -502,11 +502,18 @@ dropping the point. ``tests/occt/IntersectionDifferentialTests.cpp``
 compares the three handlers with OCCT's ``IntAna_IntConicQuad`` on
 generic lines.
 
-A ``BSplineCurve``, polynomial or rational, has handlers against the same
-three surfaces. The surface's implicit equation composed with the curve is,
-on each Bézier segment and in homogeneous coordinates, a polynomial
-:math:`g` of degree :math:`p` against the plane and :math:`2p` against a
-quadric, of the sign of the equation since every weight is positive. Its
+A ``BSplineCurve``, polynomial or rational, has handlers against all five
+elementary surfaces. The surface's implicit equation composed with the
+curve is, on each Bézier segment and in homogeneous coordinates, a
+polynomial :math:`g` of degree :math:`p` against the plane, :math:`2p`
+against a sphere, a cylinder or a cone and :math:`4p` against a torus, of
+the sign of the equation since every weight is positive. The cone's
+equation, :math:`\cos^2 a\,(x^2 + y^2) - (R \cos a + z \sin a)^2` in its
+frame, vanishes on both nappes, as the cone's parametrisation runs through
+its apex onto the second; the torus's is
+:math:`(x^2 + y^2 + z^2 + R^2 - r^2)^2 - 4R^2 (x^2 + y^2)`. Both are read in
+the surface's frame as given, the axis :math:`X \times Y` as the evaluator
+rounds it, with :math:`\sin a` and :math:`\cos a` enclosed. Its
 Bernstein coefficients are enclosed in outward-rounded interval arithmetic,
 from segments that are themselves enclosed: they come from Boehm's knot
 insertion done in intervals, so that what is proved holds for the curve as
@@ -538,9 +545,29 @@ exactly in the plane is an overlap, its pcurve the spline of the projected
 poles. A periodic curve is intersected within its own domain only, a
 curve in a plane that leaves the requested box is not clipped yet, and a
 point's surface parameters are those of its rounded position, kept or
-dropped against the box as the line handlers do. Every other pair reports
-``NotImplemented``; the generic path for curves against B-spline surfaces
-waits for Phase 2 with the surface–surface one.
+dropped against the box as the line handlers do.
+
+A ``Circle`` or an ``Ellipse`` against the five elementary surfaces goes
+through the same proofs, on its exact rational form. The requested domain,
+which must be bounded, is cut into equal arcs of at most a quarter turn,
+and each arc :math:`[t_0, t_1]` is the rational quadratic Bézier segment
+with end poles at :math:`t_0` and :math:`t_1`, weight 1, and middle pole
+:math:`(\cos h\,C + A \cos m + B \sin m,\ \cos h)` in homogeneous
+coordinates, :math:`h` the half-angle, :math:`m` the middle angle and
+:math:`A`, :math:`B` the radii times the axes. Every one of these is
+enclosed from the doubles :math:`t_0` and :math:`t_1`, so what is proved
+holds for the conic as given. A root at Bézier parameter :math:`s` is the
+angle :math:`m + 2 \arctan(\tan(h/2)(2s - 1))`, its bracket mapped through
+that monotone map and widened by its rounding; points are reported on the
+conic's angle, which may run over several turns. A conic whose centre and
+axes lie exactly in a plane is an overlap there, its pcurve the same
+conic in the plane's parameters; one whose bounding square leaves the
+requested box is not clipped yet. A conic on a curved surface, the
+equator of a sphere or the meridian of a torus, fails with
+``IntersectionFailed``.
+
+Every other pair reports ``NotImplemented``; the generic path for curves
+against B-spline surfaces waits for Phase 2 with the surface–surface one.
 
 Plane curves
 ------------
