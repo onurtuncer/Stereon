@@ -398,7 +398,11 @@ joined arcs are walked into branches, first from free ends, which lie on the
 search box's boundary or at a dropped box, then round the closed loops left.
 A branch's 3D curve and both pcurves must share one smooth parameter
 (ADR-0009). A chord-length cubic interpolant through the traced points
-serves as a *guide*. Each guide point is moved onto :math:`f = 0` by Newton's
+serves as a *guide*. A branch whose traced points lie within
+:math:`2^{-40}` of one another, too short for a guide, is a sliver of a
+branch at a corner of the search box or a loop as small. It is reported as
+a point of contact, not dropped, its ``Bound`` the farthest corner of its
+arcs' certified boxes, which hold it. Each guide point is moved onto :math:`f = 0` by Newton's
 method along the fixed direction of :math:`\nabla f` at its projection on
 the carrier. Because the direction is fixed, the point found is a smooth
 function of the guide's parameter. Where the implicit side's angle,
