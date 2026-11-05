@@ -190,14 +190,36 @@ parameters (a sphere's)                derivative, though the geometry is regula
 A result takes its worst point's status, and carries values only for
 ``Valid`` and ``NearEvent``.
 
-``IntersectJvp`` and ``IntersectVjp`` implement the products for a line
-against a plane, a sphere or a cylinder, with ``LineBinding`` binding a
-parameter to a coordinate of the line's origin or direction and
-``SurfaceBinding`` to a coordinate of the surface's origin (a sphere's
-centre) or to its radius, each a ``Length``. The surface's partials come
-from its own ``Deriv``; at fixed :math:`(u, v)` the origin moves every point
-alike, and the radius moves a sphere's point along :math:`(S - C) / r` and a
-cylinder's along its radial direction. A pole is detected on its own: the
+``IntersectJvp`` and ``IntersectVjp`` implement the products for a line or
+a B-spline curve against a plane, a cylinder, a cone, a sphere or a torus.
+``LineBinding`` binds a parameter to a coordinate of the line's origin or
+direction. ``SurfaceBinding`` binds one to a value of the surface, each a
+``Length`` but the semi-angle, an ``Angle``:
+
+- ``OriginX``, ``OriginY``, ``OriginZ``: a coordinate of its origin (a
+  sphere's or a torus's centre);
+- ``Radius``: a sphere's or a cylinder's radius, a cone's reference radius,
+  a torus's major radius;
+- ``MinorRadius``: a torus's tube;
+- ``SemiAngle``: a cone's opening.
+
+A binding of a value the surface does not have is ``InvalidInput``. The
+surface's partials :math:`S_u`, :math:`S_v` come from its own ``Deriv``.
+At fixed :math:`(u, v)`, with :math:`\hat\rho = \cos u\,X + \sin u\,Y` and
+:math:`A` the axis:
+
+- the origin moves every point alike;
+- the radius moves a sphere's point along :math:`(S - C) / r`, and a
+  cylinder's, a cone's and a torus's along :math:`\hat\rho`;
+- a cone's semi-angle moves it by
+  :math:`v (\cos a\,\hat\rho - \sin a\,A)`;
+- a torus's minor radius moves it along the tube's normal,
+  :math:`\cos v\,\hat\rho + \sin v\,A`.
+
+``Intersect`` has no line handler for the cone and the torus yet, so their
+points come from B-spline curves, or from a caller's own closed form, which
+``IntersectJvp`` accepts once it lies on both geometries. The cone's apex is
+a pole, detected as the sphere's are. A pole is detected on its own: the
 conditioning, the sine of an angle, scales out the vanishing :math:`S_u`, so
 a partial within rounding of zero against the other (below 2\ :sup:`-50` of
 it) makes the point ``Indeterminate``. Each point gives six values,

@@ -20,6 +20,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <numbers>
@@ -35,6 +36,7 @@ import Stereon.Intersect;
 #include "Checks.hpp"
 
 using IntersectTest::ctx;
+using Stereon::Cone;
 using Stereon::CurveSurfaceIntersection;
 using Stereon::CurveSurfacePoint;
 using Stereon::Cylinder;
@@ -53,6 +55,7 @@ using Stereon::Sphere;
 using Stereon::Surface;
 using Stereon::SurfaceBinding;
 using Stereon::SurfaceComponent;
+using Stereon::Torus;
 using Stereon::Vec3;
 
 namespace {
@@ -73,8 +76,63 @@ Point3& OriginOf(Cylinder& s)
 {
     return s.Origin;
 }
+Point3& OriginOf(Cone& s)
+{
+    return s.Origin;
+}
+Point3& OriginOf(Torus& s)
+{
+    return s.Center;
+}
+
+/// What each surface's bindings move, in the order of their parameters:
+/// the origin, then its radius, then a torus's minor radius or a cone's
+/// semi-angle.
 template <typename S>
-constexpr std::size_t SurfaceParameters = std::is_same_v<S, Plane> ? 3 : 4;
+std::vector<SurfaceComponent> ComponentsOf()
+{
+    std::vector<SurfaceComponent> components{SurfaceComponent::OriginX, SurfaceComponent::OriginY,
+                                             SurfaceComponent::OriginZ};
+    if constexpr (!std::is_same_v<S, Plane>) {
+        components.push_back(SurfaceComponent::Radius);
+    }
+    if constexpr (std::is_same_v<S, Torus>) {
+        components.push_back(SurfaceComponent::MinorRadius);
+    }
+    if constexpr (std::is_same_v<S, Cone>) {
+        components.push_back(SurfaceComponent::SemiAngle);
+    }
+    return components;
+}
+
+template <typename S>
+std::size_t SurfaceParameters()
+{
+    return ComponentsOf<S>().size();
+}
+
+/// The quantity of the parameter moving a surface component.
+ParameterQuantity QuantityOf(const SurfaceComponent component)
+{
+    return component == SurfaceComponent::SemiAngle ? ParameterQuantity::Angle
+                                                    : ParameterQuantity::Length;
+}
+
+/// The surface moved by d(first + k) along its k-th component.
+template <typename S, typename Step>
+void MoveSurface(S& surface, const Step& d, const std::size_t first)
+{
+    OriginOf(surface) = OriginOf(surface) + Vec3{d(first), d(first + 1), d(first + 2)};
+    if constexpr (std::is_same_v<S, Sphere> || std::is_same_v<S, Cylinder>) {
+        surface.Radius += d(first + 3);
+    } else if constexpr (std::is_same_v<S, Cone>) {
+        surface.Radius += d(first + 3);
+        surface.SemiAngle += d(first + 4);
+    } else if constexpr (std::is_same_v<S, Torus>) {
+        surface.MajorRadius += d(first + 3);
+        surface.MinorRadius += d(first + 4);
+    }
+}
 
 /// Parameters each bound to one coordinate: the line's origin and
 /// direction, then the surface's origin, then its radius where it has one.
@@ -84,21 +142,39 @@ struct Model {
     std::vector<SurfaceBinding> SurfaceBindings;
 };
 
-Model FullModel(const std::vector<double>& references)
+/// The line's six bindings, then one per surface component, in order.
+Model ModelOf(const std::vector<double>& references,
+              const std::vector<SurfaceComponent>& components)
 {
     ParameterSet set;
     std::vector<ParameterId> ids;
     for (std::size_t k = 0; k < references.size(); ++k) {
-        ids.push_back(*set.Add("p" + std::to_string(k), ParameterQuantity::Length, references[k]));
+        const ParameterQuantity quantity =
+            k < 6 ? ParameterQuantity::Length : QuantityOf(components[k - 6]);
+        ids.push_back(*set.Add("p" + std::to_string(k), quantity, references[k]));
     }
     Model model{SensitivityContext(std::move(set)), {}, {}};
     for (std::size_t k = 0; k < 6; ++k) {
         model.LineBindings.push_back({ids[k], static_cast<LineComponent>(k)});
     }
     for (std::size_t k = 6; k < references.size(); ++k) {
-        model.SurfaceBindings.push_back({ids[k], static_cast<SurfaceComponent>(k - 6)});
+        model.SurfaceBindings.push_back({ids[k], components[k - 6]});
     }
     return model;
+}
+
+/// A plane's bindings for nine references, a sphere's or a cylinder's for
+/// ten.
+Model FullModel(const std::vector<double>& references)
+{
+    return ModelOf(references,
+                   references.size() == 9 ? ComponentsOf<Plane>() : ComponentsOf<Sphere>());
+}
+
+template <typename S>
+Model ModelFor(const std::vector<double>& references)
+{
+    return ModelOf(references, ComponentsOf<S>());
 }
 
 /// The geometry moved by `step` times the seed, each parameter by its
@@ -110,10 +186,7 @@ std::pair<Line, S> Moved(Line line, S surface, const std::vector<double>& seed,
     const auto d = [&](const std::size_t k) { return step * seed[k] * references[k]; };
     line.Origin = line.Origin + Vec3{d(0), d(1), d(2)};
     line.Direction = line.Direction + Vec3{d(3), d(4), d(5)};
-    OriginOf(surface) = OriginOf(surface) + Vec3{d(6), d(7), d(8)};
-    if constexpr (SurfaceParameters<S> == 4) {
-        surface.Radius += d(9);
-    }
+    MoveSurface(surface, d, 6);
     return {line, surface};
 }
 
@@ -196,8 +269,8 @@ bool WellConditioned(const Line& line, const S& surface, const std::size_t point
 template <typename S>
 void RequireTaylor(const Line& line, const S& surface)
 {
-    const auto [references, seed] = RandomSeed(6 + SurfaceParameters<S>);
-    Model model = FullModel(references);
+    const auto [references, seed] = RandomSeed(6 + SurfaceParameters<S>());
+    Model model = ModelFor<S>(references);
     const std::vector<double> jv = Jvp(model, line, surface, seed);
     const std::vector<double> base = Points(line, surface);
     const auto residual = [&](const double h) {
@@ -207,7 +280,10 @@ void RequireTaylor(const Line& line, const S& surface)
         std::vector<double> r(base.size());
         for (std::size_t i = 0; i < base.size(); ++i) {
             const double difference = moved[i] - base[i];
-            r[i] = (i % Values == 4 ? std::remainder(difference, tau) : difference) - h * jv[i];
+            // u is an angle, and so is a torus's v; a step never moves
+            // any other v by half a turn, so v is taken modulo one too.
+            const bool angle = i % Values == 4 || i % Values == 5;
+            r[i] = (angle ? std::remainder(difference, tau) : difference) - h * jv[i];
         }
         return Norm(r);
     };
@@ -222,8 +298,8 @@ void RequireTaylor(const Line& line, const S& surface)
 template <typename S>
 void RequireTranspose(const Line& line, const S& surface)
 {
-    const auto [references, v] = RandomSeed(6 + SurfaceParameters<S>);
-    Model model = FullModel(references);
+    const auto [references, v] = RandomSeed(6 + SurfaceParameters<S>());
+    Model model = ModelFor<S>(references);
     const std::vector<double> jv = Jvp(model, line, surface, v);
     std::vector<double> w;
     for (std::size_t i = 0; i < jv.size(); ++i) {
@@ -292,6 +368,38 @@ std::pair<Line, std::pair<Sphere, Cylinder>> RandomQuadricCrossing()
         return std::abs(p.OnSurface.Y) <= 1.2;
     }));
     return {line, {sphere, cylinder}};
+}
+
+/// The crossings of a line at the parameters of their closed form, for the
+/// cone and the torus, which Intersect has no line handler for yet.
+template <typename S>
+CurveSurfaceIntersection Crossings(const Line& line, const S& surface,
+                                   const std::vector<double>& parameters)
+{
+    CurveSurfaceIntersection at;
+    for (const double t : parameters) {
+        const Point3 p = Eval(line, t);
+        at.Points.push_back({t, Project(surface, p), p, Stereon::ContactType::Crossing, true});
+    }
+    return at;
+}
+
+/// The forward product at those crossings for the unit seed of parameter k,
+/// every reference 1.
+template <typename S>
+std::vector<double> RateAt(const Line& line, const S& surface, const CurveSurfaceIntersection& at,
+                           const std::size_t k)
+{
+    const std::size_t count = 6 + SurfaceParameters<S>();
+    Model model = ModelFor<S>(std::vector<double>(count, 1.0));
+    std::vector<double> seed(count, 0.0);
+    seed[k] = 1.0;
+    REQUIRE(model.Sensitivity.SetSeed(seed).has_value());
+    const auto jvp = Stereon::IntersectJvp(line, model.LineBindings, Surface{surface},
+                                           model.SurfaceBindings, at, model.Sensitivity);
+    REQUIRE(jvp.has_value());
+    REQUIRE(jvp->GetStatus() == DerivativeStatus::Valid);
+    return {jvp->GetValues()->begin(), jvp->GetValues()->end()};
 }
 
 } // namespace
@@ -363,6 +471,49 @@ TEST_CASE("the crossings of a sphere and a cylinder move as their closed forms s
     const std::vector<double> along = rate(cylinder, 8);
     REQUIRE(std::abs(along[2]) <= 1e-14);
     REQUIRE(std::abs(along[5] + 1.0) <= 1e-14);
+}
+
+TEST_CASE("the crossings of a cone and a torus move as their closed forms say",
+          "[intersect][linearization]")
+{
+    constexpr double pi = std::numbers::pi;
+    const Vec3 ex{1.0, 0.0, 0.0};
+    const Vec3 ey{0.0, 1.0, 0.0};
+    // The cone about z with radius 1 at its origin and semi-angle pi/4, and
+    // a line along x at height 1/2: crossings at x = -+(1 + 1/2 tan a) =
+    // -+3/2. Growing R or a widens it: x' = -+1 and -+(1/2) sec² a = -+1.
+    // Raising its origin narrows it at the line's height: x' = +-tan a.
+    const Cone cone{Point3{}, 1.0, pi / 4.0, ex, ey};
+    const Line line{Point3{-5.0, 0.0, 0.5}, ex};
+    const CurveSurfaceIntersection onCone = Crossings(line, cone, {3.5, 6.5});
+    const std::vector<double> radius = RateAt(line, cone, onCone, 9);
+    const std::vector<double> angle = RateAt(line, cone, onCone, 10);
+    const std::vector<double> raise = RateAt(line, cone, onCone, 8);
+    for (const auto& [rate, first] :
+         {std::pair{radius, -1.0}, std::pair{angle, -1.0}, std::pair{raise, 1.0}}) {
+        REQUIRE(rate.size() == 2 * Values);
+        REQUIRE(std::abs(rate[0] - first) <= 1e-14);
+        REQUIRE(std::abs(rate[3] - first) <= 1e-14);
+        REQUIRE(std::abs(rate[Values] + first) <= 1e-14);
+        REQUIRE(std::abs(rate[Values + 3] + first) <= 1e-14);
+    }
+
+    // The torus about z with radii 2 and 1, and the x axis: crossings at
+    // x = -3, -1, 1, 3. Growing R moves all four outward; growing r moves
+    // the outer ones outward and the inner ones in.
+    const Torus torus{Point3{}, 2.0, 1.0, ex, ey};
+    const Line axis{Point3{-5.0, 0.0, 0.0}, ex};
+    const CurveSurfaceIntersection onTorus = Crossings(axis, torus, {2.0, 4.0, 6.0, 8.0});
+    const std::vector<double> major = RateAt(axis, torus, onTorus, 9);
+    const std::vector<double> minor = RateAt(axis, torus, onTorus, 10);
+    REQUIRE(major.size() == 4 * Values);
+    const std::array<double, 4> outward{-1.0, -1.0, 1.0, 1.0};
+    const std::array<double, 4> tube{-1.0, 1.0, -1.0, 1.0};
+    for (std::size_t k = 0; k < 4; ++k) {
+        REQUIRE(std::abs(major[k * Values] - outward[k]) <= 1e-14);
+        REQUIRE(std::abs(minor[k * Values] - tube[k]) <= 1e-14);
+        REQUIRE(std::abs(minor[k * Values + 3] - tube[k]) <= 1e-14);
+    }
 }
 
 TEST_CASE("the Taylor residual of a crossing decays with the square of the step",
@@ -529,10 +680,24 @@ TEST_CASE("invalid sensitivity input is refused, and other surfaces are NotSuppo
         {model.SurfaceBindings.front().Parameter, SurfaceComponent::Radius}};
     REQUIRE(code(Stereon::IntersectJvp(up, model.LineBindings, Surface{ground}, radius, at,
                                        model.Sensitivity)) == ErrorCode::InvalidInput);
-    // A torus has no bindings yet: a NotSupported status, never a value.
-    const Surface torus(
-        Stereon::Torus{Point3{}, 2.0, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}});
-    const auto unsupported = Stereon::IntersectJvp(up, model.LineBindings, torus, {},
+    // A cone has no minor radius, and its semi-angle is an Angle.
+    const Surface cone(Cone{Point3{}, 1.0, 0.5, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}});
+    const ParameterId length = model.SurfaceBindings.front().Parameter;
+    for (const SurfaceComponent component :
+         {SurfaceComponent::MinorRadius, SurfaceComponent::SemiAngle}) {
+        const std::vector<SurfaceBinding> bad{{length, component}};
+        REQUIRE(code(Stereon::IntersectJvp(up, model.LineBindings, cone, bad,
+                                           CurveSurfaceIntersection{}, model.Sensitivity)) ==
+                ErrorCode::InvalidInput);
+    }
+    // A B-spline surface has no bindings yet: a NotSupported status, never
+    // a value.
+    const std::vector<double> knots{0.0, 0.0, 1.0, 1.0};
+    const auto patch = Stereon::MakeBSplineSurface(
+        1, 1, knots, knots, {{0.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {1.0, 0.0, 0.0}, {1.0, 1.0, 0.0}},
+        {});
+    REQUIRE(patch.has_value());
+    const auto unsupported = Stereon::IntersectJvp(up, model.LineBindings, Surface{*patch}, {},
                                                    CurveSurfaceIntersection{}, model.Sensitivity);
     REQUIRE(unsupported.has_value());
     REQUIRE(unsupported->GetStatus() == DerivativeStatus::NotSupported);
@@ -587,23 +752,25 @@ struct SplineModel {
     std::vector<SurfaceBinding> SurfaceBindings;
 };
 
-SplineModel MakeSplineModel(const std::vector<PoleBinding>& poles, const std::size_t surface,
+SplineModel MakeSplineModel(const std::vector<PoleBinding>& poles,
+                            const std::vector<SurfaceComponent>& surface,
                             const std::vector<double>& references)
 {
     ParameterSet set;
     std::vector<ParameterId> ids;
     for (std::size_t k = 0; k < references.size(); ++k) {
         const bool weight = k < poles.size() && poles[k].Component == PoleComponent::Weight;
-        ids.push_back(*set.Add(
-            "p" + std::to_string(k),
-            weight ? ParameterQuantity::Dimensionless : ParameterQuantity::Length, references[k]));
+        const ParameterQuantity quantity = k >= poles.size() ? QuantityOf(surface[k - poles.size()])
+                                           : weight          ? ParameterQuantity::Dimensionless
+                                                             : ParameterQuantity::Length;
+        ids.push_back(*set.Add("p" + std::to_string(k), quantity, references[k]));
     }
     SplineModel model{SensitivityContext(std::move(set)), {}, {}};
     for (std::size_t k = 0; k < poles.size(); ++k) {
         model.PoleBindings.push_back({ids[k], poles[k].Pole, poles[k].Component});
     }
-    for (std::size_t k = 0; k < surface; ++k) {
-        model.SurfaceBindings.push_back({ids[poles.size() + k], static_cast<SurfaceComponent>(k)});
+    for (std::size_t k = 0; k < surface.size(); ++k) {
+        model.SurfaceBindings.push_back({ids[poles.size() + k], surface[k]});
     }
     return model;
 }
@@ -633,11 +800,7 @@ std::pair<BSplineCurve, S> MovedSpline(BSplineCurve curve, S surface, const Spli
             break;
         }
     }
-    const std::size_t s = model.PoleBindings.size();
-    OriginOf(surface) = OriginOf(surface) + Vec3{d(s), d(s + 1), d(s + 2)};
-    if constexpr (SurfaceParameters<S> == 4) {
-        surface.Radius += d(s + 3);
-    }
+    MoveSurface(surface, d, model.PoleBindings.size());
     return {curve, surface};
 }
 
@@ -649,7 +812,9 @@ std::vector<double> SplineJvp(SplineModel& model, const BSplineCurve& curve, con
     const auto jvp =
         Stereon::IntersectJvp(curve, model.PoleBindings, Surface{surface}, model.SurfaceBindings,
                               Meet(curve, surface), model.Sensitivity);
-    RC_ASSERT(jvp.has_value());
+    if (!jvp) {
+        RC_FAIL(IntersectTest::ErrorText(jvp));
+    }
     RC_ASSERT(jvp->GetStatus() == DerivativeStatus::Valid);
     const auto values = jvp->GetValues();
     return {values->begin(), values->end()};
@@ -689,14 +854,28 @@ RandomSplineThrough(const Point3& center, const Vec3& direction, const double sp
 template <typename S>
 bool SplineWellConditioned(const BSplineCurve& curve, const S& surface)
 {
-    const CurveSurfaceIntersection at = Meet(curve, surface);
-    if (at.Points.empty() || !at.Overlaps.empty()) {
+    // The primal's own completeness is tested elsewhere: a curve it cannot
+    // resolve is no sample for the products.
+    const auto result = Intersect(Stereon::Curve{curve}, Surface{surface}, ctx);
+    if (!result || result->Points.empty() || !result->Overlaps.empty()) {
         return false;
     }
-    return std::ranges::all_of(at.Points, [&](const CurveSurfacePoint& p) {
+    return std::ranges::all_of(result->Points, [&](const CurveSurfacePoint& p) {
         const auto lin = Stereon::Linearize(curve, Surface{surface}, p);
-        const bool offPole = !std::is_same_v<S, Sphere> || std::abs(p.OnSurface.Y) <= 1.2;
-        return p.Decided && offPole && lin && lin->Conditioning >= 0.25;
+        bool offPole = true;
+        if constexpr (std::is_same_v<S, Sphere>) {
+            offPole = std::abs(p.OnSurface.Y) <= 1.2;
+        } else if constexpr (std::is_same_v<S, Cone>) {
+            offPole =
+                std::abs(surface.Radius + p.OnSurface.Y * std::sin(surface.SemiAngle)) >= 0.25;
+        }
+        // Away from the curve's ends, so a step never carries a crossing
+        // out of its domain: a cone, being unbounded, can lie near one.
+        const Stereon::Interval domain = Domain(curve);
+        const double margin = 0.025 * Width(domain);
+        const bool inside =
+            p.Parameter >= domain.GetLower() + margin && p.Parameter <= domain.GetUpper() - margin;
+        return p.Decided && offPole && inside && lin && lin->Conditioning >= 0.25;
     });
 }
 
@@ -706,19 +885,28 @@ void RequireSplineProducts(const BSplineCurve& curve, const std::vector<PoleBind
                            const S& surface)
 {
     RC_PRE(SplineWellConditioned(curve, surface));
-    const std::size_t count = poles.size() + SurfaceParameters<S>;
+    const std::size_t count = poles.size() + SurfaceParameters<S>();
     const auto [references, seed] = RandomSeed(count);
-    SplineModel model = MakeSplineModel(poles, SurfaceParameters<S>, references);
+    SplineModel model = MakeSplineModel(poles, ComponentsOf<S>(), references);
     const std::vector<double> jv = SplineJvp(model, curve, surface, seed);
     const std::vector<double> base = Points(curve, surface);
     const auto residual = [&](const double h) {
         const auto [c, s] = MovedSpline(curve, surface, model, seed, references, h);
+        // A step that turns a near miss into crossings, or into a touch the
+        // primal cannot resolve, crosses an event of the intersection: no
+        // sample for its derivative. A cone, unbounded, offers near misses
+        // far from the crossings the products are of.
+        const bool resolved = Intersect(Stereon::Curve{c}, Surface{s}, ctx).has_value();
+        RC_PRE(resolved);
         const std::vector<double> moved = Points(c, s);
-        RC_ASSERT(moved.size() == base.size());
+        RC_PRE(moved.size() == base.size());
         std::vector<double> r(base.size());
         for (std::size_t i = 0; i < base.size(); ++i) {
             const double difference = moved[i] - base[i];
-            r[i] = (i % Values == 4 ? std::remainder(difference, tau) : difference) - h * jv[i];
+            // u is an angle, and so is a torus's v; a step never moves
+            // any other v by half a turn, so v is taken modulo one too.
+            const bool angle = i % Values == 4 || i % Values == 5;
+            r[i] = (angle ? std::remainder(difference, tau) : difference) - h * jv[i];
         }
         return Norm(r);
     };
@@ -810,6 +998,44 @@ TEST_CASE("B-spline crossings: second-order Taylor decay and the transpose",
             RequireSplineProducts(curve, poles, IntersectTest::PlaneWithNormal(center, direction));
             break;
         }
+    });
+}
+
+TEST_CASE("B-spline crossings of cones and tori: Taylor decay and the transpose",
+          "[intersect][linearization][property]")
+{
+    const auto frameAbout = [](const Point3& center) {
+        const Vec3 axis{Coordinate(), Coordinate(), Coordinate()};
+        RC_PRE(Length(axis) >= 0.5);
+        return IntersectTest::CylinderAbout(center, axis, 1.0);
+    };
+    rc::prop("for random cubic B-splines through cones", [&] {
+        const Point3 center{Coordinate(), Coordinate(), Coordinate()};
+        const Cylinder frame = frameAbout(center);
+        const double radius = *rc::gen::inRange(8, 25) / 8.0;
+        const double sign = *rc::gen::arbitrary<bool>() ? 1.0 : -1.0;
+        const double angle = sign * *rc::gen::inRange(2, 11) / 10.0;
+        const Cone cone{center, radius, angle, frame.XAxis, frame.YAxis};
+        const Vec3 direction{Coordinate(), Coordinate(), Coordinate()};
+        RC_PRE(Length(direction) >= radius);
+        const auto [curve, poles] = RandomSplineThrough(center, direction, radius);
+        RequireSplineProducts(curve, poles, cone);
+    });
+    rc::prop("for random cubic B-splines through tori", [&] {
+        const Point3 center{Coordinate(), Coordinate(), Coordinate()};
+        const Cylinder frame = frameAbout(center);
+        const double minor = *rc::gen::inRange(4, 9) / 8.0;
+        const double major = minor + *rc::gen::inRange(4, 13) / 8.0;
+        const Torus torus{center, major, minor, frame.XAxis, frame.YAxis};
+        // Through a point of the tube's centre circle, so the tube is
+        // crossed; the end poles, two steps away, lie outside the torus.
+        const double u = *rc::gen::inRange(0, 16) / 16.0 * tau;
+        const Point3 tube =
+            center + major * (std::cos(u) * frame.XAxis + std::sin(u) * frame.YAxis);
+        const Vec3 direction{Coordinate(), Coordinate(), Coordinate()};
+        RC_PRE(Length(direction) >= major + minor);
+        const auto [curve, poles] = RandomSplineThrough(tube, direction, minor);
+        RequireSplineProducts(curve, poles, torus);
     });
 }
 

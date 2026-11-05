@@ -37,9 +37,10 @@ import :Dispatch;
 /// carries no derivative carries none as a whole (ADR-0021, section 5).
 ///
 /// The pairs so far are a line or a B-spline curve against a plane, a
-/// sphere or a cylinder, the parameters bound to coordinates of the line's
-/// origin and direction, to the curve's poles and weights (PoleBinding, as
-/// EvalJvp takes them), and to the surface's origin or radius. The
+/// cylinder, a cone, a sphere or a torus, the parameters bound to
+/// coordinates of the line's origin and direction, to the curve's poles and
+/// weights (PoleBinding, as EvalJvp takes them), and to the surface's
+/// origin, its radii and a cone's semi-angle. The
 /// surface's partials come from its
 /// own Deriv, so a new surface needs only the velocities of its defining
 /// values; the others answer NotSupported until they bind theirs.
@@ -64,14 +65,18 @@ struct LineBinding {
     LineComponent Component = LineComponent::OriginX;
 };
 
-/// What a design parameter moves on a surface, each a Length: a coordinate
-/// of its origin (a sphere's centre), or its radius (a sphere's or a
-/// cylinder's). The frame is fixed: turning a surface is a later binding.
+/// What a design parameter moves on a surface: a coordinate of its origin
+/// (a sphere's or a torus's centre, a cone's reference point); its Radius
+/// (a sphere's, a cylinder's, a cone's reference radius, a torus's major
+/// radius); a torus's MinorRadius; each a Length; or a cone's SemiAngle, an
+/// Angle. The frame is fixed: turning a surface is a later binding.
 enum class SurfaceComponent : std::uint8_t {
     OriginX,
     OriginY,
     OriginZ,
     Radius,
+    MinorRadius,
+    SemiAngle,
 };
 
 struct SurfaceBinding {
@@ -123,9 +128,10 @@ Linearize(const BSplineCurve& curve, const Surface& surface, const CurveSurfaceP
 /// `sensitivity`: for each point of `intersection`, in its order,
 /// CurveSurfacePointValues values. `intersection` is the result of
 /// intersecting these two geometries. NotSupported (a status) for a
-/// surface other than a plane, a sphere or a cylinder. InvalidInput for a
-/// binding whose parameter is not of the context's set or is not a Length,
-/// a radius binding on a plane, or a seed that was never set.
+/// surface other than a plane, a cylinder, a cone, a sphere or a torus.
+/// InvalidInput for a binding whose parameter is not of the context's set,
+/// is not a Length (an Angle for a SemiAngle), or moves a value the surface
+/// does not have, or for a seed that was never set.
 [[nodiscard]] Result<SensitivityResult>
 IntersectJvp(const Line& line, std::span<const LineBinding> lineBindings, const Surface& surface,
              std::span<const SurfaceBinding> surfaceBindings,
