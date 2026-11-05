@@ -180,6 +180,35 @@ Shape BoxFrom(const Point3& lo, const Point3& hi)
 
 } // namespace
 
+TEST_CASE("boxes sharing only an edge unite into two solids touching along it",
+          "[boolean][assemble][coincident][regression]")
+{
+    // The integration tests of 2026-11-05 (tests/boolean/IntegrationTests.cpp):
+    // the edge each box carries of the other was merged into one, used by
+    // four faces of one shell, and the union was published although the
+    // shell is not closed (L01). Now each box keeps its own edge there.
+    const Shape a = Box();
+    const Shape b = BoxFrom(Point3{10.0, 10.0, 0.0}, Point3{20.0, 20.0, 10.0});
+    const OperationResult united = Run(a, b, BooleanOperation::Union);
+    REQUIRE(CountOf<EntityKind::Solid>(united.Shape) == 2);
+    REQUIRE(CountOf<EntityKind::Face>(united.Shape) == 12);
+    REQUIRE(CountOf<EntityKind::Edge>(united.Shape) == 24);
+    REQUIRE(CountOf<EntityKind::Vertex>(united.Shape) == 16);
+    const Stereon::ValidityReport report =
+        ValidateTopology(united.Shape, Stereon::ValidityLevel::Solid, ctx);
+    for (const Stereon::ValidityFinding& finding : report.GetFindings()) {
+        INFO(finding.Message);
+        CHECK(finding.Rule == Stereon::TopologyRule::SelfIntersectionUnchecked);
+    }
+    REQUIRE(Inside(united.Shape, Point3{5.0, 5.0, 5.0}));
+    REQUIRE(Inside(united.Shape, Point3{15.0, 15.0, 5.0}));
+    REQUIRE_FALSE(Inside(united.Shape, Point3{15.0, 5.0, 5.0}));
+
+    // Common and cut are untouched: nothing in common, A unchanged.
+    REQUIRE(CountOf<EntityKind::Face>(Run(a, b, BooleanOperation::Common).Shape) == 0);
+    REQUIRE(CountOf<EntityKind::Face>(Run(a, b, BooleanOperation::Cut).Shape) == 6);
+}
+
 TEST_CASE("boxes face to face: the coincident faces OnOpposite", "[boolean][assemble][coincident]")
 {
     // B against A's face x = 10, the whole face: the faces coincide with
