@@ -504,11 +504,19 @@ struct BoxCuts {
 /// other axis keeps its middle point in the box. A contact in the box
 /// between two pieces outside is kept as a stretch of one parameter, as the
 /// line handler keeps a corner. A middle point within rounding of an edge
-/// cannot be trusted, and the clip fails.
+/// cannot be trusted, and the clip fails. A range of one parameter has no
+/// piece between cuts: its point decides it, kept within rounding of an
+/// edge as a contact on the boundary is (OnBoxBoundary).
 [[nodiscard]] Result<std::vector<Interval>> InsideBox(const Curve2d& pcurve, const Interval& range,
                                                       const Box2& box, const Context& ctx,
                                                       const std::string_view handler)
 {
+    if (range.GetLower() == range.GetUpper()) {
+        if (InBox(Eval(pcurve, range.GetLower()), box) == Strict::Negative) {
+            return std::vector<Interval>{};
+        }
+        return std::vector<Interval>{range};
+    }
     STEREON_TRY(const BoxCuts cuts, CutsOf(pcurve, range, box, ctx));
     std::vector<Interval> kept;
     for (std::size_t i = 0; i + 1 < cuts.At.size(); ++i) {

@@ -156,6 +156,38 @@ TEST_CASE("a line cuts a circle in two points, touches it in one or misses it",
     REQUIRE_THAT(shifted->Points.front().ParameterB, WithinAbs(2.5 * pi, 1e-14));
 }
 
+TEST_CASE("a line's two crossings of a circle stay apart however far its origin",
+          "[intersect][planar][regression]")
+{
+    // The audit of 2026-11-05: from the origin (-10^8, 0) along x, the
+    // quadratic's C = |w|² - r² = 10^16 - 1 rounds to 10^16 and the
+    // discriminant B² - A C, exactly 1, to zero, so both crossings were
+    // placed at the circle's centre, certified.
+    const Curve2d far{Line2d{Point2{-1e8, 0.0}, Vec2{1.0, 0.0}}};
+    const auto audit = Intersect(far, unitCircle, ctx);
+    REQUIRE(audit.has_value());
+    REQUIRE(audit->Points.size() == 2);
+    REQUIRE_THAT(audit->Points[0].Position.X, WithinAbs(-1.0, 1e-7));
+    REQUIRE_THAT(audit->Points[1].Position.X, WithinAbs(1.0, 1e-7));
+    RequireOnBoth(*audit, far, unitCircle, 1e-7);
+
+    // An oblique line at distance 1/2 from the centre, its origin 5 L back
+    // from the foot of the perpendicular: the crossings sqrt(3) apart, each
+    // on the circle to the rounding of the point the line's parameter
+    // gives, about L units in the last place.
+    for (double length = 1e2; length <= 1e12; length *= 100.0) {
+        const Curve2d line{
+            Line2d{Point2{-3.0 * length - 0.4, -4.0 * length + 0.3}, Vec2{3.0, 4.0}}};
+        const auto result = Intersect(line, unitCircle, ctx);
+        REQUIRE(result.has_value());
+        REQUIRE(result->Points.size() == 2);
+        const double within = 64.0 * std::numeric_limits<double>::epsilon() * 5.0 * length;
+        RequireOnBoth(*result, line, unitCircle, within);
+        REQUIRE_THAT(Distance(result->Points[0].Position, result->Points[1].Position),
+                     WithinAbs(std::sqrt(3.0), 2.0 * within));
+    }
+}
+
 TEST_CASE("circles cross, touch, nest or coincide, decided exactly", "[intersect][planar]")
 {
     const auto circleAt = [](const double x, const double r) {
