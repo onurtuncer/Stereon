@@ -774,9 +774,10 @@ export namespace Stereon {
 /// period and placed in the box. InvalidInput for an empty curve or
 /// surface or a domain that is empty or NaN-bounded; NotSupported for a
 /// type that is not built in; NotImplemented for a pair without a handler
-/// yet: lines and B-spline curves against planes, spheres and cylinders
-/// have theirs. IntersectionFailed when a B-spline's roots cannot all be
-/// isolated: never an empty result that is not a proved separation.
+/// yet: lines, circles, ellipses and B-spline curves against planes,
+/// spheres, cylinders, cones and tori have theirs. IntersectionFailed when
+/// a root cannot be decided or placed: never an empty result that is not a
+/// proved separation (tests/intersect/AdversarialTests.cpp).
 [[nodiscard]] Result<CurveSurfaceIntersection> Intersect(const Curve& curve, const Interval& domain,
                                                          const Surface& surface, const Box2& box,
                                                          const Context& ctx);
