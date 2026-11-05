@@ -220,7 +220,9 @@ std::vector<double> Jvp(Model& model, const Line& line, const S& surface,
     const auto jvp =
         Stereon::IntersectJvp(line, model.LineBindings, Surface{surface}, model.SurfaceBindings,
                               Meet(line, surface), model.Sensitivity);
-    RC_ASSERT(jvp.has_value());
+    if (!jvp) {
+        RC_FAIL(IntersectTest::ErrorText(jvp));
+    }
     RC_ASSERT(jvp->GetStatus() == DerivativeStatus::Valid);
     const auto values = jvp->GetValues();
     return {values->begin(), values->end()};
