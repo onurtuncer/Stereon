@@ -504,6 +504,31 @@ dropping the point. ``tests/occt/IntersectionDifferentialTests.cpp``
 compares the three handlers with OCCT's ``IntAna_IntConicQuad`` on
 generic lines.
 
+A ``Line`` against a ``Cone`` or a ``Torus`` cannot be decided exactly on
+the input doubles: the cone's equation holds the cosine and sine of its
+semi-angle. These pairs use the proofs of the B-spline handlers below.
+
+- **A cone over a bounded domain.** The line is a Bézier segment of degree
+  1, its poles enclosed. The cone's equation along it is proved as a
+  B-spline's is.
+- **A cone over an unbounded domain.** The cone has no bound, so its
+  quadratic is used, with coefficients enclosed in intervals.
+  - A discriminant provably negative is a separation.
+  - A discriminant provably positive, with a leading coefficient of strict
+    sign, gives two simple crossings, placed in doubles and polished from
+    the line re-centred at each.
+  - Otherwise the call fails with ``IntersectionFailed``: a line along a
+    generator, whose second root lies out near infinity, a line through
+    the apex, or a line tangent within rounding. The same line over a
+    bounded domain is resolved.
+- **A torus.** Every point of the torus lies within :math:`R + r` of its
+  centre. So the line is searched only over its stretch inside a sphere
+  half a tube wider than that, an outward-rounded stretch whatever the
+  domain, as a segment against the torus's quartic.
+
+Either nappe of the cone is crossed, as its parametrisation runs through
+the apex.
+
 A ``BSplineCurve``, polynomial or rational, has handlers against all five
 elementary surfaces. The surface's implicit equation composed with the
 curve is, on each Bézier segment and in homogeneous coordinates, a

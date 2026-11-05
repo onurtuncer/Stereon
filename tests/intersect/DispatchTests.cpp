@@ -152,10 +152,14 @@ TEST_CASE("every curve-surface pair has a handler; lines against planes, spheres
     REQUIRE(Intersect(SomeLine(), SomeSphere(), ctx).has_value());
     REQUIRE(Intersect(SomeLine(), SomeCylinder(), ctx).has_value());
     REQUIRE(Intersect(SomeCircle(), SomePlane(), ctx).has_value());
-    // The other pairs name their types, the curve first.
     const Surface torus(
         Stereon::Torus{Point3{}, 2.0, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}});
-    REQUIRE(MessageOf(Intersect(SomeLine(), torus, ctx).error()).starts_with("Line x Torus"));
+    REQUIRE(Intersect(SomeLine(), torus, ctx).has_value());
+    // The other pairs name their types, the curve first.
+    const Curve parabola(
+        Stereon::Parabola{Point3{}, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}});
+    REQUIRE(
+        MessageOf(Intersect(parabola, SomePlane(), ctx).error()).starts_with("Parabola x Plane"));
 }
 
 TEST_CASE("empty inputs are invalid input", "[intersect][dispatch]")
