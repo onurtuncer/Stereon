@@ -369,3 +369,34 @@ TEST_CASE("a line through the inside of a quadric crosses it twice, on both geom
         RC_ASSERT(Distance(Eval(plane, p.OnSurface), p.Position) <= within);
     });
 }
+
+TEST_CASE("a crossing from a far line origin lies on the quadric to rounding",
+          "[intersect][line-surface][regression]")
+{
+    // RapidCheck's counterexample of 2026-11-04 (the linearisation's
+    // transpose property, seed 17734536904155436187): the line starts about
+    // 24 units from a cylinder of radius 1/2, so the quadratic's
+    // coefficients, formed from that offset, placed the crossings 1.4e-13
+    // off the cylinder, about 600 units in the last place of the point, and
+    // IntersectJvp rejected them as stale.
+    const Point3 center{-11.0 / 8.0, -11.0 / 8.0, -12.0 / 8.0};
+    constexpr double radius = 0.5;
+    const Vec3 direction{-30.0 / 8.0, -40.0 / 8.0, -39.0 / 8.0};
+    const Vec3 axis = Cross(direction, Vec3{-10.0 / 8.0, -20.0 / 8.0, -34.0 / 8.0});
+    const Line line{center + Vec3{-0.125, -0.125, -0.1875} - 3.0 * direction, direction};
+    const Sphere sphere{center, radius, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+    const Cylinder cylinder = IntersectTest::CylinderAbout(center, axis, radius);
+    const auto onBoth = [&](const auto& surface) {
+        const auto result = Intersect(Curve{line}, Surface{surface}, ctx);
+        REQUIRE(result.has_value());
+        REQUIRE(result->Points.size() == 2);
+        for (const CurveSurfacePoint& p : result->Points) {
+            const double ulps = 32.0 * std::numeric_limits<double>::epsilon() *
+                                std::max(1.0, Length(Stereon::ToVec(p.Position)));
+            REQUIRE(Distance(Eval(line, p.Parameter), p.Position) <= ulps);
+            REQUIRE(Distance(Eval(surface, p.OnSurface), p.Position) <= ulps);
+        }
+    };
+    onBoth(sphere);
+    onBoth(cylinder);
+}
