@@ -632,6 +632,27 @@ Every overlap shares the one pcurve and restricts its range.
 Every other pair reports ``NotImplemented``; the generic path for curves
 against B-spline surfaces waits for Phase 2 with the surface–surface one.
 
+*Verification.* Besides each handler's own tests,
+``tests/intersect/AdversarialTests.cpp`` runs properties over the whole
+grid of lines, circles, ellipses and polynomial and rational B-splines
+against the five surfaces. Each result is validated as geometry, not
+counted: every point lies on both geometries to the rounding of its own
+size, inside the requested domain and box and in order, and every
+overlap's pcurve traces the curve; a handler that cannot decide fails
+with ``IntersectionFailed`` and nothing else. The inputs are multiples of
+:math:`1/8` in axis-aligned frames, so translating them by a multiple of
+:math:`1/8` and scaling them by a power of two are exact, and every exact
+decision must agree on the transformed problem while the points move with
+it. Reversing the curve keeps the points; a line's origin moved up to
+:math:`2^{30}` back along it shifts only its parameters; a periodic
+surface's box a turn on gives the same points a turn on; a domain of one
+parameter away from every point is a proved separation; a curve in a plane
+is clipped to exactly the stretches in a random box; and a line
+:math:`2^{-k}` either side of a tangency, :math:`20 \le k \le 50`, gets
+the count its distance decides from a sphere or a cylinder. Against a
+torus it may fail closed instead, which it does from :math:`k = 40` and
+at an exact touch of the tube's top.
+
 Plane curves
 ------------
 
