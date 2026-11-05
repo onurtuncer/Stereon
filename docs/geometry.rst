@@ -120,7 +120,7 @@ intersection capability of tier 3 arrive with the intersection work.
 The built-in analytic types are ``Line``, ``Circle``, ``Ellipse``,
 ``Hyperbola`` and ``Parabola`` (and their ``2d`` forms in the plane), and
 ``Plane``,
-``Cylinder``, ``Cone``, ``Sphere`` and ``Torus``. A line is
+``Cylinder``, ``Cone``, ``Sphere``, ``Torus`` and ``Ellipsoid``. A line is
 ``Origin + t * Direction``; a circle is ``Center + Radius * (cos t * XAxis +
 sin t * YAxis)`` on ``[0, 2π]``; a plane is ``Origin + u * XAxis + v *
 YAxis``; a cylinder is the circle swept along its axis. :doc:`analytic`
@@ -161,7 +161,8 @@ Some conventions worth knowing:
 - ``Transformed`` accepts similarities: rigid motions, reflections and
   uniform scaling. A non-uniform scaling would turn a circle into an
   ellipse, which the type cannot hold.
-- Bounding boxes of the bounded types (circle, ellipse, sphere, torus) are
+- Bounding boxes of the bounded types (circle, ellipse, sphere, torus,
+  ellipsoid) are
   computed in ``Interval`` arithmetic, so they enclose the exact geometry.
   Lines, planes, cylinders and cones are unbounded and return
   ``Everything()``.
@@ -256,8 +257,8 @@ derivative orders that exist. The erased wrappers also require a parameter
 inside ``Domain`` unless the geometry is periodic in it: a type that is
 periodic provides ``Period(c)`` for curves or ``Periods(s)`` for surfaces
 (``PeriodicCurve``, ``PeriodicSurface``), and every finite parameter is then
-valid for it. ``Circle`` and ``Ellipse`` have period 2π; ``Cylinder``, ``Cone`` and
-``Sphere`` periods (2π, 0); ``Torus`` periods (2π, 2π).
+valid for it. ``Circle`` and ``Ellipse`` have period 2π; ``Cylinder``, ``Cone``,
+``Sphere`` and ``Ellipsoid`` periods (2π, 0); ``Torus`` periods (2π, 2π).
 
 The evaluators are templates, and GCC 16.2 silently drops contracts in
 templates imported from a module, so these checks are not ``pre``
@@ -344,9 +345,9 @@ alignment of a double:
      - 72
      - 80
    * - ``Surface``
-     - ``Cone``, ``Torus`` (96 bytes)
-     - 104
+     - ``Ellipsoid`` (104 bytes; ADR-0048)
      - 112
+     - 120
 
 Every built-in analytic type is still stored inline, so no copy got slower;
 ``static_assert``\ s next to each type and in

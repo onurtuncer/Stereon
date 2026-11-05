@@ -11,6 +11,7 @@ import Stereon.Curve;
 import :BSplineSurface;
 import :Cone;
 import :Cylinder;
+import :Ellipsoid;
 import :Erased;
 import :Plane;
 import :Sphere;
@@ -33,6 +34,10 @@ export namespace Stereon {
 [[nodiscard]] Result<BSplineSurface> ToBSpline(const Cone& cone, Box2 range);
 [[nodiscard]] Result<BSplineSurface> ToBSpline(const Sphere& sphere, Box2 range);
 [[nodiscard]] Result<BSplineSurface> ToBSpline(const Torus& torus, Box2 range);
+/// The unit sphere's exact form with its poles mapped onto the ellipsoid:
+/// the image of a NURBS under an affine map is the NURBS of its poles'
+/// images, weights unchanged, so the form is exact (ADR-0048).
+[[nodiscard]] Result<BSplineSurface> ToBSpline(const Ellipsoid& ellipsoid, Box2 range);
 /// A B-spline surface restricted to `range`.
 [[nodiscard]] Result<BSplineSurface> ToBSpline(const BSplineSurface& surface, Box2 range);
 /// Any built-in surface through the wrapper; NotSupported for other types.

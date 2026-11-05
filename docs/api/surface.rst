@@ -11,8 +11,8 @@ Surfaces — ``Stereon.Surface``
 ==============================
 
 Surfaces, organised the way :doc:`curve` organises curves. There are the
-analytic surfaces (``Plane``, ``Cylinder``, ``Cone``, ``Sphere`` and
-``Torus``), B-spline and NURBS surfaces (``BSplineSurface``), extrusions and
+analytic surfaces (``Plane``, ``Cylinder``, ``Cone``, ``Sphere``,
+``Torus`` and ``Ellipsoid``), B-spline and NURBS surfaces (``BSplineSurface``), extrusions and
 revolutions of any profile curve, rectangular trimmed surfaces, and the
 type-erased ``Surface``, which holds any of them.
 
@@ -42,7 +42,7 @@ Start here
 ----------
 
 Pick the type for your surface
-   ``Plane``, ``Cylinder``, ``Cone``, ``Sphere``, ``Torus``,
+   ``Plane``, ``Cylinder``, ``Cone``, ``Sphere``, ``Torus``, ``Ellipsoid``,
    ``BSplineSurface``, ``ExtrusionSurface``, ``RevolutionSurface`` or
    ``TrimmedSurface``. Data from outside the kernel goes through the
    checked factory (``MakeCylinder``, ``MakeBSplineSurface``,
