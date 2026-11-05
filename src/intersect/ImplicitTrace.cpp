@@ -823,7 +823,7 @@ struct Guide {
         points.push_back(x);
     }
     if (points.size() < 4) {
-        return std::optional<Guide>{}; // A sliver of rounding at a corner of the search box.
+        return std::optional<Guide>{}; // Too short to fit: reported as a point (SliverPoint).
     }
     STEREON_TRY(CurveFit fit, Interpolate(points, 3, Parametrization::ChordLength));
     return std::optional<Guide>{Guide{std::move(fit.Curve), uv.front(), length}};
@@ -1183,12 +1183,69 @@ void Chart(std::vector<Point2>& uv, const std::array<bool, 2>& periodic)
     }
 }
 
-/// Every piece of a chain's branch, certified, into the result.
+/// The parameters that hold an arc, narrower than its certified box: over
+/// its graph's variable g, the arc runs between its ends; across it, f_a
+/// keeps its sign in the box, so the arc's slope is at most |f_g / f_a|
+/// there and it stays within that slope times the run from its first end.
+/// The ends are crossings found by bisection on an edge, padded by 2^-40.
+[[nodiscard]] std::pair<Interval, Interval> ArcBox(const Roles& r, const Trace& t, const Arc& arc)
+{
+    const Point2 p = t.Ends[arc.From].UV;
+    const Point2 q = t.Ends[arc.To].UV;
+    const auto padded = [](const Interval& i) {
+        const double pad =
+            0x1p-40 * std::max({1.0, std::abs(i.GetLower()), std::abs(i.GetUpper())});
+        return Interval{i.GetLower() - pad, i.GetUpper() + pad};
+    };
+    const double g0 = arc.OverU ? p.X : p.Y;
+    const double g1 = arc.OverU ? q.X : q.Y;
+    const double a0 = arc.OverU ? p.Y : p.X;
+    const Interval graph = padded(Hull(Interval{g0}, Interval{g1}));
+    const BoxValues e = ValuesOver(r.Carrier, r.Implicit, arc.U, arc.V);
+    const Interval slope = arc.OverU ? e.Fu / e.Fv : e.Fv / e.Fu;
+    const double steepest = std::max(std::abs(slope.GetLower()), std::abs(slope.GetUpper()));
+    const double reach =
+        steepest * (Interval{graph.GetUpper()} - Interval{graph.GetLower()}).GetUpper();
+    const Interval across =
+        Intersection(arc.OverU ? arc.V : arc.U, padded(Interval{a0 - reach, a0 + reach}));
+    const Interval onGraph = Intersection(arc.OverU ? arc.U : arc.V, graph);
+    return arc.OverU ? std::pair{onGraph, across} : std::pair{across, onGraph};
+}
+
+/// A branch too short to fit a guide through, its points within 2^-40 of
+/// one another: a sliver of a branch at a corner of the search box, or a
+/// loop as small. Dropped, it would leave an empty result claiming a
+/// separation there (ADR-0029); it is reported as a point of contact on
+/// the curve at its first point, bounded by the farthest corner of the
+/// enclosures in space of the boxes that hold its arcs (ArcBox).
+[[nodiscard]] Result<IntersectionPoint> SliverPoint(const Roles& r, const Trace& t,
+                                                    const Chain& chain, const Point2& start)
+{
+    STEREON_TRY(const Point2 uv, OntoCurve(r, start));
+    const Point3 x = PointAt(r.Carrier, uv);
+    double bound = 0.0;
+    for (const Step& step : chain) {
+        const auto [u, v] = ArcBox(r, t, t.Arcs[step.Arc]);
+        const IPoint3 over = JetOver(r.Carrier, IPoint2{I{u}, I{v}}).Point;
+        const auto farther = [](const double c, const Interval& range) {
+            return std::max(std::abs(c - range.GetLower()), std::abs(range.GetUpper() - c));
+        };
+        bound = std::max(bound, std::hypot(farther(x.X, over.X.Value), farther(x.Y, over.Y.Value),
+                                           farther(x.Z, over.Z.Value)));
+    }
+    return IntersectionPoint{x, uv, ProjectOnto(r.ImplicitGeometry, x), bound};
+}
+
+/// Every piece of a chain's branch, certified, into the result; a branch
+/// too short to fit, as a point (SliverPoint).
 [[nodiscard]] Result<void> AddBranch(SurfaceSurfaceIntersection& result, const Roles& r,
                                      const Trace& t, const Chain& chain, const Context& ctx)
 {
-    STEREON_TRY(const std::optional<Guide> guide, GuideCurve(r, GuideOf(r, t, chain)));
+    const std::vector<Point2> samples = GuideOf(r, t, chain);
+    STEREON_TRY(const std::optional<Guide> guide, GuideCurve(r, samples));
     if (!guide) {
+        STEREON_TRY(IntersectionPoint point, SliverPoint(r, t, chain, samples.front()));
+        result.Points.push_back(point);
         return {};
     }
     STEREON_TRY(const std::vector<double> cuts, PieceCuts(r, *guide, ctx.GetResolution()));
