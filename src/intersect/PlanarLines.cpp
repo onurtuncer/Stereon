@@ -49,7 +49,8 @@ namespace Stereon::Detail {
 namespace {
 
 /// The points where a line cuts a conic, from the sign of the discriminant
-/// (exact) and the roots (rounded): two crossings, one tangency or none.
+/// (exact) and the roots (from coefficients to a few roundings, QuadraticOf):
+/// two crossings, one tangency or none.
 template <typename Coefficients>
 void CutConic(PlanarIntersection& result, const Line2d& line, const Interval& domainLine,
               const Interval& domainConic, Coefficients&& coefficients, const auto& conicParameter)
@@ -62,8 +63,7 @@ void CutConic(PlanarIntersection& result, const Line2d& line, const Interval& do
     if (sign == Sign::Negative) {
         return;
     }
-    const auto [a, b, c] = coefficients(Plain{});
-    const LineQuadratic q{a, b, c};
+    const auto [q, discriminant] = QuadraticOf(coefficients);
     const auto keep = [&](const double t, const ContactType contact) {
         const Point2 p = Eval(line, t);
         KeepPoint(result, {t, conicParameter(p), p, contact, true}, domainLine, false, domainConic,
@@ -73,7 +73,6 @@ void CutConic(PlanarIntersection& result, const Line2d& line, const Interval& do
         keep(-q.B / q.A, ContactType::Tangential);
         return;
     }
-    const double discriminant = std::max(0.0, q.B * q.B - q.A * q.C);
     for (const double t : RootsOf(q, discriminant)) {
         keep(t, ContactType::Crossing);
     }
@@ -256,7 +255,8 @@ template <typename Quadratic, typename Place>
                  }) != Sign::Positive) {
         return {};
     }
-    const auto [a, b, c] = q(Plain{});
+    const double b = ValueOfFormula([&](auto f) { return q(f)[1]; });
+    const double c = ValueOfFormula([&](auto f) { return q(f)[2]; });
     return place(-c / (2.0 * b), ContactType::Crossing);
 }
 
@@ -277,23 +277,23 @@ template <typename Quadratic, typename Place>
         const auto [a, b, c] = q(f);
         return F::Sub(F::Mul(b, b), F::Mul(a, c));
     });
-    const auto [a, b, c] = q(Plain{});
     if (sign == Sign::Negative) {
         return {};
     }
+    const auto [quadratic, discriminant] = QuadraticOf(q);
     if (sign == Sign::Zero) {
         const Sign vertex = SignOfFormula([&](auto f) {
             using F = decltype(f);
             const auto [qa, qb, qc] = q(f);
             return F::Sub(F::Mul(qa, qa), F::Mul(qb, qb));
         });
-        return !chart || vertex == Sign::Positive ? place(-b / a, ContactType::Tangential)
-                                                  : Result<void>{};
+        return !chart || vertex == Sign::Positive
+                   ? place(-quadratic.B / quadratic.A, ContactType::Tangential)
+                   : Result<void>{};
     }
     const std::array<bool, 2> inside =
         chart ? InsideChart(q, alpha) : std::array<bool, 2>{true, true};
-    const std::array<double, 2> roots =
-        RootsOf(LineQuadratic{a, b, c}, std::max(0.0, b * b - a * c));
+    const std::array<double, 2> roots = RootsOf(quadratic, discriminant);
     for (std::size_t i = 0; i < roots.size(); ++i) {
         if (inside[i]) {
             STEREON_TRY_VOID(place(roots[i], ContactType::Crossing));
