@@ -213,7 +213,7 @@ std::optional<Stereon::ShellId> ShellAt(const Shape& shape, const VertexId v)
 /// Pairs of coincident vertices of one shell, and of edges between the same
 /// vertices whose middles coincide, each within the sum of their
 /// tolerances; and any edge no face uses.
-std::string Duplicates(const Shape& shape)
+std::string DuplicateVertices(const Shape& shape)
 {
     std::string text;
     std::vector<VertexId> vertices;
@@ -235,6 +235,12 @@ std::string Duplicates(const Shape& shape)
             }
         }
     }
+    return text;
+}
+
+std::string DuplicateEdges(const Shape& shape)
+{
+    std::string text;
     std::vector<EdgeId> edges;
     for (const EdgeId e : *AllEntities<EntityKind::Edge>(shape)) {
         if (!FirstUseOf(shape, e)) {
@@ -262,6 +268,11 @@ std::string Duplicates(const Shape& shape)
         }
     }
     return text;
+}
+
+std::string Duplicates(const Shape& shape)
+{
+    return DuplicateVertices(shape) + DuplicateEdges(shape);
 }
 
 /// Inside, outside, or not decided at this point.
@@ -295,6 +306,34 @@ struct Outcome {
     double Volume = 0.0;
     double Estimate = 0.0;
 };
+
+void CheckMembership(const Pair& pair, const Shape& shape, const BooleanOperation operation,
+                     const bool reversed, const std::string& name,
+                     std::vector<std::string>& problems)
+{
+    // Membership at a grid of points off the faces of both operands.
+    constexpr int n = 4;
+    const auto at = [&](const double lo, const double hi, const int s) {
+        return lo + (hi - lo) * (s + 0.4142135623730951) / n;
+    };
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            for (int k = 0; k < n; ++k) {
+                const Point3 p{at(pair.Lo.X, pair.Hi.X, i), at(pair.Lo.Y, pair.Hi.Y, j),
+                               at(pair.Lo.Z, pair.Hi.Z, k)};
+                const std::optional<bool> inA = InsideOf(pair.A, p);
+                const std::optional<bool> inB = InsideOf(pair.B, p);
+                const std::optional<bool> inResult = InsideOf(shape, p);
+                if (inA && inB && inResult &&
+                    *inResult != Expected(operation, *inA, *inB, reversed)) {
+                    problems.push_back(name + " has (" + std::to_string(p.X) + ", " +
+                                       std::to_string(p.Y) + ", " + std::to_string(p.Z) +
+                                       ") on the wrong side");
+                }
+            }
+        }
+    }
+}
 
 /// Everything wrong with the four operations on a pair, one line each: a
 /// refusal, a solid-level finding, a duplicate, a point on the wrong side,
@@ -333,28 +372,7 @@ std::vector<std::string> Problems(const Pair& pair)
         const ShapeMeasures::Measures m = ShapeMeasures::MeasuresOf(shape);
         outcomes.push_back({shape, m.Volume, m.VolumeEstimate});
 
-        // Membership at a grid of points off the faces of both operands.
-        constexpr int n = 4;
-        const auto at = [&](const double lo, const double hi, const int s) {
-            return lo + (hi - lo) * (s + 0.4142135623730951) / n;
-        };
-        for (int i = 0; i < n; ++i) {
-            for (int j = 0; j < n; ++j) {
-                for (int k = 0; k < n; ++k) {
-                    const Point3 p{at(pair.Lo.X, pair.Hi.X, i), at(pair.Lo.Y, pair.Hi.Y, j),
-                                   at(pair.Lo.Z, pair.Hi.Z, k)};
-                    const std::optional<bool> inA = InsideOf(pair.A, p);
-                    const std::optional<bool> inB = InsideOf(pair.B, p);
-                    const std::optional<bool> inResult = InsideOf(shape, p);
-                    if (inA && inB && inResult &&
-                        *inResult != Expected(run.Operation, *inA, *inB, run.Reversed)) {
-                        problems.push_back(name + " has (" + std::to_string(p.X) + ", " +
-                                           std::to_string(p.Y) + ", " + std::to_string(p.Z) +
-                                           ") on the wrong side");
-                    }
-                }
-            }
-        }
+        CheckMembership(pair, shape, run.Operation, run.Reversed, name, problems);
     }
     // The volume identities, when every operation gave a result.
     if (std::ranges::all_of(outcomes, [](const Outcome& o) { return o.Result.has_value(); })) {
