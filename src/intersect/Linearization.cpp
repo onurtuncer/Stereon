@@ -168,12 +168,25 @@ template <typename Side>
 [[nodiscard]] bool IsSupported(const Surface& surface)
 {
     return surface.Target<Plane>() != nullptr || surface.Target<Sphere>() != nullptr ||
-           surface.Target<Cylinder>() != nullptr;
+           surface.Target<Cylinder>() != nullptr || surface.Target<Cone>() != nullptr ||
+           surface.Target<Torus>() != nullptr;
 }
 
-[[nodiscard]] bool HasRadius(const Surface& surface)
+/// Whether the surface has the value a component moves: every surface its
+/// origin, all but the plane a Radius, the torus a MinorRadius, the cone a
+/// SemiAngle.
+[[nodiscard]] bool Has(const Surface& surface, const SurfaceComponent component)
 {
-    return surface.Target<Sphere>() != nullptr || surface.Target<Cylinder>() != nullptr;
+    switch (component) {
+    case SurfaceComponent::Radius:
+        return surface.Target<Plane>() == nullptr;
+    case SurfaceComponent::MinorRadius:
+        return surface.Target<Torus>() != nullptr;
+    case SurfaceComponent::SemiAngle:
+        return surface.Target<Cone>() != nullptr;
+    default:
+        return true;
+    }
 }
 
 /// Whether a point has a derivative, and why not when it has none.
@@ -271,13 +284,48 @@ template <typename Side>
            s.Det;
 }
 
+/// The unit radial direction cos u X + sin u Y of a surface of revolution.
+template <typename S>
+[[nodiscard]] Vec3 Radial(const S& surface, const double u)
+{
+    return std::cos(u) * surface.XAxis + std::sin(u) * surface.YAxis;
+}
+
+/// dS/d(component) at fixed (u, v) of a cone, O + (R + v sin a) radial(u) +
+/// v cos a axis: the radius moves it along radial(u), the semi-angle by
+/// v (cos a radial(u) - sin a axis).
+[[nodiscard]] Vec3 ConePartial(const Cone& cone, const Point2& uv, const SurfaceComponent component)
+{
+    const Vec3 radial = Radial(cone, uv.X);
+    if (component == SurfaceComponent::Radius) {
+        return radial;
+    }
+    const double a = cone.SemiAngle;
+    return uv.Y * (std::cos(a) * radial - std::sin(a) * Axis(cone));
+}
+
+/// dS/d(component) at fixed (u, v) of a torus, C + (R + r cos v) radial(u)
+/// + r sin v axis: the major radius moves it along radial(u), the minor
+/// one along the tube's normal cos v radial(u) + sin v axis.
+[[nodiscard]] Vec3 TorusPartial(const Torus& torus, const Point2& uv,
+                                const SurfaceComponent component)
+{
+    const Vec3 radial = Radial(torus, uv.X);
+    if (component == SurfaceComponent::Radius) {
+        return radial;
+    }
+    return std::cos(uv.Y) * radial + std::sin(uv.Y) * Axis(torus);
+}
+
 /// dS/d(component) at fixed (u, v), per unit of the component: the origin
 /// moves every point alike; the radius moves a sphere's point along
-/// (S - C) / r and a cylinder's along its radial direction.
+/// (S - C) / r and a cylinder's along its radial direction; the cone's and
+/// the torus's are ConePartial's and TorusPartial's.
 [[nodiscard]] Vec3 SurfacePartial(const Surface& surface, const Point2& uv,
                                   const SurfaceComponent component)
 {
-    if (component != SurfaceComponent::Radius) {
+    if (component == SurfaceComponent::OriginX || component == SurfaceComponent::OriginY ||
+        component == SurfaceComponent::OriginZ) {
         return UnitAlong(static_cast<int>(component));
     }
     if (const Sphere* sphere = surface.Target<Sphere>()) {
@@ -286,7 +334,13 @@ template <typename Side>
     if (const Cylinder* cylinder = surface.Target<Cylinder>()) {
         return (Eval(*cylinder, uv) - cylinder->Origin - uv.Y * Axis(*cylinder)) / cylinder->Radius;
     }
-    // A radius binding on a surface without one was refused by
+    if (const Cone* cone = surface.Target<Cone>()) {
+        return ConePartial(*cone, uv, component);
+    }
+    if (const Torus* torus = surface.Target<Torus>()) {
+        return TorusPartial(*torus, uv, component);
+    }
+    // A binding of a value the surface does not have was refused by
     // CheckSurfaceBindings; nothing moves here.
     return {};
 }
@@ -296,10 +350,15 @@ template <typename Side>
                                                 const std::string_view where)
 {
     for (const SurfaceBinding& b : bindings) {
-        STEREON_TRY_VOID(CheckParameter(set, b.Parameter, ParameterQuantity::Length, where));
-        if (b.Component == SurfaceComponent::Radius && !HasRadius(surface)) {
+        const ParameterQuantity quantity = b.Component == SurfaceComponent::SemiAngle
+                                               ? ParameterQuantity::Angle
+                                               : ParameterQuantity::Length;
+        STEREON_TRY_VOID(CheckParameter(set, b.Parameter, quantity, where));
+        if (!Has(surface, b.Component)) {
             return Fail(ErrorCode::InvalidInput,
-                        std::string(where) + ": a radius binding on a surface without one");
+                        std::string(where) +
+                            ": a binding of a value the surface does not have (a radius on a "
+                            "plane, a minor radius off a torus, a semi-angle off a cone)");
         }
     }
     return {};
@@ -353,7 +412,7 @@ CheckInput(const Side& curve, const std::span<const SurfaceBinding> surfaceBindi
     return SensitivityResult::Without(DerivativeStatus::NotSupported,
                                       std::string(where) +
                                           ": a curve against this surface type has no products "
-                                          "yet; planes, spheres and cylinders have theirs");
+                                          "yet; the elementary surfaces have theirs");
 }
 
 /// The regime: how many points, and how each meets the surface.
