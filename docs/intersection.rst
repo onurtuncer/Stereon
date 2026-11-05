@@ -8,28 +8,7 @@
 Intersections
 =============
 
-``Stereon.Intersect`` finds where geometry meets: two curves in space, two
-curves in a parameter plane, a curve and a surface, and two surfaces. One
-function, ``Intersect``, is overloaded for each of these pairings. Every
-call is sent to a handler chosen at compile time for the pair of built-in
-types it receives. The plane-curve pairs serve the face clipping of the
-Booleans, and the curve–surface pairs serve their edge–face work and ray
-queries.
-
-This chapter covers:
-
-- what a result promises (*Outcomes*);
-- the calls (*Entry points*) and which pairs have handlers (*What is
-  handled*);
-- one section per family of pairs, each describing how its handlers decide;
-- the layout of the package, for anyone extending it (*Inside the
-  package*).
-
-The declarations are in the API reference, :doc:`api/intersect`.
-Derivatives of intersection points are in :doc:`sensitivity`, under
-*Products of intersections*.
-
-.. _intersection-outcomes:
+Curve-curve, curve-surface and surface-surface intersection, including the marching and subdivision strategy; plane curve intersection for the face clipping of the Booleans.
 
 Outcomes
 --------
@@ -77,163 +56,6 @@ supports do not make overlapping faces, because the faces' trims decide that.
 
 Exact analytic geometry stays exact: a plane–plane branch is a ``Line``, not
 a B-spline.
-
-Entry points
-------------
-
-Each pairing has three forms:
-
-- with explicit domains (and, for two surfaces, a tolerance);
-- with explicit domains and the Context's resolution as the tolerance;
-- over the inputs' whole domains.
-
-A domain is a closed parameter interval for a curve and a parameter box for
-a surface. A domain may be unbounded where the geometry is, such as a line
-or a plane asked over its whole domain.
-
-.. list-table::
-   :header-rows: 1
-   :widths: 46 26 28
-
-   * - Call
-     - Result
-     - Holds
-   * - ``Intersect(curve, domainA, curve, domainB, ctx)``
-     - ``CurveCurveIntersection``
-     - ``CurveCurvePoint`` and ``CurveCurveOverlap`` entries
-   * - ``Intersect(curve2d, domainA, curve2d, domainB, ctx)``
-     - ``PlanarIntersection``
-     - ``PlanarPoint`` and ``PlanarOverlap`` entries
-   * - ``Intersect(curve, domain, surface, box, ctx)``
-     - ``CurveSurfaceIntersection``
-     - ``CurveSurfacePoint`` and ``CurveSurfaceOverlap`` entries
-   * - ``Intersect(surfaceA, boxA, surfaceB, boxB, tolerance, ctx)``
-     - ``SurfaceSurfaceIntersection``
-     - ``IntersectionPoint``, ``IntersectionBranch`` and ``OverlapRegion``
-       entries
-
-The entry points check their inputs before dispatching, and every failure
-is a ``KernelError`` whose code says what kind it is:
-
-``InvalidInput``
-   An empty ``Curve`` or ``Surface``, a domain that is empty or has a NaN
-   bound, or a tolerance that is negative or not finite. A handler may add
-   its own checks, for example a bounded domain for a conic.
-
-``NotSupported``
-   A type that is not built in. Such types need the capability declarations
-   of ADR-0003's tiers 2 and 3. Also returned for an input outside what a
-   handler's arithmetic can decide; the handler's section says when.
-
-``NotImplemented``
-   A built-in pair with no handler yet. The message names both types,
-   curve first: ``Line x Torus intersection is not implemented yet
-   (ADR-0010)``.
-
-``IntersectionFailed`` and ``CertificationFailed``
-   The handler could not prove a complete answer, or could not certify a
-   branch's deviation bound. Neither ever comes back as a partial success
-   (ADR-0029).
-
-Three other functions belong to the package:
-
-- ``Linearize``, ``IntersectJvp`` and ``IntersectVjp`` give the equations
-  of a curve–surface point and their forward and reverse derivative
-  products (:doc:`sensitivity`).
-- ``IntersectCapabilities()`` declares which of those derivatives exist
-  (ADR-0021, section 5).
-
-.. _intersection-coverage:
-
-What is handled
----------------
-
-Each table lists the built-in types in the order of their type lists
-(``BuiltinCurveTypes``, ``BuiltinCurve2dTypes`` and
-``BuiltinSurfaceTypes``); a dash is ``NotImplemented``. For two curves or
-two surfaces, the order of the arguments never decides whether a pair is
-handled: its exchange is handled too, with the result's two sides swapped.
-
-**Curves against surfaces** (*Curves against surfaces*):
-
-.. list-table::
-   :header-rows: 1
-   :stub-columns: 1
-
-   * -
-     - Plane
-     - Cylinder
-     - Cone
-     - Sphere
-     - Torus
-     - B-spline surface
-   * - Line
-     - exact
-     - exact
-     - —
-     - exact
-     - —
-     - —
-   * - Circle, Ellipse
-     - arcs
-     - arcs
-     - arcs
-     - arcs
-     - arcs
-     - —
-   * - B-spline curve
-     - Bernstein
-     - Bernstein
-     - Bernstein
-     - Bernstein
-     - Bernstein
-     - —
-   * - Hyperbola, Parabola
-     - —
-     - —
-     - —
-     - —
-     - —
-     - —
-
-*exact*: every configuration decided on the input doubles. *Bernstein*:
-the surface's equation along the curve, its roots isolated with proof.
-*arcs*: the same on the conic's exact rational quarter-turn arcs.
-
-**Two surfaces** (*Analytic handlers*, *Elementary surfaces*, *Two
-B-spline surfaces*):
-
-.. list-table::
-   :header-rows: 1
-   :widths: 40 60
-
-   * - Pair
-     - Handler
-   * - Plane–plane, plane–cylinder, cylinder–cylinder
-     - Closed forms, every decision exact. Skew cylinders give the
-       quartic: certified B-splines through samples of its closed form.
-   * - Every other pair of planes, cylinders, cones, spheres and tori
-     - ``ElementaryPair``: closed forms where the configuration has one,
-       the parametric–implicit trace otherwise.
-   * - Two B-spline surfaces
-     - Proved apart when their control nets' boxes are separated;
-       ``NotImplemented`` otherwise.
-   * - A B-spline surface and an elementary surface
-     - —
-
-**Two curves in space** (*Space curves*): ``Line`` against ``Line``, every
-decision exact. Every other pair is ``NotImplemented``.
-
-**Two curves in a plane** (*Plane curves*): every ordered pair of
-``Line2d``, ``Circle2d``, ``Ellipse2d``, ``Hyperbola2d``, ``Parabola2d``
-and ``BSplineCurve2d``, polynomial or rational:
-
-- lines against lines and conics, and two circles, are decided exactly;
-- two conics use the chart quartic (*Algorithm C*);
-- a B-spline against a line or a conic uses *Algorithm S*;
-- two B-splines use Krawczyk's test (*Algorithm K*).
-
-.. _intersection-analytic:
 
 Analytic handlers
 -----------------
@@ -668,9 +490,7 @@ cylinder, which settles whether there are two crossings, one touch or
 none. The crossing of a plane has a rational parameter, and whether it
 and the point's parameters on the plane lie in the requested domains is
 decided exactly on that rational, as the line–line handler decides; the
-roots of a quadric are irrational, each polished once from the line
-re-centred at it, so that its point lies on the quadric to its own rounding
-however far the line's origin is, and are placed by their rounded values,
+roots of a quadric are irrational and are placed by their rounded values,
 so a crossing within rounding of a domain's end may fall on either side
 of it. A touch of a quadric is a ``Tangential`` point: the line stays
 outside. A root that double precision cannot place, a line so nearly along
@@ -714,16 +534,28 @@ every piece ends in one of four ways:
   ``IntersectionFailed``.
 
 So an empty result is a proof that the curve misses the surface over the
-requested domain, and nothing unresolved becomes one. A curve 3·2⁻⁴⁰ off a
+requested domain, and nothing unresolved becomes one.
+
+Bisection to the rounding of :math:`g` leaves a crossing as far off the
+surface as :math:`g`'s enclosed coefficients allow. For a torus's quartic,
+that is hundreds of units in the last place of the point. So each decided
+crossing then takes one Newton step on its signed distance from the
+surface, :math:`(C(t) - S(u, v)) \cdot n / (C'(t) \cdot n)` at the
+projection of its rounded point. The step is kept only inside the
+crossing's proved bracket, and skipped at a pole of the surface's
+parameters, where the normal vanishes. Every point then lies on both
+geometries to the rounding of its coordinates.
+
+A curve 3·2⁻⁴⁰ off a
 plane is apart; a root that lands on a piece's end, a knot or a dyadic
 parameter, is seen from both sides and reported once, undecided; a root
 whose bracket reaches past the requested domain is kept, clamped into it,
 rather than dropped on its rounded parameter. A curve whose every pole lies
 exactly in the plane is an overlap, its pcurve the spline of the projected
-poles. A periodic curve is intersected within its own domain only, a
-curve in a plane that leaves the requested box is not clipped yet, and a
-point's surface parameters are those of its rounded position, kept or
-dropped against the box as the line handlers do.
+poles, clipped to the requested box as described below. A periodic curve
+is intersected within its own domain only, and a point's surface
+parameters are those of its rounded position, kept or dropped against the
+box as the line handlers do.
 
 A ``Circle`` or an ``Ellipse`` against the five elementary surfaces goes
 through the same proofs, on its exact rational form. The requested domain,
@@ -739,10 +571,28 @@ angle :math:`m + 2 \arctan(\tan(h/2)(2s - 1))`, its bracket mapped through
 that monotone map and widened by its rounding; points are reported on the
 conic's angle, which may run over several turns. A conic whose centre and
 axes lie exactly in a plane is an overlap there, its pcurve the same
-conic in the plane's parameters; one whose bounding square leaves the
-requested box is not clipped yet. A conic on a curved surface, the
-equator of a sphere or the meridian of a torus, fails with
-``IntersectionFailed``.
+conic in the plane's parameters. A conic on a curved surface, the equator
+of a sphere or the meridian of a torus, fails with ``IntersectionFailed``.
+
+A B-spline or a conic in a plane is kept whole when its control polygon,
+or its bounding square, lies in the requested box. Otherwise it is
+clipped to the box:
+
+- Its range is cut wherever its pcurve meets the line of a finite edge,
+  each found by the complete plane-curve intersection below
+  (*Plane curves*). Between two cuts, the pcurve stays strictly on one
+  side of every edge's line.
+- The middle point of each piece decides it. If that point lies within
+  rounding of an edge, the clip fails with ``IntersectionFailed`` rather
+  than guess.
+- A stretch along an edge's line is on the boundary. It is kept where the
+  other coordinate keeps it in the box.
+- A contact in the box with both neighbouring pieces outside, such as a
+  touch from outside or a pass through a corner, is kept as an overlap of
+  one parameter, as the line handlers keep one.
+- Adjacent kept pieces are merged.
+
+Every overlap shares the one pcurve and restricts its range.
 
 Every other pair reports ``NotImplemented``; the generic path for curves
 against B-spline surfaces waits for Phase 2 with the surface–surface one.
@@ -1149,160 +999,8 @@ A B-spline surface against a plane, cylinder, cone, sphere or torus reports
    The rest of the generic path (Bézier subdivision, interval and
    normal-cone pruning, marching) when Phase 2 builds it.
 
-.. _intersection-package:
-
-Inside the package
-------------------
-
-``Stereon.Intersect`` imports ``Stereon.Surface``, and through it the curve,
-core and robust libraries. It is built from three partitions:
-
-``:Dispatch``
-   The result types, the ``Intersect`` overloads and the handler tables.
-
-``:Linearization``
-   ``Linearize``, ``IntersectJvp`` and ``IntersectVjp``.
-
-``:Capabilities``
-   ``IntersectCapabilities``.
-
-The handlers live in implementation units and are declared in
-``Stereon::Detail``. Nothing outside the package calls them directly.
-
-**Dispatch.** There are four handler tables, one per pairing:
-
-- ``CurvePairTable`` and ``PlanarPairTable``, square over
-  ``BuiltinCurveTypes`` and ``BuiltinCurve2dTypes``;
-- ``SurfacePairTable``, square over ``BuiltinSurfaceTypes``;
-- ``CurveSurfaceTable``, curves by surfaces.
-
-Each table is a compile-time array of function pointers, generated by
-``MakePairTable`` or ``MakeMixedTable`` by pack expansion over the type
-lists. A ``consteval`` selector chooses each cell: ``SurfaceHandlerFor``,
-``PlanarHandlerFor`` or ``CurveSurfaceHandlerFor``, written as a chain of
-``if constexpr``. The selectors are not template specialisations, because
-GCC 16.2 and MSVC mishandle explicit specialisations in module interfaces
-(``docs/toolchain/gcc16-feature-probe.md``).
-
-A pair without a handler gets a stub that returns ``NotImplemented`` and
-names both types, so no cell is ever empty; ``tests/intersect/DispatchTests.cpp``
-checks every cell of the curve and the curve–surface tables. An entry point checks its inputs, reads each
-input's index in its type list (``BuiltinIndexOf``) and calls the cell. A
-type that is not in the list has no index, which is the ``NotSupported``
-case.
-
-**Sources.**
-
-.. list-table::
-   :header-rows: 1
-   :widths: 32 68
-
-   * - File
-     - Holds
-   * - ``Dispatch.cppm``, ``Dispatch.cpp``
-     - Result types, entry points, input checks, the handler tables and
-       stubs.
-   * - ``PlanePlane.cpp``, ``PlaneCylinder.cpp``, ``CylinderCylinder.cpp``
-     - The Boolean prototype's analytic pairs (RS-0001 Tier A).
-   * - ``CylinderCylinderSkew.cpp``
-     - Skew and intersecting cylinder axes: the quartic's closed form,
-       clipped, fitted and certified (RS-0001 Tier B).
-   * - ``ElementaryPairs.cpp``
-     - The other pairs of elementary surfaces: their closed forms, then
-       the trace.
-   * - ``ImplicitTrace.cpp``
-     - The parametric–implicit tracer: certified subdivision of one
-       surface's chart against the other's equation.
-   * - ``GenericSSI.cpp``
-     - The broad phase of two B-spline surfaces (control-net
-       separation).
-   * - ``LineLine.cpp``
-     - Two lines in space, decided on exact rationals.
-   * - ``LineSurface.cpp``
-     - A line against a plane, a sphere or a cylinder.
-   * - ``SplineSurface.cpp``
-     - A B-spline curve, a circle or an ellipse against the five
-       elementary surfaces.
-   * - ``PlanarLines.cpp``, ``PlanarConics.cpp``
-     - Lines and conics in the plane: closed forms and Algorithm C.
-   * - ``PlanarSpline.cpp``, ``PlanarSplinePair.cpp``
-     - A plane B-spline against a line or a conic (Algorithm S), and two
-       of them (Algorithm K).
-   * - ``Linearization.cppm``, ``Linearization.cpp``
-     - The equations of a curve–surface point and their derivative
-       products.
-   * - ``Capabilities.cppm``
-     - The derivative capability declarations.
-
-**Shared headers.** The handlers have their own headers, each included
-only by the implementation units that need it:
-
-``Exact.hpp``
-   A configuration decision as the sign of a polynomial in the input
-   doubles. Each quantity is carried two ways: as an outward-rounded
-   interval for the fast path, and as a deferred expansion that settles
-   the sign exactly when the interval straddles zero (RS-0001 G5,
-   ADR-0002).
-
-``Planar.hpp``
-   A formula written once over a scalar field and read three ways: as its
-   enclosure, its rounded value or exactly. ``SignOfFormula`` and the
-   small vector helpers are here.
-
-``Analytic.hpp``
-   What the analytic handlers share once a configuration is decided:
-
-   - a branch's nominal geometry;
-   - its range clipped to the requested domains;
-   - parameter boxes;
-   - the swap of a result's two sides.
-
-``Implicit.hpp``
-   Each elementary surface both as a parametrisation, in doubles or over
-   intervals, and as an implicit equation with its gradient. These are
-   the two halves of a parametric–implicit pair.
-
-``Bernstein.hpp``
-   Enclosed Bézier segments from interval knot insertion, and the
-   subdivision that isolates a polynomial's roots with proof. The
-   B-spline and conic handlers in space and in the plane share it.
-
-**Adding a handler.**
-
-1. Write the handler in its own implementation unit, with its table's
-   handler signature, and declare it in ``Dispatch.cppm``'s
-   ``Stereon::Detail``.
-2. Route the pair to it in its selector, and its exchange too where the
-   pairing has one.
-3. Decide each configuration as the sign of a polynomial in the input
-   doubles, or prove it on enclosures. An empty result must be a proof of
-   separation. Anything the handler cannot decide fails with
-   ``IntersectionFailed``.
-4. Test:
-
-   - exact configurations and their neighbours a rounding or 2⁻⁴⁰ either
-     side;
-   - the cases that must fail closed;
-   - a property against sampled sign changes;
-   - a differential case against OCCT in ``tests/occt/``.
-5. Document it:
-
-   - the pair's row in *What is handled* and its section in this
-     chapter;
-   - the row in the v0.2 acceptance ledger;
-   - a capability declaration if it gains derivatives.
-
 Related design decisions
 ------------------------
 
-- `ADR-0001: Tolerance model <https://github.com/onurtuncer/Stereon/blob/main/docs/adr/0001-tolerance-model.md>`_
-- `ADR-0002: Numeric robustness <https://github.com/onurtuncer/Stereon/blob/main/docs/adr/0002-numeric-robustness.md>`_
-- `ADR-0003: Geometry polymorphism <https://github.com/onurtuncer/Stereon/blob/main/docs/adr/0003-geometry-polymorphism.md>`_
-- `ADR-0009: Parameter-space representation <https://github.com/onurtuncer/Stereon/blob/main/docs/adr/0009-parameter-space-representation.md>`_
-- `ADR-0010: SSI strategy <https://github.com/onurtuncer/Stereon/blob/main/docs/adr/0010-ssi-strategy.md>`_
-- `ADR-0021: Shape derivatives <https://github.com/onurtuncer/Stereon/blob/main/docs/adr/0021-shape-derivatives.md>`_
-- `ADR-0028: Purpose-specific numerical tolerances <https://github.com/onurtuncer/Stereon/blob/main/docs/adr/0028-purpose-specific-numerical-tolerances.md>`_
-- `ADR-0029: Intersection and classification outcomes <https://github.com/onurtuncer/Stereon/blob/main/docs/adr/0029-intersection-and-classification-outcomes.md>`_
-- `RS-0001: Tolerant analytic intersection <https://github.com/onurtuncer/Stereon/blob/main/docs/adr/RS-0001-tolerant-analytic-intersection.md>`_
 
 

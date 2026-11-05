@@ -14,8 +14,11 @@
 // parameter being its angle, and every sign change of the surface's
 // implicit equation along the curve has a point in it.
 
+#include "RapidCheck.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <limits>
@@ -193,11 +196,84 @@ TEST_CASE("a circle in the plane is an overlap whose pcurve traces it",
                          Eval(upright, t)) <= 1e-12);
     }
 
-    // Leaving the requested box, it is not clipped yet.
+    // Leaving the requested box, it is clipped: x = 1 - 3/2 sin t and
+    // y = 2 + 3/2 cos t stay in the unit square for t in
+    // [pi - asin(2/3), pi], where it leaves across x = 1.
     const auto clipped = Intersect(Curve{flat}, Domain(flat), Surface{ground},
                                    Stereon::Box2{Interval{0.0, 1.0}, Interval{0.0, 1.0}}, ctx);
-    REQUIRE_FALSE(clipped.has_value());
-    REQUIRE(clipped.error().GetCode() == ErrorCode::NotImplemented);
+    REQUIRE(clipped.has_value());
+    REQUIRE(clipped->Overlaps.size() == 1);
+    const Interval kept = clipped->Overlaps.front().Range;
+    REQUIRE(std::abs(kept.GetLower() - (pi - std::asin(2.0 / 3.0))) <= 1e-12);
+    REQUIRE(std::abs(kept.GetUpper() - pi) <= 1e-12);
+}
+
+TEST_CASE("a curve in the plane is clipped to the requested box", "[intersect][conic-surface]")
+{
+    const Stereon::Box2 rightHalf{Interval{0.0, 2.0}, Interval{-2.0, 2.0}};
+    const Circle unit{Point3{}, 1.0, ex, ey};
+
+    // The right half of the unit circle, over [0, 2 pi]: two stretches,
+    // either side of the seam.
+    const auto halves = Intersect(Curve{unit}, Domain(unit), Surface{ground}, rightHalf, ctx);
+    REQUIRE(halves.has_value());
+    REQUIRE(halves->Points.empty());
+    REQUIRE(halves->Overlaps.size() == 2);
+    REQUIRE(std::abs(halves->Overlaps[0].Range.GetLower()) <= 1e-12);
+    REQUIRE(std::abs(halves->Overlaps[0].Range.GetUpper() - pi / 2.0) <= 1e-12);
+    REQUIRE(std::abs(halves->Overlaps[1].Range.GetLower() - 3.0 * pi / 2.0) <= 1e-12);
+    REQUIRE(std::abs(halves->Overlaps[1].Range.GetUpper() - 2.0 * pi) <= 1e-12);
+    for (const Stereon::CurveSurfaceOverlap& overlap : halves->Overlaps) {
+        for (const double t : IntersectTest::SamplesOf(overlap.Range, 16)) {
+            REQUIRE(Eval(unit, t).X >= -1e-12);
+        }
+    }
+
+    // Touching the box's edge x = 1 from outside: the one point it shares.
+    const Stereon::Box2 beyond{Interval{1.0, 2.0}, Interval{-1.0, 1.0}};
+    const auto touch = Intersect(Curve{unit}, Interval{-pi, pi}, Surface{ground}, beyond, ctx);
+    REQUIRE(touch.has_value());
+    REQUIRE(touch->Overlaps.size() == 1);
+    REQUIRE(Width(touch->Overlaps.front().Range) <= 1e-12);
+    REQUIRE(std::abs(touch->Overlaps.front().Range.GetLower()) <= 1e-7);
+
+    // Wholly outside: a proved separation.
+    const Stereon::Box2 far{Interval{3.0, 4.0}, Interval{-1.0, 1.0}};
+    const auto apart = Intersect(Curve{unit}, Domain(unit), Surface{ground}, far, ctx);
+    REQUIRE(apart.has_value());
+    REQUIRE(apart->IsEmpty());
+
+    // A cubic whose x runs 0 to 4, x = 2 at s = 1/2, against x <= 2.
+    auto made = Stereon::MakeBSplineCurve(
+        3, {0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0},
+        {{0.0, 0.0, 0.0}, {1.0, 2.0, 0.0}, {3.0, -1.0, 0.0}, {4.0, 1.0, 0.0}});
+    REQUIRE(made.has_value());
+    const Stereon::Box2 left{Interval{0.0, 2.0}, Interval::Everything()};
+    const auto cubic = Intersect(Curve{*made}, Domain(*made), Surface{ground}, left, ctx);
+    REQUIRE(cubic.has_value());
+    REQUIRE(cubic->Overlaps.size() == 1);
+    REQUIRE(std::abs(cubic->Overlaps.front().Range.GetLower()) <= 1e-15);
+    REQUIRE(std::abs(cubic->Overlaps.front().Range.GetUpper() - 0.5) <= 1e-12);
+    for (const double t : IntersectTest::SamplesOf(cubic->Overlaps.front().Range, 16)) {
+        REQUIRE(Distance(Eval(ground, Eval(cubic->Overlaps.front().OnSurface, t)),
+                         Eval(*made, t)) <= 1e-12);
+    }
+}
+
+TEST_CASE("a curve along the box's edge keeps the stretch on the boundary",
+          "[intersect][conic-surface]")
+{
+    // A straight B-spline up the line x = 0, against a box whose left edge
+    // it runs along from y = 1/2: on the boundary, so kept.
+    auto made =
+        Stereon::MakeBSplineCurve(1, {0.0, 0.0, 1.0, 1.0}, {{0.0, 0.0, 0.0}, {0.0, 1.0, 0.0}});
+    REQUIRE(made.has_value());
+    const Stereon::Box2 box{Interval{0.0, 1.0}, Interval{0.5, 2.0}};
+    const auto along = Intersect(Curve{*made}, Domain(*made), Surface{ground}, box, ctx);
+    REQUIRE(along.has_value());
+    REQUIRE(along->Overlaps.size() == 1);
+    REQUIRE(std::abs(along->Overlaps.front().Range.GetLower() - 0.5) <= 1e-12);
+    REQUIRE(along->Overlaps.front().Range.GetUpper() == 1.0);
 }
 
 TEST_CASE("an ellipse crosses a plane, a sphere and a cylinder", "[intersect][conic-surface]")
@@ -326,4 +402,39 @@ TEST_CASE("a B-spline crosses a cone and a torus", "[intersect][spline-surface]"
     const auto apart = Meet(*within, ring);
     REQUIRE(apart.has_value());
     REQUIRE(apart->Points.empty());
+}
+
+TEST_CASE("every point lies on the surface to the rounding of its coordinates",
+          "[intersect][spline-surface][property][regression]")
+{
+    // The subdivision places a root to the rounding of the enclosed form,
+    // which for a torus's quartic left a point 1.2e-13 off it, hundreds of
+    // units in the last place of its coordinates, and IntersectJvp then
+    // took Intersect's own point for a stale one (RapidCheck, 2026-11-04).
+    rc::prop("for random cubic B-splines against a torus, a cone and a sphere", [] {
+        const auto coordinate = [] { return *rc::gen::inRange(-24, 25) / 8.0; };
+        std::vector<Point3> poles;
+        for (int i = 0; i < 5; ++i) {
+            poles.push_back({coordinate(), coordinate(), coordinate()});
+        }
+        const auto made =
+            Stereon::MakeBSplineCurve(3, {0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 2.0, 2.0, 2.0}, poles, {});
+        RC_PRE(made.has_value());
+        const auto check = [&](const auto& surface) {
+            // Completeness and failing closed are tested elsewhere.
+            const auto result = Intersect(Curve{*made}, Surface{surface}, ctx);
+            if (!result) {
+                return;
+            }
+            for (const CurveSurfacePoint& p : result->Points) {
+                const double ulps = 64.0 * std::numeric_limits<double>::epsilon() *
+                                    std::max(1.0, Length(Stereon::ToVec(p.Position)));
+                RC_ASSERT(Distance(Eval(*made, p.Parameter), p.Position) <= ulps);
+                RC_ASSERT(Distance(Eval(surface, p.OnSurface), p.Position) <= ulps);
+            }
+        };
+        check(ring);
+        check(Cone{Point3{}, 1.0, pi / 4.0, ex, ey});
+        check(Sphere{Point3{0.25, 0.0, 0.0}, 1.5, ex, ey});
+    });
 }
