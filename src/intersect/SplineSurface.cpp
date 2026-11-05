@@ -681,8 +681,8 @@ Result<CurveSurfaceIntersection> LineCone(const Curve& a, const Interval& domain
     } else {
         STEREON_TRY(found, ConeQuadraticRoots(*line, *cone, domain));
     }
-    return PointsOf([&](const double t) { return Eval(*line, t); }, found, box,
-                    [&](const Point3& p) { return Project(*cone, p); }, true);
+    return PointsOf([&](const double t) { return Eval(*line, t); }, Polished(found, *line, *cone),
+                    box, [&](const Point3& p) { return Project(*cone, p); }, true);
 }
 
 Result<CurveSurfaceIntersection> LineTorus(const Curve& a, const Interval& domain, const Surface& b,
@@ -707,8 +707,8 @@ Result<CurveSurfaceIntersection> LineTorus(const Curve& a, const Interval& domai
                     *line, range,
                     [&](const std::vector<HPoint>& poles) { return TorusForm(poles, *torus); },
                     "Line x Torus"));
-    return PointsOf([&](const double t) { return Eval(*line, t); }, found, box,
-                    [&](const Point3& p) { return Project(*torus, p); }, true, true);
+    return PointsOf([&](const double t) { return Eval(*line, t); }, Polished(found, *line, *torus),
+                    box, [&](const Point3& p) { return Project(*torus, p); }, true, true);
 }
 
 // --- Circles and ellipses ------------------------------------------------
