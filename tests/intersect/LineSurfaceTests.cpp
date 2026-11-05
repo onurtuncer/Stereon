@@ -400,3 +400,45 @@ TEST_CASE("a crossing from a far line origin lies on the quadric to rounding",
     onBoth(sphere);
     onBoth(cylinder);
 }
+
+TEST_CASE("a line's two crossings of a quadric stay apart however far its origin",
+          "[intersect][line-surface][regression]")
+{
+    // The audit of 2026-11-05: from 10^8 away the quadratic's coefficients,
+    // formed in doubles, cancelled the discriminant to zero, both crossings
+    // were placed at the foot of the perpendicular from the centre, and the
+    // polish, its step refused against a second root at no distance, left
+    // them there. A line at distance 1/2 from the centre, its origin 13 L
+    // back from the foot: the crossings sqrt(3) apart, each on the surface
+    // to the rounding of the point, about L units in the last place.
+    for (double length = 1e2; length <= 1e12; length *= 100.0) {
+        const Vec3 direction{3.0, 4.0, 12.0};
+        const Line line{Point3{-3.0 * length - 0.4, -4.0 * length + 0.3, -12.0 * length},
+                        direction};
+        const double within = 64.0 * std::numeric_limits<double>::epsilon() * 13.0 * length;
+        const auto result = Intersect(Curve{line}, Surface{unitSphere}, ctx);
+        REQUIRE(result.has_value());
+        REQUIRE(result->Points.size() == 2);
+        for (const CurveSurfacePoint& p : result->Points) {
+            REQUIRE(p.Contact == ContactType::Crossing);
+            REQUIRE(Distance(Eval(line, p.Parameter), p.Position) <= within);
+            REQUIRE(Distance(Eval(unitSphere, p.OnSurface), p.Position) <= within);
+        }
+        REQUIRE(std::abs(Distance(result->Points[0].Position, result->Points[1].Position) -
+                         std::sqrt(3.0)) <= 2.0 * within);
+    }
+    // The audit's configuration on the cylinder: a line along x, 1/2 from
+    // the axis, from x = -L; the crossings at x = ±sqrt(3)/2.
+    for (double length = 1e2; length <= 1e12; length *= 100.0) {
+        const Line line{Point3{-length, 0.5, 0.25}, Vec3{1.0, 0.0, 0.0}};
+        const auto result = Intersect(Curve{line}, Surface{unitCylinder}, ctx);
+        REQUIRE(result.has_value());
+        REQUIRE(result->Points.size() == 2);
+        const double within = 64.0 * std::numeric_limits<double>::epsilon() * length;
+        REQUIRE(std::abs(result->Points[0].Position.X + std::sqrt(0.75)) <= within);
+        REQUIRE(std::abs(result->Points[1].Position.X - std::sqrt(0.75)) <= within);
+        for (const CurveSurfacePoint& p : result->Points) {
+            REQUIRE(Distance(Eval(unitCylinder, p.OnSurface), p.Position) <= within);
+        }
+    }
+}

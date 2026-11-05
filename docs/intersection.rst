@@ -496,13 +496,42 @@ and the point's parameters on the plane lie in the requested domains is
 decided exactly on that rational, as the line–line handler decides; the
 roots of a quadric are irrational and are placed by their rounded values,
 so a crossing within rounding of a domain's end may fall on either side
-of it. A touch of a quadric is a ``Tangential`` point: the line stays
+of it. The quadratic's coefficients and discriminant are taken from their
+enclosures when those are tight, and from their exact values otherwise:
+formed in doubles, they cancel for a line whose origin lies far from the
+surface, :math:`10^8` from a unit sphere say, and the two crossings
+collapse onto one point. A touch of a quadric is a ``Tangential`` point: the line stays
 outside. A root that double precision cannot place, a line so nearly along
 the axis that the quadratic's leading coefficient rounds to zero while it
 is exactly positive, fails with ``IntersectionFailed`` rather than
 dropping the point. ``tests/occt/IntersectionDifferentialTests.cpp``
 compares the three handlers with OCCT's ``IntAna_IntConicQuad`` on
 generic lines.
+
+A ``Line`` against a ``Cone`` or a ``Torus`` cannot be decided exactly on
+the input doubles: the cone's equation holds the cosine and sine of its
+semi-angle. These pairs use the proofs of the B-spline handlers below.
+
+- **A cone over a bounded domain.** The line is a Bézier segment of degree
+  1, its poles enclosed. The cone's equation along it is proved as a
+  B-spline's is.
+- **A cone over an unbounded domain.** The cone has no bound, so its
+  quadratic is used, with coefficients enclosed in intervals.
+  - A discriminant provably negative is a separation.
+  - A discriminant provably positive, with a leading coefficient of strict
+    sign, gives two simple crossings, placed in doubles and polished from
+    the line re-centred at each.
+  - Otherwise the call fails with ``IntersectionFailed``: a line along a
+    generator, whose second root lies out near infinity, a line through
+    the apex, or a line tangent within rounding. The same line over a
+    bounded domain is resolved.
+- **A torus.** Every point of the torus lies within :math:`R + r` of its
+  centre. So the line is searched only over its stretch inside a sphere
+  half a tube wider than that, an outward-rounded stretch whatever the
+  domain, as a segment against the torus's quartic.
+
+Either nappe of the cone is crossed, as its parametrisation runs through
+the apex.
 
 A ``BSplineCurve``, polynomial or rational, has handlers against all five
 elementary surfaces. The surface's implicit equation composed with the
@@ -595,6 +624,8 @@ clipped to the box:
   touch from outside or a pass through a corner, is kept as an overlap of
   one parameter, as the line handlers keep one.
 - Adjacent kept pieces are merged.
+- A requested domain of one parameter has no piece: its point decides it,
+  kept within rounding of an edge as a contact on the boundary is.
 
 Every overlap shares the one pcurve and restricts its range.
 
@@ -696,7 +727,13 @@ misses the branch or meets it once. A parabola
 :math:`(n\cdot X)\,t^2 + 2(2f\,n\cdot Y)\,t + 4f\,n\cdot(V-O)` over every
 real :math:`t`, linear for a line along the axis. All of these decisions
 are exact; the roots themselves are irrational and are placed by their
-rounded values, as a line's roots on a circle are.
+rounded values, as a line's roots on a circle are. They are solved from
+the quadratic's coefficients and discriminant each to a few roundings
+(``ValueOfFormula``): the middle of a tight enclosure, else the exact
+value's estimate. In doubles, a line from :math:`(-10^8, 0)` along
+:math:`x` gives the unit circle's :math:`C = 10^{16} - 1` as
+:math:`10^{16}` and its discriminant, exactly 1, as zero, both crossings
+at the centre.
 
 Algorithm C: two conics by the exact chart quartic
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
