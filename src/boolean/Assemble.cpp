@@ -171,12 +171,13 @@ void Record(Work& w, const EntityKind kind, const std::uint32_t target, const st
 
 // --- The pieces of the intersection ---------------------------------------------
 
-/// Whether a kept face of the body uses the edge.
-[[nodiscard]] Result<bool> KeptUses(const Work& w, const std::uint8_t body, const EdgeId edge)
+/// How many kept faces of the body use the edge.
+[[nodiscard]] Result<std::size_t> KeptUses(const Work& w, const std::uint8_t body,
+                                           const EdgeId edge)
 {
     STEREON_TRY(const std::vector<FaceId> faces, FacesOf(w.ShapeOf(body), edge));
-    return std::ranges::any_of(faces,
-                               [&](const FaceId f) { return w.Kept[body].contains(f.GetIndex()); });
+    return static_cast<std::size_t>(std::ranges::count_if(
+        faces, [&](const FaceId f) { return w.Kept[body].contains(f.GetIndex()); }));
 }
 
 /// Identifies B's vertex with A's: within the pair tolerance, the larger
@@ -214,15 +215,24 @@ void Record(Work& w, const EntityKind kind, const std::uint32_t target, const st
 /// The pieces of the intersection and the edges paired on coincident faces:
 /// each pair, the body whose edge the result takes (A's where a kept face
 /// of A uses it), which way B's runs, and the ends of B's identified with
-/// A's.
+/// A's. A pair where each body keeps two faces at its edge is not merged:
+/// the operands only touch along it, the union of two boxes sharing an
+/// edge say, and the result has a boundary of each there. Merged, its edge
+/// would be used four times by one shell, which is then not closed (L01,
+/// ADR-0041: a non-manifold complex is no solid); apart, each lump keeps
+/// its own closed shell, and they touch along coincident edges.
 [[nodiscard]] Result<void> PairPieces(Work& w)
 {
     const Shape& sa = w.Bodies.A.Shape;
     const Shape& sb = w.Bodies.B.Shape;
     for (const SharedEdge& shared : w.Bodies.Shared) {
-        STEREON_TRY(const bool usedByA, KeptUses(w, BodyA, shared.A));
+        STEREON_TRY(const std::size_t usesA, KeptUses(w, BodyA, shared.A));
+        STEREON_TRY(const std::size_t usesB, KeptUses(w, BodyB, shared.B));
+        if (usesA >= 2 && usesB >= 2) {
+            continue;
+        }
         const bool along = RunsAlong(w, shared.A, shared.B);
-        SharedPair pair{usedByA ? BodyA : BodyB, {shared.A, shared.B}, along};
+        SharedPair pair{usesA > 0 ? BodyA : BodyB, {shared.A, shared.B}, along};
         w.PairOf[{BodyA, shared.A.GetIndex()}] = w.Pairs.size();
         w.PairOf[{BodyB, shared.B.GetIndex()}] = w.Pairs.size();
         w.Pairs.push_back(pair);
