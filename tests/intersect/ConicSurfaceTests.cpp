@@ -14,8 +14,11 @@
 // parameter being its angle, and every sign change of the surface's
 // implicit equation along the curve has a point in it.
 
+#include "RapidCheck.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <limits>
@@ -326,4 +329,39 @@ TEST_CASE("a B-spline crosses a cone and a torus", "[intersect][spline-surface]"
     const auto apart = Meet(*within, ring);
     REQUIRE(apart.has_value());
     REQUIRE(apart->Points.empty());
+}
+
+TEST_CASE("every point lies on the surface to the rounding of its coordinates",
+          "[intersect][spline-surface][property][regression]")
+{
+    // The subdivision places a root to the rounding of the enclosed form,
+    // which for a torus's quartic left a point 1.2e-13 off it, hundreds of
+    // units in the last place of its coordinates, and IntersectJvp then
+    // took Intersect's own point for a stale one (RapidCheck, 2026-11-04).
+    rc::prop("for random cubic B-splines against a torus, a cone and a sphere", [] {
+        const auto coordinate = [] { return *rc::gen::inRange(-24, 25) / 8.0; };
+        std::vector<Point3> poles;
+        for (int i = 0; i < 5; ++i) {
+            poles.push_back({coordinate(), coordinate(), coordinate()});
+        }
+        const auto made =
+            Stereon::MakeBSplineCurve(3, {0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 2.0, 2.0, 2.0}, poles, {});
+        RC_PRE(made.has_value());
+        const auto check = [&](const auto& surface) {
+            // Completeness and failing closed are tested elsewhere.
+            const auto result = Intersect(Curve{*made}, Surface{surface}, ctx);
+            if (!result) {
+                return;
+            }
+            for (const CurveSurfacePoint& p : result->Points) {
+                const double ulps = 64.0 * std::numeric_limits<double>::epsilon() *
+                                    std::max(1.0, Length(Stereon::ToVec(p.Position)));
+                RC_ASSERT(Distance(Eval(*made, p.Parameter), p.Position) <= ulps);
+                RC_ASSERT(Distance(Eval(surface, p.OnSurface), p.Position) <= ulps);
+            }
+        };
+        check(ring);
+        check(Cone{Point3{}, 1.0, pi / 4.0, ex, ey});
+        check(Sphere{Point3{0.25, 0.0, 0.0}, 1.5, ex, ey});
+    });
 }
