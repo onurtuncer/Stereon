@@ -591,6 +591,8 @@ clipped to the box:
   touch from outside or a pass through a corner, is kept as an overlap of
   one parameter, as the line handlers keep one.
 - Adjacent kept pieces are merged.
+- A requested domain of one parameter has no piece: its point decides it,
+  kept within rounding of an edge as a contact on the boundary is.
 
 Every overlap shares the one pcurve and restricts its range.
 
