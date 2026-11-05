@@ -278,12 +278,6 @@ void RequireSame(const CurveSurfaceIntersection& a, const CurveSurfaceIntersecti
     }
 }
 
-/// Both results exist, or the property has nothing to compare.
-bool BothValid(const Result<CurveSurfaceIntersection>& a, const Result<CurveSurfaceIntersection>& b)
-{
-    return a.has_value() && b.has_value();
-}
-
 } // namespace
 
 TEST_CASE("every curve-surface result validates as geometry or fails closed",
