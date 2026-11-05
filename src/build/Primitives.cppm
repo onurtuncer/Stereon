@@ -17,8 +17,8 @@ import Stereon.Topo;
 ///
 /// A frame is an origin and two orthonormal axes, x and y, as for the
 /// analytic surfaces; z is their cross product. Every edge is Exact (a line
-/// or a circle, ADR-0009) with exact pcurves on its faces, except the
-/// cylinder's seam, a Boundary edge used twice by the lateral face. Vertex
+/// or a circle, ADR-0009) with exact pcurves on its faces, including the
+/// cylinder's seam, an exact line used twice by the lateral face. Vertex
 /// and edge tolerances are the Context's resolution: native construction
 /// is resolution-tight (ADR-0001). Faces are oriented outward.
 

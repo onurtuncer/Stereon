@@ -145,12 +145,11 @@ std::vector<Pair> Pairs()
         Cylinder(Point3{2.0, 0.0, -5.0}, ex, ey, 3.0, 10.0), cl, Point3{6.0, 4.0, 6.0},
         "refused: PlaneCylinder cannot clip a partial circle to a plane face's box");
     add("cylinders perpendicular", upright, Cylinder(Point3{-6.0, 0.0, 0.0}, ey, ez, 1.5, 12.0), cl,
-        ch, "every operation builds a Boundary edge used by two faces, which Freeze rejects (S07)");
+        ch);
     add("cylinders perpendicular, equal radii", upright,
         Cylinder(Point3{-6.0, 0.0, 0.0}, ey, ez, 3.0, 12.0), cl, ch,
         "refused: ImprintNetwork, at the node where the two curves of intersection cross");
-    add("cylinders skew", upright, Cylinder(Point3{-6.0, 1.0, 1.0}, ey, ez, 1.5, 12.0), cl, ch,
-        "every operation builds a Boundary edge used by two faces, which Freeze rejects (S07)");
+    add("cylinders skew", upright, Cylinder(Point3{-6.0, 1.0, 1.0}, ey, ez, 1.5, 12.0), cl, ch);
     add("cylinders skew, oblique", upright,
         Cylinder(Point3{-5.0, -3.0, -2.0}, ez, Vec3{-0.8, 0.6, 0.0}, 1.0, 12.0), cl, ch);
     return pairs;

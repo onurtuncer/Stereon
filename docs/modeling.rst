@@ -31,9 +31,11 @@ and *y*, with *z* their cross product, as for the analytic surfaces.
   also takes an origin, two axes and the three side lengths.
 - A **cylinder** has 2 vertices on the seam at angle 0, two circular edges, a
   seam, a lateral cylindrical face and two planar disks. The seam is a
-  ``Boundary`` edge that the lateral face uses twice.
+  line that the lateral face uses twice, with pcurves at angles 0 and 2π.
+  Its ``Exact`` representation remains valid when imprinting splits those
+  uses onto different faces.
 
-Every edge except the seam is ``Exact``, with exact pcurves on its faces
+Every edge, including the seam, is ``Exact``, with exact pcurves on its faces
 (ADR-0009). Faces are oriented outward. Vertex and edge tolerances equal the
 ``Context``'s resolution, because native construction is resolution-tight
 (ADR-0001).
