@@ -534,7 +534,19 @@ every piece ends in one of four ways:
   ``IntersectionFailed``.
 
 So an empty result is a proof that the curve misses the surface over the
-requested domain, and nothing unresolved becomes one. A curve 3·2⁻⁴⁰ off a
+requested domain, and nothing unresolved becomes one.
+
+Bisection to the rounding of :math:`g` leaves a crossing as far off the
+surface as :math:`g`'s enclosed coefficients allow. For a torus's quartic,
+that is hundreds of units in the last place of the point. So each decided
+crossing then takes one Newton step on its signed distance from the
+surface, :math:`(C(t) - S(u, v)) \cdot n / (C'(t) \cdot n)` at the
+projection of its rounded point. The step is kept only inside the
+crossing's proved bracket, and skipped at a pole of the surface's
+parameters, where the normal vanishes. Every point then lies on both
+geometries to the rounding of its coordinates.
+
+A curve 3·2⁻⁴⁰ off a
 plane is apart; a root that lands on a piece's end, a knot or a dyadic
 parameter, is seen from both sides and reported once, undecided; a root
 whose bracket reaches past the requested domain is kept, clamped into it,
