@@ -260,18 +260,76 @@ struct Outcome {
     double Estimate = 0.0;
 };
 
+/// One of the four operations on a pair: A op B, or B - A.
+struct Run {
+    BooleanOperation Operation;
+    bool Reversed;
+};
+
+/// The points of a 4^3 grid over the pair's box that the result puts on the
+/// wrong side of the operation of their windings in A and B.
+void CheckMembership(const Pair& pair, const Run& run, const Shape& shape, const std::string& name,
+                     std::vector<std::string>& problems)
+{
+    constexpr int n = 4;
+    const auto at = [&](const double lo, const double hi, const int s) {
+        return lo + (hi - lo) * (s + 0.4142135623730951) / n;
+    };
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            for (int k = 0; k < n; ++k) {
+                const Point3 p{at(pair.Lo.X, pair.Hi.X, i), at(pair.Lo.Y, pair.Hi.Y, j),
+                               at(pair.Lo.Z, pair.Hi.Z, k)};
+                const std::optional<bool> inA = InsideOf(pair.A, p);
+                const std::optional<bool> inB = InsideOf(pair.B, p);
+                const std::optional<bool> inResult = InsideOf(shape, p);
+                if (inA && inB && inResult &&
+                    *inResult != Expected(run.Operation, *inA, *inB, run.Reversed)) {
+                    problems.push_back(name + " has (" + std::to_string(p.X) + ", " +
+                                       std::to_string(p.Y) + ", " + std::to_string(p.Z) +
+                                       ") on the wrong side");
+                }
+            }
+        }
+    }
+}
+
+/// The volume identities of the four results, in the order union, common,
+/// A - B, B - A, when every operation gave one.
+void CheckVolumes(const Pair& pair, const std::vector<Outcome>& outcomes,
+                  std::vector<std::string>& problems)
+{
+    if (!std::ranges::all_of(outcomes, [](const Outcome& o) { return o.Result.has_value(); })) {
+        return;
+    }
+    const ShapeMeasures::Measures a = ShapeMeasures::MeasuresOf(pair.A);
+    const ShapeMeasures::Measures b = ShapeMeasures::MeasuresOf(pair.B);
+    const double united = outcomes[0].Volume;
+    const double common = outcomes[1].Volume;
+    const double cutAB = outcomes[2].Volume;
+    const double cutBA = outcomes[3].Volume;
+    double slack = 1e-9 * std::max(1.0, a.Volume + b.Volume) + a.VolumeEstimate + b.VolumeEstimate;
+    for (const Outcome& o : outcomes) {
+        slack += o.Estimate;
+    }
+    const auto identity = [&](const char* what, const double lhs, const double rhs) {
+        if (!(std::abs(lhs - rhs) <= slack)) {
+            problems.push_back(std::string(what) + " breaks: " + std::to_string(lhs) + " against " +
+                               std::to_string(rhs));
+        }
+    };
+    identity("vol(A u B) + vol(A n B) = vol(A) + vol(B)", united + common, a.Volume + b.Volume);
+    identity("vol(A - B) = vol(A) - vol(A n B)", cutAB, a.Volume - common);
+    identity("vol(B - A) = vol(B) - vol(A n B)", cutBA, b.Volume - common);
+    identity("vol(A u B) = vol(A - B) + vol(B - A) + vol(A n B)", united, cutAB + cutBA + common);
+}
+
 /// Everything wrong with the four operations on a pair, one line each: a
 /// refusal, a solid-level finding, a duplicate, a point on the wrong side,
 /// a broken volume identity.
 std::vector<std::string> Problems(const Pair& pair)
 {
     std::vector<std::string> problems;
-    const ShapeMeasures::Measures a = ShapeMeasures::MeasuresOf(pair.A);
-    const ShapeMeasures::Measures b = ShapeMeasures::MeasuresOf(pair.B);
-    struct Run {
-        BooleanOperation Operation;
-        bool Reversed;
-    };
     const std::vector<Run> runs{{BooleanOperation::Union, false},
                                 {BooleanOperation::Common, false},
                                 {BooleanOperation::Cut, false},
@@ -296,53 +354,9 @@ std::vector<std::string> Problems(const Pair& pair)
         }
         const ShapeMeasures::Measures m = ShapeMeasures::MeasuresOf(shape);
         outcomes.push_back({shape, m.Volume, m.VolumeEstimate});
-
-        // Membership at a grid of points off the faces of both operands.
-        constexpr int n = 4;
-        const auto at = [&](const double lo, const double hi, const int s) {
-            return lo + (hi - lo) * (s + 0.4142135623730951) / n;
-        };
-        for (int i = 0; i < n; ++i) {
-            for (int j = 0; j < n; ++j) {
-                for (int k = 0; k < n; ++k) {
-                    const Point3 p{at(pair.Lo.X, pair.Hi.X, i), at(pair.Lo.Y, pair.Hi.Y, j),
-                                   at(pair.Lo.Z, pair.Hi.Z, k)};
-                    const std::optional<bool> inA = InsideOf(pair.A, p);
-                    const std::optional<bool> inB = InsideOf(pair.B, p);
-                    const std::optional<bool> inResult = InsideOf(shape, p);
-                    if (inA && inB && inResult &&
-                        *inResult != Expected(run.Operation, *inA, *inB, run.Reversed)) {
-                        problems.push_back(name + " has (" + std::to_string(p.X) + ", " +
-                                           std::to_string(p.Y) + ", " + std::to_string(p.Z) +
-                                           ") on the wrong side");
-                    }
-                }
-            }
-        }
+        CheckMembership(pair, run, shape, name, problems);
     }
-    // The volume identities, when every operation gave a result.
-    if (std::ranges::all_of(outcomes, [](const Outcome& o) { return o.Result.has_value(); })) {
-        const double united = outcomes[0].Volume;
-        const double common = outcomes[1].Volume;
-        const double cutAB = outcomes[2].Volume;
-        const double cutBA = outcomes[3].Volume;
-        double slack =
-            1e-9 * std::max(1.0, a.Volume + b.Volume) + a.VolumeEstimate + b.VolumeEstimate;
-        for (const Outcome& o : outcomes) {
-            slack += o.Estimate;
-        }
-        const auto identity = [&](const char* what, const double lhs, const double rhs) {
-            if (!(std::abs(lhs - rhs) <= slack)) {
-                problems.push_back(std::string(what) + " breaks: " + std::to_string(lhs) +
-                                   " against " + std::to_string(rhs));
-            }
-        };
-        identity("vol(A u B) + vol(A n B) = vol(A) + vol(B)", united + common, a.Volume + b.Volume);
-        identity("vol(A - B) = vol(A) - vol(A n B)", cutAB, a.Volume - common);
-        identity("vol(B - A) = vol(B) - vol(A n B)", cutBA, b.Volume - common);
-        identity("vol(A u B) = vol(A - B) + vol(B - A) + vol(A n B)", united,
-                 cutAB + cutBA + common);
-    }
+    CheckVolumes(pair, outcomes, problems);
     return problems;
 }
 
