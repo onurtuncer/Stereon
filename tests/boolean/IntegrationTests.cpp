@@ -21,9 +21,9 @@
 // - a point is inside it exactly when the operation of its insides in A
 //   and B says so, by winding numbers at a grid of points off every face.
 //
-// The pairs that fail a check today are listed with what is wrong, and a
-// second test requires each of them still to fail: a fix shows up as that
-// test failing, and the pair moves to the passing ones.
+// A pair that fails a check is listed with what is wrong, and a second
+// test requires each such pair still to fail: a fix shows up as that test
+// failing, and the pair moves to the passing ones. None is listed today.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -111,8 +111,7 @@ std::vector<Pair> Pairs()
     add("box edge to edge", box, BoxFrom(Point3{10.0, 10.0, 0.0}, Point3{20.0, 20.0, 10.0}), lo,
         Point3{21.0, 21.0, 11.0});
     add("box sharing top and bottom", box, BoxFrom(Point3{5.0, 5.0, 0.0}, Point3{15.0, 15.0, 10.0}),
-        lo, Point3{16.0, 16.0, 11.0},
-        "refused: ImprintNetwork cannot close the network of the coplanar overlap");
+        lo, Point3{16.0, 16.0, 11.0});
     add("box turned through", box,
         OrientedBox(Point3{5.0, 2.0, -2.0}, turnedX, turnedY, Vec3{4.0, 3.0, 14.0}), lo,
         Point3{11.0, 11.0, 13.0});
@@ -143,8 +142,7 @@ std::vector<Pair> Pairs()
     add("cylinders perpendicular", upright, Cylinder(Point3{-6.0, 0.0, 0.0}, ey, ez, 1.5, 12.0), cl,
         ch);
     add("cylinders perpendicular, equal radii", upright,
-        Cylinder(Point3{-6.0, 0.0, 0.0}, ey, ez, 3.0, 12.0), cl, ch,
-        "refused: ImprintNetwork, at the node where the two curves of intersection cross");
+        Cylinder(Point3{-6.0, 0.0, 0.0}, ey, ez, 3.0, 12.0), cl, ch);
     add("cylinders skew", upright, Cylinder(Point3{-6.0, 1.0, 1.0}, ey, ez, 1.5, 12.0), cl, ch);
     add("cylinders skew, oblique", upright,
         Cylinder(Point3{-5.0, -3.0, -2.0}, ez, Vec3{-0.8, 0.6, 0.0}, 1.0, 12.0), cl, ch);
@@ -443,12 +441,17 @@ TEST_CASE("the known Boolean defects and gaps are still there", "[boolean][integ
     // Each pair here fails some check today, for the reason it names. When
     // one passes, this fails: clear its Known so the test above holds it,
     // and update the ledger.
+    std::size_t known = 0;
     for (const Pair& pair : Pairs()) {
         if (pair.Known.empty()) {
             continue;
         }
+        ++known;
         const std::vector<std::string> problems = Problems(pair);
         INFO(pair.Name << " (" << pair.Known << "):\n" << Lines(problems));
         CHECK_FALSE(problems.empty());
+    }
+    if (known == 0) {
+        SUCCEED("no pair is known to fail today: the test above holds every one");
     }
 }

@@ -396,8 +396,10 @@ Result<CurveSurfaceIntersection> SplineTorus(const Curve&, const Interval&, cons
 
 /// A line against a cone: over a bounded domain as a degree-1 Bezier segment
 /// through the cone's equation, proved as a B-spline's roots are; over an
-/// unbounded one through its quadratic, decided on enclosures, failing for
-/// a line along a generator, through the apex or tangent within rounding.
+/// unbounded one through its quadratic, decided on enclosures formed about
+/// the middle of its roots, so wherever along the line its origin lies,
+/// failing for a line along a generator, through the apex or tangent within
+/// rounding.
 /// Against a torus: over the stretch within the torus's bounding sphere, as
 /// a segment, its quartic proved the same way. Defined in SplineSurface.cpp.
 Result<CurveSurfaceIntersection> LineCone(const Curve&, const Interval&, const Surface&,

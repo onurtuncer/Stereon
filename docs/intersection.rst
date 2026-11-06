@@ -522,15 +522,32 @@ semi-angle. These pairs use the proofs of the B-spline handlers below.
   1, its poles enclosed. The cone's equation along it is proved as a
   B-spline's is.
 - **A cone over an unbounded domain.** The cone has no bound, so its
-  quadratic is used, with coefficients enclosed in intervals.
-  - A discriminant provably negative is a separation.
-  - A discriminant provably positive, with a leading coefficient of strict
-    sign, gives two simple crossings, placed in doubles and polished from
-    the line re-centred at each.
+  quadratic :math:`A t^2 + 2 B t + C` is used, with coefficients enclosed
+  in intervals, in two steps.
+
+  - From the line's origin: a discriminant :math:`B^2 - A C` provably
+    negative is a separation, and a leading coefficient of no strict sign,
+    a line along a generator within rounding, fails.
+  - Then about the middle of the two roots, the line's point at
+    :math:`-B / A` as rounded, its offset from the cone enclosed so that
+    the proof holds for the line as given. The discriminant is the same
+    number wherever the quadratic is centred. From an origin far from the
+    crossings, though, :math:`B^2` and :math:`A C` each carry the square
+    of that distance, and their enclosures cancel across zero however far
+    apart the crossings are; about the middle of the roots they do not.
+    So the decision does not depend on where along the line its origin
+    lies. A discriminant provably negative is a separation. One provably
+    positive gives two simple crossings, placed in doubles from the
+    middle of that enclosure and polished from the line re-centred at
+    each.
   - Otherwise the call fails with ``IntersectionFailed``: a line along a
     generator, whose second root lies out near infinity, a line through
     the apex, or a line tangent within rounding. The same line over a
     bounded domain is resolved.
+
+  What remains of the origin is its own rounding: a line whose origin is
+  so far that one rounding of its coordinates is comparable with the
+  chord fails, as a tangent line does.
 - **A torus.** Every point of the torus lies within :math:`R + r` of its
   centre. So the line is searched only over its stretch inside a sphere
   half a tube wider than that, an outward-rounded stretch whatever the

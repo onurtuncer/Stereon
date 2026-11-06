@@ -214,9 +214,13 @@ are tombstones, so what an inverse brings back has new handles.
   them again.
 - ``MakeEdgeVertex`` (MEV) grows a new vertex and an edge to it from the
   vertex where a coedge ends, as a strut of that coedge's loop: the edge's
-  use along it and its use against it follow the coedge. On an empty loop
-  it grows from the loop's isolated vertex. ``KillEdgeVertex`` (KEV)
-  removes a strut and its far vertex.
+  use out to the new vertex and its use back follow the coedge. The edge
+  runs from the existing vertex to the new one, or, with
+  ``StrutDirection::ToExisting``, from the new one to the existing: its
+  geometry then runs towards the vertex it was grown from, and its use out
+  runs against it. On an empty loop it grows from the loop's isolated
+  vertex. ``KillEdgeVertex`` (KEV) removes a strut and its far vertex,
+  whichever way its edge runs.
 - ``MakeEdgeFace`` (MEF) joins the vertices where two coedges of one loop
   end, splitting the loop: a new face on the same surface and in the same
   shell takes one side. ``KillEdgeFace`` (KEF) removes an edge between two
