@@ -854,7 +854,9 @@ edges and 6 vertices, B with 6, 10 and 6.
 The common is the Steinmetz solid, five faces of volume
 :math:`16 r^3 / 3 = 144` and area :math:`16 r^2 = 144`; the union has 8
 faces; A less B is two lobes of 3 faces each. The six pieces are
-``Intersection`` edges in each.
+``Intersection`` edges in each. :doc:`examples` (*The Steinmetz solids*)
+runs these Booleans, and a third cylinder across both, as a program, with
+every result's faces and its closed-form volume and area.
 
 Before the corner was looked at, a piece at a node was written after the
 first coedge of its sense found there, which could bound the part of the

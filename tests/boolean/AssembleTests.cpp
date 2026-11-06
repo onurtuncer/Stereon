@@ -273,6 +273,45 @@ TEST_CASE("perpendicular cylinders of equal radii: the Steinmetz solid and what 
     REQUIRE_FALSE(Inside(cut.Shape, Point3{5.0, 0.5, 0.5}));
 }
 
+TEST_CASE("three perpendicular cylinders of equal radii: the tricylinder",
+          "[boolean][assemble][seam][regression]")
+{
+    // The Steinmetz solid of the cylinders about z and x, inside a third of
+    // the same radius about y. The first two are tangent at the nodes on the
+    // y axis; the third is tangent to the one about z at two nodes on the x
+    // axis and to the one about x at two on the z axis, each pair meeting in
+    // two ellipses through its nodes. The six ellipses meet three at a time
+    // at the eight points (+-r, +-r, +-r) / sqrt 2. The result has the
+    // faces, edges and vertices of a rhombic dodecahedron: twelve faces,
+    // four on each cylinder, and fourteen vertices, the six nodes, where
+    // four faces meet, and those eight points, where three do.
+    const Vec3 ex{1.0, 0.0, 0.0};
+    const Vec3 ey{0.0, 1.0, 0.0};
+    const Vec3 ez{0.0, 0.0, 1.0};
+    const auto aboutZ = Stereon::MakeCylinderSolid(Point3{0.0, 0.0, -5.0}, ex, ey, 3.0, 10.0, ctx);
+    const auto aboutX = Stereon::MakeCylinderSolid(Point3{-6.0, 0.0, 0.0}, ey, ez, 3.0, 12.0, ctx);
+    const auto aboutY = Stereon::MakeCylinderSolid(Point3{0.0, -6.0, 0.0}, ez, ex, 3.0, 12.0, ctx);
+    REQUIRE(aboutZ.has_value());
+    REQUIRE(aboutX.has_value());
+    REQUIRE(aboutY.has_value());
+    const OperationResult two = Run(aboutZ->Shape, aboutX->Shape, BooleanOperation::Common);
+    const OperationResult three = Run(two.Shape, aboutY->Shape, BooleanOperation::Common);
+    REQUIRE(CountOf<EntityKind::Solid>(three.Shape) == 1);
+    REQUIRE(CountOf<EntityKind::Shell>(three.Shape) == 1);
+    REQUIRE(CountOf<EntityKind::Face>(three.Shape) == 12);
+    REQUIRE(CountOf<EntityKind::Edge>(three.Shape) == 24);
+    REQUIRE(CountOf<EntityKind::Vertex>(three.Shape) == 14);
+    // Every edge joins faces of two cylinders.
+    REQUIRE(IntersectionEdgesOf(three.Shape) == 24);
+    RequireClosed(three.Shape);
+    // Inside all three; inside the first two but not the third; inside one.
+    REQUIRE(Inside(three.Shape, Point3{0.5, 0.5, 0.5}));
+    REQUIRE(Inside(three.Shape, Point3{1.5, 1.5, 1.5}));
+    REQUIRE_FALSE(Inside(three.Shape, Point3{2.2, 0.5, 2.2}));
+    REQUIRE_FALSE(Inside(three.Shape, Point3{0.5, 2.5, 2.5}));
+    REQUIRE_FALSE(Inside(three.Shape, Point3{0.5, 0.5, 4.0}));
+}
+
 TEST_CASE("bodies apart: two solids, nothing in common, the cut unchanged", "[boolean][assemble]")
 {
     const Shape a = Box();

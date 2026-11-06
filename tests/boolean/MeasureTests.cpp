@@ -148,12 +148,41 @@ TEST_CASE("the measure of the primitives", "[boolean][measure]")
 
 namespace {
 
+const Stereon::Vec3 ex{1.0, 0.0, 0.0};
+const Stereon::Vec3 ey{0.0, 1.0, 0.0};
+const Stereon::Vec3 ez{0.0, 0.0, 1.0};
+
 /// One operation of a pair and its result's exact volume and area.
 struct Expected {
     Stereon::BooleanOperation Operation;
     double Volume;
     double Area;
 };
+
+/// A result bounded by traced curves has the closed-form volume and area to
+/// its own tolerances. The curves are known to the result's tolerances, so
+/// its volume is known to its area times the largest of them, and its area
+/// to its edges' length times it. (The cylinders' results below come out
+/// within 2e-6 of their closed forms, on values of some hundreds.)
+void CheckTraced(const Stereon::Shape& shape, const double volume, const double area)
+{
+    const ShapeMeasures::Measures m = ShapeMeasures::MeasuresOf(shape);
+    INFO("volume " << m.Volume << " for " << volume << ", area " << m.Area << " for " << area);
+    const double tolerance = LargestTolerance(shape);
+    CHECK(std::abs(m.Volume - volume) <= m.Area * tolerance);
+    CHECK(std::abs(m.Area - area) <= m.EdgeLength * tolerance);
+}
+
+/// A cylinder of radius r and the given length about an axis through the
+/// origin, centred on it: the axis is x cross y.
+Stereon::Shape CylinderAbout(const Stereon::Vec3& x, const Stereon::Vec3& y, const double r,
+                             const double length)
+{
+    const Stereon::Point3 base = Stereon::Point3{} - (0.5 * length) * Cross(x, y);
+    return BooleanCases::Must(MakeCylinderSolid(base, x, y, r, length, BooleanCases::serial),
+                              "a cylinder")
+        .Shape;
+}
 
 } // namespace
 
@@ -200,18 +229,8 @@ TEST_CASE("equal perpendicular cylinders measure the Steinmetz solid",
     const double acrossVolume = pi * r * r * 12.0;
     const double uprightArea = 2.0 * pi * r * (r + 10.0);
     const double acrossArea = 2.0 * pi * r * (r + 12.0);
-    const Stereon::Shape upright =
-        BooleanCases::Must(
-            MakeCylinderSolid(Stereon::Point3{0.0, 0.0, -5.0}, Stereon::Vec3{1.0, 0.0, 0.0},
-                              Stereon::Vec3{0.0, 1.0, 0.0}, r, 10.0, BooleanCases::serial),
-            "the upright cylinder")
-            .Shape;
-    const Stereon::Shape across =
-        BooleanCases::Must(
-            MakeCylinderSolid(Stereon::Point3{-6.0, 0.0, 0.0}, Stereon::Vec3{0.0, 1.0, 0.0},
-                              Stereon::Vec3{0.0, 0.0, 1.0}, r, 12.0, BooleanCases::serial),
-            "the cylinder across")
-            .Shape;
+    const Stereon::Shape upright = CylinderAbout(ex, ey, r, 10.0);
+    const Stereon::Shape across = CylinderAbout(ey, ez, r, 12.0);
     // The cut gives up the half of the Steinmetz surface on the upright
     // cylinder and gains the half on the other: its area is the upright
     // cylinder's.
@@ -225,14 +244,62 @@ TEST_CASE("equal perpendicular cylinders measure the Steinmetz solid",
         INFO(Stereon::ToString(e.Operation));
         const auto result = Boolean(upright, across, e.Operation, BooleanCases::serial);
         REQUIRE(result.has_value());
-        const ShapeMeasures::Measures m = ShapeMeasures::MeasuresOf(result->Shape);
-        INFO("volume " << m.Volume << ", area " << m.Area);
-        // The ellipses are traced curves, known to the result's tolerances:
-        // so its volume is known to its area times the largest of them, and
-        // its area to its edges' length times it. (Both come out within
-        // 1e-6 of their closed forms, on values of some hundreds.)
-        const double tolerance = LargestTolerance(result->Shape);
-        CHECK(std::abs(m.Volume - e.Volume) <= m.Area * tolerance);
-        CHECK(std::abs(m.Area - e.Area) <= m.EdgeLength * tolerance);
+        CheckTraced(result->Shape, e.Volume, e.Area);
     }
+    // The other cut, the same way round.
+    const auto other =
+        Boolean(across, upright, Stereon::BooleanOperation::Cut, BooleanCases::serial);
+    REQUIRE(other.has_value());
+    CheckTraced(other->Shape, acrossVolume - commonVolume, acrossArea);
+}
+
+TEST_CASE("three equal perpendicular cylinders measure the tricylinder",
+          "[boolean][measure][regression]")
+{
+    // A third cylinder of radius r = 3 about y, 12 long, across the other
+    // two. The common of the three is the Steinmetz tricylinder, of volume
+    // 8 (2 - sqrt 2) r^3 and area 24 (2 - sqrt 2) r^2, a third of that area
+    // on each cylinder: twelve faces, with the edges and vertices of a
+    // rhombic dodecahedron. It is the Steinmetz solid of two of them cut
+    // down by the third, so it needs the imprint through four more nodes.
+    const double r = 3.0;
+    const double two = 16.0 * r * r * r / 3.0;
+    const double twoArea = 16.0 * r * r;
+    const double three = 8.0 * (2.0 - std::numbers::sqrt2) * r * r * r;
+    const double threeArea = 24.0 * (2.0 - std::numbers::sqrt2) * r * r;
+    const Stereon::Shape upright = CylinderAbout(ex, ey, r, 10.0);
+    const Stereon::Shape across = CylinderAbout(ey, ez, r, 12.0);
+    const Stereon::Shape third = CylinderAbout(ez, ex, r, 12.0);
+    const auto pair =
+        Boolean(upright, across, Stereon::BooleanOperation::Common, BooleanCases::serial);
+    REQUIRE(pair.has_value());
+    const auto tricylinder =
+        Boolean(pair->Shape, third, Stereon::BooleanOperation::Common, BooleanCases::serial);
+    REQUIRE(tricylinder.has_value());
+    CHECK(AllEntities<EntityKind::Face>(tricylinder->Shape)->size() == 12);
+    CHECK(AllEntities<EntityKind::Edge>(tricylinder->Shape)->size() == 24);
+    CHECK(AllEntities<EntityKind::Vertex>(tricylinder->Shape)->size() == 14);
+    CheckTraced(tricylinder->Shape, three, threeArea);
+    // The same solid with the operands the other way round.
+    const auto swapped =
+        Boolean(third, pair->Shape, Stereon::BooleanOperation::Common, BooleanCases::serial);
+    REQUIRE(swapped.has_value());
+    CHECK(AllEntities<EntityKind::Face>(swapped->Shape)->size() == 12);
+    CheckTraced(swapped->Shape, three, threeArea);
+
+    // The union of the three, by inclusion and exclusion: each pair has a
+    // Steinmetz solid in common and the three a tricylinder. Of each
+    // cylinder's lateral face the union loses what lies inside either of
+    // the others, 8 r^2 each less the third of the tricylinder's area that
+    // lies inside both.
+    const double volumes = pi * r * r * (10.0 + 12.0 + 12.0);
+    const double areas = 2.0 * pi * r * ((r + 10.0) + (r + 12.0) + (r + 12.0));
+    const auto united =
+        Boolean(upright, across, Stereon::BooleanOperation::Union, BooleanCases::serial);
+    REQUIRE(united.has_value());
+    const auto all =
+        Boolean(united->Shape, third, Stereon::BooleanOperation::Union, BooleanCases::serial);
+    REQUIRE(all.has_value());
+    CHECK(AllEntities<EntityKind::Solid>(all->Shape)->size() == 1);
+    CheckTraced(all->Shape, volumes - 3.0 * two + three, areas - 3.0 * twoArea + threeArea);
 }
