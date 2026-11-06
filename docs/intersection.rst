@@ -94,6 +94,12 @@ The configurations:
   resolution, and the certificate below proves what it achieved. The fit
   is limited to 2^16 sample intervals; an excessive or non-finite count
   returns ``CertificationFailed`` before integer conversion or allocation.
+  Circular sections are clipped to a bounded plane box by the same complete
+  planar edge-intersection clipper used for curves lying in a plane.
+  Retained arcs keep the cylinder-angle parameter and are certified against
+  both surfaces. Isolated box contacts are retained as singleton ranges,
+  consistent with clipped rulings; uncertain piece classification fails
+  with ``IntersectionFailed``. Partial ellipse clipping remains unsupported.
 - **Cylinder–cylinder, parallel axes:** two rulings, an external or
   internal tangent ruling (``SameSide``), a proved separation apart or
   nested, or an overlap, exact or declared: the surfaces' Hausdorff

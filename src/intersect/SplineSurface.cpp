@@ -31,6 +31,7 @@ import Stereon.Robust;
 
 #include "Analytic.hpp"
 #include "Bernstein.hpp"
+#include "BoxClip.hpp"
 #include "Planar.hpp"
 
 /// A B-spline curve, polynomial or rational, or a circle or an ellipse,
@@ -583,6 +584,16 @@ struct BoxCuts {
 }
 
 } // namespace
+
+Result<std::vector<Interval>> ClipPcurveToBox(const Curve2d& pcurve, const Interval& range,
+                                              const Box2& box, const Context& ctx,
+                                              const std::string_view handler)
+{
+    if (range.IsEmpty() || box.IsEmpty()) {
+        return std::vector<Interval>{};
+    }
+    return InsideBox(pcurve, range, box, ctx, handler);
+}
 
 Result<CurveSurfaceIntersection> SplinePlane(const Curve& a, const Interval& domain,
                                              const Surface& b, const Box2& box, const Context& ctx)
