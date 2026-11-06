@@ -189,9 +189,16 @@ stretch's middle point decides whether the stretch lies inside the face:
   the piece's crossing there;
 - a stretch whose middle lies on an ``OnBoundary`` stretch is along the
   boundary, neither inside nor outside, and is not a piece;
-- otherwise the middle point's side is the parity of a ray's crossings of
-  the loops (below), and a stretch inside becomes a piece, its ends the
-  crossings that cut it (nothing at a free end of the branch).
+- otherwise the stretch's side is the parity of a ray's crossings of the
+  loops (below), and a stretch inside becomes a piece, its ends the
+  crossings that cut it (nothing at a free end of the branch). The side is
+  read at the middle of the stretch's longest part between the touches
+  inside it (``SideReadingAt``), not at the stretch's own middle: a touch
+  does not change sides, but the middle can *be* a touch, and from a point
+  on the boundary every ray starts on an edge and none decides. A cylinder
+  tangent to a box's side meets the box's top plane in a circle that
+  touches the top face's edge from outside; the plane's box keeps an arc
+  of it whose middle is exactly that touch.
 
 The inside test
 ~~~~~~~~~~~~~~~
