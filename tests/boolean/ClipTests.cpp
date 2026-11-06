@@ -200,3 +200,32 @@ TEST_CASE("an ellipse's sinusoid pcurve is clipped on a cylinder's lateral face"
     // Inside where 9 + 3 cos t < 10: all but 2 acos(1/3) of the turn.
     REQUIRE_THAT(covered, WithinAbs(2.0 * pi - 2.0 * std::acos(1.0 / 3.0), 1e-6));
 }
+
+TEST_CASE("an arc touching a face's edge at its middle is outside, not undecidable",
+          "[boolean][clip][regression]")
+{
+    // A cylinder of radius 3 about (13, 5), tangent to the box's side x = 10,
+    // meets the top plane in a circle that touches the top face's edge
+    // x = 10 at (10, 5) from outside. The plane's box keeps the arc with
+    // x <= 11, whose middle is that touch, and the clip judged the arc's side
+    // there: on the boundary, where every ray starts on an edge, so every
+    // direction was refused (IntegrationTests, "cylinder tangent to a side").
+    // The side is now read off the touch, and the arc lies outside.
+    const Shape box = Box();
+    const FaceId top = PlaneFaceAlong(box, Vec3{0.0, 0.0, 1.0});
+    const Surface tangent{
+        Cylinder{Point3{13.0, 5.0, 0.0}, 3.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}}};
+    const IntersectionBranch branch = BranchOn(box, top, tangent, faceBox);
+    const auto clip = ClipToFace(box, top, branch, BranchSide::A, ctx);
+    INFO((clip ? std::string() : std::string(clip.error().GetMessage())));
+    REQUIRE(clip.has_value());
+    REQUIRE(clip->Inside.empty());
+    // The touch itself is reported, tangential, at (10, 5).
+    bool touched = false;
+    for (const Stereon::LoopCrossing& c : clip->Crossings) {
+        const Point3 p = Eval(branch.Curve3d, c.OnBranch);
+        touched = touched || (c.Contact != ContactType::Crossing && std::abs(p.X - 10.0) <= 1e-9 &&
+                              std::abs(p.Y - 5.0) <= 1e-9);
+    }
+    REQUIRE(touched);
+}
