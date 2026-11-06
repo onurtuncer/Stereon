@@ -109,9 +109,7 @@ std::vector<Pair> Pairs()
     add("box on part of a face", box, BoxFrom(Point3{10.0, 2.0, 3.0}, Point3{15.0, 8.0, 7.0}), lo,
         Point3{16.0, 11.0, 11.0});
     add("box edge to edge", box, BoxFrom(Point3{10.0, 10.0, 0.0}, Point3{20.0, 20.0, 10.0}), lo,
-        Point3{21.0, 21.0, 11.0},
-        "the union is published with the shared edge used four times by one shell: not "
-        "closed at the Solid level, an invalid success");
+        Point3{21.0, 21.0, 11.0});
     add("box sharing top and bottom", box, BoxFrom(Point3{5.0, 5.0, 0.0}, Point3{15.0, 15.0, 10.0}),
         lo, Point3{16.0, 16.0, 11.0},
         "refused: ImprintNetwork cannot close the network of the coplanar overlap");
@@ -172,21 +170,50 @@ std::string SolidFindings(const Shape& shape)
     return text;
 }
 
-/// The middle of an edge, through its primary use's pcurve on its face.
+/// The first use of an edge in its radial ring, if it has one.
+std::optional<Stereon::CoedgeId> FirstUseOf(const Shape& shape, const EdgeId edge)
+{
+    const auto uses = RadialCoedgesOf(shape, edge);
+    if (!uses || uses->begin() == uses->end()) {
+        return std::nullopt;
+    }
+    return *uses->begin();
+}
+
+/// The middle of an edge, through its first use's pcurve on its face.
 std::optional<Point3> MiddleOf(const Shape& shape, const EdgeId edge)
 {
-    const Stereon::CoedgeId use = PrimaryCoedgeOf(shape, edge);
-    const std::optional<Stereon::Curve2d> pcurve = PCurveOf(shape, use);
+    const std::optional<Stereon::CoedgeId> use = FirstUseOf(shape, edge);
+    if (!use) {
+        return std::nullopt;
+    }
+    const std::optional<Stereon::Curve2d> pcurve = PCurveOf(shape, *use);
     if (!pcurve) {
         return std::nullopt;
     }
-    const Stereon::Surface surface = SurfaceOf(shape, FaceOf(shape, LoopOf(shape, use)));
+    const Stereon::Surface surface = SurfaceOf(shape, FaceOf(shape, LoopOf(shape, *use)));
     return Eval(surface, Eval(*pcurve, Midpoint(RangeOf(shape, edge))));
 }
 
-/// Pairs of coincident vertices, and of edges between the same vertices
-/// whose middles coincide, each within the sum of their tolerances.
-std::string Duplicates(const Shape& shape)
+/// The shell a vertex's boundary belongs to, through its first used edge.
+std::optional<Stereon::ShellId> ShellAt(const Shape& shape, const VertexId v)
+{
+    const auto edges = EdgesOf(shape, v);
+    if (!edges) {
+        return std::nullopt;
+    }
+    for (const EdgeId e : *edges) {
+        if (const std::optional<Stereon::CoedgeId> use = FirstUseOf(shape, e)) {
+            return ShellOf(shape, FaceOf(shape, LoopOf(shape, *use)));
+        }
+    }
+    return std::nullopt;
+}
+
+/// Pairs of coincident vertices of one shell, and of edges between the same
+/// vertices whose middles coincide, each within the sum of their
+/// tolerances; and any edge no face uses.
+std::string DuplicateVertices(const Shape& shape)
 {
     std::string text;
     std::vector<VertexId> vertices;
@@ -195,6 +222,11 @@ std::string Duplicates(const Shape& shape)
     }
     for (std::size_t i = 0; i < vertices.size(); ++i) {
         for (std::size_t j = i + 1; j < vertices.size(); ++j) {
+            // Lumps touching at a point or along an edge have coincident
+            // vertices, one in each shell: only a shell's own repeat one.
+            if (ShellAt(shape, vertices[i]) != ShellAt(shape, vertices[j])) {
+                continue;
+            }
             const double d =
                 Distance(PositionOf(shape, vertices[i]), PositionOf(shape, vertices[j]));
             if (d <= ToleranceOf(shape, vertices[i]) + ToleranceOf(shape, vertices[j])) {
@@ -203,8 +235,18 @@ std::string Duplicates(const Shape& shape)
             }
         }
     }
+    return text;
+}
+
+std::string DuplicateEdges(const Shape& shape)
+{
+    std::string text;
     std::vector<EdgeId> edges;
     for (const EdgeId e : *AllEntities<EntityKind::Edge>(shape)) {
+        if (!FirstUseOf(shape, e)) {
+            text += "edge " + Describe(shape, e) + " has no use\n";
+            continue;
+        }
         edges.push_back(e);
     }
     for (std::size_t i = 0; i < edges.size(); ++i) {
@@ -226,6 +268,11 @@ std::string Duplicates(const Shape& shape)
         }
     }
     return text;
+}
+
+std::string Duplicates(const Shape& shape)
+{
+    return DuplicateVertices(shape) + DuplicateEdges(shape);
 }
 
 /// Inside, outside, or not decided at this point.
@@ -259,6 +306,34 @@ struct Outcome {
     double Volume = 0.0;
     double Estimate = 0.0;
 };
+
+void CheckMembership(const Pair& pair, const Shape& shape, const BooleanOperation operation,
+                     const bool reversed, const std::string& name,
+                     std::vector<std::string>& problems)
+{
+    // Membership at a grid of points off the faces of both operands.
+    constexpr int n = 4;
+    const auto at = [&](const double lo, const double hi, const int s) {
+        return lo + (hi - lo) * (s + 0.4142135623730951) / n;
+    };
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            for (int k = 0; k < n; ++k) {
+                const Point3 p{at(pair.Lo.X, pair.Hi.X, i), at(pair.Lo.Y, pair.Hi.Y, j),
+                               at(pair.Lo.Z, pair.Hi.Z, k)};
+                const std::optional<bool> inA = InsideOf(pair.A, p);
+                const std::optional<bool> inB = InsideOf(pair.B, p);
+                const std::optional<bool> inResult = InsideOf(shape, p);
+                if (inA && inB && inResult &&
+                    *inResult != Expected(operation, *inA, *inB, reversed)) {
+                    problems.push_back(name + " has (" + std::to_string(p.X) + ", " +
+                                       std::to_string(p.Y) + ", " + std::to_string(p.Z) +
+                                       ") on the wrong side");
+                }
+            }
+        }
+    }
+}
 
 /// Everything wrong with the four operations on a pair, one line each: a
 /// refusal, a solid-level finding, a duplicate, a point on the wrong side,
@@ -297,28 +372,7 @@ std::vector<std::string> Problems(const Pair& pair)
         const ShapeMeasures::Measures m = ShapeMeasures::MeasuresOf(shape);
         outcomes.push_back({shape, m.Volume, m.VolumeEstimate});
 
-        // Membership at a grid of points off the faces of both operands.
-        constexpr int n = 4;
-        const auto at = [&](const double lo, const double hi, const int s) {
-            return lo + (hi - lo) * (s + 0.4142135623730951) / n;
-        };
-        for (int i = 0; i < n; ++i) {
-            for (int j = 0; j < n; ++j) {
-                for (int k = 0; k < n; ++k) {
-                    const Point3 p{at(pair.Lo.X, pair.Hi.X, i), at(pair.Lo.Y, pair.Hi.Y, j),
-                                   at(pair.Lo.Z, pair.Hi.Z, k)};
-                    const std::optional<bool> inA = InsideOf(pair.A, p);
-                    const std::optional<bool> inB = InsideOf(pair.B, p);
-                    const std::optional<bool> inResult = InsideOf(shape, p);
-                    if (inA && inB && inResult &&
-                        *inResult != Expected(run.Operation, *inA, *inB, run.Reversed)) {
-                        problems.push_back(name + " has (" + std::to_string(p.X) + ", " +
-                                           std::to_string(p.Y) + ", " + std::to_string(p.Z) +
-                                           ") on the wrong side");
-                    }
-                }
-            }
-        }
+        CheckMembership(pair, shape, run.Operation, run.Reversed, name, problems);
     }
     // The volume identities, when every operation gave a result.
     if (std::ranges::all_of(outcomes, [](const Outcome& o) { return o.Result.has_value(); })) {
