@@ -708,6 +708,13 @@ template <typename Record, typename Make>
     return RevolutionSurface(profile, r.Origin, r.Axis, RevolutionSurface::UnitAxis{});
 }
 
+[[nodiscard]] bool IsCompositeSurfaceRecord(const RawRecord& record)
+{
+    return record.Name == GeometryTypeName<TrimmedSurface> ||
+           record.Name == GeometryTypeName<ExtrusionSurface> ||
+           record.Name == GeometryTypeName<RevolutionSurface>;
+}
+
 /// The record decoded as the type of the list it names, or as a composite
 /// record of the chunk's kind: a trimmed curve in a curve chunk, a trimmed
 /// surface or a sweep in the surface chunk.
@@ -723,10 +730,7 @@ Result<Wrapper> DecodeAny(TypeList<Ts...> types, const RawRecord& record, const 
         }
     }
     if constexpr (std::is_same_v<Wrapper, Surface>) {
-        const bool composite = record.Name == GeometryTypeName<TrimmedSurface> ||
-                               record.Name == GeometryTypeName<ExtrusionSurface> ||
-                               record.Name == GeometryTypeName<RevolutionSurface>;
-        if (composite) {
+        if (IsCompositeSurfaceRecord(record)) {
             STEREON_TRY_VOID(RequireVersion(record, where, SurfaceRecordsVersion, version));
         }
         if (record.Name == GeometryTypeName<Ellipsoid>) {
