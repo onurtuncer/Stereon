@@ -113,7 +113,7 @@ template <std::size_t D>
 
 } // namespace Stereon
 
-namespace Stereon::Detail {
+export namespace Stereon::Detail {
 
 /// The largest number of bisection steps EllipseRoot needs: one per binary
 /// digit of a double between the smallest subnormal and 2, so that the

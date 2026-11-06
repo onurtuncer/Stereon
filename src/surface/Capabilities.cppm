@@ -41,6 +41,10 @@ inline constexpr OperationCapability SurfaceCatalogue[] = {
     Declare("MakeTorus", {Dependency::DefiningValues},
             {TrackingConvention::FixedSurfaceCoordinates},
             "smooth in the centre, radii and frame; the minor radius stays below the major"),
+    Declare("MakeEllipsoid", {Dependency::DefiningValues},
+            {TrackingConvention::FixedSurfaceCoordinates},
+            "smooth in the centre, semi-axes and frame; samples stay off the poles, coordinate "
+            "singularities"),
     Declare("MakeBSplineSurface", {Dependency::DefiningValues},
             {TrackingConvention::FixedSurfaceCoordinates},
             "smooth in the poles and weights at fixed knot vectors and degrees"),

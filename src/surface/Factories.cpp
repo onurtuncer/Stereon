@@ -72,6 +72,19 @@ Result<Sphere> MakeSphere(const Point3& center, const double radius, const Vec3&
     return Sphere{center, radius, xAxis, yAxis, rightHanded};
 }
 
+Result<Ellipsoid> MakeEllipsoid(const Point3& center, const double a, const double b,
+                                const double c, const Vec3& xAxis, const Vec3& yAxis,
+                                const bool rightHanded)
+{
+    constexpr std::string_view where = "MakeEllipsoid";
+    STEREON_TRY_VOID(Detail::CheckFinite(center, "Center", where));
+    STEREON_TRY_VOID(Detail::CheckPositive(a, "A", where));
+    STEREON_TRY_VOID(Detail::CheckPositive(b, "B", where));
+    STEREON_TRY_VOID(Detail::CheckPositive(c, "C", where));
+    STEREON_TRY_VOID(Detail::CheckOrthonormal(xAxis, yAxis, where));
+    return Ellipsoid{center, a, b, c, xAxis, yAxis, rightHanded};
+}
+
 Result<Torus> MakeTorus(const Point3& center, const double majorRadius, const double minorRadius,
                         const Vec3& xAxis, const Vec3& yAxis, const bool rightHanded)
 {

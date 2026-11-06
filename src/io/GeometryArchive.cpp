@@ -241,7 +241,9 @@ template <typename Wrapper>
 bool PutItem(std::vector<std::byte>& out, const Wrapper& item, const int depth)
 {
     const bool builtin = VisitBuiltin(item, [&]<typename G>(const G& geometry) {
-        if constexpr (std::is_same_v<G, Wrapper>) {
+        // No format version this kernel writes stores an ellipsoid
+        // (EllipsoidVersion).
+        if constexpr (std::is_same_v<G, Wrapper> || std::is_same_v<G, Ellipsoid>) {
             return false;
         } else {
             PutRecord(out, geometry);
@@ -515,6 +517,10 @@ template <std::size_t D>
 {
     return MakeTorus(g.Center, g.MajorRadius, g.MinorRadius, g.XAxis, g.YAxis, g.RightHanded);
 }
+[[nodiscard]] auto Validated(const Ellipsoid& g)
+{
+    return MakeEllipsoid(g.Center, g.A, g.B, g.C, g.XAxis, g.YAxis, g.RightHanded);
+}
 [[nodiscard]] auto Validated(const BSplineSurface& g)
 {
     return MakeBSplineSurface(g.DegreeU, g.DegreeV, g.KnotsU, g.KnotsV, g.Poles, g.Weights);
@@ -545,6 +551,13 @@ template <typename Wrapper, typename... Ts>
 /// The format versions that introduced the composite records.
 constexpr std::uint32_t TrimmedCurvesVersion = 2;
 constexpr std::uint32_t SurfaceRecordsVersion = 3;
+/// The format version that will store ellipsoids (ADR-0048), above every
+/// version this kernel writes: until it comes, with its committed file,
+/// ellipsoids are neither written nor read, since a version-3 file with one
+/// would be refused by every existing reader of version 3.
+constexpr std::uint32_t EllipsoidVersion = 4;
+static_assert(EllipsoidVersion > GeometryFormatVersion,
+              "format version 4 stores ellipsoids: lift the writer's refusal in PutItem");
 
 /// ParseError unless the file's format version has the record's type: no
 /// writer of version 1 stored a trimmed curve, so a version-1 file with one
@@ -715,6 +728,9 @@ Result<Wrapper> DecodeAny(TypeList<Ts...> types, const RawRecord& record, const 
                                record.Name == GeometryTypeName<RevolutionSurface>;
         if (composite) {
             STEREON_TRY_VOID(RequireVersion(record, where, SurfaceRecordsVersion, version));
+        }
+        if (record.Name == GeometryTypeName<Ellipsoid>) {
+            STEREON_TRY_VOID(RequireVersion(record, where, EllipsoidVersion, version));
         }
         if (record.Name == GeometryTypeName<TrimmedSurface>) {
             return DecodeTrimmedSurface(types, record, where, depth, version);
