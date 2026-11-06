@@ -18,6 +18,7 @@
 
 #include <cmath>
 #include <cstddef>
+#include <iterator>
 #include <numbers>
 #include <string>
 #include <utility>
@@ -121,6 +122,59 @@ TEST_CASE("a cylinder through a box cuts two discs and two bands", "[boolean][bo
     for (const auto& [ea, eb, transition] : bodies.Shared) {
         REQUIRE(CurveOf(bodies.A.Shape, ea)->Target<Stereon::Circle>() != nullptr);
         REQUIRE(KindOf(bodies.B.Shape, eb) == Stereon::EdgeCurveKind::Exact);
+    }
+}
+
+TEST_CASE("a cylinder pierced across its seam is cut into faces that close in its parameters",
+          "[boolean][bodies][seam][regression]")
+{
+    // The upright cylinder's seam is at u = 0, on +x. A cylinder along x,
+    // through its axis or 1 off it, pierces it across the seam, where the
+    // hole's curve meets the seam twice, and opposite it at u = pi, where a
+    // closed curve meets no edge. Before #214 the second half of the curve
+    // at the seam was joined to the seam's use on the far side, a jump of
+    // 2 pi in a loop (G03; S07 while the seam was a Boundary edge), and the
+    // closed curve was hung on whichever part kept the face's handle, a
+    // half disc at u = 2 pi (docs/imprinting.rst, *Seams*).
+    const Vec3 ex{1.0, 0.0, 0.0};
+    const Vec3 ey{0.0, 1.0, 0.0};
+    const Vec3 ez{0.0, 0.0, 1.0};
+    const auto upright = MakeCylinderSolid(Point3{0.0, 0.0, -5.0}, ex, ey, 3.0, 10.0, ctx);
+    REQUIRE(upright.has_value());
+    for (const double offset : {0.0, 1.0}) {
+        INFO("offset " << offset);
+        const auto across = MakeCylinderSolid(Point3{-6.0, offset, 0.0}, ey, ez, 1.5, 12.0, ctx);
+        REQUIRE(across.has_value());
+        // Committed at the Geometric level, so every loop closes in the
+        // surface's parameters.
+        const ImprintedBodies bodies = Imprinted(upright->Shape, across->Shape);
+        const Shape& a = bodies.A.Shape;
+        // The lateral face: the outer part, the two halves of the disc
+        // across the seam, which the seam's middle piece divides, and the
+        // disc at u = pi.
+        std::size_t lateral = 0;
+        std::size_t holed = 0;
+        for (const Stereon::FaceId face : *AllEntities<EntityKind::Face>(a)) {
+            const Stereon::Surface surface = SurfaceOf(a, face);
+            if (surface.Target<Stereon::Cylinder>() == nullptr) {
+                continue;
+            }
+            ++lateral;
+            const auto loops = LoopsOf(a, face);
+            REQUIRE(loops.has_value());
+            const auto count = std::ranges::distance(loops->begin(), loops->end());
+            if (count < 2) {
+                continue;
+            }
+            // The face with a hole is the outer part, the one running round
+            // the whole cylinder from its bottom circle to its top.
+            ++holed;
+            const auto outer = CoedgesOf(a, *loops->begin());
+            REQUIRE(outer.has_value());
+            REQUIRE(std::ranges::distance(outer->begin(), outer->end()) >= 6);
+        }
+        REQUIRE(lateral == 4);
+        REQUIRE(holed == 1);
     }
 }
 

@@ -95,11 +95,15 @@ ring and the disc change faces (KFMRH, then MFKRH), so the disc is the
 piece's face. Where a piece starts and ends on one edge, a cylinder's
 seam, both uses of that edge end at the vertex, one from either side of
 the chart, and the imprint takes the use the piece's own pcurve reaches,
-so the loops stay continuous in the face's parameter space. The new edge
-is ``Exact`` with the
+found by where the uses' pcurves end, so the loops stay continuous in the
+face's parameter space; a hole across the seam becomes two half discs on
+either side of the seam's piece between them (:doc:`imprinting`,
+*Seams*). A component touching no boundary is hung on the part of the face
+that holds it. The new edge is ``Exact`` with the
 branch's curve where that is a line, a circle or an ellipse, and otherwise
 a ``Trim`` edge with its cached curve (ADR-0009, section 8), its tolerance
-the larger of the resolution and the branch's certified bound. The
+the larger of the resolution and the branch's certified bound; in the
+result, where it joins a face of each operand, an ``Intersection`` edge. The
 ``Imprint`` names each piece's edge, its end vertices and the face it cut
 off, the builder's vertex for every network vertex, and the vertices the
 splits made. ``NetworkOf`` turns one clip into a network, and
