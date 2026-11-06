@@ -276,6 +276,47 @@ TEST_CASE("a curve along the box's edge keeps the stretch on the boundary",
     REQUIRE(along->Overlaps.front().Range.GetUpper() == 1.0);
 }
 
+TEST_CASE("a curve in the plane over one parameter is kept by its point",
+          "[intersect][conic-surface][regression]")
+{
+    // The audit of 2026-11-05: a range of one parameter has no piece
+    // between cuts, so its point in the box was dropped, an empty result
+    // claiming a separation. A straight B-spline from (-2, 0) to (2, 0)
+    // against the square [-1, 1]²: at s = 1/2 the origin, inside; at s = 0
+    // the point (-2, 0), outside; at s = 1/4 the point (-1, 0), on the edge.
+    auto made =
+        Stereon::MakeBSplineCurve(1, {0.0, 0.0, 1.0, 1.0}, {{-2.0, 0.0, 0.0}, {2.0, 0.0, 0.0}});
+    REQUIRE(made.has_value());
+    const Stereon::Box2 square{Interval{-1.0, 1.0}, Interval{-1.0, 1.0}};
+    const auto at = [&](const double s) {
+        return Intersect(Curve{*made}, Interval{s}, Surface{ground}, square, ctx);
+    };
+    for (const double s : {0.5, 0.25, 0.75}) {
+        const auto kept = at(s);
+        REQUIRE(kept.has_value());
+        REQUIRE(kept->Points.empty());
+        REQUIRE(kept->Overlaps.size() == 1);
+        REQUIRE(kept->Overlaps.front().Range == Interval{s});
+    }
+    for (const double s : {0.0, 1.0, 0.125}) {
+        const auto apart = at(s);
+        REQUIRE(apart.has_value());
+        REQUIRE(apart->IsEmpty());
+    }
+
+    // A circle of radius 3/2, which leaves the box [-2, 2] x [-1, 1]: in it
+    // at angle 0, out of it at pi / 2.
+    const Circle wide{Point3{}, 1.5, ex, ey};
+    const Stereon::Box2 band{Interval{-2.0, 2.0}, Interval{-1.0, 1.0}};
+    const auto in = Intersect(Curve{wide}, Interval{0.0}, Surface{ground}, band, ctx);
+    REQUIRE(in.has_value());
+    REQUIRE(in->Overlaps.size() == 1);
+    REQUIRE(in->Overlaps.front().Range == Interval{0.0});
+    const auto out = Intersect(Curve{wide}, Interval{pi / 2.0}, Surface{ground}, band, ctx);
+    REQUIRE(out.has_value());
+    REQUIRE(out->IsEmpty());
+}
+
 TEST_CASE("an ellipse crosses a plane, a sphere and a cylinder", "[intersect][conic-surface]")
 {
     // Semi-axes 3 along x and 1/2 along y.
