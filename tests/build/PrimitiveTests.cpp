@@ -134,7 +134,7 @@ TEST_CASE("a cylinder: two circles, a seam, a lateral face and two disks", "[bui
     }
     REQUIRE(kinds == std::vector<Stereon::EdgeCurveKind>{Stereon::EdgeCurveKind::Exact,
                                                          Stereon::EdgeCurveKind::Exact,
-                                                         Stereon::EdgeCurveKind::Boundary});
+                                                         Stereon::EdgeCurveKind::Exact});
     // The disks face down and up.
     const auto faces = *Stereon::AllEntities<EntityKind::Face>(shape);
     std::vector<Stereon::FaceId> list(faces.begin(), faces.end());
@@ -173,5 +173,45 @@ TEST_CASE("primitives refuse bad dimensions and frames", "[build][primitives]")
         const auto refused = Stereon::MakeCylinderSolid(Point3{}, x, y, radius, height, context);
         REQUIRE_FALSE(refused);
         REQUIRE(refused.error().GetCode() == ErrorCode::InvalidInput);
+    }
+}
+
+TEST_CASE("a cylinder seam keeps an exact line and both periodic pcurves",
+          "[build][primitives][regression]")
+{
+    const Context ctx = Context::Default();
+    const Point3 base{1.0, -2.0, 3.0};
+    for (const TiltedFrame& frame : {TiltedFrame{{1, 0, 0}, {0, 1, 0}}, Tilted()}) {
+        const auto cylinder = Stereon::MakeCylinderSolid(base, frame.X, frame.Y, 1.5, 4.0, ctx);
+        REQUIRE(cylinder);
+        const Shape& shape = cylinder->Shape;
+        std::size_t seams = 0;
+        for (const Stereon::EdgeId edge : *AllEntities<EntityKind::Edge>(shape)) {
+            if (StartOf(shape, edge) == EndOf(shape, edge)) {
+                continue;
+            }
+            ++seams;
+            REQUIRE(KindOf(shape, edge) == Stereon::EdgeCurveKind::Exact);
+            const auto curve = CurveOf(shape, edge);
+            REQUIRE(curve);
+            REQUIRE(curve->Target<Stereon::Line>() != nullptr);
+            const auto uses = RadialCoedgesOf(shape, edge);
+            REQUIRE(uses);
+            std::size_t count = 0;
+            for (const Stereon::CoedgeId use : *uses) {
+                ++count;
+                const auto pcurve = PCurveOf(shape, use);
+                REQUIRE(pcurve);
+                const auto surface = SurfaceOf(shape, FaceOf(shape, LoopOf(shape, use)));
+                for (const double t : {0.0, 1.0, 2.0, 4.0}) {
+                    const Point3 expected = base + 1.5 * frame.X + t * Cross(frame.X, frame.Y);
+                    CHECK(Distance(Eval(*curve, t), expected) <= ctx.GetResolution());
+                    CHECK(Distance(Eval(surface, Eval(*pcurve, t)), expected) <=
+                          ctx.GetResolution());
+                }
+            }
+            CHECK(count == 2);
+        }
+        CHECK(seams == 1);
     }
 }

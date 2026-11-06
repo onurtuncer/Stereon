@@ -146,6 +146,55 @@ TEST_CASE("a box and a cylinder through it: union, common and cut", "[boolean][a
     REQUIRE_FALSE(Inside(cut.Shape, Point3{5.0, 5.0, 12.0}));
 }
 
+TEST_CASE("cylinders crossing meet along Intersection edges, across the seam too",
+          "[boolean][assemble][seam][regression]")
+{
+    // A cylinder along x through the upright one's axis, or 1 off it: the
+    // hole it makes crosses the upright's seam. Their curves of meeting are
+    // fitted, so each body imprints them as Trim edges on its own face;
+    // joined, a face of each body uses them, on two surfaces, which a Trim
+    // edge cannot be (G05). The result takes them as Intersection edges.
+    const auto upright = Stereon::MakeCylinderSolid(Point3{0.0, 0.0, -5.0}, Vec3{1.0, 0.0, 0.0},
+                                                    Vec3{0.0, 1.0, 0.0}, 3.0, 10.0, ctx);
+    REQUIRE(upright.has_value());
+    // Membership is checked through the result's own winding number, which
+    // refuses the skew union (its faces add up to a few 1e-6 off 1; see the
+    // known pairs of IntegrationTests.cpp), so for the perpendicular one only.
+    for (const auto& [offset, membership] : {std::pair{0.0, true}, std::pair{1.0, false}}) {
+        INFO("offset " << offset);
+        const auto across = Stereon::MakeCylinderSolid(
+            Point3{-6.0, offset, 0.0}, Vec3{0.0, 1.0, 0.0}, Vec3{0.0, 0.0, 1.0}, 1.5, 12.0, ctx);
+        REQUIRE(across.has_value());
+        for (const BooleanOperation operation :
+             {BooleanOperation::Union, BooleanOperation::Common, BooleanOperation::Cut}) {
+            INFO(Stereon::ToString(operation));
+            const OperationResult result = Run(upright->Shape, across->Shape, operation);
+            std::size_t intersections = 0;
+            for (const Stereon::EdgeId edge : *AllEntities<EntityKind::Edge>(result.Shape)) {
+                if (KindOf(result.Shape, edge) == Stereon::EdgeCurveKind::Intersection) {
+                    ++intersections;
+                }
+            }
+            // Two closed curves, each cut into pieces at the seams.
+            REQUIRE(intersections >= 2);
+            const Stereon::ValidityReport report =
+                ValidateTopology(result.Shape, Stereon::ValidityLevel::Solid, ctx);
+            for (const Stereon::ValidityFinding& finding : report.GetFindings()) {
+                INFO(finding.Message);
+                CHECK(finding.Rule == Stereon::TopologyRule::SelfIntersectionUnchecked);
+            }
+        }
+        if (!membership) {
+            continue;
+        }
+        // Where the across cylinder pierces the upright one, both ways.
+        const OperationResult united = Run(upright->Shape, across->Shape, BooleanOperation::Union);
+        REQUIRE(Inside(united.Shape, Point3{0.0, 0.0, 4.0}));
+        REQUIRE(Inside(united.Shape, Point3{5.0, offset, 0.0}));
+        REQUIRE_FALSE(Inside(united.Shape, Point3{5.0, offset + 2.0, 0.0}));
+    }
+}
+
 TEST_CASE("bodies apart: two solids, nothing in common, the cut unchanged", "[boolean][assemble]")
 {
     const Shape a = Box();

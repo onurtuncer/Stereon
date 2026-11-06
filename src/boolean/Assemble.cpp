@@ -118,6 +118,9 @@ struct SharedPair {
     /// transverse intersection, which both bodies carry on the branch's
     /// parameter; either way for edges paired on coincident faces.
     bool Along = true;
+    /// Whether both bodies keep a face at the piece, so that its edge joins
+    /// faces of two surfaces.
+    bool Joins = false;
 };
 
 struct Work {
@@ -232,7 +235,8 @@ void Record(Work& w, const EntityKind kind, const std::uint32_t target, const st
             continue;
         }
         const bool along = RunsAlong(w, shared.A, shared.B);
-        SharedPair pair{usesA > 0 ? BodyA : BodyB, {shared.A, shared.B}, along};
+        SharedPair pair{
+            usesA > 0 ? BodyA : BodyB, {shared.A, shared.B}, along, usesA > 0 && usesB > 0};
         w.PairOf[{BodyA, shared.A.GetIndex()}] = w.Pairs.size();
         w.PairOf[{BodyB, shared.B.GetIndex()}] = w.Pairs.size();
         w.Pairs.push_back(pair);
@@ -334,6 +338,21 @@ struct Carried {
     return {};
 }
 
+/// The kind of the result's edge for a body's edge of that kind. Each body
+/// carries a curved piece of the intersection as a Trim edge on its own
+/// face; joining a face of each body, the result's edge lies on two
+/// surfaces: an Intersection edge (ADR-0009, G05), its uses' pcurves on
+/// both, the first its primary. The circles and ellipses a plane cuts from
+/// a cylinder are Exact and stay so.
+[[nodiscard]] EdgeCurveKind KindFor(const Work& w, const EdgeCurveKind kind,
+                                    const std::optional<std::size_t> pair)
+{
+    if (pair && w.Pairs[*pair].Joins && kind == EdgeCurveKind::Trim) {
+        return EdgeCurveKind::Intersection;
+    }
+    return kind;
+}
+
 /// The result's edge for an edge of the representative body: its kind,
 /// range and curve, between the result's vertices for its ends, at the
 /// larger tolerance of the pair's two edges when it is a piece of the
@@ -343,7 +362,7 @@ struct Carried {
 {
     const Shape& shape = w.ShapeOf(body);
     EdgeSpec spec;
-    spec.Kind = KindOf(shape, edge);
+    spec.Kind = KindFor(w, KindOf(shape, edge), pair);
     STEREON_TRY(spec.Start, VertexFor(w, body, StartOf(shape, edge)));
     STEREON_TRY(spec.End, VertexFor(w, body, EndOf(shape, edge)));
     spec.Range = RangeOf(shape, edge);

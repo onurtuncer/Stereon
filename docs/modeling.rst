@@ -31,9 +31,11 @@ and *y*, with *z* their cross product, as for the analytic surfaces.
   also takes an origin, two axes and the three side lengths.
 - A **cylinder** has 2 vertices on the seam at angle 0, two circular edges, a
   seam, a lateral cylindrical face and two planar disks. The seam is a
-  ``Boundary`` edge that the lateral face uses twice.
+  line that the lateral face uses twice, with pcurves at angles 0 and 2π.
+  Its ``Exact`` representation remains valid when imprinting splits those
+  uses onto different faces.
 
-Every edge except the seam is ``Exact``, with exact pcurves on its faces
+Every edge, including the seam, is ``Exact``, with exact pcurves on its faces
 (ADR-0009). Faces are oriented outward. Vertex and edge tolerances equal the
 ``Context``'s resolution, because native construction is resolution-tight
 (ADR-0001).
@@ -93,11 +95,15 @@ ring and the disc change faces (KFMRH, then MFKRH), so the disc is the
 piece's face. Where a piece starts and ends on one edge, a cylinder's
 seam, both uses of that edge end at the vertex, one from either side of
 the chart, and the imprint takes the use the piece's own pcurve reaches,
-so the loops stay continuous in the face's parameter space. The new edge
-is ``Exact`` with the
+found by where the uses' pcurves end, so the loops stay continuous in the
+face's parameter space; a hole across the seam becomes two half discs on
+either side of the seam's piece between them (:doc:`imprinting`,
+*Seams*). A component touching no boundary is hung on the part of the face
+that holds it. The new edge is ``Exact`` with the
 branch's curve where that is a line, a circle or an ellipse, and otherwise
 a ``Trim`` edge with its cached curve (ADR-0009, section 8), its tolerance
-the larger of the resolution and the branch's certified bound. The
+the larger of the resolution and the branch's certified bound; in the
+result, where it joins a face of each operand, an ``Intersection`` edge. The
 ``Imprint`` names each piece's edge, its end vertices and the face it cut
 off, the builder's vertex for every network vertex, and the vertices the
 splits made. ``NetworkOf`` turns one clip into a network, and

@@ -145,12 +145,13 @@ std::vector<Pair> Pairs()
         Cylinder(Point3{2.0, 0.0, -5.0}, ex, ey, 3.0, 10.0), cl, Point3{6.0, 4.0, 6.0},
         "refused: PlaneCylinder cannot clip a partial circle to a plane face's box");
     add("cylinders perpendicular", upright, Cylinder(Point3{-6.0, 0.0, 0.0}, ey, ez, 1.5, 12.0), cl,
-        ch, "every operation builds a Boundary edge used by two faces, which Freeze rejects (S07)");
+        ch);
     add("cylinders perpendicular, equal radii", upright,
         Cylinder(Point3{-6.0, 0.0, 0.0}, ey, ez, 3.0, 12.0), cl, ch,
         "refused: ImprintNetwork, at the node where the two curves of intersection cross");
     add("cylinders skew", upright, Cylinder(Point3{-6.0, 1.0, 1.0}, ey, ez, 1.5, 12.0), cl, ch,
-        "every operation builds a Boundary edge used by two faces, which Freeze rejects (S07)");
+        "the results are valid, but WindingNumberOf refuses the union and the cut: their faces "
+        "add up to a few 1e-6 off 0 or 1 at points far from them, whatever the budget");
     add("cylinders skew, oblique", upright,
         Cylinder(Point3{-5.0, -3.0, -2.0}, ez, Vec3{-0.8, 0.6, 0.0}, 1.0, 12.0), cl, ch);
     return pairs;
@@ -288,6 +289,22 @@ std::optional<bool> InsideOf(const Shape& shape, const Point3& p)
     return w->IsInside();
 }
 
+/// Why the winding number refuses the body at this point, or nothing. A
+/// refusal is not an undecided point: InvalidResult means the faces do not
+/// add up to 0 or 1, which a closed, consistently oriented body always does,
+/// so it is a problem of the result, not of the point.
+std::optional<std::string> RefusalAt(const Shape& shape, const Point3& p)
+{
+    if (AllEntities<EntityKind::Face>(shape)->empty()) {
+        return std::nullopt;
+    }
+    const auto w = WindingNumberOf(shape, p, 8, serial);
+    if (w || w.error().GetCode() != Stereon::ErrorCode::InvalidResult) {
+        return std::nullopt;
+    }
+    return std::string(w.error().GetMessage());
+}
+
 bool Expected(const BooleanOperation op, const bool a, const bool b, const bool reversed)
 {
     switch (op) {
@@ -321,6 +338,10 @@ void CheckMembership(const Pair& pair, const Shape& shape, const BooleanOperatio
             for (int k = 0; k < n; ++k) {
                 const Point3 p{at(pair.Lo.X, pair.Hi.X, i), at(pair.Lo.Y, pair.Hi.Y, j),
                                at(pair.Lo.Z, pair.Hi.Z, k)};
+                if (const std::optional<std::string> refusal = RefusalAt(shape, p)) {
+                    problems.push_back(name + ": the winding number refuses it: " + *refusal);
+                    return;
+                }
                 const std::optional<bool> inA = InsideOf(pair.A, p);
                 const std::optional<bool> inB = InsideOf(pair.B, p);
                 const std::optional<bool> inResult = InsideOf(shape, p);

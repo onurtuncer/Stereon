@@ -384,12 +384,21 @@ done:
 - **A component touching no boundary.** When no piece can be written, some
   piece has neither end made: a component of the network lies inside the
   face without touching its boundary (a hole's outline, say). It is *hung*
-  on a helper strut: a ``Spatial`` straight edge from a vertex of the face's
-  first loop to the component's first unmade vertex. The component is then
+  on a helper strut: a ``Spatial`` straight edge from a vertex of the outer
+  loop of the face *part* that holds the component to the component's first
+  unmade vertex. Pieces written before it may already have split the face,
+  and the part that kept the original face's handle need not be the one
+  around the component; the part is the one whose outer loop, sampled in the
+  face's parameters, encloses the component's vertex, the innermost when
+  several do (``PartHolding``). The component is then
   written from it, its last piece closing it with MEF. When every piece is
   done, each helper strut is removed (KEMR, ``KillEdgeMakeRing``): the
   component, cut free, is left as a separate loop of the face, a *ring*,
   and the face MEF cut off is its *disc*.
+
+When several networks are imprinted on one face, each starts from the part
+of the face that holds a point of its first piece, chosen the same way, so a
+later network is written into the part an earlier one left around it.
 
 A network whose pieces can never all be written (a piece runs into the
 face from a junction no other piece reaches) fails with
@@ -439,10 +448,48 @@ the vertex the crossing made, and the clip names one of them without
 telling which side the piece arrives from. The imprint takes the use the
 piece's *own* pcurve reaches: of the face's uses of the crossed edge, the
 one whose pcurve, at the crossing's parameter on the edge, lies nearest the
-piece's end in the face's parameter space (``SenseAt``). Writing the piece
-against the other use would leave the face's loop discontinuous in
-parameter space, a jump of a whole period, which the winding number of
-classification (``WindingNumberOf``) refuses as ``InvalidResult``.
+piece's end in the face's parameter space (``SenseAt``).
+
+The sense that names is not enough to find the coedge to write the piece
+against. ``UseEndingAt`` looks for the coedge of the face's loops that ends
+at the piece's vertex, and once a first piece has been written at a seam
+vertex, its own use ends there too, and with the sense of the seam's use on
+the *far* side. So the coedge is chosen by position first: the one whose
+pcurve ends where the piece's pcurve ends, in the face's parameters, and
+among those as near as the Context's resolution, the one of the sense
+``SenseAt`` named. Uses on one side of a seam end where the piece does to
+rounding; the two sides are a whole period apart, so the choice does not
+depend on the size of the face. A piece written against the other side
+leaves the face's loop discontinuous in parameter space, a jump of a whole
+period, which the geometric validation refuses (G03, ``LoopParameterGap``)
+and the winding number of classification (``WindingNumberOf``) would
+refuse as ``InvalidResult``.
+
+A hole whose outline crosses a seam is cut by it. In the cylinder's chart
+it is two half discs, one at each side of the chart, and the seam's piece
+between the two crossings lies between them:
+
+.. code-block:: text
+
+   v                       u = 0                          u = 2π
+   ^   top                   |                               |
+   |                         |                               |
+   |               P2 +------+                               +------+ P2
+   |                  | left |                               | right|
+   |                  | half |  <- seam piece P1..P2 ->      | half |
+   |               P1 +------+    used by both halves        +------+ P1
+   |                         |                               |
+   |   bottom                |                               |
+   +---------------------------------------------------------------> u
+
+Each half disc is a face, and the seam's piece from :math:`P_1` to
+:math:`P_2` is used once by each: at :math:`u = 0` by the left half and at
+:math:`u = 2\pi` by the right. That is an edge between two faces, which a
+``Boundary`` seam, two uses by one face only (S07), cannot be; the cylinder
+primitive's seam is therefore an ``Exact`` line along the axis, with both
+periodic pcurves (:doc:`modeling`). The rest of the seam, below
+:math:`P_1` and above :math:`P_2`, is used twice by the outer face as
+before.
 
 The edges the pieces become
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -457,6 +504,14 @@ interval evaluation covers the types. Both uses of the new edge, one on
 each side of it in the face, take the piece's pcurve. The edge's tolerance,
 like its vertices', is the larger of the Context's resolution and the
 branch's certified bound.
+
+In each body a ``Trim`` piece lies on one surface, the body's own. The
+assembly joins the two bodies' edges of a piece into one edge of the
+result, and where both bodies keep a face at it, that edge joins faces of
+two surfaces: it becomes an ``Intersection`` edge (ADR-0009, G05), each
+use keeping its own pcurve and the first its primary. Two crossing
+cylinders meet along such edges; a plane meets a cylinder in circles and
+ellipses, which stay ``Exact``.
 
 After the imprint
 -----------------
@@ -581,6 +636,38 @@ the same circle runs from the seam all the way round to the seam: its
 crossings are the seam's, at :math:`u = 0` and :math:`u = 2\pi`, and both
 ends take the use of the seam their own pcurve reaches, so the face's
 loops stay continuous. B's lateral face is cut into three bands.
+
+A cylinder pierced across its seam
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:math:`A` is a cylinder of radius 3 about the :math:`z` axis from
+:math:`z = -5` to :math:`z = 5`, its seam at :math:`u = 0` on the
+:math:`+x` side; :math:`B` a cylinder of radius 1.5 along the :math:`x`
+axis from :math:`x = -6` to :math:`x = 6`. B pierces A's lateral face
+twice, around :math:`u = 0` and around :math:`u = \pi`.
+
+- Around :math:`u = \pi` the curve of meeting is a closed branch touching
+  no edge of A. By the time it is written, the curve around :math:`u = 0`
+  has split A's lateral face, so it is hung on the part that holds it, the
+  outer one, not on the half disc that kept the face's handle.
+- Around :math:`u = 0` the curve crosses A's seam at
+  :math:`P_1 = (3, 0, -1.5)` and :math:`P_2 = (3, 0, 1.5)`, which split
+  the seam into three pieces. Its half at :math:`u \approx 2\pi` is written
+  first, against the seam's uses at :math:`u = 2\pi`, and cuts off the
+  right half disc. The half at :math:`u \approx 0` is then written against
+  the seam's uses at :math:`u = 0`, found by where their pcurves end,
+  although its own first half's reversed use also ends at :math:`P_2` with
+  the sense the seam's use at :math:`u = 0` has. It cuts off the left half
+  disc.
+
+A's lateral face ends in four faces: the outer one, with the hole at
+:math:`u = \pi` as an inner loop, the two half discs and the disc at
+:math:`u = \pi`. On B, whose seam lies along :math:`y = 1.5`, the curves
+cross B's own seam the same way. The curves of meeting are fitted, so each
+body carries them as ``Trim`` edges; joined in the result, a face of each
+cylinder uses them, and they become ``Intersection`` edges. A cylinder
+along :math:`y = 1` instead of the :math:`x` axis, skew to A's, crosses
+A's seam in the same way.
 
 A smaller box against a face
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~

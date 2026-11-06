@@ -1029,6 +1029,23 @@ EdgeUseSense ShapeBuilder::SenseOf(const BuilderCoedgeId coedge) const noexcept
     return IsLive(coedge) ? m_Tables.Coedges[coedge.GetIndex()].Sense : EdgeUseSense::Same;
 }
 
+std::optional<Curve2d> ShapeBuilder::PCurveOf(const BuilderCoedgeId coedge) const
+{
+    if (!IsLive(coedge)) {
+        return std::nullopt;
+    }
+    const PCurveRef pcurve = m_Tables.Coedges[coedge.GetIndex()].PCurve;
+    if (!pcurve.IsValid()) {
+        return std::nullopt;
+    }
+    return m_Tables.PCurves[pcurve.GetIndex()];
+}
+
+Interval ShapeBuilder::RangeOf(const BuilderEdgeId edge) const noexcept
+{
+    return IsLive(edge) ? m_Tables.Edges[edge.GetIndex()].Range : Interval::Empty();
+}
+
 BuilderVertexId ShapeBuilder::StartOf(const BuilderEdgeId edge) const noexcept
 {
     if (!IsLive(edge)) {
