@@ -84,8 +84,10 @@ into a ``ShapeBuilder`` opened on the shape, inside the caller's
 transaction, through the Euler operators of :doc:`topology`. The edges the
 networks cross are split at the crossings (SEMV), once per distinct
 crossing, so that the two faces sharing an edge meet at the same vertex.
-Each piece then becomes an edge: a strut when it reaches a junction not yet
-made (MEV); a split of the face when both its ends exist on one loop (MEF),
+Each piece then becomes an edge: a strut when one of its ends is a junction
+not yet made (MEV), grown from whichever end exists, so that two pieces
+running out of one junction to the boundary can be written; a split of the
+face when both its ends exist on one loop (MEF),
 or a bridge when on two loops of the face (MEKR); a component that touches
 no boundary is hung on a helper strut from a loop vertex, removed once the
 component has closed (KEMR), which leaves a ring as a loop of the face and
@@ -98,8 +100,12 @@ the chart, and the imprint takes the use the piece's own pcurve reaches,
 found by where the uses' pcurves end, so the loops stay continuous in the
 face's parameter space; a hole across the seam becomes two half discs on
 either side of the seam's piece between them (:doc:`imprinting`,
-*Seams*). A component touching no boundary is hung on the part of the face
-that holds it. The new edge is ``Exact`` with the
+*Seams*). Where more than two pieces meet at a vertex, the node where two
+curves of intersection cross, a use ends there for every part of the face
+round it, and the imprint takes the one whose corner of the face holds the
+piece's direction (:doc:`imprinting`, *Where a piece joins a vertex*). A
+component touching no boundary is hung on the part of the face that holds
+it. The new edge is ``Exact`` with the
 branch's curve where that is a line, a circle or an ellipse, and otherwise
 a ``Trim`` edge with its cached curve (ADR-0009, section 8), its tolerance
 the larger of the resolution and the branch's certified bound; in the

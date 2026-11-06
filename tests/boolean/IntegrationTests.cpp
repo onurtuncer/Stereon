@@ -111,8 +111,7 @@ std::vector<Pair> Pairs()
     add("box edge to edge", box, BoxFrom(Point3{10.0, 10.0, 0.0}, Point3{20.0, 20.0, 10.0}), lo,
         Point3{21.0, 21.0, 11.0});
     add("box sharing top and bottom", box, BoxFrom(Point3{5.0, 5.0, 0.0}, Point3{15.0, 15.0, 10.0}),
-        lo, Point3{16.0, 16.0, 11.0},
-        "refused: ImprintNetwork cannot close the network of the coplanar overlap");
+        lo, Point3{16.0, 16.0, 11.0});
     add("box turned through", box,
         OrientedBox(Point3{5.0, 2.0, -2.0}, turnedX, turnedY, Vec3{4.0, 3.0, 14.0}), lo,
         Point3{11.0, 11.0, 13.0});
@@ -143,8 +142,7 @@ std::vector<Pair> Pairs()
     add("cylinders perpendicular", upright, Cylinder(Point3{-6.0, 0.0, 0.0}, ey, ez, 1.5, 12.0), cl,
         ch);
     add("cylinders perpendicular, equal radii", upright,
-        Cylinder(Point3{-6.0, 0.0, 0.0}, ey, ez, 3.0, 12.0), cl, ch,
-        "refused: ImprintNetwork, at the node where the two curves of intersection cross");
+        Cylinder(Point3{-6.0, 0.0, 0.0}, ey, ez, 3.0, 12.0), cl, ch);
     add("cylinders skew", upright, Cylinder(Point3{-6.0, 1.0, 1.0}, ey, ez, 1.5, 12.0), cl, ch,
         "the results are valid, but WindingNumberOf refuses the union and the cut: their faces "
         "add up to a few 1e-6 off 0 or 1 at points far from them, whatever the budget");

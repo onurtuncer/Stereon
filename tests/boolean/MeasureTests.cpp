@@ -145,3 +145,94 @@ TEST_CASE("the measure of the primitives", "[boolean][measure]")
     // Two circles and the seam.
     CHECK(std::abs(c.EdgeLength - (2.0 * 2.0 * pi * 1.5 + 4.0)) <= 1e-12);
 }
+
+namespace {
+
+/// One operation of a pair and its result's exact volume and area.
+struct Expected {
+    Stereon::BooleanOperation Operation;
+    double Volume;
+    double Area;
+};
+
+} // namespace
+
+TEST_CASE("boxes sharing their top and bottom planes measure their exact prisms",
+          "[boolean][measure][coincident][regression]")
+{
+    // A = [0, 10]^3 and B = [5, 15]^2 x [0, 10]: prisms of height 10 over
+    // two squares of side 10 that overlap in one of side 5. The union's
+    // section has area 175 and perimeter 60, the common's 25 and 20, and
+    // the cut's, an L, 75 and 40. A pair the imprint used to refuse
+    // (tests/boolean/BodiesTests.cpp).
+    const Stereon::Shape a =
+        BooleanCases::BoxFrom(Stereon::Point3{}, Stereon::Point3{10.0, 10.0, 10.0});
+    const Stereon::Shape b =
+        BooleanCases::BoxFrom(Stereon::Point3{5.0, 5.0, 0.0}, Stereon::Point3{15.0, 15.0, 10.0});
+    const Expected expected[] = {
+        {Stereon::BooleanOperation::Union, 1750.0, 950.0},
+        {Stereon::BooleanOperation::Common, 250.0, 250.0},
+        {Stereon::BooleanOperation::Cut, 750.0, 550.0},
+    };
+    for (const Expected& e : expected) {
+        INFO(Stereon::ToString(e.Operation));
+        const auto result = Boolean(a, b, e.Operation, BooleanCases::serial);
+        REQUIRE(result.has_value());
+        const ShapeMeasures::Measures m = ShapeMeasures::MeasuresOf(result->Shape);
+        INFO("volume " << m.Volume << ", area " << m.Area);
+        CHECK(std::abs(m.Volume - e.Volume) <= 1e-10 * e.Volume);
+        CHECK(std::abs(m.Area - e.Area) <= 1e-10 * e.Area);
+    }
+}
+
+TEST_CASE("equal perpendicular cylinders measure the Steinmetz solid",
+          "[boolean][measure][regression]")
+{
+    // Cylinders of radius r = 3 through the origin, about z over a height
+    // of 10 and about x over a length of 12. Their common is the Steinmetz
+    // solid, of volume 16 r^3 / 3 and area 16 r^2, half of that area on
+    // each cylinder; the union and the cut follow from it. A pair the
+    // imprint used to refuse (tests/boolean/BodiesTests.cpp).
+    const double r = 3.0;
+    const double commonVolume = 16.0 * r * r * r / 3.0;
+    const double commonArea = 16.0 * r * r;
+    const double uprightVolume = pi * r * r * 10.0;
+    const double acrossVolume = pi * r * r * 12.0;
+    const double uprightArea = 2.0 * pi * r * (r + 10.0);
+    const double acrossArea = 2.0 * pi * r * (r + 12.0);
+    const Stereon::Shape upright =
+        BooleanCases::Must(
+            MakeCylinderSolid(Stereon::Point3{0.0, 0.0, -5.0}, Stereon::Vec3{1.0, 0.0, 0.0},
+                              Stereon::Vec3{0.0, 1.0, 0.0}, r, 10.0, BooleanCases::serial),
+            "the upright cylinder")
+            .Shape;
+    const Stereon::Shape across =
+        BooleanCases::Must(
+            MakeCylinderSolid(Stereon::Point3{-6.0, 0.0, 0.0}, Stereon::Vec3{0.0, 1.0, 0.0},
+                              Stereon::Vec3{0.0, 0.0, 1.0}, r, 12.0, BooleanCases::serial),
+            "the cylinder across")
+            .Shape;
+    // The cut gives up the half of the Steinmetz surface on the upright
+    // cylinder and gains the half on the other: its area is the upright
+    // cylinder's.
+    const Expected expected[] = {
+        {Stereon::BooleanOperation::Union, uprightVolume + acrossVolume - commonVolume,
+         uprightArea + acrossArea - commonArea},
+        {Stereon::BooleanOperation::Common, commonVolume, commonArea},
+        {Stereon::BooleanOperation::Cut, uprightVolume - commonVolume, uprightArea},
+    };
+    for (const Expected& e : expected) {
+        INFO(Stereon::ToString(e.Operation));
+        const auto result = Boolean(upright, across, e.Operation, BooleanCases::serial);
+        REQUIRE(result.has_value());
+        const ShapeMeasures::Measures m = ShapeMeasures::MeasuresOf(result->Shape);
+        INFO("volume " << m.Volume << ", area " << m.Area);
+        // The ellipses are traced curves, known to the result's tolerances:
+        // so its volume is known to its area times the largest of them, and
+        // its area to its edges' length times it. (Both come out within
+        // 1e-6 of their closed forms, on values of some hundreds.)
+        const double tolerance = LargestTolerance(result->Shape);
+        CHECK(std::abs(m.Volume - e.Volume) <= m.Area * tolerance);
+        CHECK(std::abs(m.Area - e.Area) <= m.EdgeLength * tolerance);
+    }
+}
