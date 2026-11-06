@@ -181,7 +181,23 @@ face's parameter space, a face split across a seam say, is
 ``InvalidResult`` naming the two edges rather than a sum. A cell of a face's parameter space that
 is not separated from the seed is split across its longer side and its
 loops clipped to the halves (Sutherland–Hodgman), down to the round's
-deviation target; a round that leaves a cell unseparated is followed by
+deviation target. A cut adds a corner where it crosses a side of a loop, at
+the same fraction of the side in the parameters and in space, so the corner
+lies on the chord it cuts and the cell across that chord needs no corner
+there. Where the cut parts a loop's region, each half joins its pieces by
+bridges along the cut, and a bridge passes through *every* corner of the
+loop on the cut between its ends. On the cut's line in the parameter plane
+that changes nothing; in space the corners are not on one line, each lying
+on its own chord at that chord's depth below the surface, and two halves
+bridged straight are different polylines there wherever the cut crosses
+the loop more than twice. The triangles then do not close up: a crack as
+wide as the chords' sagittas. The outer loop of a cylinder's face with a
+hole across its seam is such a loop (:doc:`imprinting`, *Seams*): a cut
+through the notch crosses it four times, and the faces of two skew
+cylinders' union added up to a few :math:`10^{-6}` off 1. Through every
+corner, both halves are made of the same steps between neighbouring
+corners of the cut, each taken as often one way as the other, and cancel
+exactly. A round that leaves a cell unseparated is followed by
 one with the target quartered, from a sixty-fourth of the body's extent
 down to the resolution, up to ``ClassifyBudget::Refinements`` rounds (eight
 by default). The result carries its bound, the cells left unseparated plus

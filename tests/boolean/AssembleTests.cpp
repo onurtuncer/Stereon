@@ -157,10 +157,7 @@ TEST_CASE("cylinders crossing meet along Intersection edges, across the seam too
     const auto upright = Stereon::MakeCylinderSolid(Point3{0.0, 0.0, -5.0}, Vec3{1.0, 0.0, 0.0},
                                                     Vec3{0.0, 1.0, 0.0}, 3.0, 10.0, ctx);
     REQUIRE(upright.has_value());
-    // Membership is checked through the result's own winding number, which
-    // refuses the skew union (its faces add up to a few 1e-6 off 1; see the
-    // known pairs of IntegrationTests.cpp), so for the perpendicular one only.
-    for (const auto& [offset, membership] : {std::pair{0.0, true}, std::pair{1.0, false}}) {
+    for (const double offset : {0.0, 1.0}) {
         INFO("offset " << offset);
         const auto across = Stereon::MakeCylinderSolid(
             Point3{-6.0, offset, 0.0}, Vec3{0.0, 1.0, 0.0}, Vec3{0.0, 0.0, 1.0}, 1.5, 12.0, ctx);
@@ -183,9 +180,6 @@ TEST_CASE("cylinders crossing meet along Intersection edges, across the seam too
                 INFO(finding.Message);
                 CHECK(finding.Rule == Stereon::TopologyRule::SelfIntersectionUnchecked);
             }
-        }
-        if (!membership) {
-            continue;
         }
         // Where the across cylinder pierces the upright one, both ways.
         const OperationResult united = Run(upright->Shape, across->Shape, BooleanOperation::Union);
