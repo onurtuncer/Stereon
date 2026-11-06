@@ -458,6 +458,12 @@ public:
     [[nodiscard]] BuilderVertexId EndOf(BuilderEdgeId edge) const noexcept;
     [[nodiscard]] Point3 PositionOf(BuilderVertexId vertex) const noexcept;
     [[nodiscard]] std::vector<BuilderLoopId> LoopsOf(BuilderFaceId face) const;
+    /// A coedge's pcurve and an edge's range as the edit has them: where a
+    /// use runs in its face's parameters, which tells the two uses of a
+    /// seam apart where their senses do not. Nothing, or an empty range,
+    /// for a handle that is not live or a use without a pcurve.
+    [[nodiscard]] std::optional<Curve2d> PCurveOf(BuilderCoedgeId coedge) const;
+    [[nodiscard]] Interval RangeOf(BuilderEdgeId edge) const noexcept;
 
     /// The structural check Freeze() will run, without freezing.
     [[nodiscard]] ValidityReport Validate() const;
