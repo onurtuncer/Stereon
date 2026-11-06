@@ -21,9 +21,9 @@
 // - a point is inside it exactly when the operation of its insides in A
 //   and B says so, by winding numbers at a grid of points off every face.
 //
-// The pairs that fail a check today are listed with what is wrong, and a
-// second test requires each of them still to fail: a fix shows up as that
-// test failing, and the pair moves to the passing ones.
+// A pair that fails a check is listed with what is wrong, and a second
+// test requires each such pair still to fail: a fix shows up as that test
+// failing, and the pair moves to the passing ones. None is listed today.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -143,9 +143,7 @@ std::vector<Pair> Pairs()
         ch);
     add("cylinders perpendicular, equal radii", upright,
         Cylinder(Point3{-6.0, 0.0, 0.0}, ey, ez, 3.0, 12.0), cl, ch);
-    add("cylinders skew", upright, Cylinder(Point3{-6.0, 1.0, 1.0}, ey, ez, 1.5, 12.0), cl, ch,
-        "the results are valid, but WindingNumberOf refuses the union and the cut: their faces "
-        "add up to a few 1e-6 off 0 or 1 at points far from them, whatever the budget");
+    add("cylinders skew", upright, Cylinder(Point3{-6.0, 1.0, 1.0}, ey, ez, 1.5, 12.0), cl, ch);
     add("cylinders skew, oblique", upright,
         Cylinder(Point3{-5.0, -3.0, -2.0}, ez, Vec3{-0.8, 0.6, 0.0}, 1.0, 12.0), cl, ch);
     return pairs;
@@ -270,33 +268,30 @@ std::string Duplicates(const Shape& shape)
     return DuplicateVertices(shape) + DuplicateEdges(shape);
 }
 
-/// Inside, outside, or not decided at this point.
-std::optional<bool> InsideOf(const Shape& shape, const Point3& p)
-{
-    if (AllEntities<EntityKind::Face>(shape)->empty()) {
-        return false;
-    }
-    const auto w = WindingNumberOf(shape, p, 8, serial);
-    if (!w || !w->IsDecided()) {
-        return std::nullopt;
-    }
-    return w->IsInside();
-}
+/// A body's side of a point, from one evaluation of its winding number:
+/// inside or outside, nothing where the number is not decided, and why
+/// where it is refused. A refusal is not an undecided point: InvalidResult
+/// means the faces do not add up to 0 or 1, which a closed, consistently
+/// oriented body always does, so it is a problem of the body, not of the
+/// point.
+struct Side {
+    std::optional<bool> Inside;
+    std::optional<std::string> Refusal;
+};
 
-/// Why the winding number refuses the body at this point, or nothing. A
-/// refusal is not an undecided point: InvalidResult means the faces do not
-/// add up to 0 or 1, which a closed, consistently oriented body always does,
-/// so it is a problem of the result, not of the point.
-std::optional<std::string> RefusalAt(const Shape& shape, const Point3& p)
+Side SideOf(const Shape& shape, const Point3& p)
 {
     if (AllEntities<EntityKind::Face>(shape)->empty()) {
-        return std::nullopt;
+        return {false, std::nullopt};
     }
     const auto w = WindingNumberOf(shape, p, 8, serial);
-    if (w || w.error().GetCode() != Stereon::ErrorCode::InvalidResult) {
-        return std::nullopt;
+    if (!w) {
+        if (w.error().GetCode() == Stereon::ErrorCode::InvalidResult) {
+            return {std::nullopt, std::string(w.error().GetMessage())};
+        }
+        return {};
     }
-    return std::string(w.error().GetMessage());
+    return {w->IsDecided() ? std::optional<bool>{w->IsInside()} : std::nullopt, std::nullopt};
 }
 
 bool Expected(const BooleanOperation op, const bool a, const bool b, const bool reversed)
@@ -332,13 +327,15 @@ void CheckMembership(const Pair& pair, const Shape& shape, const BooleanOperatio
             for (int k = 0; k < n; ++k) {
                 const Point3 p{at(pair.Lo.X, pair.Hi.X, i), at(pair.Lo.Y, pair.Hi.Y, j),
                                at(pair.Lo.Z, pair.Hi.Z, k)};
-                if (const std::optional<std::string> refusal = RefusalAt(shape, p)) {
-                    problems.push_back(name + ": the winding number refuses it: " + *refusal);
+                const Side result = SideOf(shape, p);
+                if (result.Refusal) {
+                    problems.push_back(name +
+                                       ": the winding number refuses it: " + *result.Refusal);
                     return;
                 }
-                const std::optional<bool> inA = InsideOf(pair.A, p);
-                const std::optional<bool> inB = InsideOf(pair.B, p);
-                const std::optional<bool> inResult = InsideOf(shape, p);
+                const std::optional<bool> inA = SideOf(pair.A, p).Inside;
+                const std::optional<bool> inB = SideOf(pair.B, p).Inside;
+                const std::optional<bool>& inResult = result.Inside;
                 if (inA && inB && inResult &&
                     *inResult != Expected(operation, *inA, *inB, reversed)) {
                     problems.push_back(name + " has (" + std::to_string(p.X) + ", " +
@@ -444,12 +441,17 @@ TEST_CASE("the known Boolean defects and gaps are still there", "[boolean][integ
     // Each pair here fails some check today, for the reason it names. When
     // one passes, this fails: clear its Known so the test above holds it,
     // and update the ledger.
+    std::size_t known = 0;
     for (const Pair& pair : Pairs()) {
         if (pair.Known.empty()) {
             continue;
         }
+        ++known;
         const std::vector<std::string> problems = Problems(pair);
         INFO(pair.Name << " (" << pair.Known << "):\n" << Lines(problems));
         CHECK_FALSE(problems.empty());
+    }
+    if (known == 0) {
+        SUCCEED("no pair is known to fail today: the test above holds every one");
     }
 }

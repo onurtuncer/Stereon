@@ -12,6 +12,7 @@ module;
 #include <Stereon/Core/Try.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <format>
@@ -491,39 +492,151 @@ struct Fan {
 
 // --- Cells of a face's parameter space ------------------------------------------
 
-/// The polygon clipped to the half of the parameter plane where coordinate
-/// `axis` (0 for u, 1 for v) lies above `at`, or below it
-/// (Sutherland-Hodgman): the signed region it bounds is the polygon's region
-/// within that half, joined by zero-width bridges where the cut parts it. A
-/// new corner lies on the side it cuts, which the cell across that side
-/// shares (a boundary chord with the face across the edge, an earlier cut
-/// with the other half), so the triangles still close up into one
-/// polyhedron; its offset from the surface is its ends' and the sagitta of
-/// the side's turn.
-[[nodiscard]] Polyline Clipped(const Polyline& polygon, const int axis, const double at,
-                               const bool above, const double radius)
+/// A corner's coordinate across a cut of `axis` (0 for a cut at one u, 1
+/// for one at one v), and its coordinate along the cut.
+[[nodiscard]] double Across(const Corner& corner, const int axis)
 {
-    const auto coordinate = [axis](const Corner& corner) {
-        return axis == 0 ? corner.Uv.X : corner.Uv.Y;
-    };
-    const auto inside = [&](const Corner& corner) {
-        return above ? coordinate(corner) >= at : coordinate(corner) <= at;
-    };
-    Polyline out;
-    for (std::size_t i = 0; i < polygon.size(); ++i) {
-        const Corner& a = polygon[i];
-        const Corner& b = polygon[(i + 1) % polygon.size()];
-        if (inside(a)) {
-            out.push_back(a);
-        }
-        if (inside(a) != inside(b)) {
-            const double s = (at - coordinate(a)) / (coordinate(b) - coordinate(a));
-            const double off = std::max(a.Off, b.Off) + Sagitta(radius, std::abs(b.Uv.X - a.Uv.X));
-            out.push_back(
-                {a.Uv + s * (b.Uv - a.Uv), a.Position + s * (b.Position - a.Position), off});
+    return axis == 0 ? corner.Uv.X : corner.Uv.Y;
+}
+
+[[nodiscard]] double Along(const Corner& corner, const int axis)
+{
+    return axis == 0 ? corner.Uv.Y : corner.Uv.X;
+}
+
+/// The corner where the side from a to b crosses the cut at `at`: at the
+/// fraction of the side the cut divides it in, in the parameters and in
+/// space alike, so it lies on the side it cuts, which the cell across that
+/// side shares (a boundary chord with the face across the edge, an earlier
+/// cut with the other half); exactly on the cut; and off the surface by its
+/// ends' offsets and the sagitta of the side's turn.
+[[nodiscard]] Corner CrossingOf(const Corner& a, const Corner& b, const int axis, const double at,
+                                const double radius)
+{
+    const double s = (at - Across(a, axis)) / (Across(b, axis) - Across(a, axis));
+    Corner crossing{a.Uv + s * (b.Uv - a.Uv), a.Position + s * (b.Position - a.Position),
+                    std::max(a.Off, b.Off) + Sagitta(radius, std::abs(b.Uv.X - a.Uv.X))};
+    (axis == 0 ? crossing.Uv.X : crossing.Uv.Y) = at;
+    return crossing;
+}
+
+/// The place of a corner that is not on the cut.
+constexpr std::size_t OffCut = std::numeric_limits<std::size_t>::max();
+
+/// A loop made ready for a cut: its corners with one added wherever a side
+/// crosses the cut, so that no side crosses it any more; the corners on the
+/// cut in order along it; and each corner's place in that order, OffCut for
+/// a corner off the cut. Both halves of the cut are read from the one
+/// CutLoop, so they share the crossings bit for bit.
+struct CutLoop {
+    Polyline Corners;
+    std::vector<std::size_t> OnCut;
+    std::vector<std::size_t> Place;
+};
+
+/// The loop's corners with one added wherever a side crosses the cut.
+[[nodiscard]] Polyline WithCrossings(const Polyline& loop, const int axis, const double at,
+                                     const double radius)
+{
+    Polyline corners;
+    for (std::size_t i = 0; i < loop.size(); ++i) {
+        const Corner& a = loop[i];
+        const Corner& b = loop[(i + 1) % loop.size()];
+        const double ca = Across(a, axis);
+        const double cb = Across(b, axis);
+        corners.push_back(a);
+        if ((ca < at && at < cb) || (cb < at && at < ca)) {
+            corners.push_back(CrossingOf(a, b, axis, at, radius));
         }
     }
-    return out;
+    return corners;
+}
+
+[[nodiscard]] CutLoop CutOf(const Polyline& loop, const int axis, const double at,
+                            const double radius)
+{
+    CutLoop cut{WithCrossings(loop, axis, at, radius), {}, {}};
+    for (std::size_t i = 0; i < cut.Corners.size(); ++i) {
+        if (Across(cut.Corners[i], axis) == at) {
+            cut.OnCut.push_back(i);
+        }
+    }
+    // Along the cut, and corners at one place in the loop's order: any order
+    // will do for those, so long as both halves read the same one.
+    std::ranges::sort(cut.OnCut, [&](const std::size_t i, const std::size_t j) {
+        const double ai = Along(cut.Corners[i], axis);
+        const double aj = Along(cut.Corners[j], axis);
+        return ai < aj || (ai == aj && i < j);
+    });
+    cut.Place.assign(cut.Corners.size(), OffCut);
+    for (std::size_t k = 0; k < cut.OnCut.size(); ++k) {
+        cut.Place[cut.OnCut[k]] = k;
+    }
+    return cut;
+}
+
+/// Appends the cut's corners strictly between two places along it, in the
+/// order from the first place to the second.
+void AppendBetween(Polyline& half, const CutLoop& cut, const std::size_t from, const std::size_t to)
+{
+    if (from < to) {
+        for (std::size_t k = from + 1; k < to; ++k) {
+            half.push_back(cut.Corners[cut.OnCut[k]]);
+        }
+        return;
+    }
+    for (std::size_t k = from; k > to + 1; --k) {
+        half.push_back(cut.Corners[cut.OnCut[k - 1]]);
+    }
+}
+
+/// The half of a cut loop where the coordinate across the cut lies above
+/// it, or below it: the loop's corners on that side and on the cut, in the
+/// loop's order (Sutherland-Hodgman), so the signed region the half bounds
+/// is the loop's region within that half of the parameter plane, joined by
+/// zero-width bridges along the cut where the cut parts it.
+///
+/// A bridge passes through every corner of the loop on the cut between its
+/// ends. In the parameter plane that changes nothing, the corners being on
+/// one line; in space they are not: each lies on the chord it cuts, at that
+/// chord's own depth below the surface, so a straight bridge from the first
+/// to the last misses the ones between. The two halves' stretches along the
+/// cut cover the same parts of it in opposite directions, but joined
+/// straight they are different polylines in space wherever the cut crosses
+/// the loop more than twice, and the triangles do not close up: a crack as
+/// wide as the chords' sagittas, seen as a winding number a few 1e-6 off a
+/// whole one (the outer loop of a cylinder's face with a hole across its
+/// seam was the first such loop). Passing through every corner, both halves
+/// are made of the same steps between neighbouring corners of the cut, each
+/// taken as often one way as the other, and they cancel exactly.
+///
+/// Nothing for a half with no corner strictly on its side: it bounds no
+/// region.
+[[nodiscard]] Polyline HalfLoopOf(const CutLoop& cut, const int axis, const double at,
+                                  const bool above)
+{
+    std::vector<std::size_t> kept;
+    bool beyond = false;
+    for (std::size_t i = 0; i < cut.Corners.size(); ++i) {
+        const double c = Across(cut.Corners[i], axis);
+        if (above ? c >= at : c <= at) {
+            kept.push_back(i);
+            beyond = beyond || c != at;
+        }
+    }
+    Polyline half;
+    if (!beyond) {
+        return half;
+    }
+    for (std::size_t k = 0; k < kept.size(); ++k) {
+        const std::size_t from = cut.Place[kept[k]];
+        const std::size_t to = cut.Place[kept[(k + 1) % kept.size()]];
+        half.push_back(cut.Corners[kept[k]]);
+        if (from != OffCut && to != OffCut) {
+            AppendBetween(half, cut, from, to);
+        }
+    }
+    return half;
 }
 
 /// What the triangles of a face add up to, and how many of its cells could
@@ -598,20 +711,25 @@ struct Half {
     std::vector<Polyline> Loops;
 };
 
-[[nodiscard]] Half HalfOf(const Box2& cell, const std::vector<Polyline>& loops, const int axis,
-                          const double at, const bool above, const double radius)
+/// The two halves of a cell split at `at` across `axis`, the lower first:
+/// each loop cut once (CutOf) and both its halves read from that cut.
+[[nodiscard]] std::array<Half, 2> HalvesOf(const Box2& cell, const std::vector<Polyline>& loops,
+                                           const int axis, const double at, const double radius)
 {
-    Half half{cell, {}};
+    std::array<Half, 2> halves{Half{cell, {}}, Half{cell, {}}};
     const Interval& side = axis == 0 ? cell.X : cell.Y;
-    (axis == 0 ? half.Cell.X : half.Cell.Y) =
-        above ? Interval{at, side.GetUpper()} : Interval{side.GetLower(), at};
+    (axis == 0 ? halves[0].Cell.X : halves[0].Cell.Y) = Interval{side.GetLower(), at};
+    (axis == 0 ? halves[1].Cell.X : halves[1].Cell.Y) = Interval{at, side.GetUpper()};
     for (const Polyline& loop : loops) {
-        Polyline clipped = Clipped(loop, axis, at, above, radius);
-        if (clipped.size() >= 3) {
-            half.Loops.push_back(std::move(clipped));
+        const CutLoop cut = CutOf(loop, axis, at, radius);
+        for (const bool above : {false, true}) {
+            Polyline half = HalfLoopOf(cut, axis, at, above);
+            if (half.size() >= 3) {
+                halves[above ? 1 : 0].Loops.push_back(std::move(half));
+            }
         }
     }
-    return half;
+    return halves;
 }
 
 /// Sums the cell's triangles into the tally when the point is separated from
@@ -637,8 +755,7 @@ void Accumulate(Tally& tally, const FaceFrame& f, const Box2& cell,
     }
     const int axis = SplitAxisOf(f, du, dv);
     const double at = Midpoint(axis == 0 ? cell.X : cell.Y);
-    for (const bool above : {false, true}) {
-        const Half half = HalfOf(cell, loops, axis, at, above, f.Scale.Radius);
+    for (const Half& half : HalvesOf(cell, loops, axis, at, f.Scale.Radius)) {
         Accumulate(tally, f, half.Cell, half.Loops, depth + 1);
     }
 }
