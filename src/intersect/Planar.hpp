@@ -15,7 +15,7 @@
 //
 // Included in the purview of the handlers' implementation units, after
 // `import :Dispatch;` and `import Stereon.Robust;`, with <algorithm>,
-// <array>, <cmath>, <cstddef>, <optional>, <string>, <string_view>,
+// <array>, <cmath>, <cstddef>, <limits>, <optional>, <string>, <string_view>,
 // <utility> and <vector> in their global module fragment, and after
 // Analytic.hpp. Everything is in an anonymous namespace, so each unit gets
 // its own copy.
@@ -83,6 +83,43 @@ template <typename Formula>
 [[nodiscard]] Sign SignOfFormula(Formula&& formula)
 {
     return FilteredSign(formula(Rounded{}), [&] { return formula(Exact{}).GetSign(); });
+}
+
+/// The value of a formula to a few roundings, for the geometry it then
+/// places: the middle of its enclosure when that is within a few units in
+/// the last place, the estimate of its exact value otherwise. Its rounded
+/// value can lose every digit to cancellation: |w|² - r² for a line's
+/// origin 10^8 from a unit circle, and the discriminant formed from it.
+template <typename Formula>
+[[nodiscard]] double ValueOfFormula(Formula&& formula)
+{
+    const Interval enclosure = formula(Rounded{});
+    const double middle = Midpoint(enclosure);
+    if (std::isfinite(middle) &&
+        Width(enclosure) <= 8.0 * std::numeric_limits<double>::epsilon() * std::abs(middle)) {
+        return middle;
+    }
+    return formula(Exact{}).GetEstimate();
+}
+
+/// The quadratic A t² + 2 B t + C = 0 a formula's three coefficients
+/// define, each and the discriminant B² - A C to a few roundings
+/// (ValueOfFormula), the discriminant at least zero, so that RootsOf places
+/// two crossings as two points. Formed in doubles, the coefficients of a
+/// line far from a conic cancel in the discriminant, which rounds to zero
+/// and puts both roots at the foot of the perpendicular from the centre.
+template <typename Coefficients>
+[[nodiscard]] std::pair<LineQuadratic, double> QuadraticOf(Coefficients&& coefficients)
+{
+    const auto at = [&](const std::size_t i) {
+        return ValueOfFormula([&](auto f) { return coefficients(f)[i]; });
+    };
+    const double discriminant = ValueOfFormula([&](auto f) {
+        using F = decltype(f);
+        const auto [a, b, c] = coefficients(f);
+        return F::Sub(F::Mul(b, b), F::Mul(a, c));
+    });
+    return {LineQuadratic{at(0), at(1), at(2)}, std::max(0.0, discriminant)};
 }
 
 /// A vector over a field.

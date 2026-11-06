@@ -128,8 +128,10 @@ template <typename CoefficientsFrom>
 /// The quadratic A t² + 2 B t + C = 0 that a line cuts out of a quadric,
 /// its coefficients over a scalar field for a line through a given origin,
 /// decided and solved: the sign of the discriminant B² - A C exactly, from
-/// the line's own origin, which settles the count and a touch; the roots in
-/// doubles, polished from the line re-centred at each (Polished), and
+/// the line's own origin, which settles the count and a touch; the roots
+/// from the coefficients and the discriminant to a few roundings
+/// (QuadraticOf), which keeps two crossings apart however far the origin,
+/// polished from the line re-centred at each (Polished), and
 /// placed by KeepPoint with the surface parameters `parameters` gives for a
 /// point. A root that doubles cannot place, which happens only when the
 /// leading coefficient is exactly positive yet rounds to zero, fails rather
@@ -149,8 +151,8 @@ template <typename CoefficientsFrom, typename Parameters>
     if (sign == Sign::Negative) {
         return {};
     }
-    const auto [a, b, c] = coefficientsFrom(Plain{}, line.Origin);
-    const LineQuadratic q{a, b, c};
+    const auto [q, discriminant] =
+        QuadraticOf([&](auto f) { return coefficientsFrom(f, line.Origin); });
     const auto keep = [&](const double rounded, const ContactType contact,
                           const double other) -> Result<void> {
         if (!std::isfinite(rounded)) {
@@ -166,7 +168,6 @@ template <typename CoefficientsFrom, typename Parameters>
         const double t = -q.B / q.A;
         return keep(t, ContactType::Tangential, t);
     }
-    const double discriminant = std::max(0.0, q.B * q.B - q.A * q.C);
     const std::array<double, 2> roots = RootsOf(q, discriminant);
     STEREON_TRY_VOID(keep(roots[0], ContactType::Crossing, roots[1]));
     return keep(roots[1], ContactType::Crossing, roots[0]);
