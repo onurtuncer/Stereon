@@ -174,13 +174,22 @@ void Record(Work& w, const EntityKind kind, const std::uint32_t target, const st
 
 // --- The pieces of the intersection ---------------------------------------------
 
-/// How many kept faces of the body use the edge.
+/// How many uses of the edge the body's kept faces make: one per face for
+/// an edge between two faces, two for a slit one face uses on both sides,
+/// as a line a cylinder touches a box's side along is in the cylinder's
+/// face.
 [[nodiscard]] Result<std::size_t> KeptUses(const Work& w, const std::uint8_t body,
                                            const EdgeId edge)
 {
-    STEREON_TRY(const std::vector<FaceId> faces, FacesOf(w.ShapeOf(body), edge));
-    return static_cast<std::size_t>(std::ranges::count_if(
-        faces, [&](const FaceId f) { return w.Kept[body].contains(f.GetIndex()); }));
+    const Shape& shape = w.ShapeOf(body);
+    STEREON_TRY(const RadialCoedgeRange uses, RadialCoedgesOf(shape, edge));
+    std::size_t kept = 0;
+    for (const CoedgeId use : uses) {
+        if (w.Kept[body].contains(FaceOf(shape, LoopOf(shape, use)).GetIndex())) {
+            ++kept;
+        }
+    }
+    return kept;
 }
 
 /// Identifies B's vertex with A's: within the pair tolerance, the larger
@@ -218,7 +227,7 @@ void Record(Work& w, const EntityKind kind, const std::uint32_t target, const st
 /// The pieces of the intersection and the edges paired on coincident faces:
 /// each pair, the body whose edge the result takes (A's where a kept face
 /// of A uses it), which way B's runs, and the ends of B's identified with
-/// A's. A pair where each body keeps two faces at its edge is not merged:
+/// A's. A pair where each body keeps two uses of its edge is not merged:
 /// the operands only touch along it, the union of two boxes sharing an
 /// edge say, and the result has a boundary of each there. Merged, its edge
 /// would be used four times by one shell, which is then not closed (L01,

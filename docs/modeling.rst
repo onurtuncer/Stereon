@@ -236,6 +236,16 @@ reversed shell inside the other operand becomes one, and a body floating
 in a cavity is a solid of its own with the cavity's shell on the solid
 around it.
 
+Operands that only touch along a curve stay apart there. Each body carries
+the other's edge of the contact after the imprint, and where each keeps two
+uses of its own (two faces meeting there, or one face on both sides of a
+slit, as a cylinder tangent to a box's side has along the line it touches)
+the pair is not merged into one edge: merged, it would be used four times
+by one shell, which is then not closed (L01; ADR-0041, a non-manifold
+complex is no solid). The union of two boxes sharing an edge, or of a box
+and a cylinder tangent to its side, is two solids touching along
+coincident edges, as two boxes apart are two solids.
+
 The result is published through ``Commit`` with a History of both
 operands, input 0 and input 1. Each entity of the result is traced through
 the imprint, its History and its split events, to the operand entities it
