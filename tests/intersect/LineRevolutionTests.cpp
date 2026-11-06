@@ -166,6 +166,93 @@ TEST_CASE("a line along a generator or through the apex fails closed over an unb
     REQUIRE(touch.error().GetCode() == ErrorCode::IntersectionFailed);
 }
 
+TEST_CASE("a line's two crossings of a cone are found however far its origin",
+          "[intersect][line-surface][cone][regression]")
+{
+    // Over an unbounded domain the count is decided on the enclosure of the
+    // quadratic's discriminant B² - A C. Formed from the line's origin, B²
+    // and A C each carry the square of the origin's distance and cancel:
+    // from 2^24 away the enclosure of a chord of length 3 lay across zero,
+    // and the handler failed closed for every line from 2^28 away, though
+    // never with a wrong point. The discriminant is now enclosed about the
+    // middle of the two roots, which does not move with the origin.
+    //
+    // Along x at height 1/2, where the cone's radius is 3/2, from x = -L.
+    for (double length = 1e2; length <= 1e12; length *= 100.0) {
+        INFO("from " << length);
+        const Line across{Point3{-length, 0.0, 0.5}, ex};
+        const auto result = Meet(across, rightCone);
+        REQUIRE(result.has_value());
+        REQUIRE(result->Points.size() == 2);
+        const double within = 64.0 * std::numeric_limits<double>::epsilon() * length;
+        REQUIRE(std::abs(result->Points[0].Position.X + 1.5) <= within);
+        REQUIRE(std::abs(result->Points[1].Position.X - 1.5) <= within);
+        for (const CurveSurfacePoint& p : result->Points) {
+            REQUIRE(p.Decided);
+            REQUIRE(p.Contact == ContactType::Crossing);
+            REQUIRE(Distance(Eval(across, p.Parameter), p.Position) <= within);
+            REQUIRE(Distance(Eval(rightCone, p.OnSurface), p.Position) <= within);
+        }
+    }
+    // Askew, through (-0.4, 0.3, 0) inside the cone, its origin 13 L back:
+    // the same two points as from that point itself, to the rounding of
+    // the far origin.
+    const Vec3 direction{3.0, 4.0, 12.0};
+    const auto near = Meet(Line{Point3{-0.4, 0.3, 0.0}, direction}, rightCone);
+    REQUIRE(near.has_value());
+    REQUIRE(near->Points.size() == 2);
+    for (double length = 1e2; length <= 1e12; length *= 100.0) {
+        INFO("from " << 13.0 * length);
+        const Line line{Point3{-3.0 * length - 0.4, -4.0 * length + 0.3, -12.0 * length},
+                        direction};
+        const auto result = Meet(line, rightCone);
+        REQUIRE(result.has_value());
+        REQUIRE(result->Points.size() == 2);
+        const double within = 64.0 * std::numeric_limits<double>::epsilon() * 13.0 * length;
+        for (std::size_t i = 0; i < 2; ++i) {
+            const CurveSurfacePoint& p = result->Points[i];
+            REQUIRE(p.Contact == ContactType::Crossing);
+            REQUIRE(Distance(Eval(line, p.Parameter), p.Position) <= within);
+            REQUIRE(Distance(Eval(rightCone, p.OnSurface), p.Position) <= within);
+            REQUIRE(Distance(p.Position, near->Points[i].Position) <= within);
+        }
+    }
+}
+
+TEST_CASE("from far away a line beside a cone is still apart, inside it crosses, on it fails",
+          "[intersect][line-surface][cone][regression]")
+{
+    // Along x at height 1/2 from x = -2^27, at y about the cone's radius
+    // there, 3/2. At it the line touches the cone, to the rounding of
+    // pi/4, a double root, which an unbounded domain cannot resolve: it
+    // fails, and is never an empty success. A 2^-20 gap either side is
+    // decided: outside, a proved
+    // separation; inside, two crossings 2 sqrt(3 x 2^-20) apart to first
+    // order.
+    const double far = -0x1p27;
+    const double gap = 0x1p-20;
+    const auto touch = Meet(Line{Point3{far, 1.5, 0.5}, ex}, rightCone);
+    REQUIRE_FALSE(touch.has_value());
+    REQUIRE(touch.error().GetCode() == ErrorCode::IntersectionFailed);
+
+    const auto outside = Meet(Line{Point3{far, 1.5 + gap, 0.5}, ex}, rightCone);
+    REQUIRE(outside.has_value());
+    REQUIRE(outside->IsEmpty());
+
+    const Line inside{Point3{far, 1.5 - gap, 0.5}, ex};
+    const auto crossing = Meet(inside, rightCone);
+    REQUIRE(crossing.has_value());
+    REQUIRE(crossing->Points.size() == 2);
+    const double chord = Distance(crossing->Points[0].Position, crossing->Points[1].Position);
+    const double within = 64.0 * std::numeric_limits<double>::epsilon() * 0x1p27;
+    REQUIRE(std::abs(chord - 2.0 * std::sqrt(3.0 * gap)) <= 2.0 * within + 1e-6 * chord);
+    for (const CurveSurfacePoint& p : crossing->Points) {
+        REQUIRE(p.Contact == ContactType::Crossing);
+        REQUIRE(Distance(Eval(inside, p.Parameter), p.Position) <= within);
+        REQUIRE(Distance(Eval(rightCone, p.OnSurface), p.Position) <= within);
+    }
+}
+
 TEST_CASE("a line crosses a torus where its closed form says", "[intersect][line-surface][torus]")
 {
     // The x axis: through the tube at x = -3, -1, 1, 3.

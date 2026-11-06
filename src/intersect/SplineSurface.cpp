@@ -785,16 +785,15 @@ struct EnclosedQuadratic {
     Interval C;
 };
 
-/// The quadratic the line through `origin` with the line's direction cuts
-/// out of the cone, enclosed. With (P, Q, H) the coordinates of origin - O
-/// and (Pd, Qd, Hd) of the direction in the cone's frame, and K = R cos a +
-/// H sin a, the cone's cos² a (p² + q²) - (R cos a + h sin a)² gives
-/// A = cos² a (Pd² + Qd²) - sin² a Hd², B = cos² a (P Pd + Q Qd) - K sin a
-/// Hd, and C = cos² a (P² + Q²) - K².
-[[nodiscard]] EnclosedQuadratic ConeQuadratic(const Line& line, const Point3& origin,
-                                              const Cone& cone)
+/// The quadratic the line through a point at the enclosed offset `w` from
+/// the cone's origin, with the line's direction, cuts out of the cone,
+/// enclosed. With (P, Q, H) the coordinates of w and (Pd, Qd, Hd) of the
+/// direction in the cone's frame, and K = R cos a + H sin a, the cone's
+/// cos² a (p² + q²) - (R cos a + h sin a)² gives A = cos² a (Pd² + Qd²) -
+/// sin² a Hd², B = cos² a (P Pd + Q Qd) - K sin a Hd, and C = cos² a (P² +
+/// Q²) - K².
+[[nodiscard]] EnclosedQuadratic ConeQuadraticAt(const IVec3& w, const Line& line, const Cone& cone)
 {
-    const IVec3 w = Offset(origin, cone.Origin);
     const IVec3 d = Enclosed(line.Direction);
     const IVec3 x = Enclosed(cone.XAxis);
     const IVec3 y = Enclosed(cone.YAxis);
@@ -811,6 +810,29 @@ struct EnclosedQuadratic {
     const Interval cc = c * c;
     return {cc * (pd * pd + qd * qd) - kd * kd, cc * (p * pd + q * qd) - k * kd,
             cc * (p * p + q * q) - k * k};
+}
+
+/// The quadratic of the line through `origin`, a point as given.
+[[nodiscard]] EnclosedQuadratic ConeQuadratic(const Line& line, const Point3& origin,
+                                              const Cone& cone)
+{
+    return ConeQuadraticAt(Offset(origin, cone.Origin), line, cone);
+}
+
+/// The quadratic about the line's point at the parameter `t0`, that point's
+/// offset from the cone's origin enclosed, so that what it proves holds for
+/// the line as given. Its roots are the line's own less t0 and its
+/// discriminant is the same number, but formed from the offset of a point
+/// near the crossings. From an origin far from them the squares of that
+/// distance cancel in the discriminant and leave its enclosure across zero,
+/// however far apart the crossings are.
+[[nodiscard]] EnclosedQuadratic ConeQuadraticAbout(const Line& line, const double t0,
+                                                   const Cone& cone)
+{
+    const IVec3 w = Offset(line.Origin, cone.Origin);
+    const IVec3 d = Enclosed(line.Direction);
+    const Interval t{t0};
+    return ConeQuadraticAt({w.X + t * d.X, w.Y + t * d.Y, w.Z + t * d.Z}, line, cone);
 }
 
 [[nodiscard]] double Middle(const Interval& x)
@@ -840,33 +862,53 @@ struct EnclosedQuadratic {
     return std::abs(s) < 0.5 * std::abs(other - t) && std::isfinite(polished) ? polished : t;
 }
 
+/// What an unbounded domain gives no way to resolve.
+[[nodiscard]] Result<std::vector<Found>> UnresolvedOnCone()
+{
+    return Fail(ErrorCode::IntersectionFailed,
+                "Line x Cone: a line along a generator, through the apex or tangent to the cone "
+                "within rounding cannot be resolved over an unbounded domain; a bounded one can "
+                "be");
+}
+
 /// The crossings of the cone over an unbounded domain, from its quadratic.
-/// The count is decided on the enclosures: a discriminant below zero is a
-/// proved separation; one above zero with a leading coefficient of strict
-/// sign, two simple crossings, each placed and polished in doubles. Else a
-/// line along a generator, through the apex or tangent within rounding,
-/// which an unbounded domain gives no way to resolve, fails.
+/// The count is decided on enclosures, in two steps. From the line's
+/// origin: a discriminant below zero is a proved separation, and a leading
+/// coefficient of no strict sign, a line along a generator within rounding,
+/// fails. Then about the middle of the two roots, -B / A as rounded
+/// (ConeQuadraticAbout), so that the decision does not depend on where
+/// along the line its origin lies: a discriminant below zero is a proved
+/// separation; one above zero, two simple crossings, each placed in doubles
+/// from the middle of that enclosure and polished. Else a line through the
+/// apex or tangent within rounding fails.
 [[nodiscard]] Result<std::vector<Found>> ConeQuadraticRoots(const Line& line, const Cone& cone,
                                                             const Interval& domain)
 {
-    const EnclosedQuadratic q = ConeQuadratic(line, line.Origin, cone);
+    const EnclosedQuadratic far = ConeQuadratic(line, line.Origin, cone);
+    if ((far.B * far.B - far.A * far.C).GetUpper() < 0.0) {
+        return std::vector<Found>{};
+    }
+    if (!(far.A.GetLower() > 0.0 || far.A.GetUpper() < 0.0)) {
+        return UnresolvedOnCone();
+    }
+    const double middle = -Middle(far.B) / Middle(far.A);
+    if (!std::isfinite(middle)) {
+        return UnresolvedOnCone();
+    }
+    const EnclosedQuadratic q = ConeQuadraticAbout(line, middle, cone);
     const Interval discriminant = q.B * q.B - q.A * q.C;
     if (discriminant.GetUpper() < 0.0) {
         return std::vector<Found>{};
     }
-    const bool leading = q.A.GetLower() > 0.0 || q.A.GetUpper() < 0.0;
-    if (!(discriminant.GetLower() > 0.0) || !leading) {
-        return Fail(ErrorCode::IntersectionFailed,
-                    "Line x Cone: a line along a generator, through the apex or tangent to the "
-                    "cone within rounding cannot be resolved over an unbounded domain; a bounded "
-                    "one can be");
+    if (!(discriminant.GetLower() > 0.0)) {
+        return UnresolvedOnCone();
     }
     const LineQuadratic rounded = MiddleOf(q);
     const std::array<double, 2> roots =
         RootsOf(rounded, std::max(0.0, rounded.B * rounded.B - rounded.A * rounded.C));
     std::vector<Found> found;
     for (std::size_t k = 0; k < 2; ++k) {
-        const double t = PolishedOnCone(line, cone, roots[k], roots[1 - k]);
+        const double t = PolishedOnCone(line, cone, middle + roots[k], middle + roots[1 - k]);
         if (std::isfinite(t) && Contains(domain, t)) {
             found.push_back({t, Interval{t}, ContactType::Crossing, true});
         }
