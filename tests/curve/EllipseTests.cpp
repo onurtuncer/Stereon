@@ -274,3 +274,21 @@ TEST_CASE("the other analytic curves validate their data too", "[curve][factory]
     const auto bad = Stereon::MakeCircle(Point3{}, -2.0, x, y);
     REQUIRE(bad.error().GetMessage() == "MakeCircle: Radius must be finite and positive");
 }
+
+TEST_CASE("ellipse projection retains the small medial denominator", "[curve][ellipse][regression]")
+{
+    const Ellipse e{Point3{}, 3.0, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+    // Analytic limiting foot for x=1/2 on the medial segment: lambda=-b^2.
+    const double x = 9.0 / 16.0;
+    const double y = std::sqrt(1.0 - x * x / 9.0);
+    for (const double offset : {0.0, 1e-12, 1e-16, 1e-18, 1e-100, 1e-300}) {
+        for (const double sign : {-1.0, 1.0}) {
+            CAPTURE(offset, sign);
+            const Point3 p{0.5, sign * offset, 0.0};
+            const Point3 q = Eval(e, Project(e, p));
+            const Point3 limit{x, offset == 0.0 ? y : sign * y, 0.0};
+            REQUIRE(Distance(q, limit) < 1e-10);
+            REQUIRE(Distance(q, p) <= Distance(limit, p) + Tolerance);
+        }
+    }
+}

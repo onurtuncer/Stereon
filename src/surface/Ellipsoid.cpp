@@ -22,26 +22,29 @@ module Stereon.Surface;
 
 namespace Stereon::Detail {
 
-/// The root s >= s0 of G(s) = (n0 / (s + r0))² + (n1 / (s + r1))² +
-/// (z2 / (s + 1))² - 1, bracketed and found by bisection as EllipseRoot
-/// finds its own (Eberly, 2013): G decreases strictly there, so the
-/// bisection needs no starting guess and ends at adjacent doubles.
+/// Solve for the shifted root s = 1 + lambda / shortest_axis_squared.
+/// The shortest-axis denominator is s itself: recovering it by adding 1
+/// to a root near -1 loses the closest point near the medial set. The
+/// other denominators are s + (r - 1), with the subtraction done first.
+/// The positive bracket starts at the shortest normalized coordinate;
+/// inside the surface its upper end is 1, outside it is the norm of the
+/// scaled coordinates (Eberly, 2013).
 [[nodiscard]] double EllipsoidRoot(const double r0, const double r1, const double z0,
                                    const double z1, const double z2, const double g)
 {
     const double n0 = r0 * z0;
     const double n1 = r1 * z1;
-    double s0 = z2 - 1.0;
-    double s1 = g < 0.0 ? 0.0 : Hypot(Hypot(n0, n1), z2) - 1.0;
+    double s0 = z2;
+    double s1 = g < 0.0 ? 1.0 : Hypot(Hypot(n0, n1), z2);
     double s = 0.0;
     for (int i = 0; i < EllipseRootSteps; ++i) {
-        s = 0.5 * (s0 + s1);
+        s = s0 + 0.5 * (s1 - s0);
         if (s == s0 || s == s1) {
             break; // the bracket holds two adjacent doubles
         }
-        const double ratio0 = n0 / (s + r0);
-        const double ratio1 = n1 / (s + r1);
-        const double ratio2 = z2 / (s + 1.0);
+        const double ratio0 = n0 / (s + (r0 - 1.0));
+        const double ratio1 = n1 / (s + (r1 - 1.0));
+        const double ratio2 = z2 / s;
         const double value = ratio0 * ratio0 + ratio1 * ratio1 + ratio2 * ratio2 - 1.0;
         if (value > 0.0) {
             s0 = s;
@@ -75,7 +78,7 @@ namespace Stereon::Detail {
             const double r0 = (e0 / e2) * (e0 / e2);
             const double r1 = (e1 / e2) * (e1 / e2);
             const double s = EllipsoidRoot(r0, r1, z0, z1, z2, g);
-            return {r0 * y0 / (s + r0), r1 * y1 / (s + r1), y2 / (s + 1.0)};
+            return {r0 * y0 / (s + (r0 - 1.0)), r1 * y1 / (s + (r1 - 1.0)), y2 / s};
         }
         if (y1 > 0.0) {
             const Point2 q = ClosestOnEllipseQuadrant(e1, e2, y1, y2);
