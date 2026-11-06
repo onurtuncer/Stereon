@@ -123,11 +123,9 @@ std::vector<Pair> Pairs()
     add("cylinder pocket", box, Cylinder(Point3{5.0, 5.0, 6.0}, ex, ey, 2.0, 8.0), lo,
         Point3{11.0, 11.0, 15.0});
     add("cylinder tangent to a side", box, Cylinder(Point3{13.0, 5.0, -2.0}, ex, ey, 3.0, 14.0), lo,
-        Point3{17.0, 11.0, 13.0},
-        "refused: PlaneCylinder cannot clip a partial circle to a plane face's box");
+        Point3{17.0, 11.0, 13.0});
     add("cylinder about an edge", box, Cylinder(Point3{10.0, 10.0, -2.0}, ex, ey, 3.0, 14.0), lo,
-        Point3{14.0, 14.0, 13.0},
-        "refused: PlaneCylinder cannot clip a partial circle to a plane face's box");
+        Point3{14.0, 14.0, 13.0});
     add("cylinder across", box, Cylinder(Point3{-2.0, 5.0, 5.0}, ey, ez, 2.0, 14.0),
         Point3{-3.0, -1.0, -1.0}, Point3{13.0, 11.0, 11.0});
     add("cylinder oblique", box, Cylinder(Point3{3.0, 5.0, -3.0}, ey, tiltY, 2.0, 16.0),
@@ -139,11 +137,9 @@ std::vector<Pair> Pairs()
     add("cylinders coaxial", upright, Cylinder(Point3{0.0, 0.0, -7.0}, ex, ey, 1.5, 14.0), cl,
         Point3{4.0, 4.0, 8.0});
     add("cylinders parallel", upright, Cylinder(Point3{2.0, 0.0, -7.0}, ex, ey, 3.0, 14.0), cl,
-        Point3{6.0, 4.0, 8.0},
-        "refused: PlaneCylinder cannot clip a partial circle to a plane face's box");
+        Point3{6.0, 4.0, 8.0});
     add("cylinders parallel, caps shared", upright,
-        Cylinder(Point3{2.0, 0.0, -5.0}, ex, ey, 3.0, 10.0), cl, Point3{6.0, 4.0, 6.0},
-        "refused: PlaneCylinder cannot clip a partial circle to a plane face's box");
+        Cylinder(Point3{2.0, 0.0, -5.0}, ex, ey, 3.0, 10.0), cl, Point3{6.0, 4.0, 6.0});
     add("cylinders perpendicular", upright, Cylinder(Point3{-6.0, 0.0, 0.0}, ey, ez, 1.5, 12.0), cl,
         ch, "every operation builds a Boundary edge used by two faces, which Freeze rejects (S07)");
     add("cylinders perpendicular, equal radii", upright,
