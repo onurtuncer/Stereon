@@ -708,11 +708,22 @@ template <typename Record, typename Make>
     return RevolutionSurface(profile, r.Origin, r.Axis, RevolutionSurface::UnitAxis{});
 }
 
-[[nodiscard]] bool IsCompositeSurfaceRecord(const RawRecord& record)
+/// ParseError unless the file's format version has the surface record's
+/// type: the composite records came in version 3, the ellipsoid comes in
+/// EllipsoidVersion.
+[[nodiscard]] Result<void> RequireSurfaceVersion(const RawRecord& record, const std::string& where,
+                                                 const std::uint32_t version)
 {
-    return record.Name == GeometryTypeName<TrimmedSurface> ||
-           record.Name == GeometryTypeName<ExtrusionSurface> ||
-           record.Name == GeometryTypeName<RevolutionSurface>;
+    const bool composite = record.Name == GeometryTypeName<TrimmedSurface> ||
+                           record.Name == GeometryTypeName<ExtrusionSurface> ||
+                           record.Name == GeometryTypeName<RevolutionSurface>;
+    if (composite) {
+        return RequireVersion(record, where, SurfaceRecordsVersion, version);
+    }
+    if (record.Name == GeometryTypeName<Ellipsoid>) {
+        return RequireVersion(record, where, EllipsoidVersion, version);
+    }
+    return {};
 }
 
 /// The record decoded as the type of the list it names, or as a composite
@@ -730,12 +741,7 @@ Result<Wrapper> DecodeAny(TypeList<Ts...> types, const RawRecord& record, const 
         }
     }
     if constexpr (std::is_same_v<Wrapper, Surface>) {
-        if (IsCompositeSurfaceRecord(record)) {
-            STEREON_TRY_VOID(RequireVersion(record, where, SurfaceRecordsVersion, version));
-        }
-        if (record.Name == GeometryTypeName<Ellipsoid>) {
-            STEREON_TRY_VOID(RequireVersion(record, where, EllipsoidVersion, version));
-        }
+        STEREON_TRY_VOID(RequireSurfaceVersion(record, where, version));
         if (record.Name == GeometryTypeName<TrimmedSurface>) {
             return DecodeTrimmedSurface(types, record, where, depth, version);
         }
