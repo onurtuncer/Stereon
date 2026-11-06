@@ -13,7 +13,7 @@ if(NOT STEREON_BUILD_TESTS)
     return()
 endif()
 
-foreach(example curves intersection boolean geometry_file)
+foreach(example curves intersection boolean steinmetz geometry_file)
     add_executable(stereon_example_${example} ${example}.cpp)
     target_link_libraries(stereon_example_${example} PRIVATE stereon::io stereon_options)
     stereon_anchor_contracts(stereon_example_${example})

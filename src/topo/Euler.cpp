@@ -391,25 +391,31 @@ Result<void> ShapeBuilder::KillVertexFaceShell(const BuilderVertexId vertex,
 // --- MEV / KEV ----------------------------------------------------------------
 
 /// The strut of MEV, every precondition checked: a vertex at `position`, an
-/// edge to it from `from`, and its two uses after `after` in the loop (or
-/// alone in it, for None).
+/// edge between it and `from`, running the way `direction` says, and its two
+/// uses, out to the new vertex and back, after `after` in the loop (or alone
+/// in it, for None).
 Result<EdgeVertex> ShapeBuilder::GrowStrut(const std::uint32_t loop, const std::uint32_t after,
                                            const std::uint32_t from, const Point3& position,
-                                           const double tolerance, const EdgeGeometry& geometry)
+                                           const double tolerance, const EdgeGeometry& geometry,
+                                           const StrutDirection direction)
 {
     EdgeVertex made;
     STEREON_TRY(made.Vertex, AddVertex(position, tolerance));
+    const BuilderVertexId existing = BuilderVertexId::Make(
+        from, m_Tables.Vertices[from].Slot.GetGeneration(), m_Token.GetValue());
+    const bool outward = direction == StrutDirection::FromExisting;
     EdgeSpec spec;
     spec.Kind = geometry.Kind;
-    spec.Start = BuilderVertexId::Make(from, m_Tables.Vertices[from].Slot.GetGeneration(),
-                                       m_Token.GetValue());
-    spec.End = made.Vertex;
+    spec.Start = outward ? existing : made.Vertex;
+    spec.End = outward ? made.Vertex : existing;
     spec.Curve = geometry.Curve;
     spec.Range = geometry.Range;
     spec.Tolerance = geometry.Tolerance;
     STEREON_TRY(made.Edge, AddEdge(spec));
-    made.Out = NewUse(made.Edge.GetIndex(), loop, EdgeUseSense::Same, geometry.PCurve);
-    made.Back = NewUse(made.Edge.GetIndex(), loop, EdgeUseSense::Opposite, geometry.PCurve);
+    const EdgeUseSense out = outward ? EdgeUseSense::Same : EdgeUseSense::Opposite;
+    const EdgeUseSense back = outward ? EdgeUseSense::Opposite : EdgeUseSense::Same;
+    made.Out = NewUse(made.Edge.GetIndex(), loop, out, geometry.PCurve);
+    made.Back = NewUse(made.Edge.GetIndex(), loop, back, geometry.PCurve);
     std::vector<std::uint32_t> cycle;
     if (after != None) {
         cycle = CycleFrom(after);
@@ -425,7 +431,8 @@ Result<EdgeVertex> ShapeBuilder::GrowStrut(const std::uint32_t loop, const std::
 
 Result<EdgeVertex> ShapeBuilder::MakeEdgeVertex(const BuilderCoedgeId at, const Point3& position,
                                                 const double tolerance,
-                                                const EdgeGeometry& geometry)
+                                                const EdgeGeometry& geometry,
+                                                const StrutDirection direction)
 {
     constexpr const char* op = "MakeEdgeVertex";
     STEREON_TRY_VOID(Require(at, op));
@@ -436,8 +443,8 @@ Result<EdgeVertex> ShapeBuilder::MakeEdgeVertex(const BuilderCoedgeId at, const 
         return Refuse(op, "a degenerate edge has one vertex, and MEV makes a second");
     }
     const std::uint32_t loop = m_Tables.Coedges[at.GetIndex()].Loop.GetIndex();
-    return GrowStrut(loop, at.GetIndex(), EndVertexOf(at.GetIndex()), position, tolerance,
-                     geometry);
+    return GrowStrut(loop, at.GetIndex(), EndVertexOf(at.GetIndex()), position, tolerance, geometry,
+                     direction);
 }
 
 Result<EdgeVertex> ShapeBuilder::MakeEdgeVertex(const BuilderLoopId loop,
@@ -460,7 +467,8 @@ Result<EdgeVertex> ShapeBuilder::MakeEdgeVertex(const BuilderLoopId loop,
     if (m_Tables.Vertices[from.GetIndex()].FirstEdge.IsValid()) {
         return Refuse(op, "the vertex of an empty loop has no edges");
     }
-    return GrowStrut(loop.GetIndex(), None, from.GetIndex(), position, tolerance, geometry);
+    return GrowStrut(loop.GetIndex(), None, from.GetIndex(), position, tolerance, geometry,
+                     StrutDirection::FromExisting);
 }
 
 Result<void> ShapeBuilder::KillEdgeVertex(const BuilderEdgeId edge, const BuilderVertexId vertex)

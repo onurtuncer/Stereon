@@ -200,6 +200,43 @@ TEST_CASE("each inverse restores the loop it touched, down to nothing", "[topo][
     }
 }
 
+TEST_CASE("MEV grows an edge that runs towards the vertex it is grown from", "[topo][euler]")
+{
+    // The Booleans' imprint grows a piece from its end when only that end
+    // exists, and the piece's edge must still run from its start to its
+    // end (docs/imprinting.rst, *Writing the pieces*).
+    Tetrahedron t;
+    MakePillow(t);
+    ShapeBuilder& b = t.B;
+    const std::vector<std::uint32_t> before = Cycle(b, t.E3.Loop);
+    // From v2, where E3's new use ends: the edge runs from the apex to v2.
+    const auto strut = Must(b.MakeEdgeVertex(t.E3.New, Point3{0, 0, 1}, 0.0, t.Edge,
+                                             Stereon::StrutDirection::ToExisting));
+    REQUIRE(b.StartOf(strut.Edge) == strut.Vertex);
+    REQUIRE(b.EndOf(strut.Edge) == t.E2.Vertex);
+    // Out still leaves the existing vertex and Back returns to it, so Out
+    // runs against the edge and Back along it.
+    REQUIRE(b.SenseOf(strut.Out) == Stereon::EdgeUseSense::Opposite);
+    REQUIRE(b.SenseOf(strut.Back) == Stereon::EdgeUseSense::Same);
+    const std::vector<BuilderCoedgeId> cycle = b.CoedgesOf(t.E3.Loop);
+    const auto grown = std::ranges::find(cycle, t.E3.New);
+    REQUIRE(grown != cycle.end());
+    const auto at = static_cast<std::size_t>(grown - cycle.begin());
+    REQUIRE(cycle[(at + 1) % cycle.size()] == strut.Out);
+    REQUIRE(cycle[(at + 2) % cycle.size()] == strut.Back);
+    REQUIRE(b.Validate().IsValid());
+    // KEV is its inverse, as for a strut the usual way round.
+    Must(b.KillEdgeVertex(strut.Edge, strut.Vertex));
+    REQUIRE(Cycle(b, t.E3.Loop) == before);
+    REQUIRE(b.Validate().IsValid());
+
+    // The default is unchanged: from the existing vertex to the new one.
+    const auto usual = Must(b.MakeEdgeVertex(t.E3.New, Point3{0, 0, 1}, 0.0, t.Edge));
+    REQUIRE(b.StartOf(usual.Edge) == t.E2.Vertex);
+    REQUIRE(b.EndOf(usual.Edge) == usual.Vertex);
+    REQUIRE(b.SenseOf(usual.Out) == Stereon::EdgeUseSense::Same);
+}
+
 TEST_CASE("an operator that refuses changes nothing", "[topo][euler]")
 {
     Tetrahedron t;

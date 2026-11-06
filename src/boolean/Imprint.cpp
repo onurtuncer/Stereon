@@ -17,6 +17,7 @@ module;
 #include <cstdint>
 #include <limits>
 #include <map>
+#include <numbers>
 #include <optional>
 #include <span>
 #include <string>
@@ -174,10 +175,11 @@ struct UseAt {
     return Eval(*pcurve, along ? range.GetUpper() : range.GetLower());
 }
 
-/// A use ending at a vertex, with how far its end lies from the piece's end
-/// in the face's parameters.
+/// A use ending at a vertex, the use after it in its loop, and how far its
+/// end lies from the piece's end in the face's parameters.
 struct Candidate {
     UseAt Use;
+    BuilderCoedgeId Next;
     EdgeUseSense Sense;
     double Gap;
 };
@@ -190,17 +192,18 @@ struct Candidate {
     std::vector<Candidate> candidates;
     for (const BuilderFaceId face : w.Faces) {
         for (const BuilderLoopId loop : w.Builder.LoopsOf(face)) {
-            for (const BuilderCoedgeId coedge : w.Builder.CoedgesOf(loop)) {
-                const BuilderEdgeId edge = w.Builder.EdgeOf(coedge);
-                const EdgeUseSense sense = w.Builder.SenseOf(coedge);
+            const std::vector<BuilderCoedgeId> cycle = w.Builder.CoedgesOf(loop);
+            for (std::size_t i = 0; i < cycle.size(); ++i) {
+                const BuilderEdgeId edge = w.Builder.EdgeOf(cycle[i]);
+                const EdgeUseSense sense = w.Builder.SenseOf(cycle[i]);
                 const BuilderVertexId end =
                     sense == EdgeUseSense::Same ? w.Builder.EndOf(edge) : w.Builder.StartOf(edge);
                 if (end != vertex) {
                     continue;
                 }
-                const std::optional<Point2> at = UseEnd(w, coedge);
+                const std::optional<Point2> at = UseEnd(w, cycle[i]);
                 candidates.push_back(
-                    {UseAt{coedge, loop, face}, sense,
+                    {UseAt{cycle[i], loop, face}, cycle[(i + 1) % cycle.size()], sense,
                      at ? Distance(*at, uv) : std::numeric_limits<double>::infinity()});
             }
         }
@@ -208,37 +211,150 @@ struct Candidate {
     return candidates;
 }
 
-/// Among several uses ending at a vertex, the one the piece continues: the
-/// one whose pcurve ends where the piece's does, at `uv`, and of those, as
-/// near as the face's resolution, the one of the preferred sense, the
-/// crossed use's. On a periodic face the uses on the two sides of a seam end
-/// a period apart in the parameters, though at one point in space; once a
-/// piece is attached at a seam vertex its own reversed use ends there too,
-/// with the sense of the seam's use on the far side, so the sense alone
-/// can name the wrong side (the hole of a cylinder pierced across its seam,
-/// docs/imprinting.rst).
-[[nodiscard]] std::optional<UseAt> UseEndingAt(const Work& w, const BuilderVertexId vertex,
-                                               const std::optional<EdgeUseSense> preferred,
-                                               const Point2& uv)
+/// The candidates whose pcurves end where the piece's does, as near as the
+/// resolution to the nearest of them. On a periodic face the uses on the two
+/// sides of a seam end a period apart in the parameters, though at one point
+/// in space, so this tells the seam's sides apart.
+[[nodiscard]] std::vector<Candidate> NearestOf(std::vector<Candidate> candidates,
+                                               const double resolution)
 {
-    const std::vector<Candidate> candidates = UsesEndingAt(w, vertex, uv);
     double nearest = std::numeric_limits<double>::infinity();
     for (const Candidate& c : candidates) {
         nearest = std::min(nearest, c.Gap);
     }
-    std::optional<UseAt> first;
-    for (const Candidate& c : candidates) {
-        if (std::isfinite(nearest) && c.Gap - nearest > w.Ctx.GetResolution()) {
-            continue;
+    if (std::isfinite(nearest)) {
+        std::erase_if(candidates, [&](const Candidate& c) { return c.Gap - nearest > resolution; });
+    }
+    return candidates;
+}
+
+/// The way a use runs in its face's parameters where it ends (`atEnd`) or
+/// starts: its pcurve's derivative there, turned round for a use against its
+/// edge. Nothing without a pcurve or a bounded range (a helper strut has
+/// neither) or where the derivative vanishes.
+[[nodiscard]] std::optional<Vec2> HeadingOf(const Work& w, const BuilderCoedgeId coedge,
+                                            const bool atEnd)
+{
+    const std::optional<Curve2d> pcurve = w.Builder.PCurveOf(coedge);
+    const Interval range = w.Builder.RangeOf(w.Builder.EdgeOf(coedge));
+    if (!pcurve || range.IsEmpty() || !range.IsBounded()) {
+        return std::nullopt;
+    }
+    const bool along = w.Builder.SenseOf(coedge) == EdgeUseSense::Same;
+    const Vec2 derivative = Deriv(*pcurve, atEnd == along ? range.GetUpper() : range.GetLower(), 1);
+    if (!(Length(derivative) > 0.0)) { // STEREON-LINT-ALLOW(epsilon): a vanishing derivative
+        return std::nullopt;
+    }
+    return along ? derivative : -derivative;
+}
+
+/// The corner of a face at a vertex, between a use that ends there and the
+/// use after it in the loop: the rays from the vertex back along the first
+/// and out along the second, in the face's parameters. The face lies
+/// between them. At the tip of a strut, whose use out is followed by its
+/// use back, the corner is the full turn.
+struct FaceCorner {
+    Vec2 Back;
+    Vec2 Out;
+    bool Full = false;
+};
+
+/// Nothing where a ray is unknown, a helper strut's, unless the corner is a
+/// strut's tip.
+[[nodiscard]] std::optional<FaceCorner> CornerOf(const Work& w, const Candidate& c)
+{
+    const bool tip =
+        c.Use.Coedge != c.Next && w.Builder.EdgeOf(c.Use.Coedge) == w.Builder.EdgeOf(c.Next);
+    const std::optional<Vec2> arriving = HeadingOf(w, c.Use.Coedge, true);
+    const std::optional<Vec2> leaving = HeadingOf(w, c.Next, false);
+    if (!arriving || !leaving) {
+        return tip ? std::optional<FaceCorner>{FaceCorner{{}, {}, true}} : std::nullopt;
+    }
+    return FaceCorner{-*arriving, *leaving, tip};
+}
+
+/// The angle from a round to b, counter-clockwise, in [0, 2 pi).
+[[nodiscard]] double TurnFrom(const Vec2& a, const Vec2& b)
+{
+    const double angle = std::atan2(Cross(a, b), Dot(a, b));
+    if (angle < 0.0) { // STEREON-LINT-ALLOW(epsilon): a sign test
+        return angle + 2.0 * std::numbers::pi;
+    }
+    return angle;
+}
+
+/// Rays closer than this to a corner's side are not placed in it: a piece
+/// tangent to an edge it meets has no corner of its own to be read from
+/// first derivatives.
+constexpr double CornerMargin = 0x1p-30;
+
+/// Whether a ray from the vertex runs into the corner. A face oriented with
+/// its surface lies to the left of its uses in the parameter plane, so its
+/// corner is swept counter-clockwise from the ray out to the ray back; a
+/// reversed face lies to the right, and its corner is swept the other way.
+[[nodiscard]] bool Holds(const FaceCorner& corner, const Vec2& ray, const bool reversed)
+{
+    if (corner.Full) {
+        return true;
+    }
+    const Vec2& from = reversed ? corner.Back : corner.Out;
+    const Vec2& to = reversed ? corner.Out : corner.Back;
+    const double at = TurnFrom(from, ray);
+    return at > CornerMargin && at < TurnFrom(from, to) - CornerMargin;
+}
+
+/// The candidates a piece leaving the vertex along `ray` may join at: those
+/// whose corner holds the ray; failing any, those whose corner is unknown;
+/// failing those, all of them.
+[[nodiscard]] std::vector<Candidate> InCornerOf(const Work& w, const std::vector<Candidate>& near,
+                                                const Vec2& ray)
+{
+    const bool reversed = IsReversed(w.Frozen, w.Network.Face);
+    std::vector<Candidate> holding;
+    std::vector<Candidate> unknown;
+    for (const Candidate& c : near) {
+        const std::optional<FaceCorner> corner = CornerOf(w, c);
+        if (!corner) {
+            unknown.push_back(c);
+        } else if (Holds(*corner, ray, reversed)) {
+            holding.push_back(c);
         }
+    }
+    if (!holding.empty()) {
+        return holding;
+    }
+    return unknown.empty() ? near : unknown;
+}
+
+/// Among several uses ending at a vertex, the one a piece joins the loops
+/// after, so that it lies in the face's corner between that use and the
+/// next:
+///
+/// - first by position: the uses whose pcurves end where the piece's does,
+///   at `uv` (NearestOf), which tells the two sides of a seam apart;
+/// - then by direction: the use whose corner holds the piece's ray from the
+///   vertex (InCornerOf). Where several pieces meet at a vertex, four at the
+///   node of two cylinders of one radius, each lies in one corner between
+///   two neighbours, and joined at another it would cut the wrong face;
+/// - then, where first derivatives do not tell (a helper strut has no
+///   pcurve, a tangent piece no corner), the use of the preferred sense, the
+///   crossed use's, or the first.
+[[nodiscard]] std::optional<UseAt> UseEndingAt(const Work& w, const BuilderVertexId vertex,
+                                               const std::optional<EdgeUseSense> preferred,
+                                               const Point2& uv, const Vec2& ray)
+{
+    const std::vector<Candidate> near =
+        NearestOf(UsesEndingAt(w, vertex, uv), w.Ctx.GetResolution());
+    if (near.empty()) {
+        return std::nullopt;
+    }
+    const std::vector<Candidate> pool = near.size() == 1 ? near : InCornerOf(w, near, ray);
+    for (const Candidate& c : pool) {
         if (!preferred || c.Sense == *preferred) {
             return c.Use;
         }
-        if (!first) {
-            first = c.Use;
-        }
     }
-    return first;
+    return pool.front().Use;
 }
 
 /// Keeps the sense of the use `coedge` of the face if its pcurve, at the
@@ -281,6 +397,21 @@ void NearerUse(const Work& w, const CoedgeId coedge, const LoopCrossing& crossin
     return sense;
 }
 
+/// The use a piece joins the faces' loops after at its start (`atStart`) or
+/// its end, which must be made: by where the piece's pcurve ends there and
+/// by its ray from the vertex, along the piece from its start, against it
+/// from its end (UseEndingAt).
+[[nodiscard]] Result<std::optional<UseAt>> UseOfPieceAt(const Work& w, const NetworkEdge& edge,
+                                                        const bool atStart)
+{
+    const std::size_t vertex = atStart ? edge.Start : edge.End;
+    const double t = atStart ? edge.Range.GetLower() : edge.Range.GetUpper();
+    const Point2 uv = Eval(edge.PCurve, t);
+    const Vec2 tangent = Deriv(edge.PCurve, t, 1);
+    STEREON_TRY(const std::optional<EdgeUseSense> sense, SenseAt(w, vertex, uv));
+    return UseEndingAt(w, w.Made.Vertices[vertex], sense, uv, atStart ? tangent : -tangent);
+}
+
 /// A piece between two made vertices: a face split when they lie on one
 /// loop, a bridge when on two loops of one face.
 [[nodiscard]] Result<void> ImprintBetween(Work& w, const std::size_t index)
@@ -288,14 +419,8 @@ void NearerUse(const Work& w, const CoedgeId coedge, const LoopCrossing& crossin
     const NetworkEdge& edge = w.Network.Edges[index];
     const BuilderVertexId start = w.Made.Vertices[edge.Start];
     const BuilderVertexId end = w.Made.Vertices[edge.End];
-    STEREON_TRY(const std::optional<EdgeUseSense> startSense,
-                SenseAt(w, edge.Start, Eval(edge.PCurve, edge.Range.GetLower())));
-    STEREON_TRY(const std::optional<EdgeUseSense> endSense,
-                SenseAt(w, edge.End, Eval(edge.PCurve, edge.Range.GetUpper())));
-    const std::optional<UseAt> a =
-        UseEndingAt(w, start, startSense, Eval(edge.PCurve, edge.Range.GetLower()));
-    const std::optional<UseAt> b =
-        UseEndingAt(w, end, endSense, Eval(edge.PCurve, edge.Range.GetUpper()));
+    STEREON_TRY(const std::optional<UseAt> a, UseOfPieceAt(w, edge, true));
+    STEREON_TRY(const std::optional<UseAt> b, UseOfPieceAt(w, edge, false));
     if (!a || !b || a->Face != b->Face) {
         return Fail(ErrorCode::IntersectionFailed,
                     "ImprintNetwork: a piece's ends are not both on the boundary of one face");
@@ -314,26 +439,30 @@ void NearerUse(const Work& w, const CoedgeId coedge, const LoopCrossing& crossin
     return {};
 }
 
-/// A piece from a made vertex to a junction not yet made: a strut.
-[[nodiscard]] Result<void> ImprintStrut(Work& w, const std::size_t index)
+/// A piece with one end made and the other a junction not yet made: a strut
+/// from the made end, its start (`fromStart`) or its end. Either way the
+/// edge runs as the piece does, from its start to its end, on the piece's
+/// own parameter: grown from its end, it runs towards the vertex it is
+/// grown from (StrutDirection::ToExisting).
+[[nodiscard]] Result<void> ImprintStrut(Work& w, const std::size_t index, const bool fromStart)
 {
     const NetworkEdge& edge = w.Network.Edges[index];
-    const BuilderVertexId start = w.Made.Vertices[edge.Start];
-    STEREON_TRY(const std::optional<EdgeUseSense> startSense,
-                SenseAt(w, edge.Start, Eval(edge.PCurve, edge.Range.GetLower())));
-    const std::optional<UseAt> at =
-        UseEndingAt(w, start, startSense, Eval(edge.PCurve, edge.Range.GetLower()));
+    STEREON_TRY(const std::optional<UseAt> at, UseOfPieceAt(w, edge, fromStart));
     if (!at) {
         return Fail(ErrorCode::IntersectionFailed,
-                    "ImprintNetwork: a piece starts at a vertex on no loop of the face");
+                    "ImprintNetwork: a piece ends at a vertex on no loop of the face");
     }
-    const NetworkVertex& to = w.Network.Vertices[edge.End];
+    const std::size_t far = fromStart ? edge.End : edge.Start;
+    const NetworkVertex& to = w.Network.Vertices[far];
     STEREON_TRY(const EdgeGeometry geometry, GeometryOf(w, edge));
     STEREON_TRY(const EdgeVertex made,
-                w.Builder.MakeEdgeVertex(at->Coedge, to.Position, to.Tolerance, geometry));
+                w.Builder.MakeEdgeVertex(at->Coedge, to.Position, to.Tolerance, geometry,
+                                         fromStart ? StrutDirection::FromExisting
+                                                   : StrutDirection::ToExisting));
     STEREON_TRY_VOID(CacheIfTrim(w, made.Edge, geometry));
-    w.Made.Vertices[edge.End] = made.Vertex;
-    w.Made.Pieces[index] = {made.Edge, start, made.Vertex, BuilderFaceId{}};
+    w.Made.Vertices[far] = made.Vertex;
+    w.Made.Pieces[index] = {made.Edge, w.Made.Vertices[edge.Start], w.Made.Vertices[edge.End],
+                            BuilderFaceId{}};
     return {};
 }
 
@@ -464,8 +593,32 @@ void NearerUse(const Work& w, const CoedgeId coedge, const LoopCrossing& crossin
     return {};
 }
 
-/// One round over the pieces not yet imprinted: those with both ends made,
-/// then one with its start made. True when a piece was imprinted.
+/// The first piece not yet imprinted with just one end made, its start
+/// (`fromStart`) or its end, grown as a strut from it. True when there was
+/// one.
+[[nodiscard]] Result<bool> StrutRound(Work& w, const bool fromStart)
+{
+    for (std::size_t i = 0; i < w.Network.Edges.size(); ++i) {
+        const NetworkEdge& edge = w.Network.Edges[i];
+        const bool startMade = w.Made.Vertices[edge.Start].IsValid();
+        const bool endMade = w.Made.Vertices[edge.End].IsValid();
+        if (w.Done[i] || startMade == endMade || startMade != fromStart) {
+            continue;
+        }
+        STEREON_TRY_VOID(ImprintStrut(w, i, fromStart));
+        w.Done[i] = true;
+        return true;
+    }
+    return false;
+}
+
+/// One round over the pieces not yet imprinted: those with both ends made;
+/// then one strut, from a piece's start if any has just its start made,
+/// else from a piece's end. A coincident face's edges may both run away
+/// from a corner of it inside the other face, and then no piece reaches
+/// that corner by its end: the pieces are written from their far ends
+/// instead. True when a piece was imprinted; after a strut the round starts
+/// again, since the new junction may complete other pieces first.
 [[nodiscard]] Result<bool> ImprintRound(Work& w)
 {
     bool progress = false;
@@ -479,32 +632,22 @@ void NearerUse(const Work& w, const CoedgeId coedge, const LoopCrossing& crossin
         w.Done[i] = true;
         progress = true;
     }
-    for (std::size_t i = 0; i < w.Network.Edges.size(); ++i) {
-        const NetworkEdge& edge = w.Network.Edges[i];
-        if (w.Done[i] || !w.Made.Vertices[edge.Start].IsValid() ||
-            w.Made.Vertices[edge.End].IsValid()) {
-            continue;
-        }
-        STEREON_TRY_VOID(ImprintStrut(w, i));
-        w.Done[i] = true;
-        return true; // The new junction may complete other pieces first.
+    STEREON_TRY(const bool forward, StrutRound(w, true));
+    if (forward) {
+        return true;
     }
-    return progress;
+    STEREON_TRY(const bool backward, StrutRound(w, false));
+    return progress || backward;
 }
 
-/// A vertex of a piece not yet imprinted whose ends are both unmade: the
-/// start of a component touching no boundary; nothing when every piece is
-/// done or waits on a made end.
-[[nodiscard]] std::optional<std::size_t> UnmadeStart(const Work& w)
+/// The start of the first piece not yet imprinted. Asked when a round wrote
+/// nothing: a piece with both ends made is written between them and one
+/// with either end made is grown from it, so every piece left has neither,
+/// and is part of a component touching no boundary.
+[[nodiscard]] std::size_t UnmadeStart(const Work& w)
 {
-    for (std::size_t i = 0; i < w.Network.Edges.size(); ++i) {
-        const NetworkEdge& edge = w.Network.Edges[i];
-        if (!w.Done[i] && !w.Made.Vertices[edge.Start].IsValid() &&
-            !w.Made.Vertices[edge.End].IsValid()) {
-            return edge.Start;
-        }
-    }
-    return std::nullopt;
+    const auto piece = std::ranges::find(w.Done, false);
+    return w.Network.Edges[static_cast<std::size_t>(piece - w.Done.begin())].Start;
 }
 
 [[nodiscard]] bool AllDone(const Work& w)
@@ -641,13 +784,7 @@ struct Ring {
         if (progress) {
             continue;
         }
-        const std::optional<std::size_t> start = UnmadeStart(w);
-        if (!start) {
-            return Fail(ErrorCode::IntersectionFailed,
-                        "ImprintNetwork: a piece runs into the face from a junction no other piece "
-                        "reaches; the network does not close");
-        }
-        STEREON_TRY_VOID(HangHelper(w, *start));
+        STEREON_TRY_VOID(HangHelper(w, UnmadeStart(w)));
     }
     for (std::size_t h = 0; h < w.Helpers.size(); ++h) {
         const BuilderLoopId kept = builder.LoopOf(w.Helpers[h].Out);
