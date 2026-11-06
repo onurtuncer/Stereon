@@ -229,6 +229,36 @@ Shape BoxFrom(const Point3& lo, const Point3& hi)
 
 } // namespace
 
+TEST_CASE("a cylinder tangent to a box's side unites into two solids touching along a line",
+          "[boolean][assemble][regression]")
+{
+    // The cylinder touches the box's side x = 10 along the line y = 5. The
+    // box's side is split there into two faces; the cylinder's face carries
+    // the line as a slit, used on both sides. Counting kept faces, the
+    // cylinder kept one, and the pair was merged into an edge used four
+    // times by one shell (L01); counting uses, each keeps two and they stay
+    // apart. The clip first had to read the side of the top plane's arc off
+    // its touch of the top face's edge (ClipTests).
+    const Shape box = Box();
+    const auto drum = Stereon::MakeCylinderSolid(Point3{13.0, 5.0, -2.0}, Vec3{1.0, 0.0, 0.0},
+                                                 Vec3{0.0, 1.0, 0.0}, 3.0, 14.0, ctx);
+    REQUIRE(drum.has_value());
+    const OperationResult united = Run(box, drum->Shape, BooleanOperation::Union);
+    REQUIRE(CountOf<EntityKind::Solid>(united.Shape) == 2);
+    const Stereon::ValidityReport report =
+        ValidateTopology(united.Shape, Stereon::ValidityLevel::Solid, ctx);
+    for (const Stereon::ValidityFinding& finding : report.GetFindings()) {
+        INFO(finding.Message);
+        CHECK(finding.Rule == Stereon::TopologyRule::SelfIntersectionUnchecked);
+    }
+    REQUIRE(Inside(united.Shape, Point3{5.0, 5.0, 5.0}));
+    REQUIRE(Inside(united.Shape, Point3{13.0, 5.0, 5.0}));
+    REQUIRE_FALSE(Inside(united.Shape, Point3{11.0, 9.0, 5.0}));
+    // Nothing in common; the cut leaves the box whole.
+    REQUIRE(CountOf<EntityKind::Solid>(Run(box, drum->Shape, BooleanOperation::Common).Shape) == 0);
+    REQUIRE(CountOf<EntityKind::Solid>(Run(box, drum->Shape, BooleanOperation::Cut).Shape) == 1);
+}
+
 TEST_CASE("boxes sharing only an edge unite into two solids touching along it",
           "[boolean][assemble][coincident][regression]")
 {
