@@ -189,3 +189,66 @@ TEST_CASE("the winding number of a drum cut along a B-spline pcurve", "[boolean]
     RequireOutside(outside);
     RequireOutside(Winding(cut, Point3{0.0, 0.0, 11.0}));
 }
+
+TEST_CASE("the winding number is whole where a cut crosses a loop more than twice",
+          "[boolean][winding][regression]")
+{
+    // A cylinder of radius 3 about z, and one of radius 3/2 along x through
+    // (0, 1, 1), skew to it. The hole it makes lies across the upright
+    // cylinder's seam, so the lateral face's outer loop runs round a notch
+    // from u = -0.17 to u = 0.99, and the cell cut at u = pi / 4 crosses the
+    // loop four times: on the bottom circle, twice on the notch, and on the
+    // top circle. Each half joined its own two crossings by a straight
+    // bridge; the four crossings lie on chords at different depths, not on
+    // one line in space, so the halves' bridges did not cancel and left a
+    // crack. The faces added up to 1 - 3e-6 here and to 1e-3 off elsewhere,
+    // whatever the budget, and the number was refused (InvalidResult). The
+    // bridges now pass through every crossing of the cut.
+    const Vec3 ex{1.0, 0.0, 0.0};
+    const Vec3 ey{0.0, 1.0, 0.0};
+    const Vec3 ez{0.0, 0.0, 1.0};
+    const auto upright = Stereon::MakeCylinderSolid(Point3{0.0, 0.0, -5.0}, ex, ey, 3.0, 10.0, ctx);
+    const auto across = Stereon::MakeCylinderSolid(Point3{-6.0, 1.0, 1.0}, ey, ez, 1.5, 12.0, ctx);
+    REQUIRE(upright.has_value());
+    REQUIRE(across.has_value());
+    const auto result = [&](const Stereon::BooleanOperation operation) {
+        const auto made = Boolean(upright->Shape, across->Shape, operation, ctx);
+        const std::string error = made ? std::string() : std::string(made.error().GetMessage());
+        INFO(error);
+        REQUIRE(made.has_value());
+        return made->Shape;
+    };
+
+    const Shape united = result(Stereon::BooleanOperation::Union);
+    RequireInside(Winding(united, Point3{0.0, 0.0, 4.0}));
+    RequireInside(Winding(united, Point3{0.0, 1.0, 1.0}));
+    RequireInside(Winding(united, Point3{5.0, 1.0, 1.0}));
+    RequireInside(Winding(united, Point3{5.0, 1.0, 2.2}));
+    RequireOutside(Winding(united, Point3{5.0, 1.0, 2.8}));
+    RequireOutside(Winding(united, Point3{4.0, -2.0, 0.0}));
+    RequireOutside(Winding(united, Point3{0.0, 2.0, 5.5}));
+
+    const Shape cut = result(Stereon::BooleanOperation::Cut);
+    RequireInside(Winding(cut, Point3{0.0, 0.0, 4.0}));
+    RequireInside(Winding(cut, Point3{0.0, -2.0, -3.0}));
+    RequireOutside(Winding(cut, Point3{0.0, 1.0, 1.0}));
+    RequireOutside(Winding(cut, Point3{2.0, 1.0, 1.5}));
+    RequireOutside(Winding(cut, Point3{5.0, 1.0, 1.0}));
+
+    const Shape common = result(Stereon::BooleanOperation::Common);
+    RequireInside(Winding(common, Point3{0.0, 1.0, 1.0}));
+    RequireInside(Winding(common, Point3{2.5, 1.0, 1.8}));
+    RequireOutside(Winding(common, Point3{0.0, 0.0, 4.0}));
+    RequireOutside(Winding(common, Point3{5.0, 1.0, 1.0}));
+
+    // All round the upright cylinder, above the hole and off its axis, where
+    // a crack along a ruling is seen from the side.
+    for (int k = 0; k < 12; ++k) {
+        const double u = 0.5 * k + 0.1;
+        const Point3 p{2.0 * std::cos(u), 2.0 * std::sin(u), 3.5};
+        INFO("u = " << u);
+        RequireInside(Winding(united, p));
+        RequireInside(Winding(cut, p));
+        RequireOutside(Winding(common, p));
+    }
+}
