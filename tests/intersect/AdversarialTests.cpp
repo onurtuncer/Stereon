@@ -7,7 +7,8 @@
 
 // Adversarial properties shared by every curve–surface handler, over the
 // whole grid of lines, circles, ellipses and polynomial and rational
-// B-splines against planes, spheres, cylinders, cones and tori. A correct
+// B-splines against planes, spheres, cylinders, cones and tori, and of
+// lines against ellipsoids, whose other curves follow (ADR-0048). A correct
 // count can still carry wrong geometry marked certified (the audit of
 // 2026-11-05: two crossings of a far line placed at one point), so every
 // result is validated as geometry, not counted:
@@ -54,6 +55,7 @@ using Stereon::CurveSurfaceOverlap;
 using Stereon::CurveSurfacePoint;
 using Stereon::Cylinder;
 using Stereon::Ellipse;
+using Stereon::Ellipsoid;
 using Stereon::ErrorCode;
 using Stereon::Interval;
 using Stereon::Line;
@@ -80,7 +82,7 @@ const std::vector<std::pair<Vec3, Vec3>> frames{{ex, ey}, {ey, ez}, {ez, ex},
                                                 {ey, ex}, {ez, ey}, {ex, ez}};
 
 enum class CurveKind : int { Line, Circle, Ellipse, Cubic, Rational };
-enum class SurfaceKind : int { Plane, Sphere, Cylinder, Cone, Torus };
+enum class SurfaceKind : int { Plane, Sphere, Cylinder, Cone, Torus, Ellipsoid };
 
 const char* NameOf(const CurveKind k)
 {
@@ -90,7 +92,7 @@ const char* NameOf(const CurveKind k)
 
 const char* NameOf(const SurfaceKind k)
 {
-    constexpr std::array names{"Plane", "Sphere", "Cylinder", "Cone", "Torus"};
+    constexpr std::array names{"Plane", "Sphere", "Cylinder", "Cone", "Torus", "Ellipsoid"};
     return names[static_cast<std::size_t>(k)];
 }
 
@@ -182,8 +184,17 @@ Surface SomeSurface(const SurfaceKind kind)
         const double minor = Length8(4, 8);
         return Surface{Torus{o, minor + Length8(4, 16), minor, x, y}};
     }
+    case SurfaceKind::Ellipsoid:
+        return Surface{Ellipsoid{o, Length8(4, 20), Length8(4, 20), Length8(4, 20), x, y}};
     }
     return Surface{};
+}
+
+/// How many kinds of surface a kind of curve has a handler against: every
+/// one for a line; the others not yet the ellipsoid (ADR-0048 §3, step 2).
+int SurfaceKindsFor(const CurveKind kind)
+{
+    return kind == CurveKind::Line ? 6 : 5;
 }
 
 /// One configuration of the grid, named for the counterexample.
@@ -197,7 +208,7 @@ struct Pair {
 Pair SomePair()
 {
     const auto c = static_cast<CurveKind>(Uniform(0, 5));
-    const auto s = static_cast<SurfaceKind>(Uniform(0, 5));
+    const auto s = static_cast<SurfaceKind>(Uniform(0, SurfaceKindsFor(c)));
     RC_TAG(std::string(NameOf(c)) + " x " + NameOf(s));
     return {c, s, SomeCurve(c), SomeSurface(s)};
 }
@@ -373,7 +384,7 @@ TEST_CASE("a line's origin moved far along it shifts its parameters only",
     // circle were placed at one point. Here every surface, origins up to
     // 2^30 back along the line.
     rc::prop("for lines against every surface", [] {
-        const auto s = static_cast<SurfaceKind>(Uniform(0, 5));
+        const auto s = static_cast<SurfaceKind>(Uniform(0, SurfaceKindsFor(CurveKind::Line)));
         RC_TAG(std::string("Line x ") + NameOf(s));
         const Curve near = SomeCurve(CurveKind::Line);
         const Surface surface = SomeSurface(s);
@@ -395,9 +406,9 @@ TEST_CASE("a line's origin moved far along it shifts its parameters only",
 TEST_CASE("a periodic surface's box a turn on gives the same points a turn on",
           "[intersect][adversarial][property]")
 {
-    rc::prop("for spheres, cylinders, cones and tori", [] {
+    rc::prop("for spheres, cylinders, cones, tori and ellipsoids", [] {
         const auto c = static_cast<CurveKind>(Uniform(0, 5));
-        const auto s = static_cast<SurfaceKind>(Uniform(1, 5));
+        const auto s = static_cast<SurfaceKind>(Uniform(1, SurfaceKindsFor(c)));
         RC_TAG(std::string(NameOf(c)) + " x " + NameOf(s));
         const Curve curve = SomeCurve(c);
         const Surface surface = SomeSurface(s);

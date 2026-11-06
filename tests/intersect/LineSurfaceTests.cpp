@@ -5,8 +5,11 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-// Lines against planes, spheres and cylinders, v0.2's first curve–surface
-// handlers. Configurations are decided exactly on the input doubles: a
+// Lines against planes, spheres, cylinders and ellipsoids: v0.2's first
+// curve–surface handlers, and ADR-0048's first for the ellipsoid, checked
+// against the sphere it is when its semi-axes are equal and against the
+// sphere it is the image of when one axis is scaled.
+// Configurations are decided exactly on the input doubles: a
 // line along a plane a 2^-40 gap away is apart, a line at exactly the
 // radius is a touch, and a crossing of a plane is kept or dropped by its
 // exact rational parameter. Every point lies on both geometries at its
@@ -23,6 +26,7 @@
 #include <cstddef>
 #include <limits>
 #include <numbers>
+#include <utility>
 #include <vector>
 
 import Stereon.Intersect;
@@ -36,6 +40,7 @@ using Stereon::Curve;
 using Stereon::CurveSurfaceIntersection;
 using Stereon::CurveSurfacePoint;
 using Stereon::Cylinder;
+using Stereon::Ellipsoid;
 using Stereon::Interval;
 using Stereon::Line;
 using Stereon::Plane;
@@ -57,6 +62,10 @@ const Interval everything = Interval::Everything();
 const Plane ground{Point3{}, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
 const Sphere unitSphere{Point3{}, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
 const Cylinder unitCylinder{Point3{}, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+/// The ellipsoid about the origin with the semi-axes 3, 2 and 1 along x, y
+/// and z: an exact frame and dyadic semi-axes, so that a touch can be set
+/// up exactly (ADR-0048).
+const Ellipsoid stretched{Point3{}, 3.0, 2.0, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
 
 template <typename S>
 Result<CurveSurfaceIntersection> Meet(const Line& line, const S& surface,
@@ -98,6 +107,24 @@ std::size_t Crossings(const CurveSurfaceIntersection& result)
     return static_cast<std::size_t>(std::ranges::count_if(result.Points, [](const auto& p) {
         return p.Contact == ContactType::Crossing && p.Decided;
     }));
+}
+
+/// (x / A)² + (y / B)² + (z / C)² - 1 in the ellipsoid's frame.
+double Level(const Ellipsoid& e, const Point3& p)
+{
+    const Vec3 w = p - e.Center;
+    const double x = Dot(w, e.XAxis) / e.A;
+    const double y = Dot(w, e.YAxis) / e.B;
+    const double z = Dot(w, Axis(e)) / e.C;
+    return x * x + y * y + z * z - 1.0;
+}
+
+/// An ellipsoid with its semi-axis c along the given direction.
+Ellipsoid EllipsoidAbout(const Point3& center, const Vec3& axis, const double a, const double b,
+                         const double c)
+{
+    const Cylinder frame = IntersectTest::CylinderAbout(center, axis, 1.0);
+    return Ellipsoid{center, a, b, c, frame.XAxis, frame.YAxis};
 }
 
 /// A line along x at height y and depth z, from far on the negative side.
@@ -277,7 +304,7 @@ TEST_CASE("a line meets a cylinder in two crossings, a touch, or lies along a ru
 TEST_CASE("reversing the line negates every parameter and moves no point",
           "[intersect][line-surface][property]")
 {
-    rc::prop("for random lines against the plane, the sphere and the cylinder", [] {
+    rc::prop("for random lines against the plane, the sphere, the cylinder and the ellipsoid", [] {
         const auto coordinate = [] { return *rc::gen::inRange(-40, 41) / 8.0; };
         const Line line{Point3{coordinate(), coordinate(), coordinate()},
                         Vec3{coordinate(), coordinate(), coordinate()}};
@@ -304,6 +331,7 @@ TEST_CASE("reversing the line negates every parameter and moves no point",
         check(ground);
         check(unitSphere);
         check(unitCylinder);
+        check(stretched);
     });
 }
 
@@ -440,5 +468,237 @@ TEST_CASE("a line's two crossings of a quadric stay apart however far its origin
         for (const CurveSurfacePoint& p : result->Points) {
             REQUIRE(Distance(Eval(unitCylinder, p.OnSurface), p.Position) <= within);
         }
+    }
+}
+
+TEST_CASE("a line meets an ellipsoid in two crossings, a touch or not at all, decided exactly",
+          "[intersect][line-surface][ellipsoid]")
+{
+    // Along x at y = 1/2: (x / 3)² + (1/4)² = 1 at x = ±3 sqrt(15) / 4.
+    const double reach = 0.75 * std::sqrt(15.0);
+    const auto two = Meet(AlongX(0.5), stretched);
+    REQUIRE(two.has_value());
+    REQUIRE(two->Points.size() == 2);
+    REQUIRE(Crossings(*two) == 2);
+    REQUIRE(two->Overlaps.empty());
+    REQUIRE(std::abs(two->Points[0].Position.X + reach) <= 4e-15);
+    REQUIRE(std::abs(two->Points[1].Position.X - reach) <= 4e-15);
+    for (const CurveSurfacePoint& p : two->Points) {
+        REQUIRE(std::abs(Level(stretched, p.Position)) <= 4e-15);
+    }
+    RequireOnBoth(*two, AlongX(0.5), stretched);
+    // At a semi-axis one touch, decided; a hair beyond, apart; a hair
+    // inside, two crossings. Beside the equator, at y = 2:
+    const auto touch = Meet(AlongX(2.0), stretched);
+    REQUIRE(touch.has_value());
+    REQUIRE(touch->Points.size() == 1);
+    REQUIRE(touch->Points[0].Contact == ContactType::Tangential);
+    REQUIRE(touch->Points[0].Decided);
+    REQUIRE(Distance(touch->Points[0].Position, Point3{0.0, 2.0, 0.0}) <= 1e-15);
+    REQUIRE(Meet(AlongX(2.0 + 0x1p-40), stretched)->IsEmpty());
+    REQUIRE(Meet(AlongX(2.0 - 0x1p-40), stretched)->Points.size() == 2);
+    // Over the pole, at z = 1, where every longitude is the same point:
+    const auto pole = Meet(AlongX(0.0, 1.0), stretched);
+    REQUIRE(pole.has_value());
+    REQUIRE(pole->Points.size() == 1);
+    REQUIRE(pole->Points[0].Contact == ContactType::Tangential);
+    REQUIRE(pole->Points[0].Decided);
+    REQUIRE(Distance(pole->Points[0].Position, Point3{0.0, 0.0, 1.0}) <= 1e-15);
+    REQUIRE(std::abs(pole->Points[0].OnSurface.Y - pi / 2.0) <= 1e-15);
+    REQUIRE(Meet(AlongX(0.0, 1.0 + 0x1p-40), stretched)->IsEmpty());
+    REQUIRE(Meet(AlongX(0.0, 1.0 - 0x1p-40), stretched)->Points.size() == 2);
+    // And up the end of the longest semi-axis, at x = 3:
+    const auto upAt = [](const double x) {
+        return Line{Point3{x, 0.0, -5.0}, Vec3{0.0, 0.0, 1.0}};
+    };
+    const auto end = Meet(upAt(3.0), stretched);
+    REQUIRE(end.has_value());
+    REQUIRE(end->Points.size() == 1);
+    REQUIRE(end->Points[0].Contact == ContactType::Tangential);
+    REQUIRE(Distance(end->Points[0].Position, Point3{3.0, 0.0, 0.0}) <= 1e-15);
+    REQUIRE(Meet(upAt(3.0 + 0x1p-40), stretched)->IsEmpty());
+    REQUIRE(Meet(upAt(3.0 - 0x1p-40), stretched)->Points.size() == 2);
+    // The domain keeps the second crossing alone.
+    REQUIRE(Meet(AlongX(0.5), stretched, Interval{5.0, 10.0})->Points.size() == 1);
+    // The box: the longitude is placed in its range modulo the period, the
+    // latitude taken as it is.
+    const Box2 nearSide{Interval{0.0, pi}, Interval{-pi / 2.0, pi / 2.0}};
+    REQUIRE(MeetIn(AlongX(-0.5), stretched, everything, nearSide)->IsEmpty());
+    REQUIRE(MeetIn(AlongX(0.5), stretched, everything, nearSide)->Points.size() == 2);
+    const Box2 nextTurn{Interval{2.0 * pi, 3.0 * pi}, Interval{-pi / 2.0, pi / 2.0}};
+    const auto placed = MeetIn(AlongX(0.5), stretched, everything, nextTurn);
+    REQUIRE(placed.has_value());
+    REQUIRE(placed->Points.size() == 2);
+    for (const CurveSurfacePoint& p : placed->Points) {
+        REQUIRE(p.OnSurface.X >= 2.0 * pi);
+        REQUIRE(p.OnSurface.X <= 3.0 * pi);
+    }
+    RequireOnBoth(*placed, AlongX(0.5), stretched);
+    const Box2 north{Interval{0.0, 2.0 * pi}, Interval{0.0, pi / 2.0}};
+    REQUIRE(MeetIn(AlongX(0.0, -0.5), stretched, everything, north)->IsEmpty());
+    REQUIRE(MeetIn(AlongX(0.0, 0.5), stretched, everything, north)->Points.size() == 2);
+}
+
+TEST_CASE("an ellipsoid with equal semi-axes gives the sphere's results",
+          "[intersect][line-surface][ellipsoid][property]")
+{
+    // ADR-0048's oracle. On an exact frame the ellipsoid's quadratic is the
+    // sphere's times r^4, so the count and the contact agree exactly, a
+    // touch included; the points agree to rounding.
+    const std::vector<std::pair<Vec3, Vec3>> frames{
+        {Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}}, {Vec3{0.0, 1.0, 0.0}, Vec3{0.0, 0.0, 1.0}},
+        {Vec3{0.0, 0.0, 1.0}, Vec3{1.0, 0.0, 0.0}}, {Vec3{0.0, 1.0, 0.0}, Vec3{1.0, 0.0, 0.0}},
+        {Vec3{0.0, 0.0, 1.0}, Vec3{0.0, 1.0, 0.0}}, {Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 0.0, 1.0}}};
+    const auto same = [](const Line& line, const Sphere& sphere, const Ellipsoid& ellipsoid) {
+        const auto onSphere = Meet(line, sphere);
+        const auto onEllipsoid = Meet(line, ellipsoid);
+        RC_ASSERT(onSphere.has_value());
+        RC_ASSERT(onEllipsoid.has_value());
+        RC_ASSERT(onSphere->Points.size() == onEllipsoid->Points.size());
+        RC_ASSERT(onEllipsoid->Overlaps.empty());
+        for (std::size_t i = 0; i < onSphere->Points.size(); ++i) {
+            const CurveSurfacePoint& p = onSphere->Points[i];
+            const CurveSurfacePoint& q = onEllipsoid->Points[i];
+            const double within = 1e-12 * (1.0 + Length(Stereon::ToVec(p.Position)));
+            RC_ASSERT(q.Contact == p.Contact);
+            RC_ASSERT(q.Decided == p.Decided);
+            RC_ASSERT(std::abs(q.Parameter - p.Parameter) <= 1e-12 * (1.0 + std::abs(p.Parameter)));
+            RC_ASSERT(Distance(q.Position, p.Position) <= within);
+            // The same point of the surface, whatever longitude a pole gets.
+            RC_ASSERT(Distance(Eval(ellipsoid, q.OnSurface), Eval(sphere, p.OnSurface)) <= within);
+            RC_ASSERT(std::abs(q.OnSurface.Y - p.OnSurface.Y) <= 1e-7);
+        }
+        return onSphere->Points.size();
+    };
+    rc::prop("for lines through and beside spheres on dyadic coordinates", [&] {
+        const auto coordinate = [] { return *rc::gen::inRange(-40, 41) / 8.0; };
+        const Point3 center{coordinate(), coordinate(), coordinate()};
+        const double radius = *rc::gen::inRange(1, 33) / 8.0;
+        const Vec3 direction{coordinate(), coordinate(), coordinate()};
+        RC_PRE(direction != Vec3{});
+        const auto& [x, y] = frames[static_cast<std::size_t>(*rc::gen::inRange(0, 6))];
+        // Through a point within 1.5 radii of the centre along each axis:
+        // some lines cross and some miss.
+        const auto offset = [&] { return *rc::gen::inRange(-12, 13) / 8.0 * radius; };
+        const Line line{center + Vec3{offset(), offset(), offset()} - 3.0 * direction, direction};
+        const std::size_t points = same(line, Sphere{center, radius, x, y},
+                                        Ellipsoid{center, radius, radius, radius, x, y});
+        RC_CLASSIFY(points == 2, "crossing");
+        RC_CLASSIFY(points == 0, "apart");
+    });
+    rc::prop("for lines touching the sphere at the end of an axis", [&] {
+        const auto coordinate = [] { return *rc::gen::inRange(-40, 41) / 8.0; };
+        const Point3 center{coordinate(), coordinate(), coordinate()};
+        const double radius = *rc::gen::inRange(1, 33) / 8.0;
+        const auto& [x, y] = frames[static_cast<std::size_t>(*rc::gen::inRange(0, 6))];
+        // Along x, a radius above the centre: tangent at the top.
+        const Line line{center + Vec3{coordinate(), 0.0, radius}, Vec3{1.0, 0.0, 0.0}};
+        const std::size_t points = same(line, Sphere{center, radius, x, y},
+                                        Ellipsoid{center, radius, radius, radius, x, y});
+        RC_ASSERT(points == 1U);
+    });
+}
+
+TEST_CASE("scaling a sphere's configuration along an axis gives the ellipsoid's results",
+          "[intersect][line-surface][ellipsoid][property]")
+{
+    // ADR-0048: with axis-aligned inputs, scaling by 2^k along x maps the
+    // unit sphere onto an ellipsoid and a line onto a line, parameter for
+    // parameter. Every coefficient of the quadratic scales by 4^k, exactly,
+    // so the count and the contact are the sphere's; the parameters and the
+    // points agree to rounding, the two handlers rounding their enclosures
+    // through different operations.
+    rc::prop("by 2^k, |k| <= 3, on dyadic coordinates", [] {
+        const auto coordinate = [] { return *rc::gen::inRange(-40, 41) / 8.0; };
+        const Point3 center{coordinate(), coordinate(), coordinate()};
+        const Vec3 direction{coordinate(), coordinate(), coordinate()};
+        RC_PRE(direction != Vec3{});
+        const auto offset = [] { return *rc::gen::inRange(-12, 13) / 8.0; };
+        const Line line{center + Vec3{offset(), offset(), offset()} - 3.0 * direction, direction};
+        const double factor = std::ldexp(1.0, *rc::gen::inRange(-3, 4));
+        const auto scaled = [&](const Point3& p) { return Point3{factor * p.X, p.Y, p.Z}; };
+        const Sphere sphere{center, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+        const Ellipsoid ellipsoid{scaled(center),     factor, 1.0, 1.0, Vec3{1.0, 0.0, 0.0},
+                                  Vec3{0.0, 1.0, 0.0}};
+        const Line image{scaled(line.Origin), Vec3{factor * direction.X, direction.Y, direction.Z}};
+        const auto onSphere = Meet(line, sphere);
+        const auto onEllipsoid = Meet(image, ellipsoid);
+        RC_ASSERT(onSphere.has_value());
+        RC_ASSERT(onEllipsoid.has_value());
+        RC_ASSERT(onSphere->Points.size() == onEllipsoid->Points.size());
+        for (std::size_t i = 0; i < onSphere->Points.size(); ++i) {
+            const CurveSurfacePoint& p = onSphere->Points[i];
+            const CurveSurfacePoint& q = onEllipsoid->Points[i];
+            RC_ASSERT(q.Contact == p.Contact);
+            RC_ASSERT(q.Decided == p.Decided);
+            RC_ASSERT(std::abs(q.Parameter - p.Parameter) <= 1e-13 * (1.0 + std::abs(p.Parameter)));
+            RC_ASSERT(Distance(q.Position, scaled(p.Position)) <=
+                      1e-13 * (1.0 + Length(Stereon::ToVec(q.Position))));
+        }
+    });
+}
+
+TEST_CASE("a line through the inside of an ellipsoid crosses it twice, on both geometries",
+          "[intersect][line-surface][ellipsoid][property]")
+{
+    rc::prop("for ellipsoids placed and turned at random", [] {
+        const auto coordinate = [] { return *rc::gen::inRange(-40, 41) / 8.0; };
+        const auto semi = [] { return *rc::gen::inRange(2, 33) / 8.0; };
+        const Point3 center{coordinate(), coordinate(), coordinate()};
+        const double a = semi();
+        const double b = semi();
+        const double c = semi();
+        const Vec3 axis{coordinate(), coordinate(), coordinate()};
+        const Vec3 direction{coordinate(), coordinate(), coordinate()};
+        RC_PRE(axis != Vec3{} && direction != Vec3{});
+        const Ellipsoid ellipsoid = EllipsoidAbout(center, axis, a, b, c);
+        // Through a point within half the shortest semi-axis of the centre
+        // along each axis of space: inside the sphere the ellipsoid holds.
+        const double least = std::min({a, b, c});
+        const auto offset = [&] { return *rc::gen::inRange(-4, 5) / 8.0 * least; };
+        const Line line{center + Vec3{offset(), offset(), offset()} - 3.0 * direction, direction};
+        const double within = 1e-9 * (1.0 + Length(Stereon::ToVec(center)) + std::max({a, b, c}));
+        const auto result = Meet(line, ellipsoid);
+        RC_ASSERT(result.has_value());
+        RC_ASSERT(result->Points.size() == 2U);
+        RC_ASSERT(result->Overlaps.empty());
+        RC_ASSERT(result->Points[0].Parameter < result->Points[1].Parameter);
+        for (const CurveSurfacePoint& p : result->Points) {
+            RC_ASSERT(p.Contact == ContactType::Crossing);
+            RC_ASSERT(p.Decided);
+            RC_ASSERT(Distance(Eval(line, p.Parameter), p.Position) <= within);
+            RC_ASSERT(Distance(Eval(ellipsoid, p.OnSurface), p.Position) <= within);
+            RC_ASSERT(std::abs(Level(ellipsoid, p.Position)) <= 1e-9);
+        }
+    });
+}
+
+TEST_CASE("a line's two crossings of an ellipsoid stay apart however far its origin",
+          "[intersect][line-surface][ellipsoid]")
+{
+    // The sphere's far-origin case (the audit of 2026-11-05) on the
+    // ellipsoid: through (-0.4, 0.3, 0) inside it, the origin 13 L back.
+    // The chord is the one the line has from that point itself, and each
+    // crossing lies on both geometries to the rounding of the far origin.
+    const Vec3 direction{3.0, 4.0, 12.0};
+    const auto near = Meet(Line{Point3{-0.4, 0.3, 0.0}, direction}, stretched);
+    REQUIRE(near.has_value());
+    REQUIRE(near->Points.size() == 2);
+    const double chord = Distance(near->Points[0].Position, near->Points[1].Position);
+    for (double length = 1e2; length <= 1e12; length *= 100.0) {
+        INFO("from " << 13.0 * length);
+        const Line line{Point3{-3.0 * length - 0.4, -4.0 * length + 0.3, -12.0 * length},
+                        direction};
+        const double within = 64.0 * std::numeric_limits<double>::epsilon() * 13.0 * length;
+        const auto result = Intersect(Curve{line}, Surface{stretched}, ctx);
+        REQUIRE(result.has_value());
+        REQUIRE(result->Points.size() == 2);
+        for (const CurveSurfacePoint& p : result->Points) {
+            REQUIRE(p.Contact == ContactType::Crossing);
+            REQUIRE(Distance(Eval(line, p.Parameter), p.Position) <= within);
+            REQUIRE(Distance(Eval(stretched, p.OnSurface), p.Position) <= within);
+        }
+        REQUIRE(std::abs(Distance(result->Points[0].Position, result->Points[1].Position) -
+                         chord) <= 2.0 * within);
     }
 }

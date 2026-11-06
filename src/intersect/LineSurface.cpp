@@ -31,10 +31,11 @@ import Stereon.Robust;
 #include "Analytic.hpp"
 #include "Planar.hpp"
 
-/// A line against a plane, a sphere or a cylinder: v0.2's first
-/// curve–surface handlers, ADR-0010's analytic table carried to the
-/// line–quadric pairs. Every configuration decision is the sign of a
-/// polynomial in the input doubles (RS-0001 G5), written once over the
+/// A line against a plane, a sphere, a cylinder or an ellipsoid: v0.2's
+/// first curve–surface handlers, ADR-0010's analytic table carried to the
+/// line–quadric pairs, and ADR-0048's first for the ellipsoid. Every
+/// configuration decision is the sign of a polynomial in the input doubles
+/// (RS-0001 G5), written once over the
 /// scalar field of Planar.hpp and read as an enclosure first and exactly
 /// only when the enclosure straddles zero: whether the line runs along the
 /// plane or the axis, whether it then lies in the surface or apart from it,
@@ -321,6 +322,58 @@ Result<CurveSurfaceIntersection> LineCylinder(const Curve& a, const Interval& do
     STEREON_TRY_VOID(CutQuadric(
         result, *line, domain, box, coefficientsFrom,
         [&](const Point3& p) { return Project(*cylinder, p); }, "LineCylinder"));
+    Order(result);
+    return result;
+}
+
+// --- Line against ellipsoid -----------------------------------------------
+
+Result<CurveSurfaceIntersection> LineEllipsoid(const Curve& a, const Interval& domain,
+                                               const Surface& b, const Box2& box,
+                                               const Context& /*ctx*/)
+{
+    const Line* line = a.Target<Line>();
+    const Ellipsoid* ellipsoid = b.Target<Ellipsoid>();
+    if (line == nullptr || ellipsoid == nullptr) {
+        return Fail(ErrorCode::InvalidInput, "LineEllipsoid: dispatched for other types");
+    }
+    CurveSurfaceIntersection result;
+    // In the frame (X, Y, Z), Z the axis as the evaluator rounds it, a point
+    // at w from the centre has the coordinates (w . X, w . Y, w . Z), and
+    // lies on the ellipsoid where (x / A)² + (y / B)² + (z / C)² = 1.
+    // Multiplied through by (A B C)², that is a polynomial in the input
+    // doubles (ADR-0048 §3): (B C x)² + (A C y)² + (A B z)² = (A B C)². Along
+    // the line each coordinate is linear in t, so with m the three squared
+    // weights, d the direction's coordinates and w the origin's:
+    // A = sum m d², B = sum m d w, C = sum m w² - (A B C)². A is positive for
+    // every direction, so a line never lies in the ellipsoid, and never has
+    // one crossing alone.
+    const auto coefficientsFrom = [&](auto f, const Point3& origin) {
+        using F = decltype(f);
+        const Triple<F> d = Of3(f, line->Direction);
+        const Triple<F> w = Diff3(f, origin, ellipsoid->Center);
+        // One axis's share of A, B and C: its weight times d², d w and w².
+        const auto share = [&](const Vec3& axis, const typename F::Scalar& weight) {
+            const Triple<F> e = Of3(f, axis);
+            const auto along = Dot3(f, d, e);
+            const auto from = Dot3(f, w, e);
+            return std::array{F::Mul(weight, F::Mul(along, along)),
+                              F::Mul(weight, F::Mul(along, from)),
+                              F::Mul(weight, F::Mul(from, from))};
+        };
+        const auto bc = F::Mul(F::Of(ellipsoid->B), F::Of(ellipsoid->C));
+        const auto ac = F::Mul(F::Of(ellipsoid->A), F::Of(ellipsoid->C));
+        const auto ab = F::Mul(F::Of(ellipsoid->A), F::Of(ellipsoid->B));
+        const auto abc = F::Mul(F::Of(ellipsoid->A), bc);
+        const auto x = share(ellipsoid->XAxis, F::Mul(bc, bc));
+        const auto y = share(ellipsoid->YAxis, F::Mul(ac, ac));
+        const auto z = share(Axis(*ellipsoid), F::Mul(ab, ab));
+        return std::array{F::Add(F::Add(x[0], y[0]), z[0]), F::Add(F::Add(x[1], y[1]), z[1]),
+                          F::Sub(F::Add(F::Add(x[2], y[2]), z[2]), F::Mul(abc, abc))};
+    };
+    STEREON_TRY_VOID(CutQuadric(
+        result, *line, domain, box, coefficientsFrom,
+        [&](const Point3& p) { return Project(*ellipsoid, p); }, "LineEllipsoid"));
     Order(result);
     return result;
 }

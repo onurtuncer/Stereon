@@ -514,6 +514,33 @@ dropping the point. ``tests/occt/IntersectionDifferentialTests.cpp``
 compares the three handlers with OCCT's ``IntAna_IntConicQuad`` on
 generic lines.
 
+A ``Line`` against an ``Ellipsoid`` (ADR-0048) is decided the same way. In
+the ellipsoid's frame, its axis as the evaluator rounds it, a point at
+:math:`w` from the centre has the coordinates :math:`(x, y, z) = (w \cdot
+X, w \cdot Y, w \cdot Z)` and lies on the surface where
+:math:`(x/A)^2 + (y/B)^2 + (z/C)^2 = 1`. Multiplied through by
+:math:`(ABC)^2`, that is a polynomial in the input doubles,
+
+.. math::
+
+   (BC\,x)^2 + (AC\,y)^2 + (AB\,z)^2 = (ABC)^2,
+
+out of which the line cuts a quadratic whose leading coefficient is
+positive for every direction. So a line never lies in an ellipsoid: it
+meets it in two crossings, one touch or not at all, by the exact sign of
+the discriminant, a touch at the end of a semi-axis or over a pole
+included. The roots are placed as the sphere's are, from coefficients and
+a discriminant good to a few roundings however far the line's origin, and
+a point's longitude and latitude are ``Project``'s, those of the
+ellipsoid's closest point to the placed one. With equal semi-axes on an
+exact frame the quadratic is the sphere's times :math:`r^4`, and the
+results are the sphere's: the same count and contact exactly, the same
+points to rounding. Scaling a sphere's configuration by a power of two
+along an axis of its frame gives the ellipsoid's, parameter for
+parameter. The other curves against an ellipsoid, and an ellipsoid
+against a surface, answer ``NotImplemented`` until their steps of
+ADR-0048 land.
+
 A ``Line`` against a ``Cone`` or a ``Torus`` cannot be decided exactly on
 the input doubles: the cone's equation holds the cosine and sine of its
 semi-angle. These pairs use the proofs of the B-spline handlers below.
