@@ -32,6 +32,7 @@ import :Swept;
 import :Trimmed;
 import :Sphere;
 import :Torus;
+import :Ellipsoid;
 import :Visit;
 
 namespace Stereon {
@@ -179,6 +180,20 @@ Result<BSplineSurface> ToBSpline(const Torus& torus, const Box2 range)
     STEREON_TRY_VOID(CheckBox(torus, range, "ToBSpline(Torus)"));
     return Revolve(torus.Center, torus.XAxis, torus.YAxis, Axis(torus),
                    ArcMeridian(range.Y, torus.MajorRadius, torus.MinorRadius), range.X);
+}
+
+Result<BSplineSurface> ToBSpline(const Ellipsoid& ellipsoid, const Box2 range)
+{
+    STEREON_TRY_VOID(CheckBox(ellipsoid, range, "ToBSpline(Ellipsoid)"));
+    BSplineSurface unit = Revolve(Point3{}, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0},
+                                  Vec3{0.0, 0.0, 1.0}, ArcMeridian(range.Y, 0.0, 1.0), range.X);
+    const Vec3 x = ellipsoid.A * ellipsoid.XAxis;
+    const Vec3 y = ellipsoid.B * ellipsoid.YAxis;
+    const Vec3 z = ellipsoid.C * Axis(ellipsoid);
+    for (Point3& pole : unit.Poles) {
+        pole = ellipsoid.Center + pole.X * x + pole.Y * y + pole.Z * z;
+    }
+    return unit;
 }
 
 Result<BSplineSurface> ToBSpline(const Surface& surface, const Box2 range)

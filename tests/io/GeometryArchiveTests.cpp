@@ -468,6 +468,25 @@ TEST_CASE("a user's curve type cannot be stored", "[io][archive]")
     REQUIRE(std::string(written.error().GetMessage()).find("curve 1") != std::string::npos);
 }
 
+TEST_CASE("an ellipsoid waits for the format version that stores it", "[io][archive]")
+{
+    // ADR-0048: no format version this kernel writes has an ellipsoid
+    // record; a version-3 file with one would be refused by every existing
+    // reader of version 3. So it is not written, alone or as a trimmed
+    // surface's basis.
+    GeometryArchive a;
+    a.Surfaces = {Surface(Plane{O, X, Y}), Surface(Stereon::Ellipsoid{O, 3.0, 2.0, 1.0, X, Y})};
+    const auto written = WriteGeometry(a);
+    REQUIRE(written.error().GetCode() == ErrorCode::NotSupported);
+    if constexpr (Stereon::SerializationAvailable) {
+        REQUIRE(std::string(written.error().GetMessage()).find("surface 1") != std::string::npos);
+    }
+    const Surface patch(
+        *Stereon::MakeTrimmedSurface(a.Surfaces[1], Box2{Interval{0.5, 1.5}, Interval{-0.5, 0.5}}));
+    a.Surfaces = {patch};
+    REQUIRE(WriteGeometry(a).error().GetCode() == ErrorCode::NotSupported);
+}
+
 TEST_CASE("files round-trip, and the JSON view shows them", "[io][archive]")
 {
     if constexpr (!Stereon::SerializationAvailable) {

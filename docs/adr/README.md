@@ -63,3 +63,4 @@ Open questions that have to be researched before they can be decided live in [`d
 | [0045](0045-cppad-ad-backend.md) | CppAD as the automatic-differentiation backend | 0 | Proposed |
 | [0046](0046-ownership-borrowing-and-pointer-lifetimes.md) | Explicit ownership, borrowing and pointer lifetimes | 0 | Proposed |
 | [0047](0047-numerical-operation-completion-and-publication.md) | Numerical operation completion and publication | 0–1 | Proposed |
+| [0048](0048-native-ellipsoid-surface.md) | A native ellipsoid surface, with exact decisions where its quadric allows them | 2 | Proposed |

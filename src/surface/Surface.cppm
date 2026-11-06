@@ -6,7 +6,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 /// Stereon.Surface: surfaces (ADR-0003): the SurfaceGeometry concept, the
-/// built-in Plane, Cylinder, Cone, Sphere and Torus, B-spline and NURBS
+/// built-in Plane, Cylinder, Cone, Sphere, Torus and Ellipsoid, B-spline and NURBS
 /// surfaces, and the type-erased Surface.
 export module Stereon.Surface;
 
@@ -19,6 +19,7 @@ export import :Concepts;
 export import :Cone;
 export import :Conversion;
 export import :Cylinder;
+export import :Ellipsoid;
 export import :Erased;
 export import :Fitting;
 export import :GridEvaluation;

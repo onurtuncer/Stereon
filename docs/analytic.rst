@@ -401,6 +401,52 @@ in ``Interval`` arithmetic with the axis the evaluator computes, so the box
 contains the exact torus even when the stored frame is orthonormal only up
 to rounding.
 
+The ellipsoid
+~~~~~~~~~~~~~
+
+``Ellipsoid`` (ADR-0048) is the sphere's chart with a semi-axis along each
+axis of the frame:
+
+.. math::
+
+   \mathbf{S}(u, v) = \mathbf{c} + \cos v\,(A\cos u\,\mathbf{x} + B\sin u\,\mathbf{y})
+   + C\sin v\,\mathbf{z},
+
+with the sphere's domain, period and poles. The semi-axes are positive and
+in any order. Equal semi-axes give an ellipsoid still, never a ``Sphere``,
+but every value it computes then agrees with the sphere's, which the tests
+check point for point. ``Transformed`` accepts similarities only: an uneven
+scaling of a sphere is an ellipsoid, but with another parametrisation.
+
+**Projection.** In the frame, with the semi-axes taken longest first,
+:math:`e_0 \ge e_1 \ge e_2`, and the point's coordinates reflected into the
+first octant, the closest point is
+:math:`x_i = e_i^2 y_i / (e_i^2 + t)` for the largest root :math:`t` of
+
+.. math::
+
+   F(t) = \sum_i \left(\frac{e_i y_i}{e_i^2 + t}\right)^2 - 1 .
+
+:math:`F` decreases strictly where it matters, so the root is found by
+bisection to adjacent doubles, with no starting guess and a fixed number of
+steps (Eberly, *Distance from a point to an ellipse, an ellipsoid, or a
+hyperellipsoid*, 2013). A point on a coordinate plane takes Eberly's other
+cases: on the plane of the two longest axes, inside the ellipse where the
+normals from that plane cross, its closest point lies off the plane, and
+otherwise the problem is the ellipse's in the plane, solved by the same
+routine as ``Project(Ellipse)``.
+
+Points on the medial set, where two or more closest points meet, get one
+of them, the same one every time: the one on the positive side of each
+coordinate plane the point lies on. So the centre gets the north pole when
+:math:`C` is the shortest semi-axis, and :math:`(0, 0)` when the semi-axes
+are equal, as the sphere's centre does.
+
+**Bounding box.** Along coordinate axis :math:`i` the support of the
+ellipsoid is :math:`\sqrt{(A x_i)^2 + (B y_i)^2 + (C z_i)^2}`, reached, so
+``BoundingBox`` is tight. It is evaluated in ``Interval`` arithmetic, like
+the other boxes.
+
 Checked construction
 --------------------
 

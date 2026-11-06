@@ -19,6 +19,7 @@ import Stereon.Surface;
 
 using Stereon::Cone;
 using Stereon::Cylinder;
+using Stereon::Ellipsoid;
 using Stereon::Plane;
 using Stereon::Point2;
 using Stereon::Point3;
@@ -75,6 +76,12 @@ Torus SomeTorus(const double minorRadius)
     return {Point3{-1.0, 0.0, 2.0}, minorRadius + 2.0, minorRadius, f.X, f.Y, false};
 }
 
+Ellipsoid SomeEllipsoid(const double c)
+{
+    const Frame f = TiltedFrame();
+    return {Point3{0.5, 1.0, -1.0}, c + 1.0, c + 0.5, c, f.X, f.Y};
+}
+
 /// A bicubic B-spline patch over the parameter box the tests below use.
 Stereon::BSplineSurface SomeBSplineSurface()
 {
@@ -103,11 +110,13 @@ TEST_CASE("VisitBuiltin hands built-in surfaces to the visitor as themselves", "
     REQUIRE(BuiltinIndexOf(Surface(SomeCone(1.0))) == 2);
     REQUIRE(BuiltinIndexOf(Surface(SomeSphere(1.0))) == 3);
     REQUIRE(BuiltinIndexOf(Surface(SomeTorus(1.0))) == 4);
-    REQUIRE(BuiltinIndexOf(Surface(SomeBSplineSurface())) == 5);
-    STATIC_REQUIRE(Stereon::BuiltinSurfaceTypes::Size == 6);
+    REQUIRE(BuiltinIndexOf(Surface(SomeEllipsoid(1.0))) == 5);
+    REQUIRE(BuiltinIndexOf(Surface(SomeBSplineSurface())) == 6);
+    STATIC_REQUIRE(Stereon::BuiltinSurfaceTypes::Size == 7);
     STATIC_REQUIRE(Stereon::GeometryTypeName<Cone> == std::string_view{"Cone"});
     STATIC_REQUIRE(Stereon::GeometryTypeName<Sphere> == std::string_view{"Sphere"});
     STATIC_REQUIRE(Stereon::GeometryTypeName<Torus> == std::string_view{"Torus"});
+    STATIC_REQUIRE(Stereon::GeometryTypeName<Ellipsoid> == std::string_view{"Ellipsoid"});
 
     const bool sawCylinder =
         VisitBuiltin(cylinder, []<typename G>(const G&) { return std::is_same_v<G, Cylinder>; });
@@ -129,7 +138,8 @@ TEST_CASE("the surface fast path and erased path give identical results",
         const double size = *rc::gen::inRange(1, 40) / 8.0;
         for (const Surface& s :
              {Surface(SomePlane()), Surface(SomeCylinder(size)), Surface(SomeCone(size)),
-              Surface(SomeSphere(size)), Surface(SomeTorus(size)), Surface(SomeBSplineSurface())}) {
+              Surface(SomeSphere(size)), Surface(SomeTorus(size)), Surface(SomeEllipsoid(size)),
+              Surface(SomeBSplineSurface())}) {
             RC_ASSERT(VisitBuiltin(s, [&](const auto& g) { return Eval(g, uv); }) == Eval(s, uv));
             RC_ASSERT(VisitBuiltin(s, [&](const auto& g) { return Deriv(g, uv, du, dv); }) ==
                       Deriv(s, uv, du, dv));
