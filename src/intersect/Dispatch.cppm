@@ -364,17 +364,19 @@ using CurveSurfaceHandler = Result<CurveSurfaceIntersection> (*)(const Curve&, c
                                                                  const Surface&, const Box2&,
                                                                  const Context&);
 
-/// A line against a plane, a sphere or a cylinder (v0.2's first
-/// curve–surface handlers): every configuration decision the sign of a
-/// polynomial in the input doubles, a plane's crossing decided exactly
-/// against the requested domains, a quadric's roots placed to rounding.
-/// Defined in LineSurface.cpp.
+/// A line against a plane, a sphere, a cylinder or an ellipsoid (v0.2's
+/// first curve–surface handlers, and ADR-0048's first): every
+/// configuration decision the sign of a polynomial in the input doubles, a
+/// plane's crossing decided exactly against the requested domains, a
+/// quadric's roots placed to rounding. Defined in LineSurface.cpp.
 Result<CurveSurfaceIntersection> LinePlane(const Curve&, const Interval&, const Surface&,
                                            const Box2&, const Context&);
 Result<CurveSurfaceIntersection> LineSphere(const Curve&, const Interval&, const Surface&,
                                             const Box2&, const Context&);
 Result<CurveSurfaceIntersection> LineCylinder(const Curve&, const Interval&, const Surface&,
                                               const Box2&, const Context&);
+Result<CurveSurfaceIntersection> LineEllipsoid(const Curve&, const Interval&, const Surface&,
+                                               const Box2&, const Context&);
 
 /// A B-spline curve, polynomial or rational, against a plane, a sphere or
 /// a cylinder: the surface's implicit equation on each Bezier segment,
@@ -638,7 +640,8 @@ consteval CurveSurfaceHandler AgainstQuadric()
     }
 }
 
-/// The line's handlers: AgainstQuadric's three, the cone and the torus.
+/// The line's handlers: AgainstQuadric's three, the cone, the torus and the
+/// ellipsoid.
 template <typename B>
 consteval CurveSurfaceHandler LineAgainstSurface()
 {
@@ -646,6 +649,8 @@ consteval CurveSurfaceHandler LineAgainstSurface()
         return &LineCone;
     } else if constexpr (std::same_as<B, Torus>) {
         return &LineTorus;
+    } else if constexpr (std::same_as<B, Ellipsoid>) {
+        return &LineEllipsoid;
     } else {
         return AgainstQuadric<Line, B, &LinePlane, &LineSphere, &LineCylinder>();
     }

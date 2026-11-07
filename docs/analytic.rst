@@ -447,6 +447,13 @@ ellipsoid is :math:`\sqrt{(A x_i)^2 + (B y_i)^2 + (C z_i)^2}`, reached, so
 ``BoundingBox`` is tight. It is evaluated in ``Interval`` arithmetic, like
 the other boxes.
 
+**Intersections.** A ``Line`` against an ``Ellipsoid`` has its handler,
+decided exactly on the input doubles as the sphere's is
+(:doc:`intersection`). The other pairs follow in ADR-0048's order and
+answer ``NotImplemented`` until then: B-spline curves, circles and
+ellipses, then the plane's closed form, then the other surfaces through
+the trace.
+
 Checked construction
 --------------------
 
