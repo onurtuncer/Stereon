@@ -151,6 +151,12 @@ sweeps counted together, and the exact patches and projectors are rebuilt
 on load as for trimmed curves. Each version is the next without its new
 records, so a version-1 or version-2 file needs no migration.
 
+No version yet stores an ``Ellipsoid`` (ADR-0048). A version-3 file with
+one would be refused by every existing reader of version 3, so until format
+version 4 adds the record, with its committed file, the writer refuses an
+ellipsoid with ``NotSupported``, alone or as a trimmed surface's basis, and
+the reader refuses an ``Ellipsoid`` record with ``ParseError``.
+
 Reading
 ~~~~~~~
 

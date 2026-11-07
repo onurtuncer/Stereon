@@ -319,8 +319,9 @@ template <typename S>
 
 /// dS/d(component) at fixed (u, v), per unit of the component: the origin
 /// moves every point alike; the radius moves a sphere's point along
-/// (S - C) / r and a cylinder's along its radial direction; the cone's and
-/// the torus's are ConePartial's and TorusPartial's.
+/// its unit normal and a cylinder's along its radial direction. Form these
+/// locally: subtracting world positions loses accuracy after translation.
+/// The cone's and the torus's are ConePartial's and TorusPartial's.
 [[nodiscard]] Vec3 SurfacePartial(const Surface& surface, const Point2& uv,
                                   const SurfaceComponent component)
 {
@@ -329,10 +330,10 @@ template <typename S>
         return UnitAlong(static_cast<int>(component));
     }
     if (const Sphere* sphere = surface.Target<Sphere>()) {
-        return (Eval(*sphere, uv) - sphere->Center) / sphere->Radius;
+        return std::cos(uv.Y) * Radial(*sphere, uv.X) + std::sin(uv.Y) * Axis(*sphere);
     }
     if (const Cylinder* cylinder = surface.Target<Cylinder>()) {
-        return (Eval(*cylinder, uv) - cylinder->Origin - uv.Y * Axis(*cylinder)) / cylinder->Radius;
+        return Radial(*cylinder, uv.X);
     }
     if (const Cone* cone = surface.Target<Cone>()) {
         return ConePartial(*cone, uv, component);

@@ -61,6 +61,30 @@ bool Inside(const Shape& shape, const Point3& p)
     return w->IsInside();
 }
 
+/// The result is a closed solid: at the Solid level nothing is found but
+/// the self-intersection check, which that level does not make.
+void RequireClosed(const Shape& shape)
+{
+    const Stereon::ValidityReport report =
+        ValidateTopology(shape, Stereon::ValidityLevel::Solid, ctx);
+    for (const Stereon::ValidityFinding& finding : report.GetFindings()) {
+        INFO(finding.Message);
+        CHECK(finding.Rule == Stereon::TopologyRule::SelfIntersectionUnchecked);
+    }
+}
+
+/// The result's Intersection edges: where a face of each body meets.
+std::size_t IntersectionEdgesOf(const Shape& shape)
+{
+    std::size_t n = 0;
+    for (const Stereon::EdgeId edge : *AllEntities<EntityKind::Edge>(shape)) {
+        if (KindOf(shape, edge) == Stereon::EdgeCurveKind::Intersection) {
+            ++n;
+        }
+    }
+    return n;
+}
+
 Shape Corner()
 {
     const auto other =
@@ -146,6 +170,148 @@ TEST_CASE("a box and a cylinder through it: union, common and cut", "[boolean][a
     REQUIRE_FALSE(Inside(cut.Shape, Point3{5.0, 5.0, 12.0}));
 }
 
+TEST_CASE("cylinders crossing meet along Intersection edges, across the seam too",
+          "[boolean][assemble][seam][regression]")
+{
+    // A cylinder along x through the upright one's axis, or 1 off it: the
+    // hole it makes crosses the upright's seam. Their curves of meeting are
+    // fitted, so each body imprints them as Trim edges on its own face;
+    // joined, a face of each body uses them, on two surfaces, which a Trim
+    // edge cannot be (G05). The result takes them as Intersection edges.
+    const auto upright = Stereon::MakeCylinderSolid(Point3{0.0, 0.0, -5.0}, Vec3{1.0, 0.0, 0.0},
+                                                    Vec3{0.0, 1.0, 0.0}, 3.0, 10.0, ctx);
+    REQUIRE(upright.has_value());
+    for (const double offset : {0.0, 1.0}) {
+        INFO("offset " << offset);
+        const auto across = Stereon::MakeCylinderSolid(
+            Point3{-6.0, offset, 0.0}, Vec3{0.0, 1.0, 0.0}, Vec3{0.0, 0.0, 1.0}, 1.5, 12.0, ctx);
+        REQUIRE(across.has_value());
+        for (const BooleanOperation operation :
+             {BooleanOperation::Union, BooleanOperation::Common, BooleanOperation::Cut}) {
+            INFO(Stereon::ToString(operation));
+            const OperationResult result = Run(upright->Shape, across->Shape, operation);
+            std::size_t intersections = 0;
+            for (const Stereon::EdgeId edge : *AllEntities<EntityKind::Edge>(result.Shape)) {
+                if (KindOf(result.Shape, edge) == Stereon::EdgeCurveKind::Intersection) {
+                    ++intersections;
+                }
+            }
+            // Two closed curves, each cut into pieces at the seams.
+            REQUIRE(intersections >= 2);
+            const Stereon::ValidityReport report =
+                ValidateTopology(result.Shape, Stereon::ValidityLevel::Solid, ctx);
+            for (const Stereon::ValidityFinding& finding : report.GetFindings()) {
+                INFO(finding.Message);
+                CHECK(finding.Rule == Stereon::TopologyRule::SelfIntersectionUnchecked);
+            }
+        }
+        // Where the across cylinder pierces the upright one, both ways.
+        const OperationResult united = Run(upright->Shape, across->Shape, BooleanOperation::Union);
+        REQUIRE(Inside(united.Shape, Point3{0.0, 0.0, 4.0}));
+        REQUIRE(Inside(united.Shape, Point3{5.0, offset, 0.0}));
+        REQUIRE_FALSE(Inside(united.Shape, Point3{5.0, offset + 2.0, 0.0}));
+    }
+}
+
+TEST_CASE("perpendicular cylinders of equal radii: the Steinmetz solid and what is left of each",
+          "[boolean][assemble][seam][regression]")
+{
+    // The upright cylinder about z and one of the same radius about x: their
+    // two ellipses cross at (0, 3, 0) and (0, -3, 0), where the cylinders
+    // are tangent, and cut each lateral face into four parts round each
+    // crossing. The imprint used to refuse there, joining a piece to a use
+    // of the part across the crossing (tests/boolean/BodiesTests.cpp).
+    const auto upright = Stereon::MakeCylinderSolid(Point3{0.0, 0.0, -5.0}, Vec3{1.0, 0.0, 0.0},
+                                                    Vec3{0.0, 1.0, 0.0}, 3.0, 10.0, ctx);
+    const auto across = Stereon::MakeCylinderSolid(Point3{-6.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0},
+                                                   Vec3{0.0, 0.0, 1.0}, 3.0, 12.0, ctx);
+    REQUIRE(upright.has_value());
+    REQUIRE(across.has_value());
+    const Shape& a = upright->Shape;
+    const Shape& b = across->Shape;
+
+    // The four caps, and of each lateral face the two parts outside the
+    // other cylinder. The six pieces of the ellipses join them.
+    const OperationResult united = Run(a, b, BooleanOperation::Union);
+    REQUIRE(CountOf<EntityKind::Face>(united.Shape) == 8);
+    REQUIRE(CountOf<EntityKind::Solid>(united.Shape) == 1);
+    REQUIRE(CountOf<EntityKind::Shell>(united.Shape) == 1);
+    REQUIRE(IntersectionEdgesOf(united.Shape) == 6);
+    RequireClosed(united.Shape);
+    REQUIRE(Inside(united.Shape, Point3{0.5, 0.5, 0.5}));
+    REQUIRE(Inside(united.Shape, Point3{0.5, 0.5, 4.0}));
+    REQUIRE(Inside(united.Shape, Point3{5.0, 0.5, 0.5}));
+    REQUIRE(Inside(united.Shape, Point3{-5.0, 0.5, 0.5}));
+    REQUIRE_FALSE(Inside(united.Shape, Point3{4.0, 0.5, 4.0}));
+    REQUIRE_FALSE(Inside(united.Shape, Point3{0.5, 3.5, 0.5}));
+
+    // The Steinmetz solid: four lenses, the upright one's about +x in two
+    // parts along its seam.
+    const OperationResult common = Run(a, b, BooleanOperation::Common);
+    REQUIRE(CountOf<EntityKind::Face>(common.Shape) == 5);
+    REQUIRE(CountOf<EntityKind::Solid>(common.Shape) == 1);
+    REQUIRE(IntersectionEdgesOf(common.Shape) == 6);
+    RequireClosed(common.Shape);
+    REQUIRE(Inside(common.Shape, Point3{0.5, 0.5, 0.5}));
+    REQUIRE(Inside(common.Shape, Point3{2.0, 0.5, 2.0}));
+    REQUIRE_FALSE(Inside(common.Shape, Point3{0.5, 0.5, 4.0}));
+    REQUIRE_FALSE(Inside(common.Shape, Point3{5.0, 0.5, 0.5}));
+    REQUIRE_FALSE(Inside(common.Shape, Point3{0.5, 2.5, 2.5}));
+
+    // The upright one with the other taken out: a lobe above and a lobe
+    // below, each a cap, a part of the lateral face and a lens of the
+    // other's.
+    const OperationResult cut = Run(a, b, BooleanOperation::Cut);
+    REQUIRE(CountOf<EntityKind::Face>(cut.Shape) == 6);
+    REQUIRE(CountOf<EntityKind::Solid>(cut.Shape) == 2);
+    REQUIRE(IntersectionEdgesOf(cut.Shape) == 6);
+    RequireClosed(cut.Shape);
+    REQUIRE(Inside(cut.Shape, Point3{0.5, 0.5, 4.0}));
+    REQUIRE(Inside(cut.Shape, Point3{0.5, 0.5, -4.0}));
+    REQUIRE(Inside(cut.Shape, Point3{0.5, 2.5, 2.5}));
+    REQUIRE_FALSE(Inside(cut.Shape, Point3{0.5, 0.5, 0.5}));
+    REQUIRE_FALSE(Inside(cut.Shape, Point3{5.0, 0.5, 0.5}));
+}
+
+TEST_CASE("three perpendicular cylinders of equal radii: the tricylinder",
+          "[boolean][assemble][seam][regression]")
+{
+    // The Steinmetz solid of the cylinders about z and x, inside a third of
+    // the same radius about y. The first two are tangent at the nodes on the
+    // y axis; the third is tangent to the one about z at two nodes on the x
+    // axis and to the one about x at two on the z axis, each pair meeting in
+    // two ellipses through its nodes. The six ellipses meet three at a time
+    // at the eight points (+-r, +-r, +-r) / sqrt 2. The result has the
+    // faces, edges and vertices of a rhombic dodecahedron: twelve faces,
+    // four on each cylinder, and fourteen vertices, the six nodes, where
+    // four faces meet, and those eight points, where three do.
+    const Vec3 ex{1.0, 0.0, 0.0};
+    const Vec3 ey{0.0, 1.0, 0.0};
+    const Vec3 ez{0.0, 0.0, 1.0};
+    const auto aboutZ = Stereon::MakeCylinderSolid(Point3{0.0, 0.0, -5.0}, ex, ey, 3.0, 10.0, ctx);
+    const auto aboutX = Stereon::MakeCylinderSolid(Point3{-6.0, 0.0, 0.0}, ey, ez, 3.0, 12.0, ctx);
+    const auto aboutY = Stereon::MakeCylinderSolid(Point3{0.0, -6.0, 0.0}, ez, ex, 3.0, 12.0, ctx);
+    REQUIRE(aboutZ.has_value());
+    REQUIRE(aboutX.has_value());
+    REQUIRE(aboutY.has_value());
+    const OperationResult two = Run(aboutZ->Shape, aboutX->Shape, BooleanOperation::Common);
+    const OperationResult three = Run(two.Shape, aboutY->Shape, BooleanOperation::Common);
+    REQUIRE(CountOf<EntityKind::Solid>(three.Shape) == 1);
+    REQUIRE(CountOf<EntityKind::Shell>(three.Shape) == 1);
+    REQUIRE(CountOf<EntityKind::Face>(three.Shape) == 12);
+    REQUIRE(CountOf<EntityKind::Edge>(three.Shape) == 24);
+    REQUIRE(CountOf<EntityKind::Vertex>(three.Shape) == 14);
+    // Every edge joins faces of two cylinders.
+    REQUIRE(IntersectionEdgesOf(three.Shape) == 24);
+    RequireClosed(three.Shape);
+    // Inside all three; inside the first two but not the third; inside one.
+    REQUIRE(Inside(three.Shape, Point3{0.5, 0.5, 0.5}));
+    REQUIRE(Inside(three.Shape, Point3{1.5, 1.5, 1.5}));
+    REQUIRE_FALSE(Inside(three.Shape, Point3{2.2, 0.5, 2.2}));
+    REQUIRE_FALSE(Inside(three.Shape, Point3{0.5, 2.5, 2.5}));
+    REQUIRE_FALSE(Inside(three.Shape, Point3{0.5, 0.5, 4.0}));
+}
+
 TEST_CASE("bodies apart: two solids, nothing in common, the cut unchanged", "[boolean][assemble]")
 {
     const Shape a = Box();
@@ -179,6 +345,65 @@ Shape BoxFrom(const Point3& lo, const Point3& hi)
 }
 
 } // namespace
+
+TEST_CASE("a cylinder tangent to a box's side unites into two solids touching along a line",
+          "[boolean][assemble][regression]")
+{
+    // The cylinder touches the box's side x = 10 along the line y = 5. The
+    // box's side is split there into two faces; the cylinder's face carries
+    // the line as a slit, used on both sides. Counting kept faces, the
+    // cylinder kept one, and the pair was merged into an edge used four
+    // times by one shell (L01); counting uses, each keeps two and they stay
+    // apart. The clip first had to read the side of the top plane's arc off
+    // its touch of the top face's edge (ClipTests).
+    const Shape box = Box();
+    const auto drum = Stereon::MakeCylinderSolid(Point3{13.0, 5.0, -2.0}, Vec3{1.0, 0.0, 0.0},
+                                                 Vec3{0.0, 1.0, 0.0}, 3.0, 14.0, ctx);
+    REQUIRE(drum.has_value());
+    const OperationResult united = Run(box, drum->Shape, BooleanOperation::Union);
+    REQUIRE(CountOf<EntityKind::Solid>(united.Shape) == 2);
+    const Stereon::ValidityReport report =
+        ValidateTopology(united.Shape, Stereon::ValidityLevel::Solid, ctx);
+    for (const Stereon::ValidityFinding& finding : report.GetFindings()) {
+        INFO(finding.Message);
+        CHECK(finding.Rule == Stereon::TopologyRule::SelfIntersectionUnchecked);
+    }
+    REQUIRE(Inside(united.Shape, Point3{5.0, 5.0, 5.0}));
+    REQUIRE(Inside(united.Shape, Point3{13.0, 5.0, 5.0}));
+    REQUIRE_FALSE(Inside(united.Shape, Point3{11.0, 9.0, 5.0}));
+    // Nothing in common; the cut leaves the box whole.
+    REQUIRE(CountOf<EntityKind::Solid>(Run(box, drum->Shape, BooleanOperation::Common).Shape) == 0);
+    REQUIRE(CountOf<EntityKind::Solid>(Run(box, drum->Shape, BooleanOperation::Cut).Shape) == 1);
+}
+
+TEST_CASE("boxes sharing only an edge unite into two solids touching along it",
+          "[boolean][assemble][coincident][regression]")
+{
+    // The integration tests of 2026-11-05 (tests/boolean/IntegrationTests.cpp):
+    // the edge each box carries of the other was merged into one, used by
+    // four faces of one shell, and the union was published although the
+    // shell is not closed (L01). Now each box keeps its own edge there.
+    const Shape a = Box();
+    const Shape b = BoxFrom(Point3{10.0, 10.0, 0.0}, Point3{20.0, 20.0, 10.0});
+    const OperationResult united = Run(a, b, BooleanOperation::Union);
+    REQUIRE(CountOf<EntityKind::Solid>(united.Shape) == 2);
+    REQUIRE(CountOf<EntityKind::Face>(united.Shape) == 12);
+    REQUIRE(CountOf<EntityKind::Edge>(united.Shape) == 24);
+    REQUIRE(CountOf<EntityKind::Vertex>(united.Shape) == 16);
+    const Stereon::ValidityReport report =
+        ValidateTopology(united.Shape, Stereon::ValidityLevel::Solid, ctx);
+    for (const Stereon::ValidityFinding& finding : report.GetFindings()) {
+        INFO(finding.Message);
+        CHECK(finding.Rule == Stereon::TopologyRule::SelfIntersectionUnchecked);
+    }
+    REQUIRE(Inside(united.Shape, Point3{5.0, 5.0, 5.0}));
+    REQUIRE(Inside(united.Shape, Point3{15.0, 15.0, 5.0}));
+    REQUIRE_FALSE(Inside(united.Shape, Point3{15.0, 5.0, 5.0}));
+
+    // Common and cut are untouched: nothing in common, A unchanged.
+    REQUIRE(CountOf<EntityKind::Face>(Run(a, b, BooleanOperation::Common).Shape) == 0);
+    REQUIRE(CountOf<EntityKind::Face>(Run(a, b, BooleanOperation::Cut).Shape) == 6);
+}
 
 TEST_CASE("boxes face to face: the coincident faces OnOpposite", "[boolean][assemble][coincident]")
 {
@@ -251,6 +476,53 @@ TEST_CASE("boxes overlapping with coincident sides: the shared parts OnSame",
     REQUIRE(CountOf<EntityKind::Face>(cut.Shape) == 6);
     REQUIRE(Inside(cut.Shape, Point3{2.0, 5.0, 5.0}));
     REQUIRE_FALSE(Inside(cut.Shape, Point3{7.0, 5.0, 5.0}));
+}
+
+TEST_CASE("boxes sharing top and bottom planes: a corner of the overlap inside each face",
+          "[boolean][assemble][coincident][regression]")
+{
+    // B = [5, 15]^2 x [0, 10]: its top and bottom share A's planes over
+    // [5, 10]^2, a square with one corner inside A's face and the opposite
+    // one inside B's. The imprint used to refuse the two pieces that run
+    // out of such a corner (tests/boolean/BodiesTests.cpp).
+    const Shape a = Box();
+    const Shape b = BoxFrom(Point3{5.0, 5.0, 0.0}, Point3{15.0, 15.0, 10.0});
+
+    // Eight sides, and the top and the bottom each in three parts: A's
+    // alone, the shared square and B's alone.
+    const OperationResult united = Run(a, b, BooleanOperation::Union);
+    REQUIRE(CountOf<EntityKind::Face>(united.Shape) == 14);
+    REQUIRE(CountOf<EntityKind::Edge>(united.Shape) == 32);
+    REQUIRE(CountOf<EntityKind::Vertex>(united.Shape) == 20);
+    REQUIRE(CountOf<EntityKind::Solid>(united.Shape) == 1);
+    RequireClosed(united.Shape);
+    REQUIRE(Inside(united.Shape, Point3{2.0, 2.0, 5.0}));
+    REQUIRE(Inside(united.Shape, Point3{7.0, 7.0, 5.0}));
+    REQUIRE(Inside(united.Shape, Point3{12.0, 12.0, 5.0}));
+    REQUIRE_FALSE(Inside(united.Shape, Point3{12.0, 2.0, 5.0}));
+    REQUIRE_FALSE(Inside(united.Shape, Point3{2.0, 12.0, 5.0}));
+    REQUIRE_FALSE(Inside(united.Shape, Point3{7.0, 7.0, 12.0}));
+
+    const OperationResult common = Run(a, b, BooleanOperation::Common);
+    REQUIRE(CountOf<EntityKind::Face>(common.Shape) == 6);
+    REQUIRE(CountOf<EntityKind::Edge>(common.Shape) == 12);
+    REQUIRE(CountOf<EntityKind::Vertex>(common.Shape) == 8);
+    RequireClosed(common.Shape);
+    REQUIRE(Inside(common.Shape, Point3{7.0, 7.0, 5.0}));
+    REQUIRE_FALSE(Inside(common.Shape, Point3{2.0, 2.0, 5.0}));
+    REQUIRE_FALSE(Inside(common.Shape, Point3{12.0, 12.0, 5.0}));
+
+    // A with its corner taken out: an L of six sides.
+    const OperationResult cut = Run(a, b, BooleanOperation::Cut);
+    REQUIRE(CountOf<EntityKind::Face>(cut.Shape) == 8);
+    REQUIRE(CountOf<EntityKind::Edge>(cut.Shape) == 18);
+    REQUIRE(CountOf<EntityKind::Vertex>(cut.Shape) == 12);
+    REQUIRE(CountOf<EntityKind::Solid>(cut.Shape) == 1);
+    RequireClosed(cut.Shape);
+    REQUIRE(Inside(cut.Shape, Point3{2.0, 2.0, 5.0}));
+    REQUIRE(Inside(cut.Shape, Point3{7.0, 2.0, 5.0}));
+    REQUIRE(Inside(cut.Shape, Point3{2.0, 7.0, 5.0}));
+    REQUIRE_FALSE(Inside(cut.Shape, Point3{7.0, 7.0, 5.0}));
 }
 
 TEST_CASE("a Boolean's History accounts for both operands", "[boolean][assemble][history]")

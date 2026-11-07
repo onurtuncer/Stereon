@@ -43,8 +43,8 @@ export namespace Stereon {
 inline constexpr std::size_t CurveBufferSize = 96;
 /// Curve2d: Ellipse2d and Hyperbola2d, 64 bytes.
 inline constexpr std::size_t Curve2dBufferSize = 72;
-/// Surface: Cone and Torus, 96 bytes.
-inline constexpr std::size_t SurfaceBufferSize = 104;
+/// Surface: Ellipsoid, 104 bytes (ADR-0048); Cone and Torus are 96.
+inline constexpr std::size_t SurfaceBufferSize = 112;
 
 /// The buffer of a curve wrapper in D dimensions.
 template <std::size_t D>

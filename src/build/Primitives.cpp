@@ -283,13 +283,13 @@ Result<OperationResult> MakeCylinderSolid(const Point3& baseCentre, const Vec3& 
     STEREON_TRY(parts.Bottom,
                 b.AddEdge(ExactEdge(v0, v0, bottomCircle, Interval{0.0, tau}, tolerance)));
     STEREON_TRY(parts.Top, b.AddEdge(ExactEdge(v1, v1, topCircle, Interval{0.0, tau}, tolerance)));
-    EdgeSpec seam;
-    seam.Kind = EdgeCurveKind::Boundary;
-    seam.Start = v0;
-    seam.End = v1;
-    seam.Range = Interval{0.0, height};
-    seam.Tolerance = tolerance;
-    STEREON_TRY(parts.Seam, b.AddEdge(seam));
+    // The seam is a cylinder ruling with the height as its parameter.
+    // Imprinting can put its two uses on different faces, so Boundary
+    // (two uses only on one face) would then violate S07. Keep the exact
+    // line; SplitEdge preserves its parameter and both periodic pcurves.
+    STEREON_TRY(const CurveRef seamLine, b.AddCurve(Curve(Line{baseCentre + radius * xAxis, z})));
+    STEREON_TRY(parts.Seam,
+                b.AddEdge(ExactEdge(v0, v1, seamLine, Interval{0.0, height}, tolerance)));
 
     STEREON_TRY(const BuilderSolidId solid, b.AddSolid());
     STEREON_TRY(const BuilderShellId shell, b.AddShell(solid));

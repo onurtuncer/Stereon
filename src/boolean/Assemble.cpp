@@ -118,6 +118,9 @@ struct SharedPair {
     /// transverse intersection, which both bodies carry on the branch's
     /// parameter; either way for edges paired on coincident faces.
     bool Along = true;
+    /// Whether both bodies keep a face at the piece, so that its edge joins
+    /// faces of two surfaces.
+    bool Joins = false;
 };
 
 struct Work {
@@ -171,12 +174,22 @@ void Record(Work& w, const EntityKind kind, const std::uint32_t target, const st
 
 // --- The pieces of the intersection ---------------------------------------------
 
-/// Whether a kept face of the body uses the edge.
-[[nodiscard]] Result<bool> KeptUses(const Work& w, const std::uint8_t body, const EdgeId edge)
+/// How many uses of the edge the body's kept faces make: one per face for
+/// an edge between two faces, two for a slit one face uses on both sides,
+/// as a line a cylinder touches a box's side along is in the cylinder's
+/// face.
+[[nodiscard]] Result<std::size_t> KeptUses(const Work& w, const std::uint8_t body,
+                                           const EdgeId edge)
 {
-    STEREON_TRY(const std::vector<FaceId> faces, FacesOf(w.ShapeOf(body), edge));
-    return std::ranges::any_of(faces,
-                               [&](const FaceId f) { return w.Kept[body].contains(f.GetIndex()); });
+    const Shape& shape = w.ShapeOf(body);
+    STEREON_TRY(const RadialCoedgeRange uses, RadialCoedgesOf(shape, edge));
+    std::size_t kept = 0;
+    for (const CoedgeId use : uses) {
+        if (w.Kept[body].contains(FaceOf(shape, LoopOf(shape, use)).GetIndex())) {
+            ++kept;
+        }
+    }
+    return kept;
 }
 
 /// Identifies B's vertex with A's: within the pair tolerance, the larger
@@ -214,15 +227,25 @@ void Record(Work& w, const EntityKind kind, const std::uint32_t target, const st
 /// The pieces of the intersection and the edges paired on coincident faces:
 /// each pair, the body whose edge the result takes (A's where a kept face
 /// of A uses it), which way B's runs, and the ends of B's identified with
-/// A's.
+/// A's. A pair where each body keeps two uses of its edge is not merged:
+/// the operands only touch along it, the union of two boxes sharing an
+/// edge say, and the result has a boundary of each there. Merged, its edge
+/// would be used four times by one shell, which is then not closed (L01,
+/// ADR-0041: a non-manifold complex is no solid); apart, each lump keeps
+/// its own closed shell, and they touch along coincident edges.
 [[nodiscard]] Result<void> PairPieces(Work& w)
 {
     const Shape& sa = w.Bodies.A.Shape;
     const Shape& sb = w.Bodies.B.Shape;
     for (const SharedEdge& shared : w.Bodies.Shared) {
-        STEREON_TRY(const bool usedByA, KeptUses(w, BodyA, shared.A));
+        STEREON_TRY(const std::size_t usesA, KeptUses(w, BodyA, shared.A));
+        STEREON_TRY(const std::size_t usesB, KeptUses(w, BodyB, shared.B));
+        if (usesA >= 2 && usesB >= 2) {
+            continue;
+        }
         const bool along = RunsAlong(w, shared.A, shared.B);
-        SharedPair pair{usedByA ? BodyA : BodyB, {shared.A, shared.B}, along};
+        SharedPair pair{
+            usesA > 0 ? BodyA : BodyB, {shared.A, shared.B}, along, usesA > 0 && usesB > 0};
         w.PairOf[{BodyA, shared.A.GetIndex()}] = w.Pairs.size();
         w.PairOf[{BodyB, shared.B.GetIndex()}] = w.Pairs.size();
         w.Pairs.push_back(pair);
@@ -324,6 +347,21 @@ struct Carried {
     return {};
 }
 
+/// The kind of the result's edge for a body's edge of that kind. Each body
+/// carries a curved piece of the intersection as a Trim edge on its own
+/// face; joining a face of each body, the result's edge lies on two
+/// surfaces: an Intersection edge (ADR-0009, G05), its uses' pcurves on
+/// both, the first its primary. The circles and ellipses a plane cuts from
+/// a cylinder are Exact and stay so.
+[[nodiscard]] EdgeCurveKind KindFor(const Work& w, const EdgeCurveKind kind,
+                                    const std::optional<std::size_t> pair)
+{
+    if (pair && w.Pairs[*pair].Joins && kind == EdgeCurveKind::Trim) {
+        return EdgeCurveKind::Intersection;
+    }
+    return kind;
+}
+
 /// The result's edge for an edge of the representative body: its kind,
 /// range and curve, between the result's vertices for its ends, at the
 /// larger tolerance of the pair's two edges when it is a piece of the
@@ -333,7 +371,7 @@ struct Carried {
 {
     const Shape& shape = w.ShapeOf(body);
     EdgeSpec spec;
-    spec.Kind = KindOf(shape, edge);
+    spec.Kind = KindFor(w, KindOf(shape, edge), pair);
     STEREON_TRY(spec.Start, VertexFor(w, body, StartOf(shape, edge)));
     STEREON_TRY(spec.End, VertexFor(w, body, EndOf(shape, edge)));
     spec.Range = RangeOf(shape, edge);

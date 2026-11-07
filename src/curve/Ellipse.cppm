@@ -113,7 +113,7 @@ template <std::size_t D>
 
 } // namespace Stereon
 
-namespace Stereon::Detail {
+export namespace Stereon::Detail {
 
 /// The largest number of bisection steps EllipseRoot needs: one per binary
 /// digit of a double between the smallest subnormal and 2, so that the
@@ -121,24 +121,27 @@ namespace Stereon::Detail {
 inline constexpr int EllipseRootSteps =
     std::numeric_limits<double>::digits - std::numeric_limits<double>::min_exponent;
 
-/// The root s >= s0 of F(s) = (n0 / (s + r0))^2 + (z1 / (s + 1))^2 - 1,
-/// bracketed by [s0, s1] and found by bisection, which converges for every
-/// input where Newton's method can stall (Eberly, "Distance from a point to
-/// an ellipse, an ellipsoid, or a hyperellipsoid", 2013).
+/// Solve for the shifted root s = 1 + lambda / shortest_axis_squared.
+/// The shortest-axis denominator is s itself: recovering it by adding 1
+/// to a root near -1 loses the closest point near the medial set. The
+/// other denominators are s + (r - 1), with the subtraction done first.
+/// The positive bracket starts at the shortest normalized coordinate;
+/// inside the surface its upper end is 1, outside it is the norm of the
+/// scaled coordinates (Eberly, 2013).
 [[nodiscard]] inline double EllipseRoot(const double r0, const double z0, const double z1,
                                         const double g)
 {
     const double n0 = r0 * z0;
-    double s0 = z1 - 1.0;
-    double s1 = g < 0.0 ? 0.0 : Hypot(n0, z1) - 1.0;
+    double s0 = z1;
+    double s1 = g < 0.0 ? 1.0 : Hypot(n0, z1);
     double s = 0.0;
     for (int i = 0; i < EllipseRootSteps; ++i) {
-        s = 0.5 * (s0 + s1);
+        s = s0 + 0.5 * (s1 - s0);
         if (s == s0 || s == s1) {
             break; // the bracket holds two adjacent doubles
         }
-        const double ratio0 = n0 / (s + r0);
-        const double ratio1 = z1 / (s + 1.0);
+        const double ratio0 = n0 / (s + (r0 - 1.0));
+        const double ratio1 = z1 / s;
         const double value = ratio0 * ratio0 + ratio1 * ratio1 - 1.0;
         if (value > 0.0) {
             s0 = s;
@@ -169,7 +172,7 @@ inline constexpr int EllipseRootSteps =
         }
         const double r0 = (e0 / e1) * (e0 / e1);
         const double s = EllipseRoot(r0, z0, z1, g);
-        return {r0 * y0 / (s + r0), y1 / (s + 1.0)};
+        return {r0 * y0 / (s + (r0 - 1.0)), y1 / s};
     }
     if (y1 > 0.0) {
         return {0.0, e1}; // on the minor axis

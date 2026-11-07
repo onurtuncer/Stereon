@@ -34,6 +34,7 @@ import :Dispatch;
 import Stereon.Robust;
 
 #include "Analytic.hpp"
+#include "BoxClip.hpp"
 #include "Exact.hpp"
 
 /// Plane–cylinder (ADR-0010's analytic table, RS-0001 Tier A). The plane's
@@ -115,13 +116,16 @@ template <typename Conic>
         ProvenInteriorBox(onPlane, circle.Radius, circle.Radius, boxA)) {
         return result;
     }
+    std::vector<Interval> stretches{range};
     if (!Contains(boxA, planeBox)) {
-        return Fail(ErrorCode::NotImplemented,
-                    "PlaneCylinder: partial circle needs certified clipping against plane box");
+        STEREON_TRY(stretches,
+                    ClipPcurveToBox(Curve2d(onPlane), range, boxA, ctx, "PlaneCylinder"));
     }
-    STEREON_TRY_VOID(Keep(result,
-                          Crossing(Curve(circle), Curve2d(onPlane), Curve2d(onCylinder), range),
-                          s.A, s.B, ctx));
+    for (const Interval& stretch : stretches) {
+        STEREON_TRY_VOID(
+            Keep(result, Crossing(Curve(circle), Curve2d(onPlane), Curve2d(onCylinder), stretch),
+                 s.A, s.B, ctx));
+    }
     return result;
 }
 

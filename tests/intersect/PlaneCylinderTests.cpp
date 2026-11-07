@@ -231,11 +231,100 @@ TEST_CASE("bounded plane patches cannot receive uncut conic branches",
 
     const Box2 partial{Interval{-1.0, 1.0}, Interval{4.0, 6.0}};
     const auto circle = Intersect(Horizontal(0.0), partial, aboutZ, Box2::Everything(), ctx);
-    REQUIRE_FALSE(circle.has_value());
-    REQUIRE(circle.error().GetCode() == Stereon::ErrorCode::NotImplemented);
+    REQUIRE(circle.has_value());
+    REQUIRE(circle->Branches.size() == 1);
+    const auto& arc = circle->Branches.front();
+    CHECK_THAT(arc.Range.GetLower(), WithinAbs(std::acos(0.2), 1e-14));
+    CHECK_THAT(arc.Range.GetUpper(), WithinAbs(std::acos(-0.2), 1e-14));
+    CHECK(arc.IsCertified());
+    CHECK(PcurveDeviation(arc, Horizontal(0.0), aboutZ) <= ctx.GetResolution());
 
     const Surface oblique{IntersectTest::PlaneWithNormal(Point3{}, Vec3{0.0, 1.0, 1.0})};
     const auto ellipse = Intersect(oblique, central, aboutZ, Box2::Everything(), ctx);
     REQUIRE(ellipse.has_value());
     REQUIRE(ellipse->IsEmpty());
+}
+
+TEST_CASE("plane cylinder circles clip across the seam and against both domains",
+          "[intersect][cylinder][regression]")
+{
+    const Surface plane = Horizontal(3.0);
+    const Box2 right{Interval{0.0, 6.0}, Interval{-6.0, 6.0}};
+    const auto result = Intersect(plane, right, aboutZ, Box2::Everything(), ctx);
+    REQUIRE(result);
+    REQUIRE(result->Branches.size() == 2);
+    CHECK_THAT(result->Branches[0].Range.GetLower(), WithinAbs(0.0, 1e-14));
+    CHECK_THAT(result->Branches[0].Range.GetUpper(), WithinAbs(pi / 2.0, 1e-14));
+    CHECK_THAT(result->Branches[1].Range.GetLower(), WithinAbs(3.0 * pi / 2.0, 1e-14));
+    CHECK_THAT(result->Branches[1].Range.GetUpper(), WithinAbs(2.0 * pi, 1e-14));
+    const auto swapped = Intersect(aboutZ, Box2::Everything(), plane, right, ctx);
+    REQUIRE(swapped);
+    REQUIRE(swapped->Branches.size() == result->Branches.size());
+    for (std::size_t i = 0; i < result->Branches.size(); ++i) {
+        CHECK(result->Branches[i].IsCertified());
+        CHECK(swapped->Branches[i].Range == result->Branches[i].Range);
+        CHECK(PcurveDeviation(swapped->Branches[i], aboutZ, plane) <= ctx.GetResolution());
+    }
+    const Box2 angular{Interval{pi / 4.0, 3.0 * pi / 4.0}, Interval{2.0, 4.0}};
+    const auto cut = Intersect(plane, right, aboutZ, angular, ctx);
+    REQUIRE(cut);
+    REQUIRE(cut->Branches.size() == 1);
+    CHECK_THAT(cut->Branches[0].Range.GetLower(), WithinAbs(pi / 4.0, 1e-14));
+    CHECK_THAT(cut->Branches[0].Range.GetUpper(), WithinAbs(pi / 2.0, 1e-14));
+}
+
+TEST_CASE("plane cylinder clipping retains a singleton touch and proves an exterior miss",
+          "[intersect][cylinder][regression]")
+{
+    const Surface plane = Horizontal(0.0);
+    const Box2 touch{Interval{-6.0, -5.0}, Interval{-1.0, 1.0}};
+    const auto result = Intersect(plane, touch, aboutZ, Box2::Everything(), ctx);
+    REQUIRE(result);
+    REQUIRE(result->Branches.size() == 1);
+    const auto& point = result->Branches.front();
+    CHECK(point.Range.GetLower() == point.Range.GetUpper());
+    CHECK_THAT(point.Range.GetLower(), WithinAbs(pi, 1e-14));
+    CHECK(point.IsCertified());
+    const Box2 singleton{Interval{pi}, Interval::Everything()};
+    const auto one = Intersect(plane, touch, aboutZ, singleton, ctx);
+    REQUIRE(one);
+    REQUIRE(one->Branches.size() == 1);
+    CHECK(one->Branches.front().Range == Interval{pi});
+    const Box2 corner{Interval{4.0, 6.0}, Interval{4.0, 6.0}};
+    const auto miss = Intersect(plane, corner, aboutZ, Box2::Everything(), ctx);
+    REQUIRE(miss);
+    CHECK(miss->IsEmpty());
+}
+
+TEST_CASE("clipped circular sections agree with a dense independent box-membership oracle",
+          "[intersect][cylinder][property]")
+{
+    // Translation and power-of-two scaling preserve these input frames.
+    // Off-boundary samples test completeness as well as reported geometry.
+    for (const double scale : {0.5, 1.0, 8.0}) {
+        const Point3 center{8.0, -4.0, 2.0};
+        const Surface cylinder{Cylinder{center, 5.0 * scale, Vec3{1, 0, 0}, Vec3{0, 1, 0}}};
+        const Surface plane{Plane{center, Vec3{0, 1, 0}, Vec3{-1, 0, 0}}};
+        for (const double left : {-4.0, -1.0, 1.0}) {
+            const Box2 box{Interval{left * scale, 4.5 * scale},
+                           Interval{-4.5 * scale, 2.0 * scale}};
+            const auto result = Intersect(plane, box, cylinder, Box2::Everything(), ctx);
+            REQUIRE(result);
+            for (const auto& branch : result->Branches) {
+                CHECK(branch.IsCertified());
+                CHECK(PcurveDeviation(branch, plane, cylinder) <= ctx.GetResolution());
+            }
+            constexpr int samples = 257;
+            for (int k = 0; k < samples; ++k) {
+                const double t = 2.0 * pi * (k + 0.5) / samples;
+                const double x = 5.0 * scale * std::sin(t);
+                const double y = -5.0 * scale * std::cos(t);
+                const bool expected = Contains(box.X, x) && Contains(box.Y, y);
+                const bool found = std::ranges::any_of(result->Branches, [&](const auto& branch) {
+                    return Contains(branch.Range, t);
+                });
+                CHECK(found == expected);
+            }
+        }
+    }
 }

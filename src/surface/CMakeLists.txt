@@ -14,6 +14,7 @@ stereon_add_library(surface
         Cone.cppm
         Conversion.cppm
         Cylinder.cppm
+        Ellipsoid.cppm
         Erased.cppm
         Fitting.cppm
         GridEvaluation.cppm
@@ -29,6 +30,7 @@ stereon_add_library(surface
         BSplineSurface.cpp
         Certify.cpp
         Conversion.cpp
+        Ellipsoid.cpp
         Factories.cpp
         Fitting.cpp
         GridEvaluation.cpp

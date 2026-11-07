@@ -383,3 +383,22 @@ TEST_CASE("M5 ring separation preserves an existing path through the shell", "[t
     REQUIRE(b.Count<EntityKind::Face>() == 2);
     REQUIRE(b.Validate().IsValid());
 }
+
+TEST_CASE("an edit reads back a use's pcurve and an edge's range", "[topo][builder]")
+{
+    // The imprint tells a seam's two uses apart by where their pcurves end,
+    // which their senses alone cannot (docs/imprinting.rst).
+    auto body = UnownedHoleSheet();
+    auto& b = body.Builder;
+    const auto outer = b.CoedgesOf(body.Loops[0]);
+    REQUIRE(outer.size() == 4);
+    const auto edge = b.EdgeOf(outer[1]);
+    REQUIRE(b.RangeOf(edge) == Interval(0.0, 1.0));
+    const auto pcurve = b.PCurveOf(outer[1]);
+    REQUIRE(pcurve.has_value());
+    REQUIRE(Eval(*pcurve, 0.0) == Point2{3.0, 0.0});
+    REQUIRE(Eval(*pcurve, 1.0) == Point2{3.0, 3.0});
+    // Handles that are not live read back as nothing.
+    REQUIRE_FALSE(b.PCurveOf(BuilderCoedgeId{}).has_value());
+    REQUIRE(b.RangeOf(BuilderEdgeId{}).IsEmpty());
+}

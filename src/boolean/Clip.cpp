@@ -259,8 +259,36 @@ RayParity(const Curve2d& ray, const std::vector<LoopEdge>& edges, bool& decided,
                                [&](const Interval& stretch) { return Contains(stretch, t); });
 }
 
+/// Where a piece's side is read: the middle of its longest stretch between
+/// the boundary's touches inside it. A touch does not change the side, so
+/// any point of the piece off its touches decides it; but the piece's own
+/// middle can be a touch, and from a point on the boundary every ray starts
+/// on an edge and decides nothing. A circle cut from a cylinder tangent to
+/// a box's side touches the top face's edge at the middle of the arc the
+/// plane's box keeps (docs/imprinting.rst, *The inside test*).
+[[nodiscard]] double SideReadingAt(const FaceClip& clip, const Interval& piece)
+{
+    std::vector<double> stops{piece.GetLower()};
+    for (const LoopCrossing& c : clip.Crossings) {
+        if (c.Contact != ContactType::Crossing && piece.GetLower() < c.OnBranch &&
+            c.OnBranch < piece.GetUpper()) {
+            stops.push_back(c.OnBranch);
+        }
+    }
+    stops.push_back(piece.GetUpper());
+    std::ranges::sort(stops);
+    std::size_t longest = 0;
+    for (std::size_t i = 1; i + 1 < stops.size(); ++i) {
+        if (stops[i + 1] - stops[i] > stops[longest + 1] - stops[longest]) {
+            longest = i;
+        }
+    }
+    return 0.5 * (stops[longest] + stops[longest + 1]);
+}
+
 /// The stretches between consecutive crossings (and the branch's ends) that
-/// lie inside the face, each by the side of its middle point.
+/// lie inside the face, each by the side of a point off its touches
+/// (SideReadingAt).
 [[nodiscard]] Result<void> CollectPieces(const IntersectionBranch& branch, const Curve2d& pcurve,
                                          const std::vector<LoopEdge>& edges, FaceClip& clip,
                                          const Context& ctx)
@@ -297,7 +325,8 @@ RayParity(const Curve2d& ray, const std::vector<LoopEdge>& edges, bool& decided,
         if (piece.GetLower() == piece.GetUpper() || OnBoundary(clip, middle)) {
             continue;
         }
-        STEREON_TRY(const bool inside, InsideLoops(Eval(pcurve, middle), edges, clip.Decided, ctx));
+        STEREON_TRY(const bool inside, InsideLoops(Eval(pcurve, SideReadingAt(clip, piece)), edges,
+                                                   clip.Decided, ctx));
         if (inside) {
             clip.Inside.push_back({piece, cuts[i - 1], cuts[i]});
         }

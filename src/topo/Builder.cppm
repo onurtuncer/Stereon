@@ -94,8 +94,17 @@ struct VertexFaceShell {
     BuilderShellId Shell{};
 };
 
-/// What MEV makes: an edge from an existing vertex to a new one, and its
-/// two uses in one loop, out along the edge and back against it.
+/// Which way the edge of the strut MEV makes runs: from the existing vertex
+/// to the new one, or from the new one to the existing. The second lets an
+/// edge whose geometry runs towards a vertex that exists be grown from that
+/// vertex, its curve and pcurve as they are (the Booleans' imprinting: a
+/// piece of an intersection keeps one parameter in both bodies).
+enum class StrutDirection : std::uint8_t { FromExisting, ToExisting };
+
+/// What MEV makes: an edge between an existing vertex and a new one, and
+/// its two uses in one loop: out from the existing vertex to the new one,
+/// and back. Out runs along the edge and Back against it for a strut
+/// FromExisting, the other way round for one ToExisting.
 struct EdgeVertex {
     BuilderEdgeId Edge{};
     BuilderVertexId Vertex{};
@@ -306,13 +315,17 @@ public:
     /// The solid, if any, stays. Inverse of MakeVertexFaceShell.
     [[nodiscard]] Result<void> KillVertexFaceShell(BuilderVertexId vertex, BuilderFaceId face);
 
-    /// MEV: a new vertex at `position` and an edge to it from the vertex at
-    /// which `at` ends, as a strut of `at`'s loop: the edge's use along it
-    /// (Out) and its use against it (Back) follow `at` in the cycle. The
-    /// edge runs from the existing vertex to the new one. Refused for a
-    /// Degenerate edge, whose ends are one vertex. Inverse: KillEdgeVertex.
-    [[nodiscard]] Result<EdgeVertex> MakeEdgeVertex(BuilderCoedgeId at, const Point3& position,
-                                                    double tolerance, const EdgeGeometry& geometry);
+    /// MEV: a new vertex at `position` and an edge between it and the vertex
+    /// at which `at` ends, as a strut of `at`'s loop: the edge's use out to
+    /// the new vertex (Out) and its use back (Back) follow `at` in the
+    /// cycle. The edge runs from the existing vertex to the new one, or for
+    /// StrutDirection::ToExisting from the new one to the existing. Refused
+    /// for a Degenerate edge, whose ends are one vertex. Inverse:
+    /// KillEdgeVertex.
+    [[nodiscard]] Result<EdgeVertex>
+    MakeEdgeVertex(BuilderCoedgeId at, const Point3& position, double tolerance,
+                   const EdgeGeometry& geometry,
+                   StrutDirection direction = StrutDirection::FromExisting);
 
     /// MEV on an empty loop: the first edge, from `from`, which must be an
     /// isolated vertex (the loop's vertex, as MVFS made it), to a new one.
@@ -458,6 +471,12 @@ public:
     [[nodiscard]] BuilderVertexId EndOf(BuilderEdgeId edge) const noexcept;
     [[nodiscard]] Point3 PositionOf(BuilderVertexId vertex) const noexcept;
     [[nodiscard]] std::vector<BuilderLoopId> LoopsOf(BuilderFaceId face) const;
+    /// A coedge's pcurve and an edge's range as the edit has them: where a
+    /// use runs in its face's parameters, which tells the two uses of a
+    /// seam apart where their senses do not. Nothing, or an empty range,
+    /// for a handle that is not live or a use without a pcurve.
+    [[nodiscard]] std::optional<Curve2d> PCurveOf(BuilderCoedgeId coedge) const;
+    [[nodiscard]] Interval RangeOf(BuilderEdgeId edge) const noexcept;
 
     /// The structural check Freeze() will run, without freezing.
     [[nodiscard]] ValidityReport Validate() const;
@@ -528,7 +547,8 @@ private:
                                          PCurveRef pcurve);
     [[nodiscard]] Result<EdgeVertex> GrowStrut(std::uint32_t loop, std::uint32_t after,
                                                std::uint32_t from, const Point3& position,
-                                               double tolerance, const EdgeGeometry& geometry);
+                                               double tolerance, const EdgeGeometry& geometry,
+                                               StrutDirection direction);
     void KillEdgeAndUses(std::uint32_t edge);
     void CheckNeighbourhood(const std::vector<std::uint32_t>& loops,
                             const std::vector<std::uint32_t>& edges) const;

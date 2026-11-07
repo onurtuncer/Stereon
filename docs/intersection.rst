@@ -94,6 +94,12 @@ The configurations:
   resolution, and the certificate below proves what it achieved. The fit
   is limited to 2^16 sample intervals; an excessive or non-finite count
   returns ``CertificationFailed`` before integer conversion or allocation.
+  Circular sections are clipped to a bounded plane box by the same complete
+  planar edge-intersection clipper used for curves lying in a plane.
+  Retained arcs keep the cylinder-angle parameter and are certified against
+  both surfaces. Isolated box contacts are retained as singleton ranges,
+  consistent with clipped rulings; uncertain piece classification fails
+  with ``IntersectionFailed``. Partial ellipse clipping remains unsupported.
 - **Cylinder–cylinder, parallel axes:** two rulings, an external or
   internal tangent ruling (``SameSide``), a proved separation apart or
   nested, or an overlap, exact or declared: the surfaces' Hausdorff
@@ -398,7 +404,11 @@ joined arcs are walked into branches, first from free ends, which lie on the
 search box's boundary or at a dropped box, then round the closed loops left.
 A branch's 3D curve and both pcurves must share one smooth parameter
 (ADR-0009). A chord-length cubic interpolant through the traced points
-serves as a *guide*. Each guide point is moved onto :math:`f = 0` by Newton's
+serves as a *guide*. A branch whose traced points lie within
+:math:`2^{-40}` of one another, too short for a guide, is a sliver of a
+branch at a corner of the search box or a loop as small. It is reported as
+a point of contact, not dropped, its ``Bound`` the farthest corner of its
+arcs' certified boxes, which hold it. Each guide point is moved onto :math:`f = 0` by Newton's
 method along the fixed direction of :math:`\nabla f` at its projection on
 the carrier. Because the direction is fixed, the point found is a smooth
 function of the guide's parameter. Where the implicit side's angle,
@@ -492,13 +502,59 @@ and the point's parameters on the plane lie in the requested domains is
 decided exactly on that rational, as the line–line handler decides; the
 roots of a quadric are irrational and are placed by their rounded values,
 so a crossing within rounding of a domain's end may fall on either side
-of it. A touch of a quadric is a ``Tangential`` point: the line stays
+of it. The quadratic's coefficients and discriminant are taken from their
+enclosures when those are tight, and from their exact values otherwise:
+formed in doubles, they cancel for a line whose origin lies far from the
+surface, :math:`10^8` from a unit sphere say, and the two crossings
+collapse onto one point. A touch of a quadric is a ``Tangential`` point: the line stays
 outside. A root that double precision cannot place, a line so nearly along
 the axis that the quadratic's leading coefficient rounds to zero while it
 is exactly positive, fails with ``IntersectionFailed`` rather than
 dropping the point. ``tests/occt/IntersectionDifferentialTests.cpp``
 compares the three handlers with OCCT's ``IntAna_IntConicQuad`` on
 generic lines.
+
+A ``Line`` against a ``Cone`` or a ``Torus`` cannot be decided exactly on
+the input doubles: the cone's equation holds the cosine and sine of its
+semi-angle. These pairs use the proofs of the B-spline handlers below.
+
+- **A cone over a bounded domain.** The line is a Bézier segment of degree
+  1, its poles enclosed. The cone's equation along it is proved as a
+  B-spline's is.
+- **A cone over an unbounded domain.** The cone has no bound, so its
+  quadratic :math:`A t^2 + 2 B t + C` is used, with coefficients enclosed
+  in intervals, in two steps.
+
+  - From the line's origin: a discriminant :math:`B^2 - A C` provably
+    negative is a separation, and a leading coefficient of no strict sign,
+    a line along a generator within rounding, fails.
+  - Then about the middle of the two roots, the line's point at
+    :math:`-B / A` as rounded, its offset from the cone enclosed so that
+    the proof holds for the line as given. The discriminant is the same
+    number wherever the quadratic is centred. From an origin far from the
+    crossings, though, :math:`B^2` and :math:`A C` each carry the square
+    of that distance, and their enclosures cancel across zero however far
+    apart the crossings are; about the middle of the roots they do not.
+    So the decision does not depend on where along the line its origin
+    lies. A discriminant provably negative is a separation. One provably
+    positive gives two simple crossings, placed in doubles from the
+    middle of that enclosure and polished from the line re-centred at
+    each.
+  - Otherwise the call fails with ``IntersectionFailed``: a line along a
+    generator, whose second root lies out near infinity, a line through
+    the apex, or a line tangent within rounding. The same line over a
+    bounded domain is resolved.
+
+  What remains of the origin is its own rounding: a line whose origin is
+  so far that one rounding of its coordinates is comparable with the
+  chord fails, as a tangent line does.
+- **A torus.** Every point of the torus lies within :math:`R + r` of its
+  centre. So the line is searched only over its stretch inside a sphere
+  half a tube wider than that, an outward-rounded stretch whatever the
+  domain, as a segment against the torus's quartic.
+
+Either nappe of the cone is crossed, as its parametrisation runs through
+the apex.
 
 A ``BSplineCurve``, polynomial or rational, has handlers against all five
 elementary surfaces. The surface's implicit equation composed with the
@@ -591,11 +647,34 @@ clipped to the box:
   touch from outside or a pass through a corner, is kept as an overlap of
   one parameter, as the line handlers keep one.
 - Adjacent kept pieces are merged.
+- A requested domain of one parameter has no piece: its point decides it,
+  kept within rounding of an edge as a contact on the boundary is.
 
 Every overlap shares the one pcurve and restricts its range.
 
 Every other pair reports ``NotImplemented``; the generic path for curves
 against B-spline surfaces waits for Phase 2 with the surface–surface one.
+
+*Verification.* Besides each handler's own tests,
+``tests/intersect/AdversarialTests.cpp`` runs properties over the whole
+grid of lines, circles, ellipses and polynomial and rational B-splines
+against the five surfaces. Each result is validated as geometry, not
+counted: every point lies on both geometries to the rounding of its own
+size, inside the requested domain and box and in order, and every
+overlap's pcurve traces the curve; a handler that cannot decide fails
+with ``IntersectionFailed`` and nothing else. The inputs are multiples of
+:math:`1/8` in axis-aligned frames, so translating them by a multiple of
+:math:`1/8` and scaling them by a power of two are exact, and every exact
+decision must agree on the transformed problem while the points move with
+it. Reversing the curve keeps the points; a line's origin moved up to
+:math:`2^{30}` back along it shifts only its parameters; a periodic
+surface's box a turn on gives the same points a turn on; a domain of one
+parameter away from every point is a proved separation; a curve in a plane
+is clipped to exactly the stretches in a random box; and a line
+:math:`2^{-k}` either side of a tangency, :math:`20 \le k \le 50`, gets
+the count its distance decides from a sphere or a cylinder. Against a
+torus it may fail closed instead, which it does from :math:`k = 40` and
+at an exact touch of the tube's top.
 
 Plane curves
 ------------
@@ -692,7 +771,13 @@ misses the branch or meets it once. A parabola
 :math:`(n\cdot X)\,t^2 + 2(2f\,n\cdot Y)\,t + 4f\,n\cdot(V-O)` over every
 real :math:`t`, linear for a line along the axis. All of these decisions
 are exact; the roots themselves are irrational and are placed by their
-rounded values, as a line's roots on a circle are.
+rounded values, as a line's roots on a circle are. They are solved from
+the quadratic's coefficients and discriminant each to a few roundings
+(``ValueOfFormula``): the middle of a tight enclosure, else the exact
+value's estimate. In doubles, a line from :math:`(-10^8, 0)` along
+:math:`x` gives the unit circle's :math:`C = 10^{16} - 1` as
+:math:`10^{16}` and its discriminant, exactly 1, as zero, both crossings
+at the centre.
 
 Algorithm C: two conics by the exact chart quartic
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -244,6 +244,34 @@ TEST_CASE("a sphere far from a torus is proved separate", "[intersect][trace]")
     REQUIRE(result->IsEmpty());
 }
 
+TEST_CASE("a sliver of a branch at a corner of the box is a point, not a separation",
+          "[intersect][trace][regression]")
+{
+    // The audit of 2026-11-05: a chain whose samples lie within 2^-40 of one
+    // another was dropped without a proof, an empty result claiming a
+    // separation. The cylinder of radius 2 about z meets the sphere of
+    // radius 2 about (1, 0, 0) where z² = 4 cos u - 1, falling with u. The
+    // cylinder's box has its corner 1e-13 below that curve at u0 = pi / 6,
+    // so the curve crosses the box over about 1e-13 near the corner.
+    const Stereon::Cylinder cylinder{Point3{}, 2.0, X, Y, true};
+    const Surface sphere{Sphere{Point3{1.0, 0.0, 0.0}, 2.0, X, Y, true}};
+    const double u0 = pi / 6.0;
+    const double z0 = std::sqrt(4.0 * std::cos(u0) - 1.0);
+    const Box2 corner{Interval{u0, u0 + 1.0}, Interval{z0 - 1e-13, z0 + 1.0}};
+    const auto result = Intersect(Surface{cylinder}, corner, sphere, Box2::Everything(), ctx);
+    INFO(IntersectTest::ErrorText(result));
+    REQUIRE(result.has_value());
+    REQUIRE_FALSE(result->IsEmpty());
+    REQUIRE(result->Branches.empty());
+    const Point3 sliver = Eval(cylinder, Point2{u0, z0});
+    for (const Stereon::IntersectionPoint& p : result->Points) {
+        REQUIRE(p.Bound <= ctx.GetResolution());
+        REQUIRE(Distance(p.Position, sliver) <= p.Bound + 1e-12);
+        REQUIRE(Distance(Eval(cylinder, p.OnA), p.Position) <= p.Bound);
+        REQUIRE(Distance(Eval(sphere, p.OnB), p.Position) <= p.Bound);
+    }
+}
+
 TEST_CASE("a node of the intersection fails closed", "[intersect][trace]")
 {
     // The plane at R - r from the axis cuts the lemniscate of Bernoulli,

@@ -189,9 +189,16 @@ stretch's middle point decides whether the stretch lies inside the face:
   the piece's crossing there;
 - a stretch whose middle lies on an ``OnBoundary`` stretch is along the
   boundary, neither inside nor outside, and is not a piece;
-- otherwise the middle point's side is the parity of a ray's crossings of
-  the loops (below), and a stretch inside becomes a piece, its ends the
-  crossings that cut it (nothing at a free end of the branch).
+- otherwise the stretch's side is the parity of a ray's crossings of the
+  loops (below), and a stretch inside becomes a piece, its ends the
+  crossings that cut it (nothing at a free end of the branch). The side is
+  read at the middle of the stretch's longest part between the touches
+  inside it (``SideReadingAt``), not at the stretch's own middle: a touch
+  does not change sides, but the middle can *be* a touch, and from a point
+  on the boundary every ray starts on an edge and none decides. A cylinder
+  tangent to a box's side meets the box's top plane in a circle that
+  touches the top face's edge from outside; the plane's box keeps an arc
+  of it whose middle is exactly that touch.
 
 The inside test
 ~~~~~~~~~~~~~~~
@@ -376,25 +383,96 @@ done:
   a new face takes the part from the start coedge round to the end coedge.
   When they lie on two loops of one face, the piece bridges them (MEKR,
   ``MakeEdgeKillRing``) and the two loops become one.
-- **From a made vertex to a new one.** A piece whose start exists but whose
-  end does not is grown as a strut (MEV, ``MakeEdgeVertex``): an edge from
-  the existing vertex to a new vertex at the end's position. After each
-  strut the round starts again, since the new vertex may complete other
-  pieces first.
+- **From a made vertex to a new one.** A piece with one end made and the
+  other not is grown as a strut (MEV, ``MakeEdgeVertex``): an edge between
+  the existing vertex and a new vertex at the other end's position. A piece
+  whose start exists is grown from its start. When no piece has its start
+  made, one whose *end* exists is grown from its end, with
+  ``StrutDirection::ToExisting``: the edge still runs from the piece's start
+  to its end on the piece's own parameter, towards the vertex it is grown
+  from, so the piece keeps one parameter in both bodies. A coincident
+  face's edges need this: they run as the other body made them, and two
+  that both run *away* from a corner of that face lying inside this one
+  give two pieces no piece reaches the start of. After each strut the round
+  starts again, since the new vertex may complete other pieces first.
 - **A component touching no boundary.** When no piece can be written, some
   piece has neither end made: a component of the network lies inside the
   face without touching its boundary (a hole's outline, say). It is *hung*
-  on a helper strut: a ``Spatial`` straight edge from a vertex of the face's
-  first loop to the component's first unmade vertex. The component is then
+  on a helper strut: a ``Spatial`` straight edge from a vertex of the outer
+  loop of the face *part* that holds the component to the component's first
+  unmade vertex. Pieces written before it may already have split the face,
+  and the part that kept the original face's handle need not be the one
+  around the component; the part is the one whose outer loop, sampled in the
+  face's parameters, encloses the component's vertex, the innermost when
+  several do (``PartHolding``). The component is then
   written from it, its last piece closing it with MEF. When every piece is
   done, each helper strut is removed (KEMR, ``KillEdgeMakeRing``): the
   component, cut free, is left as a separate loop of the face, a *ring*,
   and the face MEF cut off is its *disc*.
 
-A network whose pieces can never all be written (a piece runs into the
-face from a junction no other piece reaches) fails with
-``IntersectionFailed``; so does a piece whose two ends are not on the
-boundary of one face.
+When several networks are imprinted on one face, each starts from the part
+of the face that holds a point of its first piece, chosen the same way, so a
+later network is written into the part an earlier one left around it.
+
+Every piece is written by one of the three: when a round writes nothing, no
+piece left has an end made, so each is part of a component touching no
+boundary. A piece whose two ends are not on the boundary of one face fails
+with ``IntersectionFailed``.
+
+Where a piece joins a vertex
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+MEV, MEF and MEKR take a coedge that *ends* at the vertex, and put the new
+edge after it in its loop: between that coedge and the next, in the corner
+of the face the two bound. When one coedge of the face's loops ends at the
+vertex there is nothing to choose. When several do, ``UseEndingAt`` chooses
+in three steps:
+
+#. **By position.** The coedges whose pcurves end where the piece's own
+   pcurve ends, in the face's parameters, as near as the Context's
+   resolution to the nearest. This tells the two sides of a seam apart
+   (*Seams*, below).
+#. **By direction.** Of those, the coedge whose corner holds the piece's
+   ray from the vertex: the piece's tangent at its start, or its tangent
+   reversed at its end. A corner lies between the ray back along the coedge
+   that ends at the vertex and the ray out along the next one. A face
+   oriented with its surface lies to the left of its coedges in the
+   parameter plane, so its corner is swept counter-clockwise from the ray
+   out to the ray back; a reversed face lies to the right, and its corner
+   is swept the other way. At the tip of a strut, whose use out is followed
+   by its use back, the corner is the full turn.
+#. **Otherwise.** Where first derivatives do not decide (a helper strut has
+   no pcurve; a piece tangent to an edge it meets lies in no corner by more
+   than rounding), the coedge of the sense the clip named, or the first.
+
+The second step matters wherever more than two pieces meet at a vertex.
+Two cylinders of one radius whose axes cross meet in two ellipses that
+cross each other at two *nodes*, and four pieces meet at each:
+
+.. code-block:: text
+
+                      top
+            e2 \               / e0
+                \             /
+                 \           /
+       left       \         /
+       wedge        node N             lens
+                  /         \
+                 /           \
+                /             \
+            e5 /               \ e3
+                     bottom
+
+In the face's parameters, e2 and e5 arrive at the node N and e0 and e3
+leave it. They are written in the order e2, e5, e0, e3. After e2 and e5
+the left wedge is cut off, and the rest of the face has one corner at N,
+running from e5 round the bottom, the right and the top to e2; e0 is
+joined in it. That leaves two corners, the top between e0 and e2 and one
+from e5 round the bottom to e0, and e3 lies in the second. Joined after
+the first coedge found at N, e3 would have been put in the top corner and
+cut the wrong face. Each piece joined in its own corner, the face ends in
+the four regions the two curves divide it into (five faces, the seam
+dividing one of them).
 
 Rings and their orientation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -439,10 +517,49 @@ the vertex the crossing made, and the clip names one of them without
 telling which side the piece arrives from. The imprint takes the use the
 piece's *own* pcurve reaches: of the face's uses of the crossed edge, the
 one whose pcurve, at the crossing's parameter on the edge, lies nearest the
-piece's end in the face's parameter space (``SenseAt``). Writing the piece
-against the other use would leave the face's loop discontinuous in
-parameter space, a jump of a whole period, which the winding number of
-classification (``WindingNumberOf``) refuses as ``InvalidResult``.
+piece's end in the face's parameter space (``SenseAt``).
+
+The sense that names is not enough to find the coedge to write the piece
+against. ``UseEndingAt`` looks for the coedge of the face's loops that ends
+at the piece's vertex, and once a first piece has been written at a seam
+vertex, its own use ends there too, and with the sense of the seam's use on
+the *far* side. So the coedge is chosen by position first (*Where a piece
+joins a vertex*, above): the one whose pcurve ends where the piece's pcurve
+ends, in the face's parameters; among those as near as the Context's
+resolution, the one whose corner holds the piece. Uses on one side of a
+seam end where the piece does to rounding; the two sides are a whole period
+apart, so the choice does not depend on the size of the face. A piece
+written against the other side
+leaves the face's loop discontinuous in parameter space, a jump of a whole
+period, which the geometric validation refuses (G03, ``LoopParameterGap``)
+and the winding number of classification (``WindingNumberOf``) would
+refuse as ``InvalidResult``.
+
+A hole whose outline crosses a seam is cut by it. In the cylinder's chart
+it is two half discs, one at each side of the chart, and the seam's piece
+between the two crossings lies between them:
+
+.. code-block:: text
+
+   v                       u = 0                          u = 2π
+   ^   top                   |                               |
+   |                         |                               |
+   |               P2 +------+                               +------+ P2
+   |                  | left |                               | right|
+   |                  | half |  <- seam piece P1..P2 ->      | half |
+   |               P1 +------+    used by both halves        +------+ P1
+   |                         |                               |
+   |   bottom                |                               |
+   +---------------------------------------------------------------> u
+
+Each half disc is a face, and the seam's piece from :math:`P_1` to
+:math:`P_2` is used once by each: at :math:`u = 0` by the left half and at
+:math:`u = 2\pi` by the right. That is an edge between two faces, which a
+``Boundary`` seam, two uses by one face only (S07), cannot be; the cylinder
+primitive's seam is therefore an ``Exact`` line along the axis, with both
+periodic pcurves (:doc:`modeling`). The rest of the seam, below
+:math:`P_1` and above :math:`P_2`, is used twice by the outer face as
+before.
 
 The edges the pieces become
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -457,6 +574,14 @@ interval evaluation covers the types. Both uses of the new edge, one on
 each side of it in the face, take the piece's pcurve. The edge's tolerance,
 like its vertices', is the larger of the Context's resolution and the
 branch's certified bound.
+
+In each body a ``Trim`` piece lies on one surface, the body's own. The
+assembly joins the two bodies' edges of a piece into one edge of the
+result, and where both bodies keep a face at it, that edge joins faces of
+two surfaces: it becomes an ``Intersection`` edge (ADR-0009, G05), each
+use keeping its own pcurve and the first its primary. Two crossing
+cylinders meet along such edges; a plane meets a cylinder in circles and
+ellipses, which stay ``Exact``.
 
 After the imprint
 -----------------
@@ -534,8 +659,7 @@ transaction per body, publishes nothing when it fails.
    * - ``IntersectionFailed``
      - Every one of the eight rays from a point meets a loop vertex, so its
        side cannot be settled; a piece's ends are not on the boundary of
-       one face; a piece runs into the face from a junction no other piece
-       reaches, so the network never closes.
+       one face; a piece ends at a vertex on no loop of the face.
    * - ``NotSupported``
      - Coincident curved faces; a coincident face bounded by an edge with
        no line, circle or ellipse of its own.
@@ -582,6 +706,38 @@ crossings are the seam's, at :math:`u = 0` and :math:`u = 2\pi`, and both
 ends take the use of the seam their own pcurve reaches, so the face's
 loops stay continuous. B's lateral face is cut into three bands.
 
+A cylinder pierced across its seam
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:math:`A` is a cylinder of radius 3 about the :math:`z` axis from
+:math:`z = -5` to :math:`z = 5`, its seam at :math:`u = 0` on the
+:math:`+x` side; :math:`B` a cylinder of radius 1.5 along the :math:`x`
+axis from :math:`x = -6` to :math:`x = 6`. B pierces A's lateral face
+twice, around :math:`u = 0` and around :math:`u = \pi`.
+
+- Around :math:`u = \pi` the curve of meeting is a closed branch touching
+  no edge of A. By the time it is written, the curve around :math:`u = 0`
+  has split A's lateral face, so it is hung on the part that holds it, the
+  outer one, not on the half disc that kept the face's handle.
+- Around :math:`u = 0` the curve crosses A's seam at
+  :math:`P_1 = (3, 0, -1.5)` and :math:`P_2 = (3, 0, 1.5)`, which split
+  the seam into three pieces. Its half at :math:`u \approx 2\pi` is written
+  first, against the seam's uses at :math:`u = 2\pi`, and cuts off the
+  right half disc. The half at :math:`u \approx 0` is then written against
+  the seam's uses at :math:`u = 0`, found by where their pcurves end,
+  although its own first half's reversed use also ends at :math:`P_2` with
+  the sense the seam's use at :math:`u = 0` has. It cuts off the left half
+  disc.
+
+A's lateral face ends in four faces: the outer one, with the hole at
+:math:`u = \pi` as an inner loop, the two half discs and the disc at
+:math:`u = \pi`. On B, whose seam lies along :math:`y = 1.5`, the curves
+cross B's own seam the same way. The curves of meeting are fitted, so each
+body carries them as ``Trim`` edges; joined in the result, a face of each
+cylinder uses them, and they become ``Intersection`` edges. A cylinder
+along :math:`y = 1` instead of the :math:`x` axis, skew to A's, crosses
+A's seam in the same way.
+
 A smaller box against a face
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -598,6 +754,114 @@ square's sides, which lie on B's boundary, so they add no piece. The
 pairing then pairs the four sides of A's square with B's four edges, which
 run either way. Classification finds A's square ``OnOpposite`` B's face and
 the frame outside.
+
+Boxes sharing their top and bottom planes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:math:`A = [0, 10]^3` and :math:`B = [5, 15]^2 \times [0, 10]`. Their top
+faces lie in the plane :math:`z = 10` with the same normal, their bottom
+faces in :math:`z = 0`, and each pair overlaps in the square
+:math:`[5, 10]^2`. B's boundary is imprinted on A's top face. Two of B's
+edges there pass through A's face, the two that meet at B's corner
+:math:`J = (5, 5)`: one leaves A's face at :math:`c_1 = (10, 5)`, the other
+at :math:`c_2 = (5, 10)`. They are pieces of B's edges and run as B made
+them, both *away* from the corner. A's face receives two pieces that start
+at one junction, which no piece ends at, and end at two crossings:
+
+.. code-block:: text
+
+    y = 10  +-----------c2----------+
+            |           |           |
+            |           ^ e1        |
+            |           |           |
+    y = 5   |           J--e0->----c1
+            |                       |
+            |                       |
+    y = 0   +-----------------------+
+          x = 0       x = 5       x = 10
+
+A's edges are split at :math:`c_1` and :math:`c_2`. No piece has its start
+made, so the first is grown from its end: a strut from :math:`c_1` to a new
+vertex at :math:`J` (MEV with ``StrutDirection::ToExisting``), whose edge
+runs from :math:`J` to :math:`c_1` as B's edge does. The second piece then
+has both ends made and closes the square with MEF. A's top face ends as an
+L and a square. So does B's, about A's corner :math:`(10, 10)`, and so do
+the two bottom faces. A's side :math:`x = 10` meets B's side :math:`y = 5`
+in a line from bottom to top, as A's side :math:`y = 10` meets B's side
+:math:`x = 5`, each a piece between two crossings. Each body ends with 10
+faces, 22 edges and 14 vertices, and the bodies share ten pairs of edges:
+the square's four sides in the top plane and in the bottom plane, and the
+two lines down the sides.
+
+Classification finds the four squares ``OnSame``. A union keeps one of
+each pair, 14 faces; a common keeps the prism over the square, 6 faces; a
+cut drops them and leaves A as an L, 8 faces. Their volumes are 1750, 250
+and 750.
+
+Before pieces could be grown from their ends, this imprint was refused: a
+piece ran into the face from a junction no other piece reached.
+
+Two cylinders of one radius whose axes cross
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:math:`A` is a cylinder of radius 3 about the :math:`z` axis from
+:math:`z = -5` to :math:`z = 5`, its seam at :math:`u = 0` on the
+:math:`+x` side; :math:`B` a cylinder of the same radius about the
+:math:`x` axis from :math:`x = -6` to :math:`x = 6`, its seam along
+:math:`y = 3`, :math:`z = 0`. They meet in two ellipses, in the planes
+:math:`x = z` and :math:`x = -z`, which cross each other at the *nodes*
+:math:`N_+ = (0, 3, 0)` and :math:`N_- = (0, -3, 0)`, where the cylinders
+are tangent (:doc:`intersection`). In A's chart the ellipses are
+:math:`z = 3 \cos u` and :math:`z = -3 \cos u`:
+
+.. code-block:: text
+
+            u = 0       pi/2         pi        3pi/2        2pi
+    z =  5  +-------------------------------------------------+
+            |                       top                       |
+    z =  3  P+.                  . ' ' .                  . P+
+            |    ' .          . '       ' .          . '    |
+    z =  0  | +x     ' N+ . '     -x       ' . N- '     +x   |
+            |    . '          ' .       . '          ' .    |
+    z = -3  P-'                  ' . . '                  ' P-
+            |                     bottom                      |
+    z = -5  +-------------------------------------------------+
+
+The ellipses cross A's seam at :math:`P_+ = (3, 0, 3)` and
+:math:`P_- = (3, 0, -3)`, which split it into three parts, and each other
+at the nodes: six pieces, two from the seam to :math:`N_+`, two from
+:math:`N_+` to :math:`N_-` over and under the lens about :math:`-x`, and
+two from :math:`N_-` to the seam. Four pieces meet at each node. Once a
+first piece has reached a node, a piece joining it has more than one
+coedge ending there to be written after; it takes the one whose corner of
+the face holds its direction (*Where a piece joins a vertex*), and so cuts
+the part of the face it runs through. A's lateral
+face ends in five faces: the top, the bottom, the lens about :math:`-x`,
+and the lens about :math:`+x` in two halves either side of the seam's
+middle part.
+
+B's seam passes through :math:`N_+`, which lies on both sides of B's
+chart, with two pieces on either side. There the two choices are made
+together: by position, the uses on the piece's side of the seam; by
+direction, the corner among them. The ellipses cross B's seam nowhere
+else, so the seam is split in two, and B's lateral face ends in four
+faces: the parts beyond both ellipses towards either cap, each holding a
+half of the seam, and the lenses above and below. B's pieces also end at
+:math:`P_+` and :math:`P_-`, since a branch ends at the seams of both
+cylinders: six pieces on each body, six pairs. A ends with 7 faces, 11
+edges and 6 vertices, B with 6, 10 and 6.
+
+The common is the Steinmetz solid, five faces of volume
+:math:`16 r^3 / 3 = 144` and area :math:`16 r^2 = 144`; the union has 8
+faces; A less B is two lobes of 3 faces each. The six pieces are
+``Intersection`` edges in each. :doc:`examples` (*The Steinmetz solids*)
+runs these Booleans, and a third cylinder across both, as a program, with
+every result's faces and its closed-form volume and area.
+
+Before the corner was looked at, a piece at a node was written after the
+first coedge of its sense found there, which could bound the part of the
+face across the crossing: the next piece then had its two ends on
+different faces, and the imprint was refused.
 
 Limits of the prototype
 -----------------------

@@ -31,9 +31,11 @@ and *y*, with *z* their cross product, as for the analytic surfaces.
   also takes an origin, two axes and the three side lengths.
 - A **cylinder** has 2 vertices on the seam at angle 0, two circular edges, a
   seam, a lateral cylindrical face and two planar disks. The seam is a
-  ``Boundary`` edge that the lateral face uses twice.
+  line that the lateral face uses twice, with pcurves at angles 0 and 2π.
+  Its ``Exact`` representation remains valid when imprinting splits those
+  uses onto different faces.
 
-Every edge except the seam is ``Exact``, with exact pcurves on its faces
+Every edge, including the seam, is ``Exact``, with exact pcurves on its faces
 (ADR-0009). Faces are oriented outward. Vertex and edge tolerances equal the
 ``Context``'s resolution, because native construction is resolution-tight
 (ADR-0001).
@@ -82,8 +84,10 @@ into a ``ShapeBuilder`` opened on the shape, inside the caller's
 transaction, through the Euler operators of :doc:`topology`. The edges the
 networks cross are split at the crossings (SEMV), once per distinct
 crossing, so that the two faces sharing an edge meet at the same vertex.
-Each piece then becomes an edge: a strut when it reaches a junction not yet
-made (MEV); a split of the face when both its ends exist on one loop (MEF),
+Each piece then becomes an edge: a strut when one of its ends is a junction
+not yet made (MEV), grown from whichever end exists, so that two pieces
+running out of one junction to the boundary can be written; a split of the
+face when both its ends exist on one loop (MEF),
 or a bridge when on two loops of the face (MEKR); a component that touches
 no boundary is hung on a helper strut from a loop vertex, removed once the
 component has closed (KEMR), which leaves a ring as a loop of the face and
@@ -93,11 +97,19 @@ ring and the disc change faces (KFMRH, then MFKRH), so the disc is the
 piece's face. Where a piece starts and ends on one edge, a cylinder's
 seam, both uses of that edge end at the vertex, one from either side of
 the chart, and the imprint takes the use the piece's own pcurve reaches,
-so the loops stay continuous in the face's parameter space. The new edge
-is ``Exact`` with the
+found by where the uses' pcurves end, so the loops stay continuous in the
+face's parameter space; a hole across the seam becomes two half discs on
+either side of the seam's piece between them (:doc:`imprinting`,
+*Seams*). Where more than two pieces meet at a vertex, the node where two
+curves of intersection cross, a use ends there for every part of the face
+round it, and the imprint takes the one whose corner of the face holds the
+piece's direction (:doc:`imprinting`, *Where a piece joins a vertex*). A
+component touching no boundary is hung on the part of the face that holds
+it. The new edge is ``Exact`` with the
 branch's curve where that is a line, a circle or an ellipse, and otherwise
 a ``Trim`` edge with its cached curve (ADR-0009, section 8), its tolerance
-the larger of the resolution and the branch's certified bound. The
+the larger of the resolution and the branch's certified bound; in the
+result, where it joins a face of each operand, an ``Intersection`` edge. The
 ``Imprint`` names each piece's edge, its end vertices and the face it cut
 off, the builder's vertex for every network vertex, and the vertices the
 splits made. ``NetworkOf`` turns one clip into a network, and
@@ -175,7 +187,23 @@ face's parameter space, a face split across a seam say, is
 ``InvalidResult`` naming the two edges rather than a sum. A cell of a face's parameter space that
 is not separated from the seed is split across its longer side and its
 loops clipped to the halves (Sutherland–Hodgman), down to the round's
-deviation target; a round that leaves a cell unseparated is followed by
+deviation target. A cut adds a corner where it crosses a side of a loop, at
+the same fraction of the side in the parameters and in space, so the corner
+lies on the chord it cuts and the cell across that chord needs no corner
+there. Where the cut parts a loop's region, each half joins its pieces by
+bridges along the cut, and a bridge passes through *every* corner of the
+loop on the cut between its ends. On the cut's line in the parameter plane
+that changes nothing; in space the corners are not on one line, each lying
+on its own chord at that chord's depth below the surface, and two halves
+bridged straight are different polylines there wherever the cut crosses
+the loop more than twice. The triangles then do not close up: a crack as
+wide as the chords' sagittas. The outer loop of a cylinder's face with a
+hole across its seam is such a loop (:doc:`imprinting`, *Seams*): a cut
+through the notch crosses it four times, and the faces of two skew
+cylinders' union added up to a few :math:`10^{-6}` off 1. Through every
+corner, both halves are made of the same steps between neighbouring
+corners of the cut, each taken as often one way as the other, and cancel
+exactly. A round that leaves a cell unseparated is followed by
 one with the target quartered, from a sixty-fourth of the body's extent
 down to the resolution, up to ``ClassifyBudget::Refinements`` rounds (eight
 by default). The result carries its bound, the cells left unseparated plus
@@ -229,6 +257,16 @@ stays a void of its solid through a cut by a body apart from it, a tool's
 reversed shell inside the other operand becomes one, and a body floating
 in a cavity is a solid of its own with the cavity's shell on the solid
 around it.
+
+Operands that only touch along a curve stay apart there. Each body carries
+the other's edge of the contact after the imprint, and where each keeps two
+uses of its own (two faces meeting there, or one face on both sides of a
+slit, as a cylinder tangent to a box's side has along the line it touches)
+the pair is not merged into one edge: merged, it would be used four times
+by one shell, which is then not closed (L01; ADR-0041, a non-manifold
+complex is no solid). The union of two boxes sharing an edge, or of a box
+and a cylinder tangent to its side, is two solids touching along
+coincident edges, as two boxes apart are two solids.
 
 The result is published through ``Commit`` with a History of both
 operands, input 0 and input 1. Each entity of the result is traced through
