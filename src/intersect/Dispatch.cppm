@@ -389,12 +389,15 @@ Result<CurveSurfaceIntersection> SplineSphere(const Curve&, const Interval&, con
                                               const Box2&, const Context&);
 Result<CurveSurfaceIntersection> SplineCylinder(const Curve&, const Interval&, const Surface&,
                                                 const Box2&, const Context&);
-/// The same against a cone, whose equation on a segment has degree 2p, and
-/// a torus, degree 4p. Defined in SplineSurface.cpp.
+/// The same against a cone, whose equation on a segment has degree 2p, a
+/// torus, degree 4p, and an ellipsoid, degree 2p (ADR-0048 §3.2). Defined in
+/// SplineSurface.cpp.
 Result<CurveSurfaceIntersection> SplineCone(const Curve&, const Interval&, const Surface&,
                                             const Box2&, const Context&);
 Result<CurveSurfaceIntersection> SplineTorus(const Curve&, const Interval&, const Surface&,
                                              const Box2&, const Context&);
+Result<CurveSurfaceIntersection> SplineEllipsoid(const Curve&, const Interval&, const Surface&,
+                                                 const Box2&, const Context&);
 
 /// A line against a cone: over a bounded domain as a degree-1 Bezier segment
 /// through the cone's equation, proved as a B-spline's roots are; over an
@@ -409,8 +412,9 @@ Result<CurveSurfaceIntersection> LineCone(const Curve&, const Interval&, const S
 Result<CurveSurfaceIntersection> LineTorus(const Curve&, const Interval&, const Surface&,
                                            const Box2&, const Context&);
 
-/// A circle or an ellipse against a plane, a cylinder, a cone, a sphere or a
-/// torus: the conic cut into rational quadratic arcs of at most a quarter
+/// A circle or an ellipse against a plane, a cylinder, a cone, a sphere, a
+/// torus or an ellipsoid: the conic cut into rational quadratic arcs of at
+/// most a quarter
 /// turn, their poles and middle weight enclosed, so that every proof holds
 /// for the conic itself, and each arc searched as a B-spline's segment is.
 /// A conic exactly in a plane is an overlap with its exact pcurve; one along
@@ -656,8 +660,8 @@ consteval CurveSurfaceHandler LineAgainstSurface()
     }
 }
 
-/// The B-spline curve's handlers: AgainstQuadric's three, the cone and the
-/// torus.
+/// The B-spline curve's handlers: AgainstQuadric's three, the cone, the
+/// torus and the ellipsoid.
 template <typename B>
 consteval CurveSurfaceHandler SplineAgainstSurface()
 {
@@ -665,18 +669,20 @@ consteval CurveSurfaceHandler SplineAgainstSurface()
         return &SplineCone;
     } else if constexpr (std::same_as<B, Torus>) {
         return &SplineTorus;
+    } else if constexpr (std::same_as<B, Ellipsoid>) {
+        return &SplineEllipsoid;
     } else {
         return AgainstQuadric<BSplineCurve, B, &SplinePlane, &SplineSphere, &SplineCylinder>();
     }
 }
 
 /// A circle's or an ellipse's handler: ConicSurface for every elementary
-/// surface.
+/// surface and the ellipsoid.
 template <typename A, typename B>
 consteval CurveSurfaceHandler ConicAgainstSurface()
 {
     if constexpr (std::same_as<B, Plane> || std::same_as<B, Cylinder> || std::same_as<B, Cone> ||
-                  std::same_as<B, Sphere> || std::same_as<B, Torus>) {
+                  std::same_as<B, Sphere> || std::same_as<B, Torus> || std::same_as<B, Ellipsoid>) {
         return &ConicSurface;
     } else {
         return &CurveSurfaceStub<A, B>;

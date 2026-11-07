@@ -35,8 +35,9 @@ import Stereon.Robust;
 #include "Planar.hpp"
 
 /// A B-spline curve, polynomial or rational, or a circle or an ellipse,
-/// against a plane, a cylinder, a cone, a sphere or a torus: the surface's
-/// implicit equation f = 0 composed with the curve. On each Bezier segment,
+/// against a plane, a cylinder, a cone, a sphere, a torus or an ellipsoid:
+/// the surface's implicit equation f = 0 composed with the curve. On each
+/// Bezier segment,
 /// in homogeneous coordinates (X, W) = (w P, w), W^k f(X / W) is a
 /// polynomial g of degree p for the plane, 2p for the quadrics and 4p for
 /// the torus, with the sign of f since every weight is positive. Its
@@ -206,6 +207,25 @@ struct IVec3 {
         g.push_back(Interval{d.X} * o.X[i] + Interval{d.Y} * o.Y[i] + Interval{d.Z} * o.Z[i]);
     }
     return g;
+}
+
+/// The ellipsoid of LineEllipsoid in homogeneous local coordinates (P, Q, H)
+/// of X - W C and the weight W: (B C P)² + (A C Q)² + (A B H)² - (A B C W)²,
+/// degree 2p, (A B C W)² times the value of (x / A)² + (y / B)² + (z / C)² -
+/// 1 at X / W. Its frame is the evaluator's, Axis(ellipsoid) as rounded, as
+/// the line's handler takes it.
+[[nodiscard]] Coefficients EllipsoidForm(const std::vector<HPoint>& poles,
+                                         const Ellipsoid& ellipsoid)
+{
+    const Offsets o = OffsetsFrom(poles, ellipsoid.Center);
+    const Interval a{ellipsoid.A};
+    const Interval b{ellipsoid.B};
+    const Interval c{ellipsoid.C};
+    const Coefficients p = Scaled(Along(o, ellipsoid.XAxis), b * c);
+    const Coefficients q = Scaled(Along(o, ellipsoid.YAxis), a * c);
+    const Coefficients h = Scaled(Along(o, Axis(ellipsoid)), a * b);
+    const Interval abc = a * b * c;
+    return SumOfSquares(p, q, h, o.W, abc * abc);
 }
 
 /// The cone of Implicit.hpp's ImplicitValue in homogeneous local
@@ -635,6 +655,27 @@ Result<CurveSurfaceIntersection> SplineSphere(const Curve& a, const Interval& do
     return PointsOf([&](const double t) { return Eval(*spline, t); },
                     Polished(found, *spline, *sphere), box,
                     [&](const Point3& p) { return Project(*sphere, p); }, true);
+}
+
+Result<CurveSurfaceIntersection> SplineEllipsoid(const Curve& a, const Interval& domain,
+                                                 const Surface& b, const Box2& box,
+                                                 const Context& /*ctx*/)
+{
+    const BSplineCurve* spline = a.Target<BSplineCurve>();
+    const Ellipsoid* ellipsoid = b.Target<Ellipsoid>();
+    if (spline == nullptr || ellipsoid == nullptr) {
+        return Fail(ErrorCode::InvalidInput, "SplineEllipsoid: dispatched for other types");
+    }
+    STEREON_TRY_VOID(CheckSpline(*spline));
+    STEREON_TRY(const std::vector<Found> found, RootsOf(
+                                                    *spline, domain,
+                                                    [&](const std::vector<HPoint>& poles) {
+                                                        return EllipsoidForm(poles, *ellipsoid);
+                                                    },
+                                                    "BSplineCurve x Ellipsoid"));
+    return PointsOf([&](const double t) { return Eval(*spline, t); },
+                    Polished(found, *spline, *ellipsoid), box,
+                    [&](const Point3& p) { return Project(*ellipsoid, p); }, true);
 }
 
 Result<CurveSurfaceIntersection> SplineCylinder(const Curve& a, const Interval& domain,
@@ -1207,6 +1248,10 @@ ConicOnSurface(const Conic& conic, const ConicData& data, const Interval& domain
     if (const Torus* torus = b.Target<Torus>()) {
         return ConicAgainst(conic, data, domain, *torus, box, TorusForm, prefix + " x Torus", true,
                             true);
+    }
+    if (const Ellipsoid* ellipsoid = b.Target<Ellipsoid>()) {
+        return ConicAgainst(conic, data, domain, *ellipsoid, box, EllipsoidForm,
+                            prefix + " x Ellipsoid", true, false);
     }
     return Fail(ErrorCode::InvalidInput, "ConicSurface: dispatched for other types");
 }

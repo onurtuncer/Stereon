@@ -449,10 +449,11 @@ the other boxes.
 
 **Intersections.** A ``Line`` against an ``Ellipsoid`` has its handler,
 decided exactly on the input doubles as the sphere's is
-(:doc:`intersection`). The other pairs follow in ADR-0048's order and
-answer ``NotImplemented`` until then: B-spline curves, circles and
-ellipses, then the plane's closed form, then the other surfaces through
-the trace.
+(:doc:`intersection`). B-spline curves, circles and ellipses have theirs
+too, proved by the subdivision the elementary surfaces use, on the
+ellipsoid's implicit equation. The pairs of surfaces follow in ADR-0048's
+order and answer ``NotImplemented`` until then: the plane's closed form,
+then the other surfaces through the trace.
 
 Checked construction
 --------------------
