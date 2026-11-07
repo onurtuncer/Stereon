@@ -453,8 +453,10 @@ decided exactly on the input doubles as the sphere's is
 too, proved by the subdivision the elementary surfaces use, on the
 ellipsoid's implicit equation. A plane against an ellipsoid has its
 closed form: the section decided exactly, an exact ellipse, and a
-certified pcurve on the ellipsoid. The other surfaces follow through the
-trace, and answer ``NotImplemented`` until then.
+certified pcurve on the ellipsoid. Against a cylinder, a cone, a sphere,
+a torus or another ellipsoid the intersection goes through the
+parametric–implicit trace, with the ellipsoid's implicit equation
+:math:`(BC\,x)^2 + (AC\,y)^2 + (AB\,z)^2 = (ABC)^2` in its frame.
 
 Checked construction
 --------------------
