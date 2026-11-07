@@ -537,9 +537,9 @@ exact frame the quadratic is the sphere's times :math:`r^4`, and the
 results are the sphere's: the same count and contact exactly, the same
 points to rounding. Scaling a sphere's configuration by a power of two
 along an axis of its frame gives the ellipsoid's, parameter for
-parameter. The other curves against an ellipsoid, and an ellipsoid
-against a surface, answer ``NotImplemented`` until their steps of
-ADR-0048 land.
+parameter. B-spline curves, circles and ellipses against an ellipsoid are
+below. An ellipsoid against a surface answers ``NotImplemented`` until its
+step of ADR-0048 lands.
 
 A ``Line`` against a ``Cone`` or a ``Torus`` cannot be decided exactly on
 the input doubles: the cone's equation holds the cosine and sine of its
@@ -584,11 +584,14 @@ Either nappe of the cone is crossed, as its parametrisation runs through
 the apex.
 
 A ``BSplineCurve``, polynomial or rational, has handlers against all five
-elementary surfaces. The surface's implicit equation composed with the
-curve is, on each Bézier segment and in homogeneous coordinates, a
-polynomial :math:`g` of degree :math:`p` against the plane, :math:`2p`
-against a sphere, a cylinder or a cone and :math:`4p` against a torus, of
-the sign of the equation since every weight is positive. The cone's
+elementary surfaces and the ellipsoid. The surface's implicit equation
+composed with the curve is, on each Bézier segment and in homogeneous
+coordinates, a polynomial :math:`g` of degree :math:`p` against the plane,
+:math:`2p` against a sphere, a cylinder, a cone or an ellipsoid and
+:math:`4p` against a torus, of the sign of the equation since every weight
+is positive. The ellipsoid's equation is the line handler's,
+:math:`(BC\,x)^2 + (AC\,y)^2 + (AB\,z)^2 - (ABC)^2` in its frame
+(ADR-0048). The cone's
 equation, :math:`\cos^2 a\,(x^2 + y^2) - (R \cos a + z \sin a)^2` in its
 frame, vanishes on both nappes, as the cone's parametrisation runs through
 its apex onto the second; the torus's is
@@ -640,8 +643,9 @@ is intersected within its own domain only, and a point's surface
 parameters are those of its rounded position, kept or dropped against the
 box as the line handlers do.
 
-A ``Circle`` or an ``Ellipse`` against the five elementary surfaces goes
-through the same proofs, on its exact rational form. The requested domain,
+A ``Circle`` or an ``Ellipse`` against the five elementary surfaces or the
+ellipsoid goes through the same proofs, on its exact rational form. The
+requested domain,
 which must be bounded, is cut into equal arcs of at most a quarter turn,
 and each arc :math:`[t_0, t_1]` is the rational quadratic Bézier segment
 with end poles at :math:`t_0` and :math:`t_1`, weight 1, and middle pole

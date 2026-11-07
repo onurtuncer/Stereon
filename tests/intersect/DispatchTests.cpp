@@ -155,20 +155,19 @@ TEST_CASE("every curve-surface pair has a handler; lines against planes, spheres
     const Surface torus(
         Stereon::Torus{Point3{}, 2.0, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}});
     REQUIRE(Intersect(SomeLine(), torus, ctx).has_value());
-    // The ellipsoid (ADR-0048) has its line handler; its other curves wait
-    // for their step, and say so.
+    // The ellipsoid (ADR-0048) has the handlers the elementary surfaces
+    // have: a line, a circle, an ellipse and a B-spline.
     const Surface ellipsoid(
         Stereon::Ellipsoid{Point3{}, 3.0, 2.0, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}});
     REQUIRE(Intersect(SomeLine(), ellipsoid, ctx).has_value());
-    const auto circleEllipsoid = Intersect(SomeCircle(), ellipsoid, ctx);
-    REQUIRE_FALSE(circleEllipsoid.has_value());
-    REQUIRE(circleEllipsoid.error().GetCode() == ErrorCode::NotImplemented);
-    REQUIRE(MessageOf(circleEllipsoid.error()).starts_with("Circle x Ellipsoid"));
+    REQUIRE(Intersect(SomeCircle(), ellipsoid, ctx).has_value());
     // The other pairs name their types, the curve first.
     const Curve parabola(
         Stereon::Parabola{Point3{}, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}});
     REQUIRE(
         MessageOf(Intersect(parabola, SomePlane(), ctx).error()).starts_with("Parabola x Plane"));
+    REQUIRE(
+        MessageOf(Intersect(parabola, ellipsoid, ctx).error()).starts_with("Parabola x Ellipsoid"));
 }
 
 TEST_CASE("empty inputs are invalid input", "[intersect][dispatch]")

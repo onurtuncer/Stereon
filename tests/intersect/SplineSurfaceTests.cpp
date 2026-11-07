@@ -36,6 +36,7 @@ using Stereon::Curve;
 using Stereon::CurveSurfaceIntersection;
 using Stereon::CurveSurfacePoint;
 using Stereon::Cylinder;
+using Stereon::Ellipsoid;
 using Stereon::ErrorCode;
 using Stereon::Interval;
 using Stereon::Plane;
@@ -97,6 +98,15 @@ double Height(const Point3& p)
 double SphereLevel(const Point3& p)
 {
     return Dot(Stereon::ToVec(p), Stereon::ToVec(p)) - 1.0;
+}
+
+/// The ellipsoid about the origin with the semi-axes 3, 2 and 1 along x, y
+/// and z (ADR-0048), and its implicit equation at p.
+const Ellipsoid stretched{Point3{}, 3.0, 2.0, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+
+double EllipsoidLevel(const Point3& p)
+{
+    return p.X * p.X / 9.0 + p.Y * p.Y / 4.0 + p.Z * p.Z - 1.0;
 }
 
 } // namespace
@@ -295,5 +305,144 @@ TEST_CASE("every sign change along a random B-spline has a point in it",
             3, {0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 3.0, 3.0, 3.0}, poles);
         check(spline, ground, Height);
         check(spline, unitSphere, SphereLevel);
+    });
+}
+
+TEST_CASE("a B-spline through an ellipsoid crosses it twice, on both geometries",
+          "[intersect][spline-surface][ellipsoid]")
+{
+    const BSplineCurve through =
+        Bezier({{-5.0, 0.25, 0.125}, {-1.5, -0.5, 0.25}, {1.5, 0.5, -0.25}, {5.0, -0.25, 0.0}});
+    const auto result = Meet(through, stretched);
+    REQUIRE(result.has_value());
+    REQUIRE(result->Points.size() == 2);
+    for (const CurveSurfacePoint& p : result->Points) {
+        REQUIRE(p.Decided);
+        REQUIRE(p.Contact == ContactType::Crossing);
+        REQUIRE(std::abs(EllipsoidLevel(p.Position)) <= 1e-12);
+    }
+    RequireOnBoth(*result, through, stretched);
+
+    // A rational one: the circle of radius 5/2 about z in the plane z = 0,
+    // a quarter of it, crosses the equator (x / 3)² + (y / 2)² = 1 once,
+    // where y² = 11/5.
+    const double w = std::sqrt(0.5);
+    const BSplineCurve quarter =
+        Spline(2, {0.0, 0.0, 0.0, 1.0, 1.0, 1.0},
+               {{2.5, 0.0, 0.0}, {2.5, 2.5, 0.0}, {0.0, 2.5, 0.0}}, {1.0, w, 1.0});
+    const auto once = Meet(quarter, stretched);
+    REQUIRE(once.has_value());
+    REQUIRE(once->Points.size() == 1);
+    REQUIRE(std::abs(once->Points[0].Position.Y - std::sqrt(2.2)) <= 1e-12);
+    REQUIRE(std::abs(once->Points[0].Position.X - std::sqrt(4.05)) <= 1e-12);
+    RequireOnBoth(*once, quarter, stretched);
+}
+
+TEST_CASE("an empty ellipsoid result is a proof: above the pole is apart, below crosses twice",
+          "[intersect][spline-surface][ellipsoid]")
+{
+    // A straight B-spline along x over the pole (0, 0, 1). Three 2^-40
+    // above it the curve is apart, proved; as far below it crosses twice,
+    // 6 sqrt(6) 2^-20 apart to first order; through the pole it touches,
+    // which the subdivision cannot decide, so it fails and is never an
+    // empty success. (Three 2^-40, not one: the roots are then not dyadic,
+    // and a root at a piece's end is undecided.)
+    constexpr double c = 3.0 * 0x1p-40;
+    const auto along = [](const double z) { return Bezier({{-5.0, 0.0, z}, {5.0, 0.0, z}}); };
+    const auto apart = Meet(along(1.0 + c), stretched);
+    REQUIRE(apart.has_value());
+    REQUIRE(apart->IsEmpty());
+
+    const auto twice = Meet(along(1.0 - c), stretched);
+    REQUIRE(twice.has_value());
+    REQUIRE(twice->Points.size() == 2);
+    for (const CurveSurfacePoint& p : twice->Points) {
+        REQUIRE(p.Contact == ContactType::Crossing);
+        REQUIRE(p.Decided);
+    }
+    // The curve meets the surface at an angle of about chord / 18 there,
+    // so a point placed to rounding along the curve sits about 1e-10 off
+    // the exact crossing; the chord is known to that.
+    const double chord = Distance(twice->Points[0].Position, twice->Points[1].Position);
+    REQUIRE(std::abs(chord - 6.0 * std::sqrt(2.0 * c)) <= 1e-9);
+
+    const auto touch = Meet(along(1.0), stretched);
+    REQUIRE_FALSE(touch.has_value());
+    REQUIRE(touch.error().GetCode() == ErrorCode::IntersectionFailed);
+}
+
+TEST_CASE("a B-spline against an ellipsoid with equal semi-axes meets it where it meets the sphere",
+          "[intersect][spline-surface][ellipsoid][property]")
+{
+    // ADR-0048's oracle. The two forms are enclosed through different
+    // operations, so one may fail closed where the other decides; where
+    // both decide, they find the same points.
+    rc::prop("for random cubic B-splines on dyadic coordinates", [] {
+        const auto coordinate = [] { return *rc::gen::inRange(-24, 25) / 8.0; };
+        std::vector<Point3> poles;
+        for (int i = 0; i < 6; ++i) {
+            poles.push_back(Point3{coordinate(), coordinate(), coordinate()});
+        }
+        const BSplineCurve spline = *Stereon::MakeBSplineCurve(
+            3, {0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 3.0, 3.0, 3.0}, poles);
+        const double radius = *rc::gen::inRange(4, 17) / 8.0;
+        const Point3 center{coordinate() / 4.0, coordinate() / 4.0, coordinate() / 4.0};
+        const Sphere sphere{center, radius, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+        const Ellipsoid ellipsoid{
+            center, radius, radius, radius, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+        const auto onSphere = Meet(spline, sphere);
+        const auto onEllipsoid = Meet(spline, ellipsoid);
+        if (!onSphere || !onEllipsoid) {
+            const auto& failed = onSphere ? onEllipsoid : onSphere;
+            RC_ASSERT(failed.error().GetCode() == ErrorCode::IntersectionFailed);
+            return;
+        }
+        RC_ASSERT(onSphere->Points.size() == onEllipsoid->Points.size());
+        for (std::size_t i = 0; i < onSphere->Points.size(); ++i) {
+            const CurveSurfacePoint& p = onSphere->Points[i];
+            const CurveSurfacePoint& q = onEllipsoid->Points[i];
+            RC_ASSERT(q.Contact == p.Contact);
+            RC_ASSERT(std::abs(q.Parameter - p.Parameter) <= 1e-9);
+            RC_ASSERT(Distance(q.Position, p.Position) <= 1e-9);
+            RC_ASSERT(Distance(Eval(ellipsoid, q.OnSurface), q.Position) <= 1e-9);
+        }
+    });
+}
+
+TEST_CASE("every sign change along a random B-spline has a point of the ellipsoid in it",
+          "[intersect][spline-surface][ellipsoid][property]")
+{
+    // The completeness check of the plane and the sphere, on the ellipsoid
+    // with semi-axes 3, 2 and 1.
+    constexpr double noise = 1e-9;
+    constexpr double slack = 1e-9;
+    rc::prop("for random cubic B-splines", [&] {
+        const auto coordinate = [] { return *rc::gen::inRange(-32, 33) / 8.0; };
+        std::vector<Point3> poles;
+        for (int i = 0; i < 6; ++i) {
+            poles.push_back(Point3{coordinate(), coordinate(), coordinate()});
+        }
+        const BSplineCurve spline = *Stereon::MakeBSplineCurve(
+            3, {0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 3.0, 3.0, 3.0}, poles);
+        const auto result = Meet(spline, stretched);
+        if (!result) {
+            RC_ASSERT(result.error().GetCode() == ErrorCode::IntersectionFailed);
+            return;
+        }
+        const std::vector<double> t = IntersectTest::SamplesOf(Domain(spline), 256);
+        for (std::size_t i = 0; i + 1 < t.size(); ++i) {
+            const double a = EllipsoidLevel(Eval(spline, t[i]));
+            const double b = EllipsoidLevel(Eval(spline, t[i + 1]));
+            if ((a < -noise && b > noise) || (a > noise && b < -noise)) {
+                RC_ASSERT(std::ranges::any_of(result->Points, [&](const CurveSurfacePoint& p) {
+                    return t[i] - slack <= p.Parameter && p.Parameter <= t[i + 1] + slack;
+                }));
+            }
+        }
+        for (const CurveSurfacePoint& p : result->Points) {
+            RC_ASSERT(Distance(Eval(spline, p.Parameter), p.Position) <= 1e-9);
+            RC_ASSERT(Distance(Eval(stretched, p.OnSurface), p.Position) <= 1e-9);
+            RC_ASSERT(std::abs(EllipsoidLevel(p.Position)) <= 1e-9);
+        }
     });
 }

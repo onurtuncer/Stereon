@@ -23,6 +23,7 @@
 #include <cstddef>
 #include <limits>
 #include <numbers>
+#include <utility>
 #include <vector>
 
 import Stereon.Intersect;
@@ -39,6 +40,7 @@ using Stereon::CurveSurfaceIntersection;
 using Stereon::CurveSurfacePoint;
 using Stereon::Cylinder;
 using Stereon::Ellipse;
+using Stereon::Ellipsoid;
 using Stereon::ErrorCode;
 using Stereon::Interval;
 using Stereon::Plane;
@@ -63,6 +65,15 @@ const Sphere unitSphere{Point3{}, 1.0, ex, ey};
 const Cone rightCone{Point3{}, 0.0, pi / 4.0, ex, ey};
 /// The torus about z with radii 2 and 1.
 const Torus ring{Point3{}, 2.0, 1.0, ex, ey};
+
+/// The ellipsoid about the origin with the semi-axes 3, 2 and 1 along x, y
+/// and z (ADR-0048), and its implicit equation at p.
+const Ellipsoid stretched{Point3{}, 3.0, 2.0, 1.0, ex, ey};
+
+double EllipsoidLevel(const Point3& p)
+{
+    return p.X * p.X / 9.0 + p.Y * p.Y / 4.0 + p.Z * p.Z - 1.0;
+}
 
 double ConeLevel(const Point3& p)
 {
@@ -477,5 +488,126 @@ TEST_CASE("every point lies on the surface to the rounding of its coordinates",
         check(ring);
         check(Cone{Point3{}, 1.0, pi / 4.0, ex, ey});
         check(Sphere{Point3{0.25, 0.0, 0.0}, 1.5, ex, ey});
+    });
+}
+
+TEST_CASE("a circle and an ellipse cross an ellipsoid four times",
+          "[intersect][conic-surface][ellipsoid]")
+{
+    // The circle of radius 5/2 about z in the plane z = 0 crosses the
+    // equator (x / 3)² + (y / 2)² = 1 once in each quadrant, where
+    // y² = 11/5 and x² = 81/20.
+    const Circle circle{Point3{}, 2.5, ex, ey};
+    const auto onCircle = Meet(circle, stretched);
+    REQUIRE(onCircle.has_value());
+    REQUIRE(onCircle->Points.size() == 4);
+    for (const CurveSurfacePoint& p : onCircle->Points) {
+        REQUIRE(p.Contact == ContactType::Crossing);
+        REQUIRE(std::abs(std::abs(p.Position.Y) - std::sqrt(2.2)) <= 1e-12);
+        REQUIRE(std::abs(std::abs(p.Position.X) - std::sqrt(4.05)) <= 1e-12);
+    }
+    REQUIRE(std::abs(onCircle->Points[0].Parameter - std::atan2(std::sqrt(2.2), std::sqrt(4.05))) <=
+            1e-13);
+    RequireComplete(*onCircle, circle, stretched, Domain(circle), EllipsoidLevel);
+
+    // An ellipse in the plane x = 0, 3 along y and 1/2 along z, against the
+    // ellipsoid's section there, (y / 2)² + z² = 1: y² = 27/8, z² = 5/32.
+    const Ellipse flat{Point3{}, 3.0, 0.5, ey, ez};
+    const auto onEllipse = Meet(flat, stretched);
+    REQUIRE(onEllipse.has_value());
+    REQUIRE(onEllipse->Points.size() == 4);
+    for (const CurveSurfacePoint& p : onEllipse->Points) {
+        REQUIRE(std::abs(std::abs(p.Position.Y) - std::sqrt(3.375)) <= 1e-12);
+        REQUIRE(std::abs(std::abs(p.Position.Z) - std::sqrt(0.15625)) <= 1e-12);
+    }
+    RequireComplete(*onEllipse, flat, stretched, Domain(flat), EllipsoidLevel);
+}
+
+TEST_CASE("an empty conic result against an ellipsoid is a proof",
+          "[intersect][conic-surface][ellipsoid]")
+{
+    // A unit circle in the plane y = 0, hanging over the pole (0, 0, 1): its
+    // lowest point 2^-40 above the pole it is apart, proved; 2^-40 below it
+    // crosses twice. Touching the pole it fails or reports its touch, and is
+    // never an empty success.
+    const double gap = std::ldexp(1.0, -40);
+    const auto hanging = [](const double lowest) {
+        return Circle{Point3{0.0, 0.0, lowest + 1.0}, 1.0, ex, ez};
+    };
+    const auto apart = Meet(hanging(1.0 + gap), stretched);
+    REQUIRE(apart.has_value());
+    REQUIRE(apart->IsEmpty());
+
+    const auto crossing = Meet(hanging(1.0 - gap), stretched);
+    REQUIRE(crossing.has_value());
+    REQUIRE(crossing->Points.size() == 2);
+    for (const CurveSurfacePoint& p : crossing->Points) {
+        REQUIRE(p.Decided);
+        // Either side of the circle's lowest point, at the angle 3 pi / 2.
+        REQUIRE(std::abs(p.Parameter - 1.5 * pi) <= 1e-5);
+    }
+
+    const auto touching = Meet(hanging(1.0), stretched);
+    if (touching.has_value()) {
+        REQUIRE_FALSE(touching->Points.empty());
+    } else {
+        REQUIRE(touching.error().GetCode() == ErrorCode::IntersectionFailed);
+    }
+}
+
+TEST_CASE("an ellipse on the ellipsoid fails rather than coming back empty",
+          "[intersect][conic-surface][ellipsoid]")
+{
+    // The ellipsoid's own equator, and its section by the plane y = 0.
+    const Ellipse equator{Point3{}, 3.0, 2.0, ex, ey};
+    const auto onEquator = Meet(equator, stretched);
+    REQUIRE_FALSE(onEquator.has_value());
+    REQUIRE(onEquator.error().GetCode() == ErrorCode::IntersectionFailed);
+
+    const Ellipse meridian{Point3{}, 3.0, 1.0, ex, ez};
+    const auto onMeridian = Meet(meridian, stretched);
+    REQUIRE_FALSE(onMeridian.has_value());
+    REQUIRE(onMeridian.error().GetCode() == ErrorCode::IntersectionFailed);
+}
+
+TEST_CASE("a circle against an ellipsoid with equal semi-axes meets it where it meets the sphere",
+          "[intersect][conic-surface][ellipsoid][property]")
+{
+    // ADR-0048's oracle, on exact frames. One form may fail closed where
+    // the other decides; where both decide, they find the same points.
+    const std::vector<std::pair<Vec3, Vec3>> frames{{ex, ey}, {ey, ez}, {ez, ex},
+                                                    {ey, ex}, {ez, ey}, {ex, ez}};
+    rc::prop("for circles and ellipses on dyadic coordinates", [&] {
+        const auto coordinate = [] { return *rc::gen::inRange(-16, 17) / 8.0; };
+        const auto frame = [&] {
+            return frames[static_cast<std::size_t>(*rc::gen::inRange(0, 6))];
+        };
+        const auto [cx, cy] = frame();
+        const auto [sx, sy] = frame();
+        const Point3 at{coordinate(), coordinate(), coordinate()};
+        const double minor = *rc::gen::inRange(4, 17) / 8.0;
+        const double major = minor + *rc::gen::inRange(0, 9) / 8.0;
+        const Curve curve = major == minor ? Curve{Circle{at, minor, cx, cy}}
+                                           : Curve{Ellipse{at, major, minor, cx, cy}};
+        const double radius = *rc::gen::inRange(4, 17) / 8.0;
+        const Point3 center{coordinate() / 2.0, coordinate() / 2.0, coordinate() / 2.0};
+        const Surface sphere{Sphere{center, radius, sx, sy}};
+        const Surface ellipsoid{Ellipsoid{center, radius, radius, radius, sx, sy}};
+        const auto onSphere = Intersect(curve, sphere, ctx);
+        const auto onEllipsoid = Intersect(curve, ellipsoid, ctx);
+        if (!onSphere || !onEllipsoid) {
+            const auto& failed = onSphere ? onEllipsoid : onSphere;
+            RC_ASSERT(failed.error().GetCode() == ErrorCode::IntersectionFailed);
+            return;
+        }
+        RC_ASSERT(onSphere->Points.size() == onEllipsoid->Points.size());
+        for (std::size_t i = 0; i < onSphere->Points.size(); ++i) {
+            const CurveSurfacePoint& p = onSphere->Points[i];
+            const CurveSurfacePoint& q = onEllipsoid->Points[i];
+            RC_ASSERT(q.Contact == p.Contact);
+            RC_ASSERT(std::abs(q.Parameter - p.Parameter) <= 1e-9);
+            RC_ASSERT(Distance(q.Position, p.Position) <= 1e-9);
+            RC_ASSERT(Distance(Eval(ellipsoid, q.OnSurface), q.Position) <= 1e-9);
+        }
     });
 }
