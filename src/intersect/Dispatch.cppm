@@ -302,6 +302,14 @@ Result<SurfaceSurfaceIntersection> CylinderCylinderSkew(const Surface&, const Bo
 /// parametric-implicit trace otherwise. Defined in ElementaryPairs.cpp.
 Result<SurfaceSurfaceIntersection> ElementaryPair(const Surface&, const Box2&, const Surface&,
                                                   const Box2&, double, const Context&);
+/// A plane against an ellipsoid (ADR-0048 §3.3): the section decided
+/// exactly, an exact ellipse with its exact pcurve on the plane and a
+/// certified fitted pcurve on the ellipsoid, a touch, or a proved
+/// separation. Defined in PlaneEllipsoid.cpp.
+Result<SurfaceSurfaceIntersection> PlaneEllipsoid(const Surface&, const Box2&, const Surface&,
+                                                  const Box2&, double, const Context&);
+Result<SurfaceSurfaceIntersection> EllipsoidPlane(const Surface&, const Box2&, const Surface&,
+                                                  const Box2&, double, const Context&);
 /// The parametric-implicit trace: one surface's parametrisation against the
 /// other's implicit equation, by certified interval subdivision, every
 /// branch a fitted and certified transverse crossing; IntersectionFailed
@@ -525,6 +533,10 @@ consteval SurfaceHandler AnalyticSurfaceHandlerFor()
         return PlanarCylindricalHandlerFor<A, B>();
     } else if constexpr (IsElementarySurface<A> && IsElementarySurface<B>) {
         return &ElementaryPair;
+    } else if constexpr (std::same_as<A, Plane> && std::same_as<B, Ellipsoid>) {
+        return &PlaneEllipsoid;
+    } else if constexpr (std::same_as<A, Ellipsoid> && std::same_as<B, Plane>) {
+        return &EllipsoidPlane;
     } else {
         return &SurfaceStub<A, B>;
     }
