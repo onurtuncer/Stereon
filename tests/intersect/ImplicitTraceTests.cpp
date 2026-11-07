@@ -281,3 +281,124 @@ TEST_CASE("a node of the intersection fails closed", "[intersect][trace]")
     REQUIRE_FALSE(result.has_value());
     REQUIRE(result.error().GetCode() == Stereon::ErrorCode::IntersectionFailed);
 }
+
+// --- The ellipsoid (ADR-0048 §3.4) -----------------------------------------
+
+namespace {
+
+/// The ellipsoid about the origin with semi-axes 3, 2 and 1 along x, y, z.
+const Surface stretched{Stereon::Ellipsoid{Point3{}, 3.0, 2.0, 1.0, X, Y, true}};
+const Box2 ellipsoidChart{Interval{0.0, 2.0 * pi}, Interval{-pi / 2.0, pi / 2.0}};
+
+/// (x / a)² + (y / b)² + (z / c)² - 1 about the origin, the frame of space.
+Implicit EllipsoidImplicit(const double a, const double b, const double c)
+{
+    return [=](const Point3& p) {
+        return (p.X / a) * (p.X / a) + (p.Y / b) * (p.Y / b) + (p.Z / c) * (p.Z / c) - 1.0;
+    };
+}
+
+} // namespace
+
+TEST_CASE("a cylinder through an ellipsoid leaves through its top and its bottom",
+          "[intersect][trace][ellipsoid]")
+{
+    // The cylinder x² + y² = 9/4 lies inside the equator (x / 3)² + (y / 2)² =
+    // 1, so it cuts the ellipsoid in two closed curves, one above and one
+    // below.
+    const Surface cylinder{IntersectTest::CylinderAbout(Point3{}, Vec3{0.0, 0.0, 1.0}, 1.5)};
+    const auto result = Intersect(cylinder, stretched, ctx);
+    INFO(IntersectTest::ErrorText(result));
+    REQUIRE(result.has_value());
+    RequireCertified(*result, cylinder, stretched);
+    REQUIRE(IntersectTest::ConnectivityOf(*result).Curves == 2);
+    RequireComplete(*result, cylinder, Box2{Interval{0.0, 2.0 * pi}, Interval{-2.0, 2.0}},
+                    EllipsoidImplicit(3.0, 2.0, 1.0));
+    // The other way round: the same curves.
+    const auto swapped = Intersect(stretched, cylinder, ctx);
+    REQUIRE(swapped.has_value());
+    RequireCertified(*swapped, stretched, cylinder);
+    REQUIRE(IntersectTest::ConnectivityOf(*swapped).Curves == 2);
+}
+
+TEST_CASE("a sphere off the centre of an ellipsoid, and a cone through it",
+          "[intersect][trace][ellipsoid]")
+{
+    const Surface sphere{Sphere{Point3{2.5, 0.5, 0.25}, 1.0, X, Y, true}};
+    const auto onSphere = Intersect(sphere, stretched, ctx);
+    INFO(IntersectTest::ErrorText(onSphere));
+    REQUIRE(onSphere.has_value());
+    RequireCertified(*onSphere, sphere, stretched);
+    REQUIRE(IntersectTest::ConnectivityOf(*onSphere).Curves == 1);
+    RequireComplete(*onSphere, stretched, ellipsoidChart,
+                    SphereImplicit(Point3{2.5, 0.5, 0.25}, 1.0));
+
+    const Surface cone{Cone{Point3{0.5, 0.0, 0.0}, 0.5, pi / 6.0, X, Y, true}};
+    const auto onCone = Intersect(cone, stretched, ctx);
+    INFO(IntersectTest::ErrorText(onCone));
+    REQUIRE(onCone.has_value());
+    RequireCertified(*onCone, cone, stretched);
+    REQUIRE_FALSE(onCone->Branches.empty());
+}
+
+TEST_CASE("two ellipsoids crossing, and a torus about one", "[intersect][trace][ellipsoid]")
+{
+    // Semi-axes (3, 2, 1) and (1, 1.5, 3) along x, y, z: each pokes out of
+    // the other along its own long axis, in two closed curves.
+    const Surface tall{Stereon::Ellipsoid{Point3{}, 1.0, 1.5, 3.0, X, Y, true}};
+    const auto result = Intersect(stretched, tall, ctx);
+    INFO(IntersectTest::ErrorText(result));
+    REQUIRE(result.has_value());
+    RequireCertified(*result, stretched, tall);
+    REQUIRE(IntersectTest::ConnectivityOf(*result).Curves == 2);
+    RequireComplete(*result, stretched, ellipsoidChart, EllipsoidImplicit(1.0, 1.5, 3.0));
+
+    // The tube about the circle of radius 2.4, its outer equator at 2.9: inside
+    // the ellipsoid along x, outside it along y.
+    const Surface ring{Torus{Point3{}, 2.4, 0.5, X, Y, true}};
+    const auto onTorus = Intersect(ring, stretched, ctx);
+    INFO(IntersectTest::ErrorText(onTorus));
+    REQUIRE(onTorus.has_value());
+    RequireCertified(*onTorus, ring, stretched);
+    REQUIRE_FALSE(onTorus->Branches.empty());
+    RequireComplete(*onTorus, ring, torusChart, EllipsoidImplicit(3.0, 2.0, 1.0));
+}
+
+TEST_CASE("an ellipsoid with equal semi-axes traces the sphere's curves",
+          "[intersect][trace][ellipsoid]")
+{
+    // ADR-0048's oracle on the trace: a cylinder through a sphere and
+    // through the ellipsoid that is the same sphere.
+    const Surface cylinder{IntersectTest::CylinderAbout(Point3{}, Vec3{0.0, 0.0, 1.0}, 2.0)};
+    const Surface sphere{Sphere{Point3{1.0, 0.0, 0.0}, 2.0, X, Y, true}};
+    const Surface round{Stereon::Ellipsoid{Point3{1.0, 0.0, 0.0}, 2.0, 2.0, 2.0, X, Y, true}};
+    const auto onSphere = Intersect(cylinder, sphere, ctx);
+    const auto onEllipsoid = Intersect(cylinder, round, ctx);
+    INFO(IntersectTest::ErrorText(onEllipsoid));
+    REQUIRE(onSphere.has_value());
+    REQUIRE(onEllipsoid.has_value());
+    RequireCertified(*onEllipsoid, cylinder, round);
+    REQUIRE(IntersectTest::ConnectivityOf(*onEllipsoid).Curves ==
+            IntersectTest::ConnectivityOf(*onSphere).Curves);
+    for (const Stereon::IntersectionBranch& branch : onEllipsoid->Branches) {
+        for (const double t : IntersectTest::SamplesOf(branch.Range, 64)) {
+            REQUIRE(std::abs(Distance(Eval(branch.Curve3d, t), Point3{1.0, 0.0, 0.0}) - 2.0) <=
+                    ctx.GetResolution());
+        }
+    }
+}
+
+TEST_CASE("a sphere far from an ellipsoid is proved separate; a tangent one fails closed",
+          "[intersect][trace][ellipsoid]")
+{
+    const Surface far{Sphere{Point3{20.0, 0.0, 0.0}, 1.0, X, Y, true}};
+    const auto apart = Intersect(far, stretched, ctx);
+    REQUIRE(apart.has_value());
+    REQUIRE(apart->IsEmpty());
+    // A sphere resting on the end of the longest semi-axis, touching it at
+    // (3, 0, 0) from outside: a tangency the trace cannot resolve.
+    const Surface resting{Sphere{Point3{4.0, 0.0, 0.0}, 1.0, X, Y, true}};
+    const auto touch = Intersect(resting, stretched, ctx);
+    REQUIRE_FALSE(touch.has_value());
+    REQUIRE(touch.error().GetCode() == Stereon::ErrorCode::IntersectionFailed);
+}
