@@ -21,7 +21,7 @@ if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_VERSION VERSIO
 endif()
 
 # CMake does not yet know C++26 for MSVC; asking for C++23 selects its newest
-# standard switch. MSVC runs as a non-blocking compiler (ADR-0016).
+# standard switch. MSVC is not built in CI (ADR-0016).
 if(MSVC)
     set(STEREON_CXX_STANDARD 23)
 else()

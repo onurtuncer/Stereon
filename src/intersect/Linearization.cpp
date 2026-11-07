@@ -320,8 +320,8 @@ template <typename S>
 /// dS/d(component) at fixed (u, v), per unit of the component: the origin
 /// moves every point alike; the radius moves a sphere's point along
 /// its unit normal and a cylinder's along its radial direction. Form these
-/// locally: subtracting world positions loses accuracy after translation. The cone's and
-/// the torus's are ConePartial's and TorusPartial's.
+/// locally: subtracting world positions loses accuracy after translation.
+/// The cone's and the torus's are ConePartial's and TorusPartial's.
 [[nodiscard]] Vec3 SurfacePartial(const Surface& surface, const Point2& uv,
                                   const SurfaceComponent component)
 {

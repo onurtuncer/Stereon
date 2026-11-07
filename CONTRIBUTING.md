@@ -19,7 +19,7 @@ Thank you for your interest in Stereon. This document explains how to propose ch
 
 ## Building and testing
 
-You need **GCC 16 or newer** (the reference compiler), CMake 3.30+ and Ninja. Clang and MSVC are not yet supported for development. They run in CI as non-blocking jobs until they support C++26 reflection and contracts ([ADR-0016](docs/adr/0016-cpp26-adoption-and-contracts.md)).
+You need **GCC 16 or newer** (the reference compiler), CMake 3.30+ and Ninja. Clang and MSVC are not yet supported for development. They are not built in CI until they support C++26 reflection and contracts ([ADR-0016](docs/adr/0016-cpp26-adoption-and-contracts.md)).
 
 ```bash
 cmake --preset gcc16-debug

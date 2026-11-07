@@ -19,8 +19,8 @@ Stereon is written in C++26 and compiled as C++20 modules. It relies on
 static reflection and contracts, which, as of 2026, only GCC 16 implements
 completely, so **GCC 16 is the reference compiler** (ADR-0016). CI builds
 every change with GCC 16.2 on Linux, Windows and macOS; those jobs block a
-merge. Clang and MSVC build in a non-blocking job until they support the
-same features.
+merge. Clang and MSVC are not built in CI until they support the same
+features.
 
 .. list-table::
    :header-rows: 1
@@ -104,7 +104,7 @@ warnings, such as ``-Wnull-dereference``, which a debug build does not see.
      - The benchmark suite: release, contracts ignored so that timings
        measure the algorithms, no tests (:doc:`performance`).
    * - ``clang-debug``, ``msvc-debug``
-     - The non-blocking builds with other compilers.
+     - Local builds with other compilers, not run in CI.
 
 Every preset except ``bench`` has a test preset of the same name, so
 ``ctest --preset <name>`` runs that build's tests.

@@ -19,8 +19,8 @@
 ///
 /// The global semantic is chosen per translation unit, not per contract, so
 /// this split is how release builds "ignore hot-path checks and enforce
-/// boundary checks". Compilers without P2900 contracts (Clang and MSVC in
-/// non-blocking CI) get empty expansions, so code using the macros still builds.
+/// boundary checks". Compilers without P2900 contracts (Clang and MSVC, not
+/// built in CI) get empty expansions, so code using the macros still builds.
 ///
 /// Usage:
 ///

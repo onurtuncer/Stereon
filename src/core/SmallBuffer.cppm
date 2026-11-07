@@ -283,7 +283,7 @@ constexpr void DispatchFixed(const std::size_t value, Kernel&& kernel)
 /// Both functions below are generated with an expansion statement and pack
 /// indexing (ADR-0016) where the compiler has them, and with a fold
 /// expression otherwise: MSVC and Clang lack expansion statements so far,
-/// and they build in non-blocking CI. The two forms make the same
+/// and they are not built in CI. The two forms make the same
 /// comparisons in the same order.
 template <typename Wrapper, typename... Ts>
 [[nodiscard]] std::size_t IndexIn(TypeList<Ts...>, const Wrapper& wrapper) noexcept

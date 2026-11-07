@@ -44,8 +44,8 @@ endif()
 
 add_library(stereon_options INTERFACE)
 
-# GCC 16 is the reference compiler (ADR-0016). Clang and MSVC are built in
-# non-blocking CI; they get C++26 language flags only when they accept them.
+# GCC 16 is the reference compiler (ADR-0016). Clang and MSVC are not built
+# in CI; they get C++26 language flags only when they accept them.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(stereon_options INTERFACE
         -freflection

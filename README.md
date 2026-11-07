@@ -86,7 +86,7 @@ int main() {
 
 ### Requirements
 
-- **GCC 16 or newer** (reference compiler). As of 2026 it is the only compiler with the C++26 reflection and contracts support Stereon relies on. Clang and MSVC run in CI as non-blocking until they catch up.
+- **GCC 16 or newer** (reference compiler). As of 2026 it is the only compiler with the C++26 reflection and contracts support Stereon relies on. Clang and MSVC are not built in CI until they catch up.
 - CMake 3.30+ and Ninja
 - Python 3.11+ (optional, for bindings and test tooling)
 
