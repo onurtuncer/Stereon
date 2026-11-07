@@ -203,6 +203,27 @@ TEST_CASE("a plane through a pole of the ellipsoid's chart fails closed",
     REQUIRE(result.error().GetCode() == ErrorCode::IntersectionFailed);
 }
 
+TEST_CASE("a plane within rounding of a pole fails closed as one through it",
+          "[intersect][ellipsoid][plane-ellipsoid][regression]")
+{
+    // CI's counterexample of 2026-11-07 (gcc16-release, gcc16-asan and
+    // macOS): the plane was made through the south pole of the sphere of
+    // radius 3/2 about (-2, -2, -2), but its frame, normalised from
+    // (-1, 4, 2) / 8, is rounded, so it misses the pole by a unit in the
+    // last place. The exact pole test on the rounded plane then says no,
+    // and the section's pcurve cannot be fitted within the budget so near
+    // the pole. That failed with CertificationFailed, which the oracle did
+    // not expect; it is IntersectionFailed, as for a plane exactly through
+    // a pole.
+    const Point3 center{-2.0, -2.0, -2.0};
+    const Plane plane = IntersectTest::PlaneWithNormal(center + Vec3{0.25, -0.375, -0.625},
+                                                       Vec3{-0.125, 0.5, 0.25});
+    const auto result =
+        Intersect(Surface{plane}, Surface{Ellipsoid{center, 1.5, 1.5, 1.5, X, Y}}, ctx);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error().GetCode() == ErrorCode::IntersectionFailed);
+}
+
 TEST_CASE("a bounded plane box keeps the section's stretches inside it",
           "[intersect][ellipsoid][plane-ellipsoid]")
 {
@@ -277,9 +298,7 @@ TEST_CASE("every plane through an ellipsoid turned at random gives certified sec
             center + Vec3{coordinate() / 2.0, coordinate() / 2.0, coordinate() / 2.0}, normal);
         const auto result = Intersect(Surface{plane}, Surface{ellipsoid}, ctx);
         if (!result) {
-            const ErrorCode code = result.error().GetCode();
-            RC_ASSERT(code == ErrorCode::IntersectionFailed ||
-                      code == ErrorCode::CertificationFailed);
+            RC_ASSERT(result.error().GetCode() == ErrorCode::IntersectionFailed);
             RC_CLASSIFY(true, "failed closed");
             return;
         }

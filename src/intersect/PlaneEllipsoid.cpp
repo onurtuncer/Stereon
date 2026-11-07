@@ -325,7 +325,13 @@ struct UvJet {
 
 /// The pcurve on the ellipsoid over a piece: samples doubled until the
 /// interpolant is proved within half the Context's resolution of the
-/// ellipsoid along the section; CertificationFailed past the budget.
+/// ellipsoid along the section. Past the budget the section passes within
+/// rounding of a pole, where its longitude turns by a half turn in no
+/// distance: IntersectionFailed, as the trace answers a branch through a
+/// pole, and as a plane exactly through one is answered here. A plane
+/// whose frame is rounded can miss the pole it was made through by a unit
+/// in the last place, which no exact test on the rounded plane can tell
+/// from a plane through it.
 [[nodiscard]] Result<Curve2d> FittedPcurve(const Sides& s, const Ellipse& section,
                                            const Interval& piece, const Context& ctx)
 {
@@ -342,9 +348,10 @@ struct UvJet {
             return std::unexpected(proved.error());
         }
     }
-    return Fail(ErrorCode::CertificationFailed,
-                "PlaneEllipsoid: the section's pcurve on the ellipsoid could not be certified "
-                "within the sample budget; it passes too near a pole of the chart");
+    return Fail(ErrorCode::IntersectionFailed,
+                "PlaneEllipsoid: the section passes within rounding of a pole of the ellipsoid's "
+                "chart, and its pcurve could not be certified within the sample budget "
+                "(ADR-0009)");
 }
 
 /// Whether the ellipsoid's requested box holds its whole chart.

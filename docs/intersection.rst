@@ -473,7 +473,9 @@ Two cases fail closed:
   exactly, where the section's longitude has no value
   (``IntersectionFailed``);
 - a section so near a pole that its pcurve cannot be certified within the
-  sample budget (``CertificationFailed``).
+  sample budget (``IntersectionFailed`` too). A plane whose frame is
+  rounded can miss the pole it was made through by a unit in the last
+  place; it lands here.
 
 A requested box on the ellipsoid outside its base turn in :math:`u` is
 ``NotImplemented``. With equal semi-axes the sections lie on the sphere,
