@@ -20,6 +20,7 @@
 //   cone       F = rho² cos² a - (R cos a + h sin a)²   (both nappes)
 //   sphere     F = rho² + h² - R²
 //   torus      F = (rho² + h² + R² - r²)² - 4 R² rho²
+//   ellipsoid  F = (B C p)² + (A C q)² + (A B h)² - (A B C)²
 //
 // The cone's form holds since rho = R + v sin a and h = v cos a give
 // R cos a + h sin a = rho cos a. The local coordinates are a linear map L
@@ -46,7 +47,7 @@ using IPoint3 = BasicPoint3<I>;
 using IVec3 = BasicVec3<I>;
 
 /// The elementary surfaces of the analytic table, as values.
-using Elementary = std::variant<Plane, Cylinder, Cone, Sphere, Torus>;
+using Elementary = std::variant<Plane, Cylinder, Cone, Sphere, Torus, Ellipsoid>;
 
 /// The surface as one of the elementary types; nothing for any other.
 [[nodiscard]] inline std::optional<Elementary> ElementaryOf(const Surface& s)
@@ -65,6 +66,9 @@ using Elementary = std::variant<Plane, Cylinder, Cone, Sphere, Torus>;
     }
     if (const Torus* t = s.Target<Torus>()) {
         return Elementary{*t};
+    }
+    if (const Ellipsoid* e = s.Target<Ellipsoid>()) {
+        return Elementary{*e};
     }
     return std::nullopt;
 }
@@ -102,6 +106,11 @@ using Elementary = std::variant<Plane, Cylinder, Cone, Sphere, Torus>;
 {
     return {WidePoint(t.Center), I{t.MajorRadius}, I{t.MinorRadius},
             WideVec(t.XAxis),    WideVec(t.YAxis), t.RightHanded};
+}
+[[nodiscard]] inline BasicEllipsoid<I> Widened(const Ellipsoid& e)
+{
+    return {WidePoint(e.Center), I{e.A},           I{e.B},       I{e.C},
+            WideVec(e.XAxis),    WideVec(e.YAxis), e.RightHanded};
 }
 
 /// A point of the parametric side and its first partials.
@@ -148,11 +157,12 @@ struct Jet {
 
 // --- The implicit side ----------------------------------------------------
 
-enum class QuadricKind : std::uint8_t { Plane, Cylinder, Cone, Sphere, Torus };
+enum class QuadricKind : std::uint8_t { Plane, Cylinder, Cone, Sphere, Torus, Ellipsoid };
 
 /// The implicit side: its kind, its frame with the axis as the evaluator
 /// takes it (the plane's normal), and its sizes. Radius is the cylinder's,
-/// the sphere's, the cone's reference radius and the torus's minor one.
+/// the sphere's, the cone's reference radius, the torus's minor one and the
+/// ellipsoid's semi-axis A; SemiB and SemiC are the ellipsoid's other two.
 struct Quadric {
     QuadricKind Kind = QuadricKind::Plane;
     Point3 Origin;
@@ -162,6 +172,8 @@ struct Quadric {
     double Radius = 0.0;
     double Major = 0.0;
     double SemiAngle = 0.0;
+    double SemiB = 0.0;
+    double SemiC = 0.0;
 };
 
 [[nodiscard]] inline Quadric QuadricOf(const Plane& p)
@@ -184,6 +196,10 @@ struct Quadric {
 {
     return {QuadricKind::Torus, t.Center, t.XAxis, t.YAxis, Axis(t), t.MinorRadius, t.MajorRadius};
 }
+[[nodiscard]] inline Quadric QuadricOf(const Ellipsoid& e)
+{
+    return {QuadricKind::Ellipsoid, e.Center, e.XAxis, e.YAxis, Axis(e), e.A, 0.0, 0.0, e.B, e.C};
+}
 
 [[nodiscard]] inline Quadric QuadricOf(const Elementary& e)
 {
@@ -193,7 +209,8 @@ struct Quadric {
 /// True for the bounded surfaces, whose whole parameter domain is a chart.
 [[nodiscard]] inline bool IsCompact(const QuadricKind kind)
 {
-    return kind == QuadricKind::Sphere || kind == QuadricKind::Torus;
+    return kind == QuadricKind::Sphere || kind == QuadricKind::Torus ||
+           kind == QuadricKind::Ellipsoid;
 }
 
 /// The local coordinates (p, q, h) of a direction: the linear part of L.
@@ -238,6 +255,13 @@ template <Scalar T>
         const T k = rho2 + l.Z * l.Z + big * big - r * r;
         return k * k - T{4.0} * big * big * rho2;
     }
+    case QuadricKind::Ellipsoid: {
+        const T bc = T{s.SemiB} * T{s.SemiC};
+        const T ac = r * T{s.SemiC};
+        const T ab = r * T{s.SemiB};
+        const T abc = r * bc;
+        return bc * bc * l.X * l.X + ac * ac * l.Y * l.Y + ab * ab * l.Z * l.Z - abc * abc;
+    }
     }
     return T{};
 }
@@ -265,6 +289,12 @@ template <Scalar T>
         const T k = l.X * l.X + l.Y * l.Y + l.Z * l.Z + big * big - r * r;
         const T radial = T{4.0} * (k - T{2.0} * big * big);
         return {radial * l.X, radial * l.Y, T{4.0} * k * l.Z};
+    }
+    case QuadricKind::Ellipsoid: {
+        const T bc = T{s.SemiB} * T{s.SemiC};
+        const T ac = r * T{s.SemiC};
+        const T ab = r * T{s.SemiB};
+        return {T{2.0} * bc * bc * l.X, T{2.0} * ac * ac * l.Y, T{2.0} * ab * ab * l.Z};
     }
     }
     return {};
