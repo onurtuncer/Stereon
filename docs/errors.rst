@@ -208,8 +208,8 @@ indices.
 Compiler support
 ~~~~~~~~~~~~~~~~
 
-GCC 16 implements P2900 contracts. Under Clang and MSVC, which build in
-non-blocking CI, the macros expand to nothing, so code using them still
+GCC 16 implements P2900 contracts. Under Clang and MSVC, which are not built
+in CI, the macros expand to nothing, so code using them still
 compiles. GCC 16.2 has bugs in contracts that cross module boundaries,
 which the build works around (``stereon_anchor_contracts``, :doc:`building`).
 ``docs/toolchain/gcc16-feature-probe.md`` records them, and the workarounds

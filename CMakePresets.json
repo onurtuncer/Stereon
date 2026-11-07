@@ -98,7 +98,7 @@
     },
     {
       "name": "clang-debug",
-      "displayName": "Clang debug (non-blocking)",
+      "displayName": "Clang debug (not in CI)",
       "description": "Clang with libc++; C++26 reflection and contracts only if this Clang supports them (ADR-0016)",
       "inherits": "base",
       "cacheVariables": {
@@ -112,7 +112,7 @@
     },
     {
       "name": "msvc-debug",
-      "displayName": "MSVC debug (non-blocking)",
+      "displayName": "MSVC debug (not in CI)",
       "description": "MSVC from a Visual Studio developer prompt; reflection and contracts not yet available (ADR-0016)",
       "inherits": "base",
       "cacheVariables": {
