@@ -1089,3 +1089,47 @@ TEST_CASE("Intersect declares its forward and reverse products", "[intersect][li
     REQUIRE(capability->Supports(Stereon::DerivativeProduct::Vjp));
     REQUIRE_FALSE(capability->Supports(Stereon::DerivativeProduct::DenseJacobian));
 }
+
+TEST_CASE("radius products are independent of world translation",
+          "[intersect][linearization][regression]")
+{
+    const double angle = std::numbers::pi / 4.0;
+    const Vec3 radial{std::cos(angle), std::sin(angle), 0.0};
+    for (const double shift : {0.0, 0x1p30, 0x1p40, 0x1p54}) {
+        const Point3 center{shift, 0.0, 0.0};
+        const Sphere sphere{center, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+        const Cylinder cylinder{center, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+        for (const Surface& surface : {Surface{sphere}, Surface{cylinder}}) {
+            CAPTURE(shift);
+            const Line line{center, radial};
+            // Supply an analytic primal contact: avoid folding the intersection
+            // solver's placement error into a derivative regression.
+            CurveSurfaceIntersection at;
+            at.Points.push_back(
+                {1.0, {angle, 0.0}, Eval(line, 1.0), Stereon::ContactType::Crossing, true});
+            Model model = FullModel(std::vector<double>(10, 1.0));
+            std::vector<double> seed(10, 0.0);
+            seed[9] = 1.0;
+            REQUIRE(model.Sensitivity.SetSeed(seed).has_value());
+            const auto jvp = Stereon::IntersectJvp(line, model.LineBindings, surface,
+                                                   model.SurfaceBindings, at, model.Sensitivity);
+            REQUIRE(jvp.has_value());
+            REQUIRE(jvp->GetStatus() == DerivativeStatus::Valid);
+            const auto values = *jvp->GetValues();
+            REQUIRE(std::abs(values[0] - radial.X) < 1e-12);
+            REQUIRE(std::abs(values[1] - radial.Y) < 1e-12);
+            REQUIRE(std::abs(values[2]) < 1e-12);
+            REQUIRE(std::abs(values[3] - 1.0) < 1e-12);
+            REQUIRE(std::abs(values[4]) < 1e-12);
+            REQUIRE(std::abs(values[5]) < 1e-12);
+            // Adjoint of t: its radius component must independently be one.
+            const std::array<double, 6> adjoint{0.0, 0.0, 0.0, 1.0, 0.0, 0.0};
+            REQUIRE(model.Sensitivity.SetAdjoint(adjoint).has_value());
+            const auto vjp = Stereon::IntersectVjp(line, model.LineBindings, surface,
+                                                   model.SurfaceBindings, at, model.Sensitivity);
+            REQUIRE(vjp.has_value());
+            REQUIRE(vjp->GetStatus() == DerivativeStatus::Valid);
+            REQUIRE(std::abs((*vjp->GetValues())[9] - 1.0) < 1e-12);
+        }
+    }
+}

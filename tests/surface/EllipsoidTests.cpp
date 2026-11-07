@@ -324,3 +324,36 @@ TEST_CASE("an ellipsoid validates data from outside the kernel", "[surface][elli
     REQUIRE(code(Stereon::MakeEllipsoid(Point3{}, 3.0, 2.0, 1.0, ex, Vec3{1.0, 1.0, 0.0})) ==
             ErrorCode::InvalidInput);
 }
+
+TEST_CASE("ellipsoid projection retains the small medial denominator",
+          "[surface][ellipsoid][regression]")
+{
+    // Permute the shortest axis to exercise the sorting and inverse mapping.
+    for (const int permutation : {0, 1, 2}) {
+        const auto permute = [permutation](const Point3& p) -> Point3 {
+            if (permutation == 1) {
+                return {p.Z, p.X, p.Y};
+            }
+            if (permutation == 2) {
+                return {p.Y, p.Z, p.X};
+            }
+            return p;
+        };
+        const Point3 axes = permute({3.0, 2.0, 1.0});
+        const Ellipsoid e{Point3{}, axes.X, axes.Y, axes.Z, ex, ey};
+        // Analytic limiting foot at lambda=-1, not a numerical projection oracle.
+        const double x = 9.0 / 16.0;
+        const double y = 2.0 / 3.0;
+        const double z = std::sqrt(1.0 - x * x / 9.0 - y * y / 4.0);
+        for (const double offset : {0.0, 1e-12, 1e-16, 1e-18, 1e-100, 1e-300}) {
+            for (const double sign : {-1.0, 1.0}) {
+                CAPTURE(permutation, offset, sign);
+                const Point3 p = permute({0.5, 0.5, sign * offset});
+                const Point3 q = Eval(e, Project(e, p));
+                const Point3 limit = permute({x, y, offset == 0.0 ? z : sign * z});
+                REQUIRE(Distance(q, limit) < 1e-10);
+                REQUIRE(Distance(q, p) <= Distance(limit, p) + Tolerance);
+            }
+        }
+    }
+}
