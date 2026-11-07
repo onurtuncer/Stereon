@@ -182,6 +182,19 @@ GeometryArchive WithSurfaces()
     return a;
 }
 
+/// WithSurfaces with an ellipsoid added, and a patch of it across the
+/// seam (ADR-0048). The content of the committed version-4 file.
+GeometryArchive WithEllipsoid()
+{
+    GeometryArchive a = WithSurfaces();
+    const Surface ellipsoid(Stereon::Ellipsoid{O, 3.0, 2.0, 1.0, X, Y});
+    const TrimmedSurface cap =
+        *Stereon::MakeTrimmedSurface(ellipsoid, Box2{Interval{5.5, 7.0}, Interval{0.25, 1.25}});
+    a.Surfaces.push_back(ellipsoid);
+    a.Surfaces.push_back(Surface(cap));
+    return a;
+}
+
 /// A parameter inside the surface's domain, away from its edges.
 Point2 SomewhereOn(const Surface& s)
 {
@@ -468,23 +481,35 @@ TEST_CASE("a user's curve type cannot be stored", "[io][archive]")
     REQUIRE(std::string(written.error().GetMessage()).find("curve 1") != std::string::npos);
 }
 
-TEST_CASE("an ellipsoid waits for the format version that stores it", "[io][archive]")
+TEST_CASE("an ellipsoid is saved and read back, alone and as a trimmed surface's basis",
+          "[io][archive][ellipsoid]")
 {
-    // ADR-0048: no format version this kernel writes has an ellipsoid
-    // record; a version-3 file with one would be refused by every existing
-    // reader of version 3. So it is not written, alone or as a trimmed
-    // surface's basis.
-    GeometryArchive a;
-    a.Surfaces = {Surface(Plane{O, X, Y}), Surface(Stereon::Ellipsoid{O, 3.0, 2.0, 1.0, X, Y})};
-    const auto written = WriteGeometry(a);
-    REQUIRE(written.error().GetCode() == ErrorCode::NotSupported);
-    if constexpr (Stereon::SerializationAvailable) {
-        REQUIRE(std::string(written.error().GetMessage()).find("surface 1") != std::string::npos);
+    if constexpr (!Stereon::SerializationAvailable) {
+        return;
     }
-    const Surface patch(
-        *Stereon::MakeTrimmedSurface(a.Surfaces[1], Box2{Interval{0.5, 1.5}, Interval{-0.5, 0.5}}));
-    a.Surfaces = {patch};
-    REQUIRE(WriteGeometry(a).error().GetCode() == ErrorCode::NotSupported);
+    // Format version 4 (ADR-0048). The record is read back bit for bit,
+    // and a version-3 file with one is refused: no writer of version 3
+    // stored it.
+    const GeometryArchive original = WithEllipsoid();
+    const Bytes bytes = Written(original);
+    const LoadedGeometry loaded = Read(bytes);
+    REQUIRE(loaded.FormatVersion == 4);
+    REQUIRE(loaded.Archive.Surfaces.size() == original.Surfaces.size());
+    const Surface& back = loaded.Archive.Surfaces[original.Surfaces.size() - 2];
+    const Stereon::Ellipsoid* ellipsoid = back.Target<Stereon::Ellipsoid>();
+    REQUIRE(ellipsoid != nullptr);
+    REQUIRE(*ellipsoid == Stereon::Ellipsoid{O, 3.0, 2.0, 1.0, X, Y});
+    const TrimmedSurface* cap = loaded.Archive.Surfaces.back().Target<TrimmedSurface>();
+    REQUIRE(cap != nullptr);
+    REQUIRE(cap->GetBasis().Target<Stereon::Ellipsoid>() != nullptr);
+    REQUIRE(Written(loaded.Archive) == bytes);
+
+    Bytes claimed = bytes;
+    PutU32At(claimed, 4, 3);
+    const auto refused = ReadGeometry(std::span<const std::byte>{claimed});
+    REQUIRE_FALSE(refused.has_value());
+    REQUIRE(refused.error().GetCode() == ErrorCode::ParseError);
+    REQUIRE(std::string(refused.error().GetMessage()).find("Ellipsoid") != std::string::npos);
 }
 
 TEST_CASE("files round-trip, and the JSON view shows them", "[io][archive]")
@@ -502,7 +527,7 @@ TEST_CASE("files round-trip, and the JSON view shows them", "[io][archive]")
 
     const auto json = Stereon::GeometryToJson(Written(EveryType()));
     REQUIRE(json.has_value());
-    REQUIRE(json->starts_with(R"({"format":3,)"));
+    REQUIRE(json->starts_with(R"({"format":4,)"));
     REQUIRE(json->find(R"("resolution":2e-05)") != std::string::npos);
     REQUIRE(
         json->find(R"({"type":"Circle","value":{"Center":{"X":1,"Y":-2,"Z":0.5},"Radius":2.5,)") !=
@@ -523,7 +548,7 @@ TEST_CASE("the committed files of every format version still read and rewrite by
     const struct {
         int Version;
         GeometryArchive Content;
-    } files[] = {{1, EveryType()}, {2, WithTrimmed()}, {3, WithSurfaces()}};
+    } files[] = {{1, EveryType()}, {2, WithTrimmed()}, {3, WithSurfaces()}, {4, WithEllipsoid()}};
     for (const auto& [version, content] : files) {
         const Bytes golden = FileBytes(GoldenFile(version));
         const LoadedGeometry loaded = Read(golden);
@@ -545,9 +570,9 @@ TEST_CASE("the committed files of every format version still read and rewrite by
 
 TEST_CASE("regenerate the committed file of the current format version", "[.regenerate]")
 {
-    static_assert(Stereon::GeometryFormatVersion == 3,
+    static_assert(Stereon::GeometryFormatVersion == 4,
                   "a new format version gets a new committed file; earlier ones stay frozen");
-    REQUIRE(Stereon::SaveGeometry(GoldenFile(3), WithSurfaces()).has_value());
+    REQUIRE(Stereon::SaveGeometry(GoldenFile(4), WithEllipsoid()).has_value());
 }
 
 TEST_CASE("trimmed curves are saved with their bases and read back bit for bit",
@@ -584,7 +609,7 @@ TEST_CASE("trimmed curves are saved with their bases and read back bit for bit",
     // The JSON view shows the basis and the trim.
     const auto json = Stereon::GeometryToJson(bytes);
     REQUIRE(json.has_value());
-    REQUIRE(json->starts_with(R"({"format":3,)"));
+    REQUIRE(json->starts_with(R"({"format":4,)"));
     REQUIRE(json->find(R"({"type":"TrimmedCurve","value":{"basis":{"type":"Circle","value":)") !=
             std::string::npos);
     REQUIRE(json->find(R"("trim":{"Lower":5,"Upper":7,"Reversed":false})") != std::string::npos);
@@ -733,7 +758,7 @@ TEST_CASE("trimmed surfaces and sweeps are saved with their bases and profiles a
     const GeometryArchive original = WithSurfaces();
     const Bytes bytes = Written(original);
     const LoadedGeometry loaded = Read(bytes);
-    REQUIRE(loaded.FormatVersion == 3);
+    REQUIRE(loaded.FormatVersion == Stereon::GeometryFormatVersion);
     REQUIRE(Written(loaded.Archive) == bytes);
     const std::vector<Surface>& after = loaded.Archive.Surfaces;
     REQUIRE(after.size() == original.Surfaces.size());

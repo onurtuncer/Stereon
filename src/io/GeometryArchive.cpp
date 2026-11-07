@@ -241,9 +241,7 @@ template <typename Wrapper>
 bool PutItem(std::vector<std::byte>& out, const Wrapper& item, const int depth)
 {
     const bool builtin = VisitBuiltin(item, [&]<typename G>(const G& geometry) {
-        // No format version this kernel writes stores an ellipsoid
-        // (EllipsoidVersion).
-        if constexpr (std::is_same_v<G, Wrapper> || std::is_same_v<G, Ellipsoid>) {
+        if constexpr (std::is_same_v<G, Wrapper>) {
             return false;
         } else {
             PutRecord(out, geometry);
@@ -551,13 +549,12 @@ template <typename Wrapper, typename... Ts>
 /// The format versions that introduced the composite records.
 constexpr std::uint32_t TrimmedCurvesVersion = 2;
 constexpr std::uint32_t SurfaceRecordsVersion = 3;
-/// The format version that will store ellipsoids (ADR-0048), above every
-/// version this kernel writes: until it comes, with its committed file,
-/// ellipsoids are neither written nor read, since a version-3 file with one
-/// would be refused by every existing reader of version 3.
+/// The format version that stores ellipsoids (ADR-0048): a version-3 file
+/// with one was not written as it claims, since no writer of version 3
+/// stored the record.
 constexpr std::uint32_t EllipsoidVersion = 4;
-static_assert(EllipsoidVersion > GeometryFormatVersion,
-              "format version 4 stores ellipsoids: lift the writer's refusal in PutItem");
+static_assert(EllipsoidVersion <= GeometryFormatVersion,
+              "the writer stores ellipsoids, so the format version must have the record");
 
 /// ParseError unless the file's format version has the record's type: no
 /// writer of version 1 stored a trimmed curve, so a version-1 file with one

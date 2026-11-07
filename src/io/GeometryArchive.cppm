@@ -130,7 +130,7 @@ struct LoadedGeometry {
 };
 
 /// The format version this kernel writes and the newest it reads.
-inline constexpr std::uint32_t GeometryFormatVersion = 3;
+inline constexpr std::uint32_t GeometryFormatVersion = 4;
 
 /// How deep the composite records (trimmed curves, trimmed surfaces and
 /// sweeps) may be nested in a file: a trimmed curve whose basis is a
