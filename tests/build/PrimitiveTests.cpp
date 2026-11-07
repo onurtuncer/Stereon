@@ -17,6 +17,7 @@
 #include <numbers>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -88,6 +89,19 @@ Vec3 OutwardNormal(const Shape& shape, const Stereon::FaceId face)
     const Stereon::Plane plane = PlaneOf(shape, face);
     const Vec3 n = Stereon::Cross(plane.XAxis, plane.YAxis);
     return Stereon::IsReversed(shape, face) ? -n : n;
+}
+
+/// A closed, consistently oriented solid of positive volume: at the Solid
+/// level the checker finds nothing but the self-intersection check, which
+/// that level does not make.
+void RequireClosedSolid(const Shape& shape)
+{
+    const Stereon::ValidityReport report =
+        Stereon::ValidateTopology(shape, ValidityLevel::Solid, Context::Default());
+    for (const Stereon::ValidityFinding& finding : report.GetFindings()) {
+        INFO(finding.Message);
+        CHECK(finding.Rule == Stereon::TopologyRule::SelfIntersectionUnchecked);
+    }
 }
 
 } // namespace
@@ -214,4 +228,99 @@ TEST_CASE("a cylinder seam keeps an exact line and both periodic pcurves",
         }
         CHECK(seams == 1);
     }
+}
+
+TEST_CASE("a sphere: two poles, a seam, two pole edges and one face", "[build][primitives]")
+{
+    const auto sphere = Stereon::MakeSphereSolid(Point3{1.0, 2.0, 3.0}, Vec3{1, 0, 0},
+                                                 Vec3{0, 1, 0}, 1.5, Context::Default());
+    REQUIRE(sphere);
+    RequirePublished(*sphere, 2, 3, 1);
+    const Shape& shape = sphere->Shape;
+    // The seam first, an exact meridian semicircle; then the two poles.
+    std::vector<Stereon::EdgeCurveKind> kinds;
+    for (const Stereon::EdgeId e : *Stereon::AllEntities<EntityKind::Edge>(shape)) {
+        kinds.push_back(Stereon::KindOf(shape, e));
+    }
+    REQUIRE(kinds == std::vector<Stereon::EdgeCurveKind>{Stereon::EdgeCurveKind::Exact,
+                                                         Stereon::EdgeCurveKind::Degenerate,
+                                                         Stereon::EdgeCurveKind::Degenerate});
+    const auto edges = *Stereon::AllEntities<EntityKind::Edge>(shape);
+    const Stereon::EdgeId seam = *edges.begin();
+    REQUIRE(Stereon::CurveOf(shape, seam)->Target<Stereon::Circle>() != nullptr);
+    // The poles lie on the frame's z axis, the seam runs from south to north.
+    const auto vertices = *Stereon::AllEntities<EntityKind::Vertex>(shape);
+    std::vector<Stereon::VertexId> poles(vertices.begin(), vertices.end());
+    REQUIRE(Stereon::Distance(Stereon::PositionOf(shape, poles[0]), Point3{1.0, 2.0, 1.5}) <=
+            1e-15);
+    REQUIRE(Stereon::Distance(Stereon::PositionOf(shape, poles[1]), Point3{1.0, 2.0, 4.5}) <=
+            1e-15);
+    REQUIRE(Stereon::StartOf(shape, seam) == poles[0]);
+    REQUIRE(Stereon::EndOf(shape, seam) == poles[1]);
+    RequireClosedSolid(shape);
+}
+
+TEST_CASE("an ellipsoid: the sphere's topology with a half ellipse for a seam",
+          "[build][primitives]")
+{
+    // Semi-axes 3, 2, 1: the seam is an ellipse of radii 3 along x and 1
+    // along z. Then 1, 1.5, 3: the longer radius is along z, so the seam
+    // is the ellipse of radii 3 along z and 1 along -x, and the latitude is
+    // shifted on it by a quarter turn; the poles stay at +-c along z.
+    for (const auto& [a, b, c] : {std::tuple{3.0, 2.0, 1.0}, std::tuple{1.0, 1.5, 3.0}}) {
+        INFO("semi-axes " << a << ", " << b << ", " << c);
+        const auto ellipsoid = Stereon::MakeEllipsoidSolid(Point3{}, Vec3{1, 0, 0}, Vec3{0, 1, 0},
+                                                           a, b, c, Context::Default());
+        REQUIRE(ellipsoid);
+        RequirePublished(*ellipsoid, 2, 3, 1);
+        const Shape& shape = ellipsoid->Shape;
+        const auto faces = *Stereon::AllEntities<EntityKind::Face>(shape);
+        const Stereon::Surface surface = Stereon::SurfaceOf(shape, *faces.begin());
+        REQUIRE(surface.Target<Stereon::Ellipsoid>() != nullptr);
+        const auto edges = *Stereon::AllEntities<EntityKind::Edge>(shape);
+        const Stereon::EdgeId seam = *edges.begin();
+        const Stereon::Ellipse* meridian =
+            Stereon::CurveOf(shape, seam)->Target<Stereon::Ellipse>();
+        REQUIRE(meridian != nullptr);
+        REQUIRE(meridian->MajorRadius == std::max(a, c));
+        REQUIRE(meridian->MinorRadius == std::min(a, c));
+        // The seam's ends are the poles, and its middle the vertex at +a x.
+        const Stereon::Interval range = Stereon::RangeOf(shape, seam);
+        const Stereon::Curve curve = *Stereon::CurveOf(shape, seam);
+        REQUIRE(Stereon::Distance(Eval(curve, range.GetLower()), Point3{0.0, 0.0, -c}) <= 1e-15);
+        REQUIRE(Stereon::Distance(Eval(curve, range.GetUpper()), Point3{0.0, 0.0, c}) <= 1e-15);
+        REQUIRE(Stereon::Distance(Eval(curve, 0.5 * (range.GetLower() + range.GetUpper())),
+                                  Point3{a, 0.0, 0.0}) <= 1e-15);
+        RequireClosedSolid(shape);
+    }
+}
+
+TEST_CASE("a sphere and an ellipsoid in a tilted frame are as valid", "[build][primitives]")
+{
+    const TiltedFrame frame = Tilted();
+    const auto sphere =
+        Stereon::MakeSphereSolid(Point3{-1.0, 0.5, 2.0}, frame.X, frame.Y, 2.0, Context::Default());
+    REQUIRE(sphere);
+    RequirePublished(*sphere, 2, 3, 1);
+    RequireClosedSolid(sphere->Shape);
+    const auto ellipsoid = Stereon::MakeEllipsoidSolid(Point3{-1.0, 0.5, 2.0}, frame.X, frame.Y,
+                                                       2.0, 1.0, 0.5, Context::Default());
+    REQUIRE(ellipsoid);
+    RequirePublished(*ellipsoid, 2, 3, 1);
+    RequireClosedSolid(ellipsoid->Shape);
+}
+
+TEST_CASE("spheres and ellipsoids refuse bad dimensions and frames", "[build][primitives]")
+{
+    const Context ctx = Context::Default();
+    const auto code = [](const auto& result) { return result.error().GetCode(); };
+    REQUIRE(code(Stereon::MakeSphereSolid(Point3{}, Vec3{1, 0, 0}, Vec3{0, 1, 0}, 0.0, ctx)) ==
+            ErrorCode::InvalidInput);
+    REQUIRE(code(Stereon::MakeSphereSolid(Point3{}, Vec3{1, 0, 0}, Vec3{1, 1, 0}, 1.0, ctx)) ==
+            ErrorCode::InvalidInput);
+    REQUIRE(code(Stereon::MakeEllipsoidSolid(Point3{}, Vec3{1, 0, 0}, Vec3{0, 1, 0}, 1.0, -2.0, 1.0,
+                                             ctx)) == ErrorCode::InvalidInput);
+    REQUIRE(code(Stereon::MakeEllipsoidSolid(Point3{}, Vec3{1, 0, 0}, Vec3{0, 1, 0}, 1.0, 2.0,
+                                             std::numeric_limits<double>::quiet_NaN(), ctx)) ==
+            ErrorCode::InvalidInput);
 }

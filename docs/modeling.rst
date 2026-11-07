@@ -13,9 +13,10 @@ Primitives, extrude, revolve, sweep, loft, sewing, Boolean operations, blends an
 Primitive solids
 ----------------
 
-``MakeBoxSolid`` and ``MakeCylinderSolid`` (``Stereon.Build``) make one solid
-of one closed shell in any orthonormal frame: an origin and two axes, *x*
-and *y*, with *z* their cross product, as for the analytic surfaces.
+``MakeBoxSolid``, ``MakeCylinderSolid``, ``MakeSphereSolid`` and
+``MakeEllipsoidSolid`` (``Stereon.Build``) make one solid of one closed
+shell in any orthonormal frame: an origin and two axes, *x* and *y*, with
+*z* their cross product, as for the analytic surfaces.
 
 .. code-block:: cpp
 
@@ -34,9 +35,19 @@ and *y*, with *z* their cross product, as for the analytic surfaces.
   line that the lateral face uses twice, with pcurves at angles 0 and 2π.
   Its ``Exact`` representation remains valid when imprinting splits those
   uses onto different faces.
+- A **sphere** has 2 vertices at its poles on the frame's *z* axis, a seam
+  at angle 0 from the south pole to the north, an exact semicircle, two
+  ``Degenerate`` edges at the poles (ADR-0009), and one spherical face
+  whose loop runs along the south pole, up the seam at 2π, along the north
+  pole and down the seam at 0.
+- An **ellipsoid** (ADR-0048 §4) is built as the sphere is, with the
+  semi-axes *a*, *b* and *c* along *x*, *y* and *z* and a half ellipse for
+  its seam. The Booleans do not take spheres or ellipsoids yet: their
+  classification and clipping know planes and cylinders, and refuse any
+  other face with ``NotSupported``.
 
-Every edge, including the seam, is ``Exact``, with exact pcurves on its faces
-(ADR-0009). Faces are oriented outward. Vertex and edge tolerances equal the
+Every edge is ``Exact``, with exact pcurves on its faces (ADR-0009), but
+for the poles, which are ``Degenerate``. Faces are oriented outward. Vertex and edge tolerances equal the
 ``Context``'s resolution, because native construction is resolution-tight
 (ADR-0001).
 

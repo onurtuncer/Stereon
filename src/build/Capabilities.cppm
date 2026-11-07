@@ -28,6 +28,14 @@ inline constexpr OperationCapability BuildCatalogue[] = {
             {TrackingConvention::FixedSurfaceCoordinates, TrackingConvention::FixedEdgeParameter},
             "smooth in the base centre, the frame, the radius and the height; the seam stays at "
             "angle 0 and the radius and height stay positive"),
+    Declare("MakeSphereSolid", {Dependency::DefiningValues, Dependency::Topology},
+            {TrackingConvention::FixedSurfaceCoordinates, TrackingConvention::FixedEdgeParameter},
+            "smooth in the centre, the frame and the radius; the seam stays at angle 0, the poles "
+            "on the frame's z axis, and the radius stays positive"),
+    Declare("MakeEllipsoidSolid", {Dependency::DefiningValues, Dependency::Topology},
+            {TrackingConvention::FixedSurfaceCoordinates, TrackingConvention::FixedEdgeParameter},
+            "smooth in the centre, the frame and the three semi-axes; the seam stays at angle 0, "
+            "the poles on the frame's z axis, and every semi-axis stays positive"),
 };
 
 /// The construction library's declarations. KernelCapabilities(), in
