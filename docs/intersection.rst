@@ -437,6 +437,50 @@ traced point within :math:`10^{-2}` mm of each root. It also checks that the
 lemniscate's node fails closed. ``tests/intersect/ElementaryPairsTests.cpp``
 covers the closed forms.
 
+A plane and an ellipsoid
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+A ``Plane`` against an ``Ellipsoid`` (ADR-0048) has a closed form. In the
+ellipsoid's frame :math:`(e_1, e_2, e_3)`, its axis as the evaluator rounds
+it, the map :math:`s = (x/A, y/B, z/C)` takes the ellipsoid onto the unit
+sphere and the plane :math:`n \cdot (x - O) = 0` onto the plane
+:math:`m \cdot s = d`, with
+:math:`m = (A\,n \cdot e_1,\ B\,n \cdot e_2,\ C\,n \cdot e_3)` and
+:math:`d = n \cdot (O - c)`. The plane meets the unit sphere in a circle,
+touches it at a point, or misses it, as :math:`d^2` is below, at or above
+:math:`\lVert m \rVert^2`: a polynomial in the input doubles, decided
+exactly. So a plane :math:`2^{-40}` beyond a vertex of the ellipsoid is a
+proved separation, a plane through the vertex a touch at one
+``IntersectionPoint``, and a plane :math:`2^{-40}` inside a section.
+
+The circle maps back onto an ellipse, the affine image of a circle. Its
+conjugate semi-diameters are turned to principal axes, and the ellipse is
+the branch's 3D curve, exact, with the exact ``Ellipse2d`` as its pcurve
+on the plane. Its pcurve on the ellipsoid is not a conic in
+:math:`(u, v)`. It is the cubic interpolant through the section's
+longitudes and latitudes, sampled more densely until ``CertifyDeviation``
+proves it within half the resolution of the ellipsoid along the ellipse,
+as the trace fits its pcurves (ADR-0009, D3). The section is cut where it
+crosses the chart's seam, the half-plane :math:`y = 0, x > 0` of the
+frame, found in closed form, so each branch's pcurve stays in the base
+turn :math:`[0, 2\pi]`: a section round the axis is one branch over the
+whole turn, one beside it zero or two. Each branch is certified on both
+surfaces and clipped to both requested boxes.
+
+Two cases fail closed:
+
+- a plane through a pole of the chart, :math:`c \pm C e_3`, decided
+  exactly, where the section's longitude has no value
+  (``IntersectionFailed``);
+- a section so near a pole that its pcurve cannot be certified within the
+  sample budget (``IntersectionFailed`` too). A plane whose frame is
+  rounded can miss the pole it was made through by a unit in the last
+  place; it lands here.
+
+A requested box on the ellipsoid outside its base turn in :math:`u` is
+``NotImplemented``. With equal semi-axes the sections lie on the sphere,
+as the sphere's own handler finds them.
+
 Space curves
 ------------
 
@@ -538,8 +582,9 @@ results are the sphere's: the same count and contact exactly, the same
 points to rounding. Scaling a sphere's configuration by a power of two
 along an axis of its frame gives the ellipsoid's, parameter for
 parameter. B-spline curves, circles and ellipses against an ellipsoid are
-below. An ellipsoid against a surface answers ``NotImplemented`` until its
-step of ADR-0048 lands.
+below, and a plane against an ellipsoid under *A plane and an ellipsoid*.
+An ellipsoid against any other surface answers ``NotImplemented`` until
+its step of ADR-0048 lands.
 
 A ``Line`` against a ``Cone`` or a ``Torus`` cannot be decided exactly on
 the input doubles: the cone's equation holds the cosine and sine of its

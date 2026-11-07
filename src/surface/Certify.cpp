@@ -33,6 +33,7 @@ import :Cylinder;
 import :Plane;
 import :Sphere;
 import :Torus;
+import :Ellipsoid;
 
 namespace Stereon {
 
@@ -258,6 +259,11 @@ template <std::size_t D>
 [[nodiscard]] BasicSphere<IntervalScalar> Enclosed(const Sphere& s)
 {
     return {Wide(s.Center), IntervalScalar{s.Radius}, Wide(s.XAxis), Wide(s.YAxis), s.RightHanded};
+}
+[[nodiscard]] BasicEllipsoid<IntervalScalar> Enclosed(const Ellipsoid& e)
+{
+    return {Wide(e.Center), IntervalScalar{e.A}, IntervalScalar{e.B}, IntervalScalar{e.C},
+            Wide(e.XAxis),  Wide(e.YAxis),       e.RightHanded};
 }
 [[nodiscard]] BasicTorus<IntervalScalar> Enclosed(const Torus& t)
 {
@@ -698,6 +704,9 @@ template <std::size_t D>
     }
     if (const Torus* torus = surface.Target<Torus>()) {
         return SurfaceOf(Enclosed(*torus));
+    }
+    if (const Ellipsoid* ellipsoid = surface.Target<Ellipsoid>()) {
+        return SurfaceOf(Enclosed(*ellipsoid));
     }
     return std::nullopt;
 }
@@ -1169,7 +1178,7 @@ Result<DeviationCertificate> CertifyDeviation(const Curve& curve, const Surface&
     if (!c || !p || !s) {
         return Fail(ErrorCode::NotSupported,
                     "CertifyDeviation: interval evaluation covers lines, conics and non-rational "
-                    "B-splines on planes, cylinders, cones, spheres and tori");
+                    "B-splines on planes, cylinders, cones, spheres, tori and ellipsoids");
     }
     // Analytic curves on a plane, or on a cylinder along a ruling or a
     // unit-speed turn, have a bound over the whole range in one step; one
