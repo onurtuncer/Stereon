@@ -89,16 +89,16 @@ template <typename F>
     return Dot3(f, NormalOf(f, s.P), Diff3(f, s.E.Center, s.P.Origin));
 }
 
-/// The normal's components along the ellipsoid's frame, the axis as
-/// X x Y: its handedness flips the sign of the third, which no decision
-/// below depends on.
+/// The normal's components along the evaluator's frame. Lift its rounded
+/// axis into the exact field; recomputing X x Y there describes a different
+/// ellipsoid and can classify a tangent plane as strictly separate.
 template <typename F>
 [[nodiscard]] std::array<typename F::Scalar, 3> AlongFrame(F f, const Sides& s)
 {
     const Triple<F> n = NormalOf(f, s.P);
     const Triple<F> x = Of3(f, s.E.XAxis);
     const Triple<F> y = Of3(f, s.E.YAxis);
-    return {Dot3(f, n, x), Dot3(f, n, y), Dot3(f, n, Cross3(f, x, y))};
+    return {Dot3(f, n, x), Dot3(f, n, y), Dot3(f, n, Of3(f, Axis(s.E)))};
 }
 
 /// |m|² - d²: positive for a section, zero for a touch, negative apart.
@@ -394,7 +394,14 @@ StretchesOf(const Curve2d& onPlane, const Box2& planeBox, const Curve2d& onEllip
     const Point2 onA = Project(s.P, at);
     const Point2 onB = Project(s.E, at);
     SurfaceSurfaceIntersection result;
-    const std::optional<double> u = InPeriodicDomain(onB.X, boxB.X);
+    // At a pole every longitude names the same point. Decide that case
+    // on the input frame, not by a tolerance on the projected latitude.
+    const bool pole =
+        SignOfFormula([&](auto field) { return AlongFrame(field, s)[0]; }) == Sign::Zero &&
+        SignOfFormula([&](auto field) { return AlongFrame(field, s)[1]; }) == Sign::Zero;
+    const std::optional<double> u =
+        pole ? std::optional<double>{std::clamp(onB.X, boxB.X.GetLower(), boxB.X.GetUpper())}
+             : InPeriodicDomain(onB.X, boxB.X);
     if (Contains(boxA.X, onA.X) && Contains(boxA.Y, onA.Y) && u && Contains(boxB.Y, onB.Y)) {
         result.Points.push_back({at, onA, Point2{*u, onB.Y}});
     }

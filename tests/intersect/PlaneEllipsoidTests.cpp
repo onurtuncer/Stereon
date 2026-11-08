@@ -321,3 +321,64 @@ TEST_CASE("every plane through an ellipsoid turned at random gives certified sec
         }
     });
 }
+
+TEST_CASE("plane ellipsoid tangency uses the evaluator's rounded axis",
+          "[intersect][ellipsoid][plane-ellipsoid][regression]")
+{
+    const double a = std::sqrt(0.5);
+    for (const bool handed : {true, false}) {
+        const Ellipsoid e{Point3{}, 3.0, 2.0, 1.0, Vec3{a, a, 0.0}, Vec3{-a, a, 0.0}, handed};
+        const Surface surface{e};
+        for (const double side : {-1.0, 1.0}) {
+            const Point3 pole = e.Center + side * e.C * Axis(e);
+            const Surface plane = Horizontal(pole.Z);
+            for (const bool swapped : {false, true}) {
+                const auto result =
+                    swapped ? Intersect(surface, plane, ctx) : Intersect(plane, surface, ctx);
+                INFO(IntersectTest::ErrorText(result));
+                REQUIRE(result.has_value());
+                REQUIRE(result->Branches.empty());
+                REQUIRE(result->Points.size() == 1);
+                REQUIRE(Distance(result->Points.front().Position, pole) <= ctx.GetResolution());
+            }
+            const double outside = std::nextafter(
+                pole.Z, side * Axis(e).Z > 0.0 ? std::numeric_limits<double>::infinity()
+                                               : -std::numeric_limits<double>::infinity());
+            const auto apart = Intersect(Horizontal(outside), surface, ctx);
+            REQUIRE(apart.has_value());
+            REQUIRE(apart->IsEmpty());
+        }
+    }
+}
+
+TEST_CASE("plane ellipsoid pole contacts survive restricted longitude boxes",
+          "[intersect][ellipsoid][plane-ellipsoid][regression]")
+{
+    const Surface surface{stretched};
+    const Box2 planeBox{Interval{-4.0, 4.0}, Interval{-4.0, 4.0}};
+    for (const double side : {-1.0, 1.0}) {
+        const Surface plane = Horizontal(side);
+        const Box2 box{Interval{1.0, 2.0}, Interval{-pi / 2.0, pi / 2.0}};
+        for (const bool swapped : {false, true}) {
+            const auto result = swapped ? Intersect(surface, box, plane, planeBox, ctx)
+                                        : Intersect(plane, planeBox, surface, box, ctx);
+            INFO(IntersectTest::ErrorText(result));
+            REQUIRE(result.has_value());
+            REQUIRE(result->Branches.empty());
+            REQUIRE(result->Points.size() == 1);
+            const auto& point = result->Points.front();
+            const Point2 uv = swapped ? point.OnA : point.OnB;
+            REQUIRE(Contains(box.X, uv.X));
+            REQUIRE(Contains(box.Y, uv.Y));
+            REQUIRE(Distance(Eval(surface, uv), point.Position) <= ctx.GetResolution());
+        }
+        const Box2 noPole{box.X, Interval{-pi / 4.0, pi / 4.0}};
+        const auto excluded = Intersect(plane, planeBox, surface, noPole, ctx);
+        REQUIRE(excluded.has_value());
+        REQUIRE(excluded->IsEmpty());
+        const Box2 away{Interval{1.0, 2.0}, Interval{1.0, 2.0}};
+        const auto outsidePlane = Intersect(plane, away, surface, box, ctx);
+        REQUIRE(outsidePlane.has_value());
+        REQUIRE(outsidePlane->IsEmpty());
+    }
+}
