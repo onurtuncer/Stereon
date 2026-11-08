@@ -67,11 +67,14 @@ import Stereon.Robust;
 /// A single critical point is bracketed to rounding, and its distance
 /// enclosed over the bracket: within the resolution, a meeting; beyond it,
 /// a near miss, not reported; across it, undecidable at the resolution, and
-/// the intersection fails. A critical point of the polynomials continued a
-/// little past a requested domain's end is a meeting at that end when the
-/// distance there is within the resolution: two edges sharing a vertex meet
-/// at it even when their ends are a rounding apart. Critical points proved
-/// twice, from overlapping boxes, are one. A pair that is none of these
+/// the intersection fails. Critical points outside the requested domains
+/// are not meetings: there the distance's minimum over the domains lies on
+/// their boundary, an end of one curve against the other's stretch, found
+/// by the same search on the end's distance alone, or two ends. So two
+/// edges sharing a vertex meet at it even when their ends are a rounding
+/// apart, and the curves meet as two lines do (LineLine.cpp). Critical
+/// points proved twice, from overlapping boxes, are one, and so are
+/// meetings within the resolution of each other on both curves. A pair that is none of these
 /// when the pieces can no longer be halved, or a search past the budget,
 /// fails with IntersectionFailed: tangent curves, an overlap, or a meeting
 /// too nearly tangential to separate is never dropped and never reported
@@ -301,21 +304,15 @@ struct PairSearch {
 
 /// A bracket in a curve's parameter, kept for a segment whose stretch in
 /// the requested domain is `stretch`: itself when it reaches the stretch
-/// (a bracket across a knot is proved from both segments and merged); the
-/// domain's end when it lies just past it (the polynomial continued: two
-/// ends a rounding apart); nothing when it lies past an end inside the
-/// domain, where the neighbouring segment proves it.
+/// (a bracket across a knot is proved from both segments and merged);
+/// nothing when it lies past an end of the stretch: inside the domain the
+/// neighbouring segment proves it, and past the domain's end the minimum
+/// lies on the boundary, where SearchEnds finds it.
 [[nodiscard]] std::optional<Interval> Kept(const Interval& bracket, const Interval& stretch,
                                            const Interval& domain)
 {
     if (Intersects(bracket, stretch)) {
         return Intersection(bracket, domain);
-    }
-    if (bracket.GetUpper() < stretch.GetLower() && stretch.GetLower() == domain.GetLower()) {
-        return Interval{domain.GetLower()};
-    }
-    if (bracket.GetLower() > stretch.GetUpper() && stretch.GetUpper() == domain.GetUpper()) {
-        return Interval{domain.GetUpper()};
     }
     return std::nullopt;
 }
@@ -344,7 +341,7 @@ struct PairSearch {
         return {};
     }
     // The distance at the kept brackets, over the whole segments' poles:
-    // a bracket kept at a domain's end lies outside the piece.
+    // a bracket clipped to a domain's end may lie outside the piece.
     const std::optional<Interval> distance =
         DistanceOver(HodographsOf(Arc{a.Index, 0.0, 1.0, segA.Poles}), LocalOf(segA, *onA),
                      HodographsOf(Arc{b.Index, 0.0, 1.0, segB.Poles}), LocalOf(segB, *onB));
@@ -416,6 +413,243 @@ struct PairSearch {
     return distinct;
 }
 
+// --- The domains' ends ---------------------------------------------------
+
+/// An end of a requested domain: its parameter, the curve's point and
+/// tangent there, enclosed, and its side: +1 for the upper end, -1 for the
+/// lower. The tangent is the inside segment's, so a knot of reduced
+/// continuity at the end does not matter.
+struct DomainEnd {
+    double T = 0.0;
+    Vec3I Point;
+    Vec3I Tangent;
+    double Side = 1.0;
+};
+
+/// The ends of `domain` on a curve's segments, or nothing for an end whose
+/// point a weight leaves unenclosed.
+[[nodiscard]] std::vector<DomainEnd> EndsOf(const std::vector<Segment>& segments,
+                                            const Interval& domain)
+{
+    std::vector<DomainEnd> ends;
+    for (const double side : {-1.0, 1.0}) {
+        const double t = side < 0.0 ? domain.GetLower() : domain.GetUpper();
+        const auto inside = std::ranges::find_if(segments, [&](const Segment& s) {
+            return side < 0.0 ? s.T0 <= t && t < s.T1 : s.T0 < t && t <= s.T1;
+        });
+        if (inside == segments.end()) {
+            continue;
+        }
+        const Interval local =
+            (Interval{t} - Interval{inside->T0}) / (Interval{inside->T1} - Interval{inside->T0});
+        const auto jet = JetOver(HodographsOf(Arc{0, 0.0, 1.0, inside->Poles}), local);
+        if (jet) {
+            ends.push_back({t, jet->Point, jet->First, side});
+        }
+        if (domain.GetLower() == domain.GetUpper()) {
+            break;
+        }
+    }
+    return ends;
+}
+
+/// Whether the squared distance is proved to grow from the end inward,
+/// d . tangent of the wrong sign: then the end is no minimum along its
+/// curve, and the meeting, if any, lies inside, where the pair search
+/// finds it. Undecided keeps the end; the merge below folds a meeting
+/// found both ways into one.
+[[nodiscard]] bool GrowsInward(const DomainEnd& end, const Vec3I& toOther)
+{
+    // d/dt |C - Q|² / 2 = (C - Q) . C'; the end is a minimum along C when
+    // it decreases towards the end: (C - Q) . C' side < 0.
+    const Interval slope = DotI(Minus(end.Point, toOther), end.Tangent) * Interval{end.Side};
+    return slope.GetLower() >= 0.0;
+}
+
+/// One curve's end against the other's segments: the critical points of
+/// the end's squared distance to the other curve, a root of
+///
+///   g(t) = (B(t) - P) . B'(t),   g'(t) = B' . B' + (B - P) . B'',
+///
+/// by Krawczyk's operator over halved pieces, as the pair search does.
+struct EndSearch {
+    const PairSearch* Pairs = nullptr;
+    DomainEnd End;
+    const std::vector<Segment>* Other = nullptr;
+    Interval OtherDomain;
+    bool Swapped = false;
+    std::size_t Visited = 0;
+    std::vector<Meeting> Found;
+};
+
+[[nodiscard]] KernelError EndUnresolved(const EndSearch& e, const std::string_view why)
+{
+    return Fail(ErrorCode::IntersectionFailed,
+                e.Pairs->Handler + ": " + std::string(why) + " for the end at " + Number(e.End.T) +
+                    " (a curve's end against a stretch of the other within the resolution; "
+                    "ADR-0010: an unresolved pair fails, it is never dropped)")
+        .error();
+}
+
+[[nodiscard]] std::optional<Interval> KrawczykEnd(const Hodographs& b, const Vec3I& p,
+                                                  const Interval& x)
+{
+    const double m = Midpoint(x);
+    const auto bm = JetOver(b, Interval{m});
+    const auto bx = JetOver(b, x);
+    if (!bm || !bx) {
+        return std::nullopt;
+    }
+    const Interval g = DotI(Minus(bm->Point, p), bm->First);
+    const Interval j = DotI(bx->First, bx->First) + DotI(Minus(bx->Point, p), bx->Second);
+    const double c = Midpoint(j);
+    if (!(std::abs(c) > 0.0) || !std::isfinite(c)) {
+        return std::nullopt;
+    }
+    const Interval y{1.0 / c};
+    return Interval{m} - y * g + (Interval{1.0} - y * j) * (x - Interval{m});
+}
+
+/// Records the critical point of the piece's inflated interval when the
+/// end lies within the resolution of the other curve there and is a
+/// minimum along its own curve.
+[[nodiscard]] Result<void> RecordEnd(EndSearch& e, const Arc& b, const Hodographs& h, Interval x)
+{
+    for (int step = 0; step < RefineSteps; ++step) {
+        const std::optional<Interval> k = KrawczykEnd(h, e.End.Point, x);
+        if (!k) {
+            break;
+        }
+        const Interval next = Intersection(*k, x);
+        if (next.IsEmpty() || Width(next) >= Width(x)) {
+            break;
+        }
+        x = next;
+    }
+    const Segment& segment = (*e.Other)[b.Index];
+    const Interval bracket = OnCurve(segment, InSegment(b, x));
+    if (!Intersects(bracket, Intersection(Interval{segment.T0, segment.T1}, e.OtherDomain))) {
+        return {}; // Past the domain's end, or the neighbouring segment's.
+    }
+    const Interval on = Intersection(bracket, e.OtherDomain);
+    const auto jet =
+        JetOver(HodographsOf(Arc{b.Index, 0.0, 1.0, segment.Poles}), LocalOf(segment, on));
+    if (!jet) {
+        return std::unexpected(EndUnresolved(e, "a weight not proved positive"));
+    }
+    const Vec3I d = Minus(e.End.Point, jet->Point);
+    const Interval squared = Squared(d[0]) + Squared(d[1]) + Squared(d[2]);
+    const double resolution = e.Pairs->Resolution;
+    const Interval limit = Squared(Interval{resolution});
+    if (squared.GetLower() > limit.GetUpper()) {
+        return {};
+    }
+    if (!(squared.GetUpper() <= limit.GetLower())) {
+        return std::unexpected(
+            EndUnresolved(e, "a closest approach within rounding of the resolution"));
+    }
+    if (GrowsInward(e.End, jet->Point)) {
+        return {};
+    }
+    const Interval end{e.End.T};
+    e.Found.push_back(e.Swapped ? Meeting{on, end} : Meeting{end, on});
+    return {};
+}
+
+[[nodiscard]] bool ApartFromPoint(const Arc& b, const Vec3I& p, const double gap)
+{
+    const std::optional<Vec3I> box = BoxOf(b);
+    if (!box) {
+        return false;
+    }
+    for (std::size_t k = 0; k < 3; ++k) {
+        if (FarApart((*box)[k], p[k], gap)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+[[nodiscard]] Result<void> VisitEnd(EndSearch& e, const Arc& b, const int depth)
+{
+    if (++e.Visited > PairBudget) {
+        return std::unexpected(EndUnresolved(e, "the subdivision budget is spent"));
+    }
+    if (ApartFromPoint(b, e.End.Point, e.Pairs->Resolution)) {
+        return {};
+    }
+    const Hodographs h = HodographsOf(b);
+    const Interval x{-Inflation, 1.0 + Inflation};
+    const std::optional<Interval> k = KrawczykEnd(h, e.End.Point, x);
+    if (k && !Intersects(*k, x)) {
+        return {};
+    }
+    if (k && InsideInterior(*k, x)) {
+        return RecordEnd(e, b, h, x);
+    }
+    if (depth == MaxDepth) {
+        return std::unexpected(EndUnresolved(e, "a piece neither apart nor a single minimum"));
+    }
+    const std::pair<Arc, Arc> halves = Halves(b);
+    STEREON_TRY_VOID(VisitEnd(e, halves.first, depth + 1));
+    return VisitEnd(e, halves.second, depth + 1);
+}
+
+/// Two ends within the resolution of each other, each a minimum along its
+/// curve: a meeting at a corner of the parameter box.
+[[nodiscard]] Result<void> Corner(PairSearch& search, const DomainEnd& a, const DomainEnd& b)
+{
+    const Vec3I d = Minus(a.Point, b.Point);
+    const Interval squared = Squared(d[0]) + Squared(d[1]) + Squared(d[2]);
+    const Interval limit = Squared(Interval{search.Resolution});
+    if (squared.GetLower() > limit.GetUpper()) {
+        return {};
+    }
+    if (!(squared.GetUpper() <= limit.GetLower())) {
+        return Fail(ErrorCode::IntersectionFailed,
+                    search.Handler + ": the ends at " + Number(a.T) + " and " + Number(b.T) +
+                        " lie within rounding of the resolution apart");
+    }
+    if (!GrowsInward(a, b.Point) && !GrowsInward(b, a.Point)) {
+        search.Found.push_back({Interval{a.T}, Interval{b.T}});
+    }
+    return {};
+}
+
+/// The minima of the distance on the boundary of the parameter box: each
+/// end of one curve against the other's stretch, and the corners. A
+/// meeting inside the box is the pair search's; one on the boundary is a
+/// critical point of the end's distance alone, which the pair search,
+/// keeping only critical points in both domains, does not see: two edges
+/// sharing a vertex a rounding apart, or nearly parallel segments touching
+/// end to end, whose closest approach lies far past both.
+[[nodiscard]] Result<void> SearchEnds(PairSearch& search)
+{
+    const std::vector<DomainEnd> endsA = EndsOf(search.A, search.DomainA);
+    const std::vector<DomainEnd> endsB = EndsOf(search.B, search.DomainB);
+    for (const bool swapped : {false, true}) {
+        for (const DomainEnd& end : swapped ? endsB : endsA) {
+            EndSearch e{&search,
+                        end,
+                        swapped ? &search.A : &search.B,
+                        swapped ? search.DomainA : search.DomainB,
+                        swapped,
+                        0,
+                        {}};
+            for (std::size_t j = 0; j < e.Other->size(); ++j) {
+                STEREON_TRY_VOID(VisitEnd(e, Arc{j, 0.0, 1.0, (*e.Other)[j].Poles}, 0));
+            }
+            search.Found.insert(search.Found.end(), e.Found.begin(), e.Found.end());
+        }
+    }
+    for (const DomainEnd& a : endsA) {
+        for (const DomainEnd& b : endsB) {
+            STEREON_TRY_VOID(Corner(search, a, b));
+        }
+    }
+    return {};
+}
+
 [[nodiscard]] Result<void> SearchAll(PairSearch& search)
 {
     for (std::size_t i = 0; i < search.A.size(); ++i) {
@@ -439,6 +673,28 @@ struct PairSearch {
         }
     }
     return CheckPeriodicDomain(curve, domain, where);
+}
+
+/// Adds a meeting, or folds it into one already found within the
+/// resolution of it on both curves (ADR-0001: points closer than that
+/// cannot be told apart), keeping the nearer: a meeting at a domain's end
+/// found both by the pair search and on the boundary.
+void Merge(std::vector<CurveCurvePoint>& points, const CurveCurvePoint& p, const BSplineCurve& a,
+           const BSplineCurve& b, const double resolution)
+{
+    const auto gap = [&](const CurveCurvePoint& q) {
+        return Distance(Eval(a, q.ParameterA), Eval(b, q.ParameterB));
+    };
+    for (CurveCurvePoint& q : points) {
+        if (Distance(Eval(a, q.ParameterA), p.Position) <= resolution &&
+            Distance(Eval(b, q.ParameterB), Eval(b, p.ParameterB)) <= resolution) {
+            if (gap(p) < gap(q)) {
+                q = p;
+            }
+            return;
+        }
+    }
+    points.push_back(p);
 }
 
 } // namespace
@@ -475,12 +731,13 @@ Result<CurveCurveIntersection> SplineSpline(const Curve& a, const Interval& doma
     search.A = Reaching(std::move(segmentsA), search.DomainA);
     search.B = Reaching(std::move(segmentsB), search.DomainB);
     STEREON_TRY_VOID(SearchAll(search));
+    STEREON_TRY_VOID(SearchEnds(search));
     for (const Meeting& m : Distinct(std::move(search.Found))) {
         const double ta =
             std::clamp(Midpoint(m.OnA), search.DomainA.GetLower(), search.DomainA.GetUpper());
         const double tb =
             std::clamp(Midpoint(m.OnB), search.DomainB.GetLower(), search.DomainB.GetUpper());
-        result.Points.push_back({ta, tb, Eval(*sa, ta)});
+        Merge(result.Points, {ta, tb, Eval(*sa, ta)}, *sa, *sb, search.Resolution);
     }
     std::ranges::sort(result.Points, [](const CurveCurvePoint& p, const CurveCurvePoint& q) {
         return p.ParameterA < q.ParameterA;
