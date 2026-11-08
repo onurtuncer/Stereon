@@ -299,8 +299,18 @@ Result<SurfaceSurfaceIntersection> CylinderCylinderSkew(const Surface&, const Bo
 
 /// Every other pair of planes, cylinders, cones, spheres and tori (v0.2's
 /// analytic table): the closed forms where the configuration has one, the
-/// parametric-implicit trace otherwise. Defined in ElementaryPairs.cpp.
+/// parametric-implicit trace otherwise. An ellipsoid against any of them
+/// but the plane, or against another ellipsoid, goes to the trace
+/// (ADR-0048 §3.4). Defined in ElementaryPairs.cpp.
 Result<SurfaceSurfaceIntersection> ElementaryPair(const Surface&, const Box2&, const Surface&,
+                                                  const Box2&, double, const Context&);
+/// A plane against an ellipsoid (ADR-0048 §3.3): the section decided
+/// exactly, an exact ellipse with its exact pcurve on the plane and a
+/// certified fitted pcurve on the ellipsoid, a touch, or a proved
+/// separation. Defined in PlaneEllipsoid.cpp.
+Result<SurfaceSurfaceIntersection> PlaneEllipsoid(const Surface&, const Box2&, const Surface&,
+                                                  const Box2&, double, const Context&);
+Result<SurfaceSurfaceIntersection> EllipsoidPlane(const Surface&, const Box2&, const Surface&,
                                                   const Box2&, double, const Context&);
 /// The parametric-implicit trace: one surface's parametrisation against the
 /// other's implicit equation, by certified interval subdivision, every
@@ -518,11 +528,30 @@ consteval SurfaceHandler PlanarCylindricalHandlerFor()
 template <typename T>
 inline constexpr bool IsPlanarOrCylindrical = std::same_as<T, Plane> || std::same_as<T, Cylinder>;
 
+/// The handlers of a pair with an ellipsoid (ADR-0048): the plane's closed
+/// form, the trace against every other analytic surface.
+template <typename A, typename B>
+consteval SurfaceHandler EllipsoidHandlerFor()
+{
+    if constexpr (std::same_as<A, Plane>) {
+        return &PlaneEllipsoid;
+    } else if constexpr (std::same_as<B, Plane>) {
+        return &EllipsoidPlane;
+    } else if constexpr ((IsElementarySurface<A> || std::same_as<A, Ellipsoid>) &&
+                         (IsElementarySurface<B> || std::same_as<B, Ellipsoid>)) {
+        return &ElementaryPair;
+    } else {
+        return &SurfaceStub<A, B>;
+    }
+}
+
 template <typename A, typename B>
 consteval SurfaceHandler AnalyticSurfaceHandlerFor()
 {
     if constexpr (IsPlanarOrCylindrical<A> && IsPlanarOrCylindrical<B>) {
         return PlanarCylindricalHandlerFor<A, B>();
+    } else if constexpr (std::same_as<A, Ellipsoid> || std::same_as<B, Ellipsoid>) {
+        return EllipsoidHandlerFor<A, B>();
     } else if constexpr (IsElementarySurface<A> && IsElementarySurface<B>) {
         return &ElementaryPair;
     } else {

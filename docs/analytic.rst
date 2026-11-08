@@ -451,9 +451,12 @@ the other boxes.
 decided exactly on the input doubles as the sphere's is
 (:doc:`intersection`). B-spline curves, circles and ellipses have theirs
 too, proved by the subdivision the elementary surfaces use, on the
-ellipsoid's implicit equation. The pairs of surfaces follow in ADR-0048's
-order and answer ``NotImplemented`` until then: the plane's closed form,
-then the other surfaces through the trace.
+ellipsoid's implicit equation. A plane against an ellipsoid has its
+closed form: the section decided exactly, an exact ellipse, and a
+certified pcurve on the ellipsoid. Against a cylinder, a cone, a sphere,
+a torus or another ellipsoid the intersection goes through the
+parametric–implicit trace, with the ellipsoid's implicit equation
+:math:`(BC\,x)^2 + (AC\,y)^2 + (AB\,z)^2 = (ABC)^2` in its frame.
 
 Checked construction
 --------------------

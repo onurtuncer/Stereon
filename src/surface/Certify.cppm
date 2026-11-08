@@ -101,8 +101,8 @@ struct DeviationCertificate {
 ///
 /// Covers lines, circles, ellipses, parabolas, hyperbolas and non-rational
 /// B-splines as the curve, lines, circles, ellipses and non-rational
-/// B-splines as the pcurve, and planes, cylinders, cones, spheres and tori
-/// as the surface; NotSupported otherwise. InvalidInput
+/// B-splines as the pcurve, and planes, cylinders, cones, spheres, tori and
+/// ellipsoids as the surface; NotSupported otherwise. InvalidInput
 /// for an empty or unbounded range or a target that is not finite and
 /// positive. CertificationFailed when the span budget runs out before every
 /// span is within the target, with the message naming the span and the

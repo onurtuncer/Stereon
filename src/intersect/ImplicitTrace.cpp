@@ -158,6 +158,9 @@ struct Roles {
 /// How far the compact implicit side reaches from its centre.
 [[nodiscard]] double ReachOf(const Quadric& q)
 {
+    if (q.Kind == QuadricKind::Ellipsoid) {
+        return std::max({q.Radius, q.SemiB, q.SemiC});
+    }
     return q.Kind == QuadricKind::Torus ? q.Major + q.Radius : q.Radius;
 }
 
@@ -236,14 +239,14 @@ struct Roles {
     return Box2{Interval::Everything(), Around(0.0, Generous(bound, bound))};
 }
 
-/// The carrier's natural chart: one turn of each angle, the sphere's
-/// latitudes, everything along a length.
+/// The carrier's natural chart: one turn of each angle, the sphere's and the
+/// ellipsoid's latitudes, everything along a length.
 [[nodiscard]] Box2 ChartOf(const Elementary& carrier, const Box2& box)
 {
     if (std::holds_alternative<Plane>(carrier)) {
         return box;
     }
-    if (std::holds_alternative<Sphere>(carrier)) {
+    if (std::holds_alternative<Sphere>(carrier) || std::holds_alternative<Ellipsoid>(carrier)) {
         return {OneTurn(box.X),
                 Intersection(box.Y, Interval{-SpherePoleLatitude, SpherePoleLatitude})};
     }
@@ -275,7 +278,9 @@ struct Roles {
 /// simpler implicit equation for the other side.
 [[nodiscard]] int CarrierRank(const Elementary& e)
 {
-    constexpr std::array<int, 5> Rank{2, 1, 3, 4, 0}; // Plane, Cylinder, Cone, Sphere, Torus.
+    // Plane, Cylinder, Cone, Sphere, Torus, Ellipsoid: the ellipsoid last,
+    // its chart having poles and its implicit equation being a quadric.
+    constexpr std::array<int, 6> Rank{2, 1, 3, 4, 0, 5};
     return Rank[e.index()];
 }
 
@@ -365,6 +370,26 @@ struct Roles {
     return radius.GetUpper() < 0.0 && SectorMissed(-l.X, -l.Y, box.X);
 }
 
+/// The torus's angles of local coordinates: about its axis, and about the
+/// tube's circle.
+[[nodiscard]] bool TorusMissed(const Quadric& q, const IVec3& l, const Box2& box)
+{
+    using std::sqrt;
+    const I rho = sqrt(l.X * l.X + l.Y * l.Y);
+    return SectorMissed(l.X, l.Y, box.X) || SectorMissed(rho - I{q.Major}, l.Z, box.Y);
+}
+
+/// The ellipsoid's parameters of local coordinates: in s = (x / A, y / B,
+/// z / C) the ellipsoid is the unit sphere, its longitude and latitude the
+/// sphere's.
+[[nodiscard]] bool EllipsoidMissed(const Quadric& q, const IVec3& l, const Box2& box)
+{
+    const I sx = l.X / I{q.Radius};
+    const I sy = l.Y / I{q.SemiB};
+    const I sz = l.Z / I{q.SemiC};
+    return LatitudeMissed(sz, 1.0, box.Y) || SectorMissed(sx, sy, box.X);
+}
+
 /// Whether the points enclosed by `x` provably lie outside the implicit
 /// side's requested box: the clip is conservative, keeping whatever it
 /// cannot exclude (see Intersect).
@@ -381,11 +406,10 @@ struct Roles {
         return ConeMissed(r.Implicit, l, box);
     case QuadricKind::Sphere:
         return LatitudeMissed(l.Z, r.Implicit.Radius, box.Y) || SectorMissed(l.X, l.Y, box.X);
-    case QuadricKind::Torus: {
-        using std::sqrt;
-        const I rho = sqrt(l.X * l.X + l.Y * l.Y);
-        return SectorMissed(l.X, l.Y, box.X) || SectorMissed(rho - I{r.Implicit.Major}, l.Z, box.Y);
-    }
+    case QuadricKind::Torus:
+        return TorusMissed(r.Implicit, l, box);
+    case QuadricKind::Ellipsoid:
+        return EllipsoidMissed(r.Implicit, l, box);
     }
     return false;
 }
