@@ -205,6 +205,62 @@ TEST_CASE("spheres meet in a circle, touch at a point, or coincide", "[intersect
     REQUIRE(same.has_value());
     REQUIRE(same->Overlaps.size() == 1);
     REQUIRE(same->Overlaps.front().FullDomain);
+    REQUIRE(same->Overlaps.front().Evidence == Stereon::CoincidenceEvidence::Exact);
+    REQUIRE(same->Overlaps.front().Distance == 0.0);
+}
+
+TEST_CASE("a tangent circle declared within the tolerance is certified within it",
+          "[intersect][elementary]")
+{
+    // Regression (corpus analytic-ssi/sweep-sphere-cylinder-coaxial): a
+    // sphere centred on a cylinder's axis, the radii 5e-4 apart, under a
+    // pair tolerance of 1e-3, is declared tangent along a circle (ADR-0029
+    // section 6); that circle lies up to 5e-4 from one surface, and its
+    // certification against the resolution failed the whole intersection.
+    for (const double radius : {2.0 - 5e-4, 2.0 + 5e-4}) {
+        const auto touch = Intersect(Surface{Sphere{Point3{}, 2.0, X, Y, true}}, Box2::Everything(),
+                                     CylinderZ(radius), Box2::Everything(), 1e-3, ctx);
+        INFO(IntersectTest::ErrorText(touch));
+        REQUIRE(touch.has_value());
+        // One circle, in arcs cut at the surfaces' seams.
+        REQUIRE(IntersectTest::ConnectivityOf(*touch).Curves == 1);
+        for (const Stereon::IntersectionBranch& arc : touch->Branches) {
+            REQUIRE(arc.Contact == ContactType::Tangential);
+            REQUIRE(arc.IsCertified());
+            // The bound is what the circle is from the surfaces: about the
+            // gap, within the tolerance.
+            REQUIRE(arc.Bound >= 4e-4);
+            REQUIRE(arc.Bound <= 1e-3);
+        }
+    }
+}
+
+TEST_CASE("coaxial surfaces of revolution within the tolerance are declared, not exact",
+          "[intersect][elementary]")
+{
+    // Regression (corpus analytic-ssi/sphere-sphere/concentric-near-equal):
+    // concentric spheres whose radii differ by less than the pair tolerance
+    // were declared coincident with Exact evidence and no distance. ADR-0029
+    // section 6: a coincidence declared within the tolerance says so, and
+    // how far apart the surfaces are, as for parallel planes and cylinders.
+    const Surface a{Sphere{Point3{}, 2.0, X, Y, true}};
+    const Surface b{Sphere{Point3{}, 2.0005, X, Y, true}};
+    const auto declared = Intersect(a, Box2::Everything(), b, Box2::Everything(), 1e-3, ctx);
+    REQUIRE(declared.has_value());
+    REQUIRE(declared->Overlaps.size() == 1);
+    const Stereon::OverlapRegion& overlap = declared->Overlaps.front();
+    REQUIRE(overlap.Evidence == Stereon::CoincidenceEvidence::Tolerant);
+    REQUIRE_THAT(overlap.Distance, WithinAbs(0.0005, 1e-15));
+    // Beyond the tolerance they are two spheres apart, one inside the other.
+    REQUIRE(Intersect(a, Box2::Everything(), b, Box2::Everything(), 1e-4, ctx)->IsEmpty());
+    // Coaxial cylinders 4e-4 apart in radius, within 1e-3, which the
+    // cylinder pair's own handler declares: the same evidence.
+    const auto wide = Intersect(CylinderZ(2.0), Box2::Everything(), CylinderZ(2.0004),
+                                Box2::Everything(), 1e-3, ctx);
+    REQUIRE(wide.has_value());
+    REQUIRE(wide->Overlaps.size() == 1);
+    REQUIRE(wide->Overlaps.front().Evidence == Stereon::CoincidenceEvidence::Tolerant);
+    REQUIRE_THAT(wide->Overlaps.front().Distance, WithinAbs(0.0004, 1e-15));
 }
 
 TEST_CASE("spheres whose poles are off their centres' line go to the trace",
