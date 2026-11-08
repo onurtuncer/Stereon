@@ -78,6 +78,22 @@ std::vector<BSplineCurve> Fixtures()
     return {Loop(2), Loop(3), Loop(5), Circle()};
 }
 
+/// The order of continuity at t: the degree less the multiplicity of any
+/// knot within `near` of t, the domain's ends counting as the seam's knot.
+int SmoothnessAt(const BSplineCurve& c, const double t, const double near)
+{
+    const Interval domain = Stereon::Domain(c);
+    const double period = Stereon::Period(c);
+    int multiplicity = 0;
+    for (const double knot : c.Knots) {
+        const double offset = std::remainder(knot - t, period);
+        if (std::abs(offset) <= near && knot >= domain.GetLower() && knot < domain.GetUpper()) {
+            ++multiplicity;
+        }
+    }
+    return c.Degree - multiplicity;
+}
+
 /// The largest distance between the two curves over `samples` parameters
 /// spread over three periods around the first curve's domain.
 double Apart(const BSplineCurve& a, const BSplineCurve& b, const int samples = 300)
@@ -158,6 +174,26 @@ TEST_CASE("a periodic B-spline's seam is right-continuous: its end evaluates as 
     }
 }
 
+TEST_CASE("a period apart on a knot, a parameter keeps its point but may change span",
+          "[curve][periodic]")
+{
+    // The property below found it (CI seed 7625109722678914703, shrunk): on
+    // the circle, three quarters of a turn is a double knot, where the
+    // quadratic's second derivative jumps. Four periods back and forth,
+    // t - 4 T + 4 T rounds to a unit in the last place below the knot and is
+    // evaluated on the span before it, 1.3 away in the second derivative.
+    // No rounding of the carried parameter can avoid it; the point agrees.
+    const BSplineCurve c = Circle();
+    const Interval domain = Stereon::Domain(c);
+    const double period = Stereon::Period(c);
+    const double t = domain.GetLower() + period * 750 / 1000.0;
+    const double shifted = t - 4 * period;
+    const double slack = 1e-12 * (1.0 + std::abs(shifted)) * 100.0;
+    REQUIRE(SmoothnessAt(c, t, slack) == 0);
+    CHECK(Distance(Eval(c, shifted), Eval(c, t)) <= slack);
+    CHECK(Length(Deriv(c, shifted, 1) - Deriv(c, t, 1)) <= slack * 10.0);
+}
+
 TEST_CASE("a periodic B-spline evaluates at every parameter, a period apart alike",
           "[curve][periodic][property]")
 {
@@ -173,8 +209,15 @@ TEST_CASE("a periodic B-spline evaluates at every parameter, a period apart alik
         // by the rounding of t + k T: the points by that much times the speed.
         const double slack = 1e-12 * (1.0 + std::abs(shifted)) * 100.0;
         RC_ASSERT(Distance(Eval(c, shifted), Eval(c, t)) <= slack);
-        RC_ASSERT(Length(Deriv(c, shifted, 1) - Deriv(c, t, 1)) <= slack * 10.0);
-        RC_ASSERT(Length(Deriv(c, shifted, 2) - Deriv(c, t, 2)) <= slack * 100.0);
+        // At a knot the image may land on either side of it, so a derivative
+        // the curve does not carry continuously there is not compared.
+        const int smooth = SmoothnessAt(c, t, slack);
+        if (smooth >= 1) {
+            RC_ASSERT(Length(Deriv(c, shifted, 1) - Deriv(c, t, 1)) <= slack * 10.0);
+        }
+        if (smooth >= 2) {
+            RC_ASSERT(Length(Deriv(c, shifted, 2) - Deriv(c, t, 2)) <= slack * 100.0);
+        }
         const Curve erased{c};
         RC_ASSERT(Distance(Eval(erased, shifted), Eval(c, t)) <= slack);
     });

@@ -246,6 +246,30 @@ TEST_CASE("a bounded plane box keeps the section's stretches inside it",
     REQUIRE(std::abs(covered - pi) <= 1e-9);
 }
 
+TEST_CASE("a plane made through a pole and rounded off it fails closed, as on the sphere",
+          "[intersect][ellipsoid][plane-ellipsoid]")
+{
+    // The property below found it (CI seed 1794158452, shrunk): this plane
+    // passes through the south pole (-2, -2, -2.5) exactly, but its frame
+    // is normalised, so the rounded plane misses the pole by a unit in the
+    // last place and the exact pole test cannot see it. A seam crossing then
+    // lands on the pole to rounding, where the longitude's rate is 0 / 0,
+    // and the interpolation's InvalidInput escaped. Now both the ellipsoid
+    // and the sphere fail closed.
+    const Point3 center{-2.0, -2.0, -2.0};
+    const double r = 0.5;
+    const Plane plane = IntersectTest::PlaneWithNormal(
+        center + Vec3{-1.0 / 16.0, -0.5, -9.0 / 16.0}, Vec3{-15.0 / 8.0, 0.25, -0.125});
+    const auto onEllipsoid =
+        Intersect(Surface{plane}, Surface{Ellipsoid{center, r, r, r, X, Y}}, ctx);
+    INFO(IntersectTest::ErrorText(onEllipsoid));
+    REQUIRE_FALSE(onEllipsoid.has_value());
+    CHECK(onEllipsoid.error().GetCode() == ErrorCode::IntersectionFailed);
+    const auto onSphere = Intersect(Surface{plane}, Surface{Sphere{center, r, X, Y}}, ctx);
+    REQUIRE_FALSE(onSphere.has_value());
+    CHECK(onSphere.error().GetCode() == ErrorCode::IntersectionFailed);
+}
+
 TEST_CASE("with equal semi-axes a plane's section lies on the sphere",
           "[intersect][ellipsoid][plane-ellipsoid][property]")
 {
