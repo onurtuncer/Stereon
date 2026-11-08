@@ -15,7 +15,9 @@
 // <directory>/trimmed (two Boolean results whose faces are drawn inside
 // their loops: a box drilled through by a cylinder, and the Steinmetz
 // solid of two cylinders) and <directory>/validity (a box without its top,
-// with the findings of its Solid-level check drawn on it). The viewer job
+// with the findings of its Solid-level check drawn on it) and
+// <directory>/intersection (a cylinder through a sphere off its axis, as
+// IntersectionArchive stores the result). The viewer job
 // of .github/workflows/linux.yml
 // renders each with `stn-view --screenshot` and uploads the images.
 
@@ -29,6 +31,7 @@
 #include <vector>
 
 import Stereon.Boolean;
+import Stereon.Intersect;
 import Stereon.Io;
 
 #include "../../tests/topo/Bodies.hpp"
@@ -173,6 +176,30 @@ bool WriteValidity(const std::filesystem::path& directory)
     return Save(directory, "open-box", *archive);
 }
 
+/// A cylinder of radius 1 about z through a sphere of radius 2 about
+/// (0.5, 0, 0): one closed curve, traced and certified.
+bool WriteIntersection(const std::filesystem::path& directory)
+{
+    const Stereon::Context ctx = Stereon::Context::Default();
+    const Stereon::Surface cylinder(Stereon::Cylinder{Point3{}, 1.0, Vec3{1, 0, 0}, Vec3{0, 1, 0}});
+    const Stereon::Surface sphere(
+        Stereon::Sphere{Point3{0.5, 0.0, 0.0}, 2.0, Vec3{1, 0, 0}, Vec3{0, 1, 0}});
+    const Stereon::Box2 band{Stereon::Interval{0.0, 2.0 * std::numbers::pi},
+                             Stereon::Interval{-2.5, 2.5}};
+    const auto result = Stereon::Intersect(cylinder, band, sphere, Domain(sphere), ctx);
+    if (!result) {
+        std::cerr << "intersection: " << result.error().GetMessage() << '\n';
+        return false;
+    }
+    const auto archive =
+        Stereon::IntersectionArchive(cylinder, band, sphere, Domain(sphere), *result);
+    if (!archive) {
+        std::cerr << "intersection: " << archive.error().GetMessage() << '\n';
+        return false;
+    }
+    return Save(directory, "cylinder-sphere", *archive);
+}
+
 } // namespace
 
 int main(const int argc, char** argv)
@@ -183,7 +210,8 @@ int main(const int argc, char** argv)
     }
     const std::filesystem::path root(argv[1]);
     return WriteGeometry(root / "geometry") && WriteTopology(root / "topology") &&
-                   WriteTrimmed(root / "trimmed") && WriteValidity(root / "validity")
+                   WriteTrimmed(root / "trimmed") && WriteValidity(root / "validity") &&
+                   WriteIntersection(root / "intersection")
                ? 0
                : 1;
 }

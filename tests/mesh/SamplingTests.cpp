@@ -443,3 +443,27 @@ TEST_CASE("a cylinder face cut by a lens keeps its iso-lines out of the lens",
         }
     }
 }
+
+TEST_CASE("a whole sphere and a whole ellipsoid are sampled through their poles",
+          "[mesh][sampling][regression]")
+{
+    // At a pole the line of constant latitude is a circle of radius about
+    // 1e-16, whose halves turn sharply: it used to be refined until the
+    // subdivision gave up, so neither surface could be drawn over its
+    // whole domain. Every line through or at a pole now samples, and stays
+    // on the surface.
+    const Surface sphere(Sphere{Point3{0.5, 0.0, 0.0}, 2.0, Vec3{1, 0, 0}, Vec3{0, 1, 0}});
+    const Surface ellipsoid(
+        Stereon::Ellipsoid{Point3{}, 3.0, 2.0, 1.0, Vec3{1, 0, 0}, Vec3{0, 1, 0}});
+    for (const Surface& surface : {sphere, ellipsoid}) {
+        const auto lines = Stereon::SampleSurface(surface, DisplayTolerance{});
+        REQUIRE(lines.has_value());
+        REQUIRE(lines->size() == 18);
+        for (const Stereon::IsoLine& iso : *lines) {
+            REQUIRE(iso.Line.Points.size() >= 2);
+        }
+        const auto trimmed = Stereon::MakeTrimmedSurface(surface, Domain(surface));
+        REQUIRE(trimmed.has_value());
+        REQUIRE(Stereon::SampleSurface(Surface(*trimmed), DisplayTolerance{}).has_value());
+    }
+}

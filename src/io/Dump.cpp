@@ -13,6 +13,7 @@ module;
 #include <Stereon/Core/Try.hpp>
 
 #include <algorithm>
+#include <charconv>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -393,6 +394,79 @@ void AddFinding(const Shape& shape, const ValidityFinding& finding, DebugChunk& 
     debug.Labels.push_back(std::move(label));
 }
 
+/// A double in the shortest form that reads back as itself.
+[[nodiscard]] std::string Short(const double x)
+{
+    char buffer[32];
+    const auto [end, error] = std::to_chars(buffer, buffer + sizeof buffer, x);
+    return error == std::errc{} ? std::string(buffer, end) : std::string("?");
+}
+
+[[nodiscard]] std::string_view ContactName(const ContactType contact) noexcept
+{
+    switch (contact) {
+    case ContactType::Crossing:
+        return "Crossing";
+    case ContactType::Tangential:
+        return "Tangential";
+    case ContactType::Overlap:
+        return "Overlap";
+    }
+    return "Unknown";
+}
+
+[[nodiscard]] std::string_view TransitionName(const SideTransition transition) noexcept
+{
+    switch (transition) {
+    case SideTransition::Unresolved:
+        return "Unresolved";
+    case SideTransition::SameSide:
+        return "SameSide";
+    case SideTransition::OppositeSide:
+        return "OppositeSide";
+    }
+    return "Unknown";
+}
+
+/// The surface trimmed to the box when the box is bounded and the trim is
+/// accepted; the surface itself otherwise, which the viewer draws around
+/// the scene.
+[[nodiscard]] Surface BoundedTo(const Surface& surface, const Box2& box)
+{
+    if (!box.X.IsBounded() || !box.Y.IsBounded()) {
+        return surface;
+    }
+    Result<TrimmedSurface> trimmed = MakeTrimmedSurface(surface, box);
+    return trimmed ? Surface(*std::move(trimmed)) : surface;
+}
+
+/// A branch: its 3D curve over its range as a polyline in its contact's
+/// colour, its pcurves on A and B, and a label at its middle.
+[[nodiscard]] Result<void> AddBranch(const IntersectionBranch& branch, const std::size_t k,
+                                     GeometryArchive& archive)
+{
+    if (!branch.Range.IsBounded()) {
+        return Fail(ErrorCode::NotSupported,
+                    "IntersectionArchive: branch " + std::to_string(k) +
+                        " has an unbounded range; bound the requested boxes to dump it");
+    }
+    STEREON_TRY(const Polyline line, SampleCurve(branch.Curve3d, DisplayTolerance{}, branch.Range));
+    DebugPolyline polyline;
+    polyline.Points = line.Points;
+    polyline.Colour = ContactColour(branch.Contact);
+    archive.Debug->Polylines.push_back(std::move(polyline));
+    archive.Curves2d.push_back(branch.OnA);
+    archive.Curves2d.push_back(branch.OnB);
+    DebugLabel label;
+    label.Position = line.Points[line.Points.size() / 2];
+    label.Text = "branch " + std::to_string(k) + ": " + std::string(ContactName(branch.Contact)) +
+                 ", " + std::string(TransitionName(branch.Transition)) + ", bound " +
+                 Short(branch.Bound);
+    label.Colour = ContactColour(branch.Contact);
+    archive.Debug->Labels.push_back(std::move(label));
+    return {};
+}
+
 /// Bool for the debugger entry points.
 [[nodiscard]] bool Written(const DumpResult& result)
 {
@@ -522,6 +596,92 @@ DebugColour FaceColour() noexcept
 DebugColour FindingColour() noexcept
 {
     return Rgb(255, 40, 40);
+}
+
+DebugColour ContactColour(const ContactType contact) noexcept
+{
+    switch (contact) {
+    case ContactType::Crossing:
+        return Rgb(230, 50, 50);
+    case ContactType::Tangential:
+        return Rgb(240, 150, 30);
+    case ContactType::Overlap:
+        return Rgb(60, 190, 90);
+    }
+    return Rgb(0, 0, 0);
+}
+
+Result<GeometryArchive> IntersectionArchive(const Surface& a, const Box2& boxA, const Surface& b,
+                                            const Box2& boxB,
+                                            const SurfaceSurfaceIntersection& result)
+{
+    GeometryArchive archive = ArchiveOf(Context{});
+    archive.Debug.emplace();
+    archive.Surfaces.push_back(BoundedTo(a, boxA));
+    archive.Surfaces.push_back(BoundedTo(b, boxB));
+    for (std::size_t k = 0; k < result.Branches.size(); ++k) {
+        STEREON_TRY_VOID(AddBranch(result.Branches[k], k, archive));
+    }
+    for (std::size_t k = 0; k < result.Points.size(); ++k) {
+        const IntersectionPoint& p = result.Points[k];
+        DebugPoint point;
+        point.Position = p.Position;
+        point.Colour = ContactColour(ContactType::Tangential);
+        archive.Debug->Points.push_back(point);
+        DebugLabel label;
+        label.Position = p.Position;
+        label.Text = "point " + std::to_string(k) + ": bound " + Short(p.Bound);
+        label.Colour = point.Colour;
+        archive.Debug->Labels.push_back(std::move(label));
+    }
+    for (std::size_t k = 0; k < result.Overlaps.size(); ++k) {
+        const OverlapRegion& overlap = result.Overlaps[k];
+        DebugLabel label;
+        label.Position = Eval(a, Point2{overlap.OnA.X.GetLower(), overlap.OnA.Y.GetLower()});
+        label.Text = "overlap " + std::to_string(k) +
+                     (overlap.SameOrientation ? ": same orientation" : ": opposite orientation");
+        label.Colour = ContactColour(ContactType::Overlap);
+        archive.Debug->Labels.push_back(std::move(label));
+    }
+    return archive;
+}
+
+Result<GeometryArchive> IntersectionArchive(const Curve& curve, const Interval& domain,
+                                            const Surface& surface, const Box2& box,
+                                            const CurveSurfaceIntersection& result)
+{
+    GeometryArchive archive = ArchiveOf(Context{});
+    archive.Debug.emplace();
+    // The curve over its domain when bounded; the curve itself, drawn
+    // around the scene, otherwise or when the trim is refused.
+    archive.Curves.push_back(curve);
+    if (domain.IsBounded()) {
+        if (Result<TrimmedCurve> trimmed = MakeTrimmedCurve(curve, domain)) {
+            archive.Curves.back() = Curve(*std::move(trimmed));
+        }
+    }
+    archive.Surfaces.push_back(BoundedTo(surface, box));
+    for (const CurveSurfacePoint& p : result.Points) {
+        DebugPoint point;
+        point.Position = p.Position;
+        point.Colour = ContactColour(p.Contact);
+        archive.Debug->Points.push_back(point);
+        DebugLabel label;
+        label.Position = p.Position;
+        label.Text = "t = " + Short(p.Parameter) + ": " + std::string(ContactName(p.Contact)) +
+                     (p.Decided ? "" : ", undecided");
+        label.Colour = point.Colour;
+        archive.Debug->Labels.push_back(std::move(label));
+    }
+    for (const CurveSurfaceOverlap& overlap : result.Overlaps) {
+        STEREON_TRY(const Polyline line, SampleCurve(curve, DisplayTolerance{}, overlap.Range));
+        DebugPolyline polyline;
+        polyline.Points = line.Points;
+        polyline.Colour = ContactColour(ContactType::Overlap);
+        archive.Debug->Polylines.push_back(std::move(polyline));
+        archive.Curves2d.push_back(overlap.OnSurface);
+    }
+    return archive;
 }
 
 Result<GeometryArchive> ValidityArchive(const Shape& shape, const ValidityReport& report)
