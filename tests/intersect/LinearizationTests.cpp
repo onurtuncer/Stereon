@@ -41,6 +41,7 @@ using Stereon::CurveSurfaceIntersection;
 using Stereon::CurveSurfacePoint;
 using Stereon::Cylinder;
 using Stereon::DerivativeStatus;
+using Stereon::Ellipsoid;
 using Stereon::ErrorCode;
 using Stereon::Line;
 using Stereon::LineBinding;
@@ -84,16 +85,24 @@ Point3& OriginOf(Torus& s)
 {
     return s.Center;
 }
+Point3& OriginOf(Ellipsoid& s)
+{
+    return s.Center;
+}
 
 /// What each surface's bindings move, in the order of their parameters:
 /// the origin, then its radius, then a torus's minor radius or a cone's
-/// semi-angle.
+/// semi-angle; an ellipsoid's three semi-axes in place of a radius.
 template <typename S>
 std::vector<SurfaceComponent> ComponentsOf()
 {
     std::vector<SurfaceComponent> components{SurfaceComponent::OriginX, SurfaceComponent::OriginY,
                                              SurfaceComponent::OriginZ};
-    if constexpr (!std::is_same_v<S, Plane>) {
+    if constexpr (std::is_same_v<S, Ellipsoid>) {
+        components.insert(components.end(),
+                          {SurfaceComponent::SemiAxisA, SurfaceComponent::SemiAxisB,
+                           SurfaceComponent::SemiAxisC});
+    } else if constexpr (!std::is_same_v<S, Plane>) {
         components.push_back(SurfaceComponent::Radius);
     }
     if constexpr (std::is_same_v<S, Torus>) {
@@ -131,6 +140,10 @@ void MoveSurface(S& surface, const Step& d, const std::size_t first)
     } else if constexpr (std::is_same_v<S, Torus>) {
         surface.MajorRadius += d(first + 3);
         surface.MinorRadius += d(first + 4);
+    } else if constexpr (std::is_same_v<S, Ellipsoid>) {
+        surface.A += d(first + 3);
+        surface.B += d(first + 4);
+        surface.C += d(first + 5);
     }
 }
 
@@ -473,6 +486,41 @@ TEST_CASE("the crossings of a sphere and a cylinder move as their closed forms s
     REQUIRE(std::abs(along[5] + 1.0) <= 1e-14);
 }
 
+TEST_CASE("the crossings of an ellipsoid move as their closed form says",
+          "[intersect][linearization]")
+{
+    // A line along x through the centre of an ellipsoid with semi-axes
+    // (A, B, C) along x, y and z crosses it at x = -+A, where u is pi or 0
+    // and v is 0: growing A moves them by -+1, B and C not at all.
+    constexpr double a = 2.0;
+    const Ellipsoid egg{Point3{0.0, 0.0, 0.0}, a, 1.25, 0.75, Vec3{1.0, 0.0, 0.0},
+                        Vec3{0.0, 1.0, 0.0}};
+    const Line line{Point3{-5.0, 0.0, 0.0}, Vec3{1.0, 0.0, 0.0}};
+    const std::size_t count = 6 + SurfaceParameters<Ellipsoid>();
+    const auto rate = [&](const std::size_t k) {
+        Model model = ModelFor<Ellipsoid>(std::vector<double>(count, 1.0));
+        std::vector<double> seed(count, 0.0);
+        seed[k] = 1.0;
+        return Jvp(model, line, egg, seed);
+    };
+    const std::vector<double> grow = rate(9);
+    REQUIRE(grow.size() == 2 * Values);
+    REQUIRE(std::abs(grow[0] + 1.0) <= 1e-14);
+    REQUIRE(std::abs(grow[3] + 1.0) <= 1e-14);
+    REQUIRE(std::abs(grow[Values] - 1.0) <= 1e-14);
+    REQUIRE(std::abs(grow[Values + 3] - 1.0) <= 1e-14);
+    for (const std::size_t k : {std::size_t{10}, std::size_t{11}}) {
+        for (const double value : rate(k)) {
+            REQUIRE(std::abs(value) <= 1e-14);
+        }
+    }
+    // Sliding it along y moves no point, and turns u at the crossings by
+    // -+1 / A as the axis of the line leaves the centre.
+    const std::vector<double> slide = rate(7);
+    REQUIRE(std::abs(slide[1]) <= 1e-14);
+    REQUIRE(std::abs(std::abs(slide[4]) - 1.0 / 1.25) <= 1e-14);
+}
+
 TEST_CASE("the crossings of a cone and a torus move as their closed forms say",
           "[intersect][linearization]")
 {
@@ -527,6 +575,43 @@ TEST_CASE("the Taylor residual of a crossing decays with the square of the step"
         const auto [line, quadrics] = RandomQuadricCrossing();
         RequireTaylor(line, quadrics.first);
         RequireTaylor(line, quadrics.second);
+    });
+}
+
+/// A random line through the inside of a random ellipsoid in a random
+/// frame, steep to it and away from its poles, as for the sphere.
+std::pair<Line, Ellipsoid> RandomEllipsoidCrossing()
+{
+    const Point3 center{Coordinate(), Coordinate(), Coordinate()};
+    const Vec3 axis{Coordinate(), Coordinate(), Coordinate()};
+    RC_PRE(Length(axis) >= 0.5);
+    const Cylinder frame = IntersectTest::CylinderAbout(center, axis, 1.0);
+    const auto semi = [] { return *rc::gen::inRange(8, 33) / 8.0; };
+    const Ellipsoid egg{center, semi(), semi(), semi(), frame.XAxis, frame.YAxis};
+    const double reach = std::min({egg.A, egg.B, egg.C});
+    // Mostly across the axis, so both crossings stay off the poles.
+    const Vec3 direction =
+        Coordinate() * frame.XAxis + Coordinate() * frame.YAxis + 0.25 * Coordinate() * Axis(egg);
+    RC_PRE(Length(direction) >= 0.5);
+    const auto offset = [&] { return *rc::gen::inRange(-2, 3) / 8.0 * reach; };
+    const Line line{center + Vec3{offset(), offset(), offset()} - 6.0 * direction, direction};
+    RC_PRE(WellConditioned(line, egg, 2));
+    RC_PRE(std::ranges::all_of(Meet(line, egg).Points, [](const CurveSurfacePoint& p) {
+        return std::abs(p.OnSurface.Y) <= 1.2;
+    }));
+    return {line, egg};
+}
+
+TEST_CASE("ellipsoid crossings: second-order Taylor decay and the transpose",
+          "[intersect][linearization][property]")
+{
+    rc::prop("for random lines through ellipsoids", [] {
+        const auto [line, egg] = RandomEllipsoidCrossing();
+        RequireTaylor(line, egg);
+    });
+    rc::prop("<J v, w> = <v, J^T w> for ellipsoids", [] {
+        const auto [line, egg] = RandomEllipsoidCrossing();
+        RequireTranspose(line, egg);
     });
 }
 

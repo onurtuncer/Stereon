@@ -37,10 +37,10 @@ import :Dispatch;
 /// carries no derivative carries none as a whole (ADR-0021, section 5).
 ///
 /// The pairs so far are a line or a B-spline curve against a plane, a
-/// cylinder, a cone, a sphere or a torus, the parameters bound to
+/// cylinder, a cone, a sphere, a torus or an ellipsoid, the parameters bound to
 /// coordinates of the line's origin and direction, to the curve's poles and
 /// weights (PoleBinding, as EvalJvp takes them), and to the surface's
-/// origin, its radii and a cone's semi-angle. The
+/// origin, its radii, a cone's semi-angle and an ellipsoid's semi-axes. The
 /// surface's partials come from its
 /// own Deriv, so a new surface needs only the velocities of its defining
 /// values; the others answer NotSupported until they bind theirs.
@@ -74,8 +74,10 @@ struct LineBinding {
 /// What a design parameter moves on a surface: a coordinate of its origin
 /// (a sphere's or a torus's centre, a cone's reference point); its Radius
 /// (a sphere's, a cylinder's, a cone's reference radius, a torus's major
-/// radius); a torus's MinorRadius; each a Length; or a cone's SemiAngle, an
-/// Angle. The frame is fixed: turning a surface is a later binding.
+/// radius); a torus's MinorRadius; an ellipsoid's SemiAxisA, SemiAxisB and
+/// SemiAxisC, along its XAxis, YAxis and axis; each a Length; or a cone's
+/// SemiAngle, an Angle. The frame is fixed: turning a surface is a later
+/// binding.
 enum class SurfaceComponent : std::uint8_t {
     OriginX,
     OriginY,
@@ -83,6 +85,9 @@ enum class SurfaceComponent : std::uint8_t {
     Radius,
     MinorRadius,
     SemiAngle,
+    SemiAxisA,
+    SemiAxisB,
+    SemiAxisC,
 };
 
 struct SurfaceBinding {
@@ -134,7 +139,8 @@ Linearize(const BSplineCurve& curve, const Surface& surface, const CurveSurfaceP
 /// `sensitivity`: for each point of `intersection`, in its order,
 /// CurveSurfacePointValues values. `intersection` is the result of
 /// intersecting these two geometries. NotSupported (a status) for a
-/// surface other than a plane, a cylinder, a cone, a sphere or a torus.
+/// surface other than a plane, a cylinder, a cone, a sphere, a torus or an
+/// ellipsoid.
 /// InvalidInput for a binding whose parameter is not of the context's set,
 /// is not a Length (an Angle for a SemiAngle), or moves a value the surface
 /// does not have, or for a seed that was never set.
@@ -223,7 +229,7 @@ Linearize(const Surface& a, const Surface& b, const IntersectionBranch& branch, 
 /// parameter may move both. A result with an overlap is Nondifferentiable
 /// as a whole, and so is any sample on a branch that is not a crossing.
 /// NotSupported (a status) unless both surfaces are planes, cylinders,
-/// cones, spheres or tori. InvalidInput as Linearize, for a sample naming
+/// cones, spheres, tori or ellipsoids. InvalidInput as Linearize, for a sample naming
 /// a branch the result does not have, a binding as IntersectJvp refuses it
 /// above, or a seed that was never set.
 [[nodiscard]] Result<SensitivityResult>
