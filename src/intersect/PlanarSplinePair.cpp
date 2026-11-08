@@ -32,6 +32,7 @@ import Stereon.Robust;
 
 #include "Analytic.hpp"
 #include "Bernstein.hpp"
+#include "BezierArc.hpp"
 #include "Planar.hpp"
 
 /// Two B-splines in the plane, polynomial or rational: the system
@@ -77,78 +78,7 @@ constexpr double Inflation = 0.125;
 /// Krawczyk's refinement: at most this many steps, each shrinking the box.
 constexpr int RefineSteps = 64;
 
-// --- Pieces --------------------------------------------------------------
-
-/// A piece [S0, S1] of segment Index's local parameter, dyadic, with its
-/// homogeneous poles over it, enclosed, and its hodograph's.
-struct Arc {
-    std::size_t Index;
-    double S0;
-    double S1;
-    std::vector<HPoint> Poles;
-};
-
-[[nodiscard]] HPoint Mid(const HPoint& a, const HPoint& b)
-{
-    const Interval half{0.5};
-    return {(a.X + b.X) * half, (a.Y + b.Y) * half, Interval{0.0}, (a.W + b.W) * half};
-}
-
-/// de Casteljau at the middle, enclosed.
-[[nodiscard]] std::pair<Arc, Arc> Halves(const Arc& arc)
-{
-    const std::size_t m = arc.Poles.size();
-    std::vector<HPoint> work = arc.Poles;
-    std::vector<HPoint> left(m);
-    std::vector<HPoint> right(m);
-    left[0] = work[0];
-    right[m - 1] = work[m - 1];
-    for (std::size_t level = 1; level < m; ++level) {
-        for (std::size_t i = 0; i + level < m; ++i) {
-            work[i] = Mid(work[i], work[i + 1]);
-        }
-        left[level] = work[0];
-        right[m - 1 - level] = work[m - 1 - level];
-    }
-    const double mid = 0.5 * arc.S0 + 0.5 * arc.S1;
-    return {Arc{arc.Index, arc.S0, mid, std::move(left)},
-            Arc{arc.Index, mid, arc.S1, std::move(right)}};
-}
-
-/// b + s (c - b): de Casteljau's step in the form whose enclosure shrinks
-/// with the poles' spread, for s anywhere, inside [0, 1] or not.
-[[nodiscard]] Interval Step(const Interval& b, const Interval& c, const Interval& s)
-{
-    return b + s * (c - b);
-}
-
-/// The homogeneous point of the poles' Bezier polynomial at s, enclosed.
-[[nodiscard]] HPoint EvalH(std::vector<HPoint> work, const Interval& s)
-{
-    for (std::size_t level = 1; level < work.size(); ++level) {
-        for (std::size_t i = 0; i + level < work.size(); ++i) {
-            work[i] = {Step(work[i].X, work[i + 1].X, s), Step(work[i].Y, work[i + 1].Y, s),
-                       Interval{0.0}, Step(work[i].W, work[i + 1].W, s)};
-        }
-    }
-    return work.front();
-}
-
-/// The hodograph's poles, p (H_i+1 - H_i), of degree p - 1; one zero pole
-/// for a constant.
-[[nodiscard]] std::vector<HPoint> Hodograph(const std::vector<HPoint>& poles)
-{
-    const Interval p{static_cast<double>(poles.size() - 1)};
-    std::vector<HPoint> d;
-    for (std::size_t i = 0; i + 1 < poles.size(); ++i) {
-        d.push_back({p * (poles[i + 1].X - poles[i].X), p * (poles[i + 1].Y - poles[i].Y),
-                     Interval{0.0}, p * (poles[i + 1].W - poles[i].W)});
-    }
-    if (d.empty()) {
-        d.push_back({Interval{0.0}, Interval{0.0}, Interval{0.0}, Interval{0.0}});
-    }
-    return d;
-}
+// --- Pieces (BezierArc.hpp holds the arcs themselves) ---------------------
 
 /// The point x / w enclosed, or nothing when w is not proved positive.
 [[nodiscard]] std::optional<std::array<Interval, 2>> PointOf(const HPoint& h)
@@ -236,25 +166,13 @@ struct Arc {
 
 // --- Krawczyk's operator -------------------------------------------------
 
-/// The outcome of Krawczyk's test on a box.
-enum class Test : std::uint8_t { NoRoot, OneRoot, Unknown };
-
-/// The parameter box of a pair: S on A's piece, T on B's, local to each
-/// piece ([0, 1] is the piece itself).
-struct ParameterBox {
-    Interval S;
-    Interval T;
-};
-
 /// K(X) for the pair, or nothing when F or J cannot be enclosed or J's
 /// midpoint is singular.
 [[nodiscard]] std::optional<ParameterBox> Krawczyk(const Arc& a, const Arc& b,
                                                    const ParameterBox& x)
 {
-    const double ms = Midpoint(x.S);
-    const double mt = Midpoint(x.T);
-    const auto pa = PointOf(EvalH(a.Poles, Interval{ms}));
-    const auto pb = PointOf(EvalH(b.Poles, Interval{mt}));
+    const auto pa = PointOf(EvalH(a.Poles, Interval{Midpoint(x.S)}));
+    const auto pb = PointOf(EvalH(b.Poles, Interval{Midpoint(x.T)}));
     const auto da = SlopeOver(a, x.S);
     const auto db = SlopeOver(b, x.T);
     if (!pa || !pb || !da || !db) {
@@ -262,43 +180,7 @@ struct ParameterBox {
     }
     const std::array<Interval, 2> f{(*pa)[0] - (*pb)[0], (*pa)[1] - (*pb)[1]};
     // J = [[a'x, -b'x], [a'y, -b'y]].
-    const std::array<Interval, 4> j{(*da)[0], -(*db)[0], (*da)[1], -(*db)[1]};
-    const double c11 = Midpoint(j[0]);
-    const double c12 = Midpoint(j[1]);
-    const double c21 = Midpoint(j[2]);
-    const double c22 = Midpoint(j[3]);
-    const double det = c11 * c22 - c12 * c21;
-    if (!(std::abs(det) > 0.0) || !std::isfinite(det)) {
-        return std::nullopt;
-    }
-    const std::array<Interval, 4> y{Interval{c22 / det}, Interval{-c12 / det}, Interval{-c21 / det},
-                                    Interval{c11 / det}};
-    const Interval ds = x.S - Interval{ms};
-    const Interval dt = x.T - Interval{mt};
-    const auto row = [&](const std::size_t r, const double m, const double unitS,
-                         const double unitT) {
-        const Interval yf = y[2 * r] * f[0] + y[2 * r + 1] * f[1];
-        const Interval rs = Interval{unitS} - (y[2 * r] * j[0] + y[2 * r + 1] * j[2]);
-        const Interval rt = Interval{unitT} - (y[2 * r] * j[1] + y[2 * r + 1] * j[3]);
-        return Interval{m} - yf + rs * ds + rt * dt;
-    };
-    return ParameterBox{row(0, ms, 1.0, 0.0), row(1, mt, 0.0, 1.0)};
-}
-
-[[nodiscard]] bool InsideInterior(const Interval& inner, const Interval& outer)
-{
-    return outer.GetLower() < inner.GetLower() && inner.GetUpper() < outer.GetUpper();
-}
-
-[[nodiscard]] Test Classify(const std::optional<ParameterBox>& k, const ParameterBox& x)
-{
-    if (!k) {
-        return Test::Unknown;
-    }
-    if (!Intersects(k->S, x.S) || !Intersects(k->T, x.T)) {
-        return Test::NoRoot;
-    }
-    return InsideInterior(k->S, x.S) && InsideInterior(k->T, x.T) ? Test::OneRoot : Test::Unknown;
+    return KrawczykStep(x, f, {(*da)[0], -(*db)[0], (*da)[1], -(*db)[1]});
 }
 
 /// The single root of a box Krawczyk's test proved to hold one, bracketed
@@ -338,30 +220,6 @@ struct PairSearch {
     std::size_t Pairs = 0;
     std::string Handler;
 };
-
-/// A piece-local box in a segment's local parameter, then the curve's.
-[[nodiscard]] Interval InSegment(const Arc& arc, const Interval& local)
-{
-    return Interval{arc.S0} + (Interval{arc.S1} - Interval{arc.S0}) * local;
-}
-
-[[nodiscard]] Interval OnCurve(const Segment& segment, const Interval& s)
-{
-    return Interval{segment.T0} + (Interval{segment.T1} - Interval{segment.T0}) * s;
-}
-
-/// Where a root's bracket in a segment's parameter lies against [0, 1]:
-/// inside (a root of the curve), beyond (of the polynomial continued, not
-/// of the segment), or across an end (undecided).
-enum class Within : std::uint8_t { Inside, Beyond, Across };
-
-[[nodiscard]] Within WithinSegment(const Interval& s)
-{
-    if (Contains(Interval{0.0, 1.0}, s)) {
-        return Within::Inside;
-    }
-    return Intersects(s, Interval{0.0, 1.0}) ? Within::Across : Within::Beyond;
-}
 
 /// Records the proved root of the pair's inflated box.
 void Record(PairSearch& search, const Arc& a, const Arc& b, const ParameterBox& x)
@@ -448,29 +306,6 @@ void Record(PairSearch& search, const Arc& a, const Arc& b, const ParameterBox& 
         }
     }
     return distinct;
-}
-
-/// A root's parameter in the requested domain: its bracket's middle, or,
-/// for a bracket across the domain's end, the end, undecided; nothing for
-/// a bracket outside the domain.
-[[nodiscard]] std::optional<double> Placed(const Interval& bracket, const Interval& domain,
-                                           bool& decided)
-{
-    if (!Intersects(bracket, domain)) {
-        return std::nullopt;
-    }
-    const double t = Midpoint(bracket);
-    if (!Contains(domain, bracket)) {
-        decided = false;
-    }
-    return std::clamp(t, domain.GetLower(), domain.GetUpper());
-}
-
-[[nodiscard]] std::vector<Segment> Reaching(std::vector<Segment> segments, const Interval& domain)
-{
-    std::erase_if(segments,
-                  [&](const Segment& s) { return !Intersects(Interval{s.T0, s.T1}, domain); });
-    return segments;
 }
 
 /// Every pair of segments, searched.

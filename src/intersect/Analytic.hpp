@@ -139,15 +139,20 @@ struct LineQuadratic {
 
 /// The branch certified against both surfaces (ADR-0009 section 4): its
 /// Bound is the larger of the two deviations, each proved within the
-/// Context's resolution over the whole range. A branch over an unbounded
-/// range stays uncertified: a face's loops bound it first (M6).
+/// Context's resolution over the whole range, or within `declared` when a
+/// handler declared the branch within the pair tolerance of the exact one
+/// (a tangency within it, ADR-0029 section 6: its curve lies up to that far
+/// from a surface by construction, and the bound records how far). A
+/// branch over an unbounded range stays uncertified: a face's loops bound
+/// it first (M6).
 [[nodiscard]] inline Result<void> Certify(IntersectionBranch& branch, const Surface& a,
-                                          const Surface& b, const Context& ctx)
+                                          const Surface& b, const Context& ctx,
+                                          const double declared = 0.0)
 {
     if (!branch.Range.IsBounded()) {
         return {};
     }
-    const double target = ctx.GetResolution();
+    const double target = std::max(ctx.GetResolution(), declared);
     STEREON_TRY(const DeviationCertificate onA,
                 CertifyDeviation(branch.Curve3d, a, branch.OnA, branch.Range, target));
     STEREON_TRY(const DeviationCertificate onB,
@@ -160,9 +165,10 @@ struct LineQuadratic {
 /// result's (ADR-0029: never a partial success).
 [[nodiscard]] inline Result<void> Keep(SurfaceSurfaceIntersection& result,
                                        IntersectionBranch branch, const Surface& a,
-                                       const Surface& b, const Context& ctx)
+                                       const Surface& b, const Context& ctx,
+                                       const double declared = 0.0)
 {
-    STEREON_TRY_VOID(Certify(branch, a, b, ctx));
+    STEREON_TRY_VOID(Certify(branch, a, b, ctx, declared));
     result.Branches.push_back(std::move(branch));
     return {};
 }

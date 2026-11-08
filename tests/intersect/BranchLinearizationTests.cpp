@@ -20,6 +20,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <limits>
@@ -40,6 +41,7 @@ using IntersectTest::ctx;
 using Stereon::BranchSample;
 using Stereon::Cylinder;
 using Stereon::DerivativeStatus;
+using Stereon::Ellipsoid;
 using Stereon::ErrorCode;
 using Stereon::IntersectionBranch;
 using Stereon::ParameterId;
@@ -73,14 +75,23 @@ Point3& OriginOf(Cylinder& s)
 {
     return s.Origin;
 }
+Point3& OriginOf(Ellipsoid& s)
+{
+    return s.Center;
+}
 
-/// The origin, then the radius where the surface has one.
+/// The origin, then the radius where the surface has one, or an
+/// ellipsoid's three semi-axes.
 template <typename S>
 std::vector<SurfaceComponent> ComponentsOf()
 {
     std::vector<SurfaceComponent> components{SurfaceComponent::OriginX, SurfaceComponent::OriginY,
                                              SurfaceComponent::OriginZ};
-    if constexpr (!std::is_same_v<S, Plane>) {
+    if constexpr (std::is_same_v<S, Ellipsoid>) {
+        components.insert(components.end(),
+                          {SurfaceComponent::SemiAxisA, SurfaceComponent::SemiAxisB,
+                           SurfaceComponent::SemiAxisC});
+    } else if constexpr (!std::is_same_v<S, Plane>) {
         components.push_back(SurfaceComponent::Radius);
     }
     return components;
@@ -91,7 +102,11 @@ template <typename S, typename Step>
 void MoveSurface(S& surface, const Step& d, const std::size_t first)
 {
     OriginOf(surface) = OriginOf(surface) + Vec3{d(first), d(first + 1), d(first + 2)};
-    if constexpr (!std::is_same_v<S, Plane>) {
+    if constexpr (std::is_same_v<S, Ellipsoid>) {
+        surface.A += d(first + 3);
+        surface.B += d(first + 4);
+        surface.C += d(first + 5);
+    } else if constexpr (!std::is_same_v<S, Plane>) {
         surface.Radius += d(first + 3);
     }
 }
@@ -315,7 +330,7 @@ bool WellConditioned(const Case<SA, SB>& c, const double poleReach = 1.2)
         if (!lin || lin->Status != DerivativeStatus::Valid || lin->Conditioning < 0.25) {
             return false;
         }
-        if constexpr (std::is_same_v<SB, Sphere>) {
+        if constexpr (std::is_same_v<SB, Sphere> || std::is_same_v<SB, Ellipsoid>) {
             if (std::abs(lin->OnB.Y) > poleReach) {
                 return false;
             }
@@ -343,6 +358,34 @@ Case<Plane, Sphere> RandomPlaneSphere()
     RC_PRE(std::abs(Dot(unit, north - plane.Origin)) >= 0.125 * radius &&
            std::abs(Dot(unit, south - plane.Origin)) >= 0.125 * radius);
     Case<Plane, Sphere> c{plane, sphere, Meet(Surface{plane}, Surface{sphere}), {}};
+    RC_PRE(!c.At.Branches.empty() && c.At.Overlaps.empty());
+    c.Samples = SamplesOf(c.At);
+    RC_PRE(WellConditioned(c));
+    return c;
+}
+
+/// A random plane cutting a random ellipsoid in a random frame, well
+/// inside it and away from its poles: an exact ellipse, its pcurve on the
+/// ellipsoid a certified fit.
+Case<Plane, Ellipsoid> RandomPlaneEllipsoid()
+{
+    const Point3 center{Coordinate(), Coordinate(), Coordinate()};
+    const Vec3 axis{Coordinate(), Coordinate(), Coordinate()};
+    const Vec3 normal{Coordinate(), Coordinate(), Coordinate()};
+    RC_PRE(Length(axis) >= 0.5 && Length(normal) >= 0.5);
+    const Cylinder frame = IntersectTest::CylinderAbout(center, axis, 1.0);
+    const auto semi = [] { return *rc::gen::inRange(8, 33) / 8.0; };
+    const Ellipsoid egg{center, semi(), semi(), semi(), frame.XAxis, frame.YAxis};
+    const double reach = std::min({egg.A, egg.B, egg.C});
+    const Vec3 unit = normal / Length(normal);
+    const Plane plane = IntersectTest::PlaneWithNormal(
+        center + (*rc::gen::inRange(-4, 5) / 8.0 * reach) * unit, normal);
+    // Away from the poles, where the plane-ellipsoid handler fails closed.
+    for (const double side : {1.0, -1.0}) {
+        const Point3 pole = center + (side * egg.C) * Axis(egg);
+        RC_PRE(std::abs(Dot(unit, pole - plane.Origin)) >= 0.125 * reach);
+    }
+    Case<Plane, Ellipsoid> c{plane, egg, Meet(Surface{plane}, Surface{egg}), {}};
     RC_PRE(!c.At.Branches.empty() && c.At.Overlaps.empty());
     c.Samples = SamplesOf(c.At);
     RC_PRE(WellConditioned(c));
@@ -493,6 +536,9 @@ TEST_CASE("branch points: second-order Taylor decay and the transpose",
     rc::prop("for random planes through spheres", [] { RequireTaylor(RandomPlaneSphere()); });
     rc::prop("for random planes across cylinders", [] { RequireTaylor(RandomPlaneCylinder()); });
     rc::prop("for cylinders through a sphere, traced", [] { RequireTaylor(RandomTracedCase()); });
+    rc::prop("for random planes through ellipsoids", [] { RequireTaylor(RandomPlaneEllipsoid()); });
+    rc::prop("<J v, w> = <v, J^T w> for ellipsoids",
+             [] { RequireTranspose(RandomPlaneEllipsoid()); });
     rc::prop("<J v, w> = <v, J^T w> for spheres", [] { RequireTranspose(RandomPlaneSphere()); });
     rc::prop("<J v, w> = <v, J^T w> for cylinders",
              [] { RequireTranspose(RandomPlaneCylinder()); });
@@ -597,12 +643,15 @@ TEST_CASE("branch products refuse bad input and other surfaces",
                   .error()
                   .GetCode() == ErrorCode::InvalidInput);
     }
-    SECTION("an ellipsoid has no bindings yet: NotSupported")
+    SECTION("a B-spline surface has no bindings yet: NotSupported")
     {
-        const Stereon::Ellipsoid egg{Point3{},           1.5, 1.5, 1.5, Vec3{1.0, 0.0, 0.0},
-                                     Vec3{0.0, 1.0, 0.0}};
-        const auto result = Stereon::IntersectJvp(Surface{c.Cut}, bindings, Surface{egg}, none, *at,
-                                                  samples, sensitivity);
+        const std::vector<double> knots{0.0, 0.0, 1.0, 1.0};
+        const auto patch = Stereon::MakeBSplineSurface(
+            1, 1, knots, knots,
+            {{0.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {1.0, 0.0, 0.0}, {1.0, 1.0, 0.0}}, {});
+        REQUIRE(patch.has_value());
+        const auto result = Stereon::IntersectJvp(Surface{c.Cut}, bindings, Surface{*patch}, none,
+                                                  *at, samples, sensitivity);
         REQUIRE(result.has_value());
         CHECK(result->GetStatus() == DerivativeStatus::NotSupported);
     }

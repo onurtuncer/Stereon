@@ -25,10 +25,11 @@ export namespace Stereon {
 inline constexpr OperationCapability IntersectCatalogue[] = {
     Declare("Intersect", {Dependency::InputGeometry, Dependency::Tolerances},
             {TrackingConvention::MovingTrimCoordinates, TrackingConvention::UniqueProjection},
-            "a line or a B-spline curve against a plane, a cylinder, a cone, a sphere or a torus, "
+            "a line or a B-spline curve against a plane, a cylinder, a cone, a sphere, a torus or "
+            "an ellipsoid, "
             "through IntersectJvp and IntersectVjp, in the line's origin and direction, the "
             "curve's poles and weights at fixed knots, and the surface's origin, its radii and a "
-            "cone's semi-angle: decided transversal "
+            "cone's semi-angle and an ellipsoid's semi-axes: decided transversal "
             "crossings only, NearEvent below NearEventSine; "
             "Tangential and Overlap contacts (ADR-0010) are nondifferentiable, undecided points "
             "and poles of the surface's parameters indeterminate; the point count and the "

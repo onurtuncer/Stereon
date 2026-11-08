@@ -171,21 +171,25 @@ template <typename Side>
 {
     return surface.Target<Plane>() != nullptr || surface.Target<Sphere>() != nullptr ||
            surface.Target<Cylinder>() != nullptr || surface.Target<Cone>() != nullptr ||
-           surface.Target<Torus>() != nullptr;
+           surface.Target<Torus>() != nullptr || surface.Target<Ellipsoid>() != nullptr;
 }
 
 /// Whether the surface has the value a component moves: every surface its
-/// origin, all but the plane a Radius, the torus a MinorRadius, the cone a
-/// SemiAngle.
+/// origin, all but the plane and the ellipsoid a Radius, the torus a
+/// MinorRadius, the cone a SemiAngle, the ellipsoid its three semi-axes.
 [[nodiscard]] bool Has(const Surface& surface, const SurfaceComponent component)
 {
     switch (component) {
     case SurfaceComponent::Radius:
-        return surface.Target<Plane>() == nullptr;
+        return surface.Target<Plane>() == nullptr && surface.Target<Ellipsoid>() == nullptr;
     case SurfaceComponent::MinorRadius:
         return surface.Target<Torus>() != nullptr;
     case SurfaceComponent::SemiAngle:
         return surface.Target<Cone>() != nullptr;
+    case SurfaceComponent::SemiAxisA:
+    case SurfaceComponent::SemiAxisB:
+    case SurfaceComponent::SemiAxisC:
+        return surface.Target<Ellipsoid>() != nullptr;
     default:
         return true;
     }
@@ -319,6 +323,22 @@ template <typename S>
     return std::cos(uv.Y) * radial + std::sin(uv.Y) * Axis(torus);
 }
 
+/// dS/d(component) at fixed (u, v) of an ellipsoid, C + cos v (A cos u X +
+/// B sin u Y) + C sin v axis: each semi-axis moves the point along its own
+/// axis by the factor it multiplies.
+[[nodiscard]] Vec3 EllipsoidPartial(const Ellipsoid& ellipsoid, const Point2& uv,
+                                    const SurfaceComponent component)
+{
+    switch (component) {
+    case SurfaceComponent::SemiAxisA:
+        return (std::cos(uv.Y) * std::cos(uv.X)) * ellipsoid.XAxis;
+    case SurfaceComponent::SemiAxisB:
+        return (std::cos(uv.Y) * std::sin(uv.X)) * ellipsoid.YAxis;
+    default:
+        return std::sin(uv.Y) * Axis(ellipsoid);
+    }
+}
+
 /// dS/d(component) at fixed (u, v), per unit of the component: the origin
 /// moves every point alike; the radius moves a sphere's point along
 /// its unit normal and a cylinder's along its radial direction. Form these
@@ -343,6 +363,9 @@ template <typename S>
     if (const Torus* torus = surface.Target<Torus>()) {
         return TorusPartial(*torus, uv, component);
     }
+    if (const Ellipsoid* ellipsoid = surface.Target<Ellipsoid>()) {
+        return EllipsoidPartial(*ellipsoid, uv, component);
+    }
     // A binding of a value the surface does not have was refused by
     // CheckSurfaceBindings; nothing moves here.
     return {};
@@ -361,7 +384,8 @@ template <typename S>
             return Fail(ErrorCode::InvalidInput,
                         std::string(where) +
                             ": a binding of a value the surface does not have (a radius on a "
-                            "plane, a minor radius off a torus, a semi-angle off a cone)");
+                            "plane or an ellipsoid, a minor radius off a torus, a semi-angle "
+                            "off a cone, a semi-axis off an ellipsoid)");
         }
     }
     return {};
@@ -909,7 +933,7 @@ CheckSurfaces(const Surface& a, const std::span<const SurfaceBinding> bindingsA,
                         DerivativeStatus::NotSupported,
                         std::string(where) +
                             ": two surfaces have products only when both are planes, "
-                            "cylinders, cones, spheres or tori"));
+                            "cylinders, cones, spheres, tori or ellipsoids"));
         return std::optional<SensitivityResult>(std::move(unsupported));
     }
     STEREON_TRY_VOID(CheckSurfaceBindings(bindingsA, a, set, where));
