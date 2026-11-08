@@ -32,7 +32,9 @@ inline constexpr OperationCapability IntersectCatalogue[] = {
             "crossings only, NearEvent below NearEventSine; "
             "Tangential and Overlap contacts (ADR-0010) are nondifferentiable, undecided points "
             "and poles of the surface's parameters indeterminate; the point count and the "
-            "tolerance stay fixed; other pairs answer NotSupported",
+            "tolerance stay fixed; branch points of two such surfaces under the normal-plane "
+            "tracking constraint (BranchSample), certified crossing branches only; "
+            "other pairs answer NotSupported",
             {DerivativeProduct::Jvp, DerivativeProduct::Vjp}),
 };
 

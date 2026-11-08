@@ -255,6 +255,83 @@ reports, is ``Nondifferentiable``. Other pairs answer ``NotSupported``; each
 new curve–surface handler binds its geometry's parameters to the same
 system.
 
+Branch points of two surfaces
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Where two surfaces meet in a curve, a point has four unknowns,
+:math:`z = (u_A, v_A, u_B, v_B)`, and only three equations,
+:math:`S_A(u_A, v_A) - S_B(u_B, v_B) = 0`: it can slide along the branch.
+The fourth equation is a tracking constraint, and Stereon uses the normal
+plane:
+
+.. math::
+
+   T \cdot \bigl(S_A(u_A, v_A) - X_0\bigr) = 0,
+
+where :math:`X_0` and :math:`T` are the branch's point and unit tangent at
+the sample's parameter :math:`t`, the shared edge parameter of ADR-0009. As
+the geometry moves, the point stays in the plane through :math:`X_0` normal
+to the branch, so :math:`T \cdot \dot x = 0`. The constraint is geometric:
+it does not depend on either surface's parametrisation, unlike holding one
+pcurve coordinate fixed, and it is well conditioned wherever the branch is
+transverse. With the rows
+:math:`[S_{A,u}, S_{A,v}, -S_{B,u}, -S_{B,v}]` and
+:math:`[T \cdot S_{A,u}, T \cdot S_{A,v}, 0, 0]`,
+
+.. math::
+
+   F_z \dot z = \begin{pmatrix} S_{B,p} \dot p - S_{A,p} \dot p \\
+                -T \cdot S_{A,p} \dot p \end{pmatrix}, \qquad
+   \dot x = S_{A,p} \dot p + S_{A,u} \dot u_A + S_{A,v} \dot v_A .
+
+:math:`F_z` is singular where the surfaces are tangent or where the branch
+lies in its own tracking plane. The conditioning is
+:math:`|T \cdot (\hat n_A \times \hat n_B)|`, the sine of the angle between
+the surfaces when :math:`T` follows the branch.
+
+A branch's curves are fitted, within its certified ``Bound``, so a sample
+is first refined onto both surfaces. Newton's method on the four equations
+starts from the branch's pcurves at :math:`t`. The refined point must lie on
+both surfaces and in the tracking plane to rounding. It must also lie
+within :math:`2(\text{Bound} + \text{rounding}) / \sin\theta` of
+:math:`X_0`; otherwise the result came from other geometry and is
+``InvalidInput``.
+
+``Linearize(a, b, branch, t)`` exposes the refined point, its parameters,
+the residual, :math:`T`, the four partials, the conditioning and the
+status. ``IntersectJvp`` and ``IntersectVjp`` take the result, a
+``SurfaceBinding`` list for each surface and a list of ``BranchSample``
+values (a branch's index and a parameter in its range). One parameter may
+move both surfaces. Each sample gives seven values, ``BranchPointValues``:
+:math:`\dot x` (three), then :math:`\dot u_A`, :math:`\dot v_A`,
+:math:`\dot u_B` and :math:`\dot v_B`. The 4 × 4 system is solved by
+Gaussian elimination with partial pivoting, transposed for the VJP.
+
+=========================================  ============================================
+Sample                                     Status
+=========================================  ============================================
+on a certified ``Crossing`` branch         ``Valid``, or ``NearEvent`` below
+                                           ``NearEventSine``
+on a ``Tangential`` or ``Overlap`` branch  ``Nondifferentiable``: the branch splits or
+                                           vanishes as the surfaces move
+any sample of a result with an overlap     ``Nondifferentiable``
+on an uncertified branch                   ``Indeterminate``
+at a pole of either surface's parameters   ``Indeterminate``
+=========================================  ============================================
+
+Both surfaces must be planes, cylinders, cones, spheres or tori; other
+pairs answer ``NotSupported``. The tests check the forward product against
+a closed form. A plane at height :math:`h` cuts a sphere of radius
+:math:`R` in a circle of radius :math:`\rho = \sqrt{R^2 - h^2}`, whose
+point moves radially by :math:`(R \dot R - h \dot h) / \rho` and up by
+:math:`\dot h`. They also check the second-order Taylor decay on random
+planes through spheres, planes across cylinders and cylinders through
+spheres, the last one traced and certified, not exact. The moved point is
+found in the same tracking plane and held there, and on both moved
+surfaces, to rounding. Further tests check the transpose identity, the
+statuses of a tangential branch, an overlap and an uncertified branch, and
+the refusal of stale results.
+
 The AD backend: CppAD
 ---------------------
 
