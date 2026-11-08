@@ -279,6 +279,12 @@ using SurfaceHandler = Result<SurfaceSurfaceIntersection> (*)(const Surface&, co
 Result<CurveCurveIntersection> LineLine(const Curve&, const Interval&, const Curve&,
                                         const Interval&, const Context&);
 
+/// Two B-spline curves in space: their meetings, critical points of the
+/// distance within the Context's resolution, proved by subdivision and
+/// Krawczyk's operator (SplineCurvePair.cpp).
+Result<CurveCurveIntersection> SplineSpline(const Curve&, const Interval&, const Curve&,
+                                            const Interval&, const Context&);
+
 /// The analytic handlers (ADR-0010's table, RS-0001 Tier A): every
 /// configuration decision is the sign of a polynomial in the input doubles
 /// and the tolerance, settled by Stereon.Robust (RS-0001 G5). Defined in
@@ -741,6 +747,8 @@ struct CurveStubOf {
     static constexpr CurveHandler Call = [] {
         if constexpr (std::same_as<A, Line> && std::same_as<B, Line>) {
             return &LineLine;
+        } else if constexpr (std::same_as<A, BSplineCurve> && std::same_as<B, BSplineCurve>) {
+            return &SplineSpline;
         } else {
             return &CurveStub<A, B>;
         }
