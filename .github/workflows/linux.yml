@@ -88,6 +88,8 @@ jobs:
             xvfb-run -a -s "-screen 0 1600x1000x24" build/gcc16-debug/viewer/app/stn-view "dumps/$shape" \
               --screenshot "screenshots/viewer-$shape-after.png" --size 1280x800 --no-panel --no-labels
           done
+          xvfb-run -a -s "-screen 0 1600x1000x24" build/gcc16-debug/viewer/app/stn-view dumps/validity \
+            --screenshot screenshots/viewer-validity.png --size 1280x800 --no-panel
           ls -l screenshots
       - uses: actions/upload-artifact@v7
         with:

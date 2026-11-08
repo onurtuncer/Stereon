@@ -14,7 +14,9 @@
 // cylinder of the topology tests, as ShapeArchive stores it) and
 // <directory>/trimmed (two Boolean results whose faces are drawn inside
 // their loops: a box drilled through by a cylinder, and the Steinmetz
-// solid of two cylinders). The viewer job of .github/workflows/linux.yml
+// solid of two cylinders) and <directory>/validity (a box without its top,
+// with the findings of its Solid-level check drawn on it). The viewer job
+// of .github/workflows/linux.yml
 // renders each with `stn-view --screenshot` and uploads the images.
 
 #include "../../tests/topo/BodiesStd.hpp"
@@ -152,6 +154,25 @@ bool WriteTrimmed(const std::filesystem::path& directory)
     return Save(directory, "drilled-box", *first) && Save(directory, "steinmetz", *second);
 }
 
+/// A box without its top, with the findings of its Solid-level check: the
+/// shell is open along the four top edges (ShellOpen).
+bool WriteValidity(const std::filesystem::path& directory)
+{
+    const std::vector<Point3> points{{0, 0, 0},  {20, 0, 0},  {20, 30, 0},  {0, 30, 0},
+                                     {0, 0, 50}, {20, 0, 50}, {20, 30, 50}, {0, 30, 50}};
+    const std::vector<std::vector<std::size_t>> sides{
+        {0, 3, 2, 1}, {0, 1, 5, 4}, {2, 3, 7, 6}, {0, 4, 7, 3}, {1, 2, 6, 5}};
+    const Stereon::Shape open = TopoTest::MakePolyhedron(points, sides).Freeze();
+    const Stereon::ValidityReport report =
+        Stereon::ValidateTopology(open, Stereon::ValidityLevel::Solid, Stereon::Context::Default());
+    const auto archive = Stereon::ValidityArchive(open, report);
+    if (!archive) {
+        std::cerr << "validity: " << archive.error().GetMessage() << '\n';
+        return false;
+    }
+    return Save(directory, "open-box", *archive);
+}
+
 } // namespace
 
 int main(const int argc, char** argv)
@@ -162,7 +183,7 @@ int main(const int argc, char** argv)
     }
     const std::filesystem::path root(argv[1]);
     return WriteGeometry(root / "geometry") && WriteTopology(root / "topology") &&
-                   WriteTrimmed(root / "trimmed")
+                   WriteTrimmed(root / "trimmed") && WriteValidity(root / "validity")
                ? 0
                : 1;
 }
