@@ -90,6 +90,8 @@ jobs:
           done
           xvfb-run -a -s "-screen 0 1600x1000x24" build/gcc16-debug/viewer/app/stn-view dumps/validity \
             --screenshot screenshots/viewer-validity.png --size 1280x800 --no-panel
+          xvfb-run -a -s "-screen 0 1600x1000x24" build/gcc16-debug/viewer/app/stn-view dumps/intersection \
+            --screenshot screenshots/viewer-intersection.png --size 1280x800
           ls -l screenshots
       - uses: actions/upload-artifact@v7
         with:

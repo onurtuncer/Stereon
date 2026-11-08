@@ -20,12 +20,14 @@
 #include <cstdlib>
 #include <filesystem>
 #include <limits>
+#include <numbers>
 #include <optional>
 #include <random>
 #include <string>
 #include <string_view>
 #include <vector>
 
+import Stereon.Intersect;
 import Stereon.Io;
 
 #include "../topo/Bodies.hpp"
@@ -491,4 +493,54 @@ TEST_CASE("a validity report's findings are drawn on the shape they name", "[io]
     const auto written = Stereon::DumpAt("open-box", open, report);
     REQUIRE(written);
     REQUIRE(written->has_value());
+}
+
+TEST_CASE("an intersection result is dumped with its branches, points and pcurves",
+          "[io][dump][intersection]")
+{
+    const Stereon::Context& ctx = Stereon::Context::Default();
+    // A cylinder of radius 1 about z through a sphere of radius 2 about
+    // (0.5, 0, 0): one closed curve, traced and certified.
+    const Stereon::Surface cylinder(Stereon::Cylinder{Point3{}, 1.0, X, Y});
+    const Stereon::Surface sphere(Stereon::Sphere{Point3{0.5, 0.0, 0.0}, 2.0, X, Y});
+    const Stereon::Box2 band{Stereon::Interval{0.0, 2.0 * std::numbers::pi},
+                             Stereon::Interval{-3.0, 3.0}};
+    const auto result = Intersect(cylinder, band, sphere, Domain(sphere), ctx);
+    REQUIRE(result);
+    REQUIRE_FALSE(result->Branches.empty());
+    const auto archive =
+        Stereon::IntersectionArchive(cylinder, band, sphere, Domain(sphere), *result);
+    REQUIRE(archive);
+    REQUIRE(archive->Surfaces.size() == 2);
+    REQUIRE(archive->Curves2d.size() == 2 * result->Branches.size());
+    const DebugChunk& debug = archive->Debug.value();
+    REQUIRE(debug.Polylines.size() == result->Branches.size());
+    for (const DebugPolyline& line : debug.Polylines) {
+        REQUIRE(line.Colour == Stereon::ContactColour(Stereon::ContactType::Crossing));
+        for (const Point3& p : line.Points) {
+            // On both surfaces, to the branch's certified bound and display
+            // sampling.
+            REQUIRE(std::abs(std::hypot(p.X, p.Y) - 1.0) <= 1e-6);
+            REQUIRE(std::abs(Distance(p, Point3{0.5, 0.0, 0.0}) - 2.0) <= 1e-6);
+        }
+    }
+    REQUIRE(debug.Labels.front().Text.starts_with("branch 0: Crossing, OppositeSide, bound "));
+
+    // A line through a sphere: two crossings, each a labelled point.
+    const Stereon::Curve line(Stereon::Line{Point3{-5.0, 0.5, 0.0}, X});
+    const auto points = Intersect(line, sphere, ctx);
+    REQUIRE(points);
+    REQUIRE(points->Points.size() == 2);
+    const auto pointArchive = Stereon::IntersectionArchive(line, Stereon::Interval{0.0, 10.0},
+                                                           sphere, Domain(sphere), *points);
+    REQUIRE(pointArchive);
+    REQUIRE(pointArchive->Debug->Points.size() == 2);
+    REQUIRE(pointArchive->Debug->Labels.size() == 2);
+    REQUIRE(pointArchive->Debug->Labels.front().Text.starts_with("t = "));
+    REQUIRE(pointArchive->Debug->Labels.front().Text.ends_with(": Crossing"));
+
+    // It is an ordinary archive: written and read back.
+    const auto loaded = Stereon::ReadGeometry(Written(*archive));
+    REQUIRE(loaded);
+    REQUIRE(loaded->Archive.Debug == archive->Debug);
 }
