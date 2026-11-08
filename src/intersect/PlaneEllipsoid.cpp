@@ -396,8 +396,9 @@ StretchesOf(const Curve2d& onPlane, const Box2& planeBox, const Curve2d& onEllip
     SurfaceSurfaceIntersection result;
     // At a pole every longitude names the same point. Decide that case
     // on the input frame, not by a tolerance on the projected latitude.
-    const bool pole = SignOfFormula([&](auto f) { return AlongFrame(f, s)[0]; }) == Sign::Zero &&
-                      SignOfFormula([&](auto f) { return AlongFrame(f, s)[1]; }) == Sign::Zero;
+    const bool pole =
+        SignOfFormula([&](auto field) { return AlongFrame(field, s)[0]; }) == Sign::Zero &&
+        SignOfFormula([&](auto field) { return AlongFrame(field, s)[1]; }) == Sign::Zero;
     const std::optional<double> u =
         pole ? std::optional<double>{std::clamp(onB.X, boxB.X.GetLower(), boxB.X.GetUpper())}
              : InPeriodicDomain(onB.X, boxB.X);
