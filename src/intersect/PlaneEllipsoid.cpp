@@ -306,10 +306,21 @@ struct UvJet {
 }
 
 /// The cubic interpolant through n + 1 samples of the piece, on the
-/// ellipse's own angle.
+/// ellipse's own angle. A sample on a pole to rounding, where the
+/// longitude's rate is 0 / 0, fails closed as FittedPcurve does past its
+/// budget: a plane made through a pole and rounded misses it by a unit in
+/// the last place, so ThroughPole cannot see it, and a seam crossing can
+/// then land on the pole itself.
 [[nodiscard]] Result<Curve2d> InterpolantOf(const std::vector<UvJet>& samples,
                                             const Interval& piece)
 {
+    for (const UvJet& s : samples) {
+        if (!std::isfinite(s.Rate.X) || !std::isfinite(s.Rate.Y)) {
+            return Fail(ErrorCode::IntersectionFailed,
+                        "PlaneEllipsoid: the section passes within rounding of a pole of the "
+                        "ellipsoid's chart, where its pcurve's longitude has no rate (ADR-0009)");
+        }
+    }
     std::vector<Point2> points;
     points.reserve(samples.size());
     for (const UvJet& s : samples) {
