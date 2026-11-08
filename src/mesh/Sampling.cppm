@@ -10,6 +10,7 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <vector>
 
 export module Stereon.Mesh:Sampling;
@@ -101,5 +102,18 @@ struct IsoLine {
                                                          const DisplayTolerance& tolerance,
                                                          std::optional<Box2> range = std::nullopt,
                                                          std::size_t linesPerDirection = 9);
+
+/// The iso-lines of SampleSurface over `range`, cut to the region the
+/// closed polygons `loops` bound in the surface's parameter plane, by the
+/// even-odd rule: a face's boundary, its outer loop and its holes, sampled.
+/// Each iso-line is cut where it crosses a loop and only its stretches
+/// inside are sampled, so a line may give several IsoLines of the same
+/// Fixed value, or none. The lines at the range's ends are left out: they
+/// run along the boundary the loops trace. Errors as SampleSurface, and
+/// InvalidInput for a loop of fewer than three points.
+[[nodiscard]] Result<std::vector<IsoLine>>
+SampleTrimmedSurface(const Surface& surface, const DisplayTolerance& tolerance,
+                     std::span<const std::vector<Point2>> loops, Box2 range,
+                     std::size_t linesPerDirection = 9);
 
 } // namespace Stereon

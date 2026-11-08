@@ -16,6 +16,7 @@ module;
 #include <cmath>
 #include <cstddef>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -381,6 +382,137 @@ Result<std::vector<IsoLine>> SampleSurface(const Surface& surface,
         const auto eval = [&](const double s) { return Eval(surface, Point2{fixed, s}); };
         STEREON_TRY(Polyline line, SampleBetween<3>(eval, breaksV, tolerance, function));
         lines.push_back(MakeIsoLine(IsoDirection::AlongV, fixed, std::move(line)));
+    }
+    return lines;
+}
+
+namespace {
+
+/// Where the line of constant `fixed` in coordinate `across` (0 for u, 1
+/// for v) crosses the loops, in the other coordinate, ascending. A segment
+/// counts when its ends lie on opposite sides, one end on the line counted
+/// with the side below, so a vertex on the line is crossed once and a
+/// segment along it not at all.
+[[nodiscard]] std::vector<double> Crossings(std::span<const std::vector<Point2>> loops,
+                                            const int across, const double fixed)
+{
+    const auto fixedOf = [&](const Point2& p) { return across == 0 ? p.X : p.Y; };
+    const auto alongOf = [&](const Point2& p) { return across == 0 ? p.Y : p.X; };
+    std::vector<double> out;
+    for (const std::vector<Point2>& loop : loops) {
+        for (std::size_t i = 0; i < loop.size(); ++i) {
+            const Point2& p = loop[i];
+            const Point2& q = loop[(i + 1) % loop.size()];
+            if ((fixedOf(p) <= fixed) == (fixedOf(q) <= fixed)) {
+                continue;
+            }
+            const double s = (fixed - fixedOf(p)) / (fixedOf(q) - fixedOf(p));
+            out.push_back(alongOf(p) + s * (alongOf(q) - alongOf(p)));
+        }
+    }
+    std::ranges::sort(out);
+    return out;
+}
+
+/// The stretches of a line inside the loops, by the even-odd rule: the
+/// crossings in pairs, each kept inside `range`.
+[[nodiscard]] std::vector<Interval> Inside(const std::vector<double>& crossings,
+                                           const Interval range)
+{
+    std::vector<Interval> out;
+    for (std::size_t i = 0; i + 1 < crossings.size(); i += 2) {
+        const double lower = std::max(crossings[i], range.GetLower());
+        const double upper = std::min(crossings[i + 1], range.GetUpper());
+        if (lower < upper) {
+            out.push_back(Interval{lower, upper});
+        }
+    }
+    return out;
+}
+
+/// The values strictly inside the range.
+[[nodiscard]] std::vector<double> Interior(std::vector<double> values, const Interval range)
+{
+    std::erase_if(values,
+                  [&](const double x) { return !(range.GetLower() < x && x < range.GetUpper()); });
+    return values;
+}
+
+/// InvalidInput unless there is a surface, a bounded range, two lines per
+/// direction and loops of three points each.
+[[nodiscard]] Result<void> CheckTrimmedInput(const Surface& surface,
+                                             std::span<const std::vector<Point2>> loops,
+                                             const Box2& range, const std::size_t linesPerDirection)
+{
+    if (surface.IsEmpty() || linesPerDirection < 2 || range.IsEmpty() || !range.X.IsBounded() ||
+        !range.Y.IsBounded()) {
+        return Fail(ErrorCode::InvalidInput,
+                    "SampleTrimmedSurface: needs a surface, a bounded range and at least two lines "
+                    "per direction");
+    }
+    const bool tooShort =
+        std::ranges::any_of(loops, [](const std::vector<Point2>& loop) { return loop.size() < 3; });
+    if (tooShort) {
+        return Fail(ErrorCode::InvalidInput,
+                    "SampleTrimmedSurface: a loop needs at least three points");
+    }
+    return {};
+}
+
+/// The iso-lines across one direction, `across` 1 for lines along u at
+/// fixed v and 0 for lines along v at fixed u: each fixed value's stretches
+/// inside the loops, sampled and appended to `lines`.
+struct IsoFamily {
+    int Across;
+    Interval Fixed;
+    Interval Along;
+    std::vector<double> FixedValues;
+    const std::vector<double>* AlongKnots;
+};
+
+[[nodiscard]] Result<void> AppendTrimmed(const Surface& surface, const DisplayTolerance& tolerance,
+                                         std::span<const std::vector<Point2>> loops,
+                                         const IsoFamily& family, std::vector<IsoLine>& lines)
+{
+    const bool alongU = family.Across == 1;
+    for (const double fixed : family.FixedValues) {
+        for (const Interval stretch :
+             Inside(Crossings(loops, family.Across, fixed), family.Along)) {
+            const auto eval = [&](const double s) {
+                return Eval(surface, alongU ? Point2{s, fixed} : Point2{fixed, s});
+            };
+            STEREON_TRY(Polyline line, SampleBetween<3>(eval, WithEnds(*family.AlongKnots, stretch),
+                                                        tolerance, "SampleTrimmedSurface"));
+            lines.push_back(MakeIsoLine(alongU ? IsoDirection::AlongU : IsoDirection::AlongV, fixed,
+                                        std::move(line)));
+        }
+    }
+    return {};
+}
+
+} // namespace
+
+Result<std::vector<IsoLine>> SampleTrimmedSurface(const Surface& surface,
+                                                  const DisplayTolerance& tolerance,
+                                                  const std::span<const std::vector<Point2>> loops,
+                                                  const Box2 range,
+                                                  const std::size_t linesPerDirection)
+{
+    STEREON_TRY_VOID(CheckTrimmedInput(surface, loops, range, linesPerDirection));
+    STEREON_TRY_VOID(CheckTolerance(tolerance, "SampleTrimmedSurface"));
+    std::vector<double> knotsU;
+    std::vector<double> knotsV;
+    SurfaceKnots(surface, knotsU, knotsV, 0);
+    // Along u at each interior v, then along v at each interior u.
+    const IsoFamily families[] = {
+        {1, range.Y, range.X, Interior(IsoValues(range.Y, linesPerDirection, knotsV), range.Y),
+         &knotsU},
+        {0, range.X, range.Y, Interior(IsoValues(range.X, linesPerDirection, knotsU), range.X),
+         &knotsV},
+    };
+    std::vector<IsoLine> lines;
+    for (const IsoFamily& family : families) {
+        STEREON_TRY_VOID(AppendTrimmed(surface, tolerance, loops, family, lines));
     }
     return lines;
 }

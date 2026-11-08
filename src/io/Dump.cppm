@@ -71,9 +71,11 @@ DumpAt(std::string_view name, DebugChunk primitives,
        SourceLocation where = SourceLocation::Current());
 
 /// What a dump of the shape stores, until the native format has topology
-/// chunks (ADR-0012): the surface of every face, trimmed to the parameter
-/// box its boundary's pcurves cover, the curve of every edge
-/// trimmed to the edge's range, the pcurve of every coedge, and as debug
+/// chunks (ADR-0012): every face as its surface's iso-lines inside its
+/// loops, polylines in FaceColour (SampleTrimmedSurface), or, where its
+/// loops cannot be sampled, its surface trimmed to the parameter box its
+/// boundary's pcurves cover; the curve of every edge trimmed to the edge's
+/// range, the pcurve of every coedge, and as debug
 /// primitives the topology overlays of ADR-0035 section 4: each vertex as a
 /// point with its tolerance as a box, each edge as a polyline coloured by
 /// its curve kind (EdgeCurveColour), drawn from its 3D curve or, for a kind
@@ -84,6 +86,9 @@ DumpAt(std::string_view name, DebugChunk primitives,
 
 /// The colour ShapeArchive draws an edge of the kind in.
 [[nodiscard]] DebugColour EdgeCurveColour(EdgeCurveKind kind) noexcept;
+
+/// The colour ShapeArchive draws a face's iso-lines in.
+[[nodiscard]] DebugColour FaceColour() noexcept;
 
 /// For a debugger: DumpAt without a source location, true when a file was
 /// written. A null name, dumping switched off and any error give false.

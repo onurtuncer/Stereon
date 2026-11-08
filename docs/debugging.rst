@@ -212,14 +212,68 @@ frontends can reuse it.
    :alt: stn-view with the closed cylinder of the topology tests, its edges coloured by kind and labelled with Describe().
 
    A ``Shape`` dump: the closed cylinder of the topology tests. Each face
-   is drawn over the parameter box of its boundary. The edges are
-   coloured by kind: the seam in orange (``Boundary``) and the circles in
-   blue (``Exact``). Vertices and edges carry their ``Describe()`` labels.
+   is drawn in grey as its surface's iso-lines inside its loops, so the
+   disks stop at their circles. The edges are coloured by kind: the seam
+   in orange (``Boundary``) and the circles in blue (``Exact``). Vertices
+   and edges carry their ``Describe()`` labels.
+
+Faces drawn inside their loops
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A face of a ``Shape`` is a piece of its surface: the region its loops bound
+in the surface's parameters. A dump draws it that way. ``ShapeArchive``
+samples each loop's pcurves into a closed polygon in the parameter plane,
+and ``SampleTrimmedSurface`` (``Stereon.Mesh:Sampling``) cuts each iso-line
+of the surface where it crosses the polygons, keeping the stretches inside
+by the even-odd rule, so holes stay empty. The lines go into the dump as
+debug polylines in grey (``FaceColour()``). Only where a face's loops cannot
+be sampled does the dump fall back to the surface itself, trimmed to the
+parameter box its boundary covers, as every face was drawn before.
+
+The difference shows on the results of Booleans, whose faces are cut out of
+their surfaces. The Steinmetz solid of two cylinders
+(:doc:`examples`, *The Steinmetz solids*) has four faces, each a lens of
+a cylinder's lateral face:
+
+.. list-table::
+   :widths: 50 50
+
+   * - .. figure:: figures/viewer-steinmetz-before.png
+          :width: 100%
+          :alt: The Steinmetz solid drawn as the two whole cylinders its faces lie on.
+
+          Before: each face drawn over the parameter box of its boundary,
+          which for these lenses takes in most of each cylinder.
+     - .. figure:: figures/viewer-steinmetz-after.png
+          :width: 100%
+          :alt: The Steinmetz solid drawn as its four lenses, bounded by the red intersection edges.
+
+          After: each face drawn inside its loops, the four lenses bounded
+          by the red ``Intersection`` edges.
+
+A box drilled through by a cylinder (:doc:`examples`, *A drilled box*):
+the top and the bottom are squares with a hole, which the lines now skip.
+
+.. list-table::
+   :widths: 50 50
+
+   * - .. figure:: figures/viewer-drilled-box-before.png
+          :width: 100%
+          :alt: A drilled box whose top face's lines run across the hole.
+
+          Before: the top's lines run across the hole.
+     - .. figure:: figures/viewer-drilled-box-after.png
+          :width: 100%
+          :alt: A drilled box whose top face's lines stop at the hole's circle.
+
+          After: they stop at the hole's circle.
 
 ``stn-view --screenshot file.png`` renders the window once, writes it as a
-PNG and exits. The figures above come from the Linux viewer CI job: it
-writes the dumps of ``docs/figures/ViewerDumps.cpp`` and renders them under
-Xvfb with Mesa's software OpenGL.
+PNG and exits; ``--no-labels`` hides the labels. The figures above come
+from the dumps of ``docs/figures/ViewerDumps.cpp``, which the Linux viewer
+CI job renders under Xvfb with Mesa's software OpenGL. The *before* images
+were rendered once, from the same dumps written by the earlier
+``ShapeArchive``, and are not regenerated.
 
 Related design decisions
 ------------------------

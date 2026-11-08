@@ -373,3 +373,73 @@ TEST_CASE("sampling refuses non-finite evaluations instead of publishing a polyl
         REQUIRE(sampled.error().GetCode() == ErrorCode::NotSupported);
     }
 }
+
+TEST_CASE("a trimmed surface's iso-lines stay inside its loops and out of its holes",
+          "[mesh][sampling][trimmed]")
+{
+    // The plane z = 0, the square [0, 4]^2 with the hole [1, 3]^2. The
+    // outer loop runs counter-clockwise and the hole clockwise, as a face's
+    // loops do; the even-odd rule does not need the senses.
+    const Surface plane(Plane{Point3{}, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}});
+    const std::vector<std::vector<Point2>> loops{
+        {Point2{0, 0}, Point2{4, 0}, Point2{4, 4}, Point2{0, 4}},
+        {Point2{1, 1}, Point2{1, 3}, Point2{3, 3}, Point2{3, 1}},
+    };
+    const Stereon::Box2 box{Interval{0.0, 4.0}, Interval{0.0, 4.0}};
+    const auto lines = Stereon::SampleTrimmedSurface(plane, DisplayTolerance{}, loops, box, 9);
+    REQUIRE(lines.has_value());
+    // Seven interior lines each way, at 0.5, 1, ..., 3.5. A line meets an
+    // edge's end on it with the side below it, so the line along the
+    // hole's lower edge (at 1) is cut in two and the line along its upper
+    // edge (at 3) runs whole, on the edge: the lines at 1, 1.5, 2 and 2.5
+    // are cut, those at 0.5, 3 and 3.5 not. 2 x (4 x 2 + 3) = 22.
+    REQUIRE(lines->size() == 22);
+    for (const Stereon::IsoLine& iso : *lines) {
+        for (const Point3& p : iso.Line.Points) {
+            REQUIRE(p.X >= 0.0);
+            REQUIRE(p.X <= 4.0);
+            REQUIRE(p.Y >= 0.0);
+            REQUIRE(p.Y <= 4.0);
+            const bool inHole =
+                p.X > 1.0 + 1e-12 && p.X < 3.0 - 1e-12 && p.Y > 1.0 + 1e-12 && p.Y < 3.0 - 1e-12;
+            REQUIRE_FALSE(inHole);
+        }
+    }
+
+    // A loop of fewer than three points is refused.
+    const std::vector<std::vector<Point2>> bad{{Point2{0, 0}, Point2{1, 0}}};
+    REQUIRE(Stereon::SampleTrimmedSurface(plane, DisplayTolerance{}, bad, box).error().GetCode() ==
+            ErrorCode::InvalidInput);
+}
+
+TEST_CASE("a cylinder face cut by a lens keeps its iso-lines out of the lens",
+          "[mesh][sampling][trimmed]")
+{
+    // The lateral face of the unit cylinder of height 2, with a hole in its
+    // chart: the diamond about (pi, 1). Every sampled point outside it.
+    const Surface cylinder(
+        Stereon::Cylinder{Point3{}, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}});
+    const double pi = std::numbers::pi;
+    const std::vector<std::vector<Point2>> loops{
+        {Point2{0, 0}, Point2{2 * pi, 0}, Point2{2 * pi, 2}, Point2{0, 2}},
+        {Point2{pi - 1, 1}, Point2{pi, 1.5}, Point2{pi + 1, 1}, Point2{pi, 0.5}},
+    };
+    const auto lines =
+        Stereon::SampleTrimmedSurface(cylinder, DisplayTolerance{}, loops,
+                                      Stereon::Box2{Interval{0.0, 2 * pi}, Interval{0.0, 2.0}}, 9);
+    REQUIRE(lines.has_value());
+    REQUIRE_FALSE(lines->empty());
+    for (const Stereon::IsoLine& iso : *lines) {
+        for (std::size_t i = 0; i < iso.Line.Points.size(); ++i) {
+            const Point3& p = iso.Line.Points[i];
+            REQUIRE(std::abs(std::hypot(p.X, p.Y) - 1.0) <= 1e-12);
+            // Back to the chart: u from the angle, v the height.
+            double u = std::atan2(p.Y, p.X);
+            if (u < 0.0) {
+                u += 2 * pi;
+            }
+            const bool inDiamond = std::abs(u - pi) / 1.0 + std::abs(p.Z - 1.0) / 0.5 < 1.0 - 1e-9;
+            REQUIRE_FALSE(inDiamond);
+        }
+    }
+}

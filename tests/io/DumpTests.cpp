@@ -352,17 +352,24 @@ TEST_CASE("a shape is dumped with its geometry and topology overlays", "[io][dum
     const Stereon::Shape box = TopoTest::MakeBox().Freeze();
     const auto archive = Stereon::ShapeArchive(box);
     REQUIRE(archive);
-    REQUIRE(archive->Surfaces.size() == 6);
+    // Faces are drawn as iso-lines inside their loops, not as surfaces.
+    REQUIRE(archive->Surfaces.empty());
     REQUIRE(archive->Curves.size() == 12);
     REQUIRE(archive->Curves2d.size() == 24);
     const DebugChunk& debug = archive->Debug.value();
     REQUIRE(debug.Points.size() == 8);
     REQUIRE(debug.Boxes.size() == 8);
     REQUIRE(debug.Labels.size() == 8 + 12);
-    REQUIRE(debug.Polylines.size() == 12);
-    for (const DebugPolyline& edge : debug.Polylines) {
-        REQUIRE(edge.Colour == Stereon::EdgeCurveColour(EdgeCurveKind::Exact));
-    }
+    // Each edge once in its kind's colour; each square face its seven
+    // interior lines each way.
+    const auto edgeLines = std::ranges::count_if(debug.Polylines, [](const DebugPolyline& p) {
+        return p.Colour == Stereon::EdgeCurveColour(EdgeCurveKind::Exact);
+    });
+    const auto faceLines = std::ranges::count_if(
+        debug.Polylines, [](const DebugPolyline& p) { return p.Colour == Stereon::FaceColour(); });
+    REQUIRE(edgeLines == 12);
+    REQUIRE(faceLines == 6 * 14);
+    REQUIRE(debug.Polylines.size() == static_cast<std::size_t>(edgeLines + faceLines));
     for (const DebugBox& tolerance : debug.Boxes) {
         REQUIRE(tolerance.Box.X.GetLower() < tolerance.Box.X.GetUpper());
     }
@@ -377,20 +384,28 @@ TEST_CASE("a shape is dumped with its geometry and topology overlays", "[io][dum
     const auto cylinder = Stereon::ShapeArchive(TopoTest::MakeCylinder().Freeze());
     REQUIRE(cylinder);
     std::vector<DebugColour> colours;
-    for (const DebugPolyline& edge : cylinder->Debug->Polylines) {
-        colours.push_back(edge.Colour);
+    for (const DebugPolyline& line : cylinder->Debug->Polylines) {
+        colours.push_back(line.Colour);
     }
     REQUIRE(std::ranges::count(colours, Stereon::EdgeCurveColour(EdgeCurveKind::Exact)) == 2);
     REQUIRE(std::ranges::count(colours, Stereon::EdgeCurveColour(EdgeCurveKind::Boundary)) == 1);
 
-    // Faces are drawn where they are: each surface trimmed to the box its
-    // boundary covers, so the cylinder's lateral face ends at its two circles.
-    for (const Stereon::Surface& face : cylinder->Surfaces) {
-        REQUIRE(face.Target<Stereon::TrimmedSurface>() != nullptr);
+    // Faces are drawn where they are: every face line lies on the closed
+    // cylinder of radius 1.5 between its two circles, at heights 0 and 4.
+    REQUIRE(cylinder->Surfaces.empty());
+    std::size_t lateralLines = 0;
+    for (const DebugPolyline& line : cylinder->Debug->Polylines) {
+        if (line.Colour != Stereon::FaceColour()) {
+            continue;
+        }
+        ++lateralLines;
+        for (const Stereon::Point3& p : line.Points) {
+            REQUIRE(p.Z >= -1e-12);
+            REQUIRE(p.Z <= 4.0 + 1e-12);
+            REQUIRE(std::hypot(p.X, p.Y) <= 1.5 + 1e-12);
+        }
     }
-    const Stereon::Box2 lateral = Stereon::Domain(cylinder->Surfaces.front());
-    REQUIRE(lateral.Y.GetLower() == 0.0);
-    REQUIRE(lateral.Y.GetUpper() == 4.0);
+    REQUIRE(lateralLines > 0);
 
     REQUIRE_FALSE(Stereon::ShapeArchive(Stereon::Shape{}));
 

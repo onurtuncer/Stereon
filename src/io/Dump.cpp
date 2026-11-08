@@ -14,6 +14,7 @@ module;
 
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -211,11 +212,81 @@ void Extend(Point2& lower, Point2& upper, const std::vector<Point2>& points)
     return trimmed ? Surface(*std::move(trimmed)) : surface;
 }
 
+/// The face's loops as closed polygons in its surface's parameters: each
+/// coedge's pcurve sampled over its edge's range, turned round for a use
+/// against its edge, in the loop's order. Nothing when a use has no pcurve
+/// or cannot be sampled.
+[[nodiscard]] std::optional<std::vector<std::vector<Point2>>> FaceLoops(const Shape& shape,
+                                                                        const FaceId face)
+{
+    const auto loops = LoopsOf(shape, face);
+    if (!loops) {
+        return std::nullopt;
+    }
+    std::vector<std::vector<Point2>> out;
+    for (const LoopId loop : *loops) {
+        const auto coedges = CoedgesOf(shape, loop);
+        if (!coedges) {
+            return std::nullopt;
+        }
+        std::vector<Point2> polygon;
+        for (const CoedgeId c : *coedges) {
+            const std::optional<Curve2d> pcurve = PCurveOf(shape, c);
+            if (!pcurve) {
+                return std::nullopt;
+            }
+            Result<Polyline2d> line =
+                SampleCurve(*pcurve, DisplayTolerance{}, RangeOf(shape, EdgeOf(shape, c)));
+            if (!line) {
+                return std::nullopt;
+            }
+            if (StoredEdgeUseSense(shape, c) == EdgeUseSense::Opposite) {
+                std::ranges::reverse(line->Points);
+            }
+            // Each use starts where the last ended: drop the repeated point.
+            const std::size_t skip = polygon.empty() ? 0 : 1;
+            polygon.insert(polygon.end(), line->Points.begin() + static_cast<std::ptrdiff_t>(skip),
+                           line->Points.end());
+        }
+        if (polygon.size() >= 3) {
+            out.push_back(std::move(polygon));
+        }
+    }
+    return out;
+}
+
+/// The face drawn where it is: its surface's iso-lines inside its loops,
+/// in FaceColour, as polylines of the debug chunk. False when the face's
+/// loops or iso-lines cannot be sampled; the caller then draws the surface
+/// over the box the boundary covers instead.
+[[nodiscard]] bool AddFaceLines(const Shape& shape, const FaceId face, DebugChunk& debug)
+{
+    const std::optional<std::vector<std::vector<Point2>>> loops = FaceLoops(shape, face);
+    const std::optional<Box2> box = FaceBox(shape, face);
+    if (!loops || loops->empty() || !box) {
+        return false;
+    }
+    const Result<std::vector<IsoLine>> lines =
+        SampleTrimmedSurface(SurfaceOf(shape, face), DisplayTolerance{}, *loops, *box);
+    if (!lines) {
+        return false;
+    }
+    for (const IsoLine& iso : *lines) {
+        DebugPolyline line;
+        line.Points = iso.Line.Points;
+        line.Colour = FaceColour();
+        debug.Polylines.push_back(std::move(line));
+    }
+    return true;
+}
+
 [[nodiscard]] Result<void> AddFacesAndCoedges(const Shape& shape, GeometryArchive& archive)
 {
     STEREON_TRY(const auto faces, AllEntities<EntityKind::Face>(shape));
     for (const FaceId f : faces) {
-        archive.Surfaces.push_back(FaceGeometry(shape, f));
+        if (!AddFaceLines(shape, f, *archive.Debug)) {
+            archive.Surfaces.push_back(FaceGeometry(shape, f));
+        }
     }
     STEREON_TRY(const auto coedges, AllEntities<EntityKind::Coedge>(shape));
     for (const CoedgeId c : coedges) {
@@ -336,6 +407,11 @@ Result<GeometryArchive> ShapeArchive(const Shape& shape)
     STEREON_TRY_VOID(AddEdges(shape, archive));
     STEREON_TRY_VOID(AddVertices(shape, *archive.Debug));
     return archive;
+}
+
+DebugColour FaceColour() noexcept
+{
+    return Rgb(150, 150, 160);
 }
 
 DebugColour EdgeCurveColour(const EdgeCurveKind kind) noexcept
