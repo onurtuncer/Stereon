@@ -77,6 +77,7 @@ jobs:
         run: |
           python tools/check_corpus.py --self-test
           python tools/check_corpus.py
+          python tools/generate_corpus.py --check
       - name: Regression cases of the base branch are all kept (corpus/README.md)
         if: github.event_name == 'pull_request'
         run: |

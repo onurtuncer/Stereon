@@ -270,6 +270,28 @@ meetings are decided on the profiles' nominal values. A configuration
 within the pair tolerance of a tangency is declared tangent and logged at
 ``Info``, as a coincidence within it is declared (ADR-0029 section 6).
 
+A declared configuration says so in the result:
+
+- **A coincidence declared within the tolerance** is an overlap with
+  ``Tolerant`` evidence. Its ``Distance`` is how far apart the profiles are:
+  the offset of two parallel profile lines, or :math:`d + |R_1 - R_2|` for
+  two profile circles whose centres are :math:`d` apart. Only profiles that
+  are equal in the doubles give ``Exact`` evidence, as for parallel planes
+  and cylinders.
+- **A tangent circle declared within the tolerance** lies up to the gap
+  away from one surface, by construction. It is certified against the pair
+  tolerance, not the resolution, and its ``Bound`` records the deviation
+  actually proved.
+
+The generated corpus sweeps (``corpus/analytic-ssi/sweep-*``) found both
+defects. Concentric spheres whose radii differed within the tolerance were
+reported as an ``Exact`` overlap at distance 0. A sphere centred on a
+cylinder's axis, the radii within the tolerance but not equal, failed the
+whole intersection: the declared tangent circle was certified against the
+resolution of 10\ :sup:`-5` mm and missed it. Regression tests in
+``tests/intersect/ElementaryPairsTests.cpp`` cover both, and the sweeps
+keep running in ``tests/intersect/CorpusTests.cpp``.
+
 **A sphere off a surface's axis** (``SphereTouch``). The points of a
 cylinder, cone or torus nearest a point off its axis lie in that point's
 meridian plane, where the surface is its profile. So the distance

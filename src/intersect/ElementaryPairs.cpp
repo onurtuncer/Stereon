@@ -247,10 +247,21 @@ struct Meet {
     bool Tangent;
 };
 
+/// The profiles' meetings, and whether they coincide: exactly, Gap zero,
+/// or within the tolerance, Gap then how far apart the parts declared
+/// coincident are (ADR-0029 section 6).
 struct Meets {
     std::vector<Meet> Points;
     bool Coincident = false;
+    double Gap = 0.0;
 };
+
+/// Records two parts `gap` apart as coincident.
+void DeclareCoincident(const double gap, Meets& out)
+{
+    out.Coincident = true;
+    out.Gap = std::max(out.Gap, gap);
+}
 
 void MeetLines(const ProfileLine& p, const ProfileLine& q, const double tol, Meets& out)
 {
@@ -258,7 +269,9 @@ void MeetLines(const ProfileLine& p, const ProfileLine& q, const double tol, Mee
     if (std::abs(det) <= 0x1p-40) {
         // Parallel: the same line within the tolerance, or none.
         const double sense = p.A * q.A + p.B * q.B > 0.0 ? 1.0 : -1.0;
-        out.Coincident = out.Coincident || std::abs(p.C - sense * q.C) <= tol;
+        if (const double gap = std::abs(p.C - sense * q.C); gap <= tol) {
+            DeclareCoincident(gap, out);
+        }
         return;
     }
     out.Points.push_back({(p.C * q.B - p.B * q.C) / det, (p.A * q.C - p.C * q.A) / det, false});
@@ -288,7 +301,11 @@ void MeetCircles(const ProfileCircle& p, const ProfileCircle& q, const double to
     const double dz = q.Z - p.Z;
     const double d = std::hypot(dr, dz);
     if (d <= tol) {
-        out.Coincident = out.Coincident || std::abs(p.R - q.R) <= tol;
+        // Concentric within the tolerance: a point of one circle lies at
+        // most d + |R_p - R_q| from the other.
+        if (std::abs(p.R - q.R) <= tol) {
+            DeclareCoincident(d + std::abs(p.R - q.R), out);
+        }
         return;
     }
     const double outer = d - (p.R + q.R);
@@ -334,7 +351,7 @@ void MeetParts(const ProfilePart& p, const ProfilePart& q, const double tol, Mee
             MeetParts(p, q, tol, all);
         }
     }
-    Meets kept{{}, all.Coincident};
+    Meets kept{{}, all.Coincident, all.Gap};
     for (Meet m : all.Points) {
         if (m.Rho < -tol) {
             continue;
@@ -574,7 +591,10 @@ struct Pair {
         IntersectionBranch branch =
             m.Tangent ? Tangency(Curve(circle), std::move(curveA), std::move(curveB), span)
                       : Crossing(Curve(circle), std::move(curveA), std::move(curveB), span);
-        STEREON_TRY_VOID(Keep(result, std::move(branch), p.ErasedA, p.ErasedB, ctx));
+        // A tangency is declared within the pair tolerance (MeetProfiles):
+        // certified within it.
+        STEREON_TRY_VOID(Keep(result, std::move(branch), p.ErasedA, p.ErasedB, ctx,
+                              m.Tangent ? p.Tolerance : 0.0));
     }
     return {};
 }
@@ -636,9 +656,10 @@ void LogTangency(const Meets& meets, const Context& ctx)
 /// Coincident surfaces of revolution, over whole charts: the overlap whose
 /// map turns A's angle into B's and carries A's v onto B's. Exactly coaxial
 /// and alike, so the map is affine; the sphere's only where its poles lie
-/// on the other's axis.
+/// on the other's axis. A gap above zero is a coincidence declared within
+/// the pair tolerance: Tolerant evidence, and the gap as its distance.
 [[nodiscard]] Result<SurfaceSurfaceIntersection> Coincident(const Pair& p, const Axis3& axis,
-                                                            const Context& ctx)
+                                                            const double gap, const Context& ctx)
 {
     if (!WholeChart(p.A, p.BoxA) || !WholeChart(p.B, p.BoxB) || !Aligned(p.A, p.B) ||
         !Aligned(p.B, p.A)) {
@@ -658,7 +679,17 @@ void LogTangency(const Meets& meets, const Context& ctx)
     overlap.SameOrientation =
         Dot(NormalAt(p.A, at), NormalAt(p.B, ProjectOnto(p.B, PointAt(p.A, at)))) > 0.0;
     overlap.FullDomain = true;
-    ctx.Log(LogLevel::Info, "Intersect: coincident surfaces of revolution (ADR-0029)");
+    if (gap > 0.0) {
+        // Declared within the pair tolerance, not exact: said so, with the
+        // distance, as for parallel planes and cylinders.
+        overlap.Evidence = CoincidenceEvidence::Tolerant;
+        overlap.Distance = gap;
+        ctx.Log(LogLevel::Info, "Intersect: coaxial surfaces of revolution " + Number(gap) +
+                                    " mm apart, within the pair tolerance " + Number(p.Tolerance) +
+                                    " mm: declared coincident, nothing moved (ADR-0029)");
+    } else {
+        ctx.Log(LogLevel::Info, "Intersect: coincident surfaces of revolution (ADR-0029)");
+    }
     SurfaceSurfaceIntersection result;
     result.Overlaps.push_back(overlap);
     return result;
@@ -675,7 +706,7 @@ void LogTangency(const Meets& meets, const Context& ctx)
     }
     const Meets meets = MeetProfiles(ProfileOf(p.A, *axis), ProfileOf(p.B, *axis), p.Tolerance);
     if (meets.Coincident) {
-        STEREON_TRY(SurfaceSurfaceIntersection overlap, Coincident(p, *axis, ctx));
+        STEREON_TRY(SurfaceSurfaceIntersection overlap, Coincident(p, *axis, meets.Gap, ctx));
         return std::optional<SurfaceSurfaceIntersection>{std::move(overlap)};
     }
     const bool circles =
