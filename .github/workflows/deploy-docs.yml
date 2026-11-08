@@ -82,7 +82,10 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends graphviz
           tag="Release_${DOXYGEN_VERSION//./_}"
-          curl -sSL -o doxygen.tar.gz             "https://github.com/doxygen/doxygen/releases/download/${tag}/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz"
+          # -f fails on an HTTP error instead of saving the error page, which
+          # the checksum would then reject; GitHub release downloads see
+          # transient 5xx responses, so retry those.
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 15 -o doxygen.tar.gz "https://github.com/doxygen/doxygen/releases/download/${tag}/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz"
           echo "${DOXYGEN_SHA256}  doxygen.tar.gz" | sha256sum -c -
           tar -xzf doxygen.tar.gz "doxygen-${DOXYGEN_VERSION}/bin/doxygen"
           sudo install -m 755 "doxygen-${DOXYGEN_VERSION}/bin/doxygen" /usr/local/bin/doxygen
