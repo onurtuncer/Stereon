@@ -44,6 +44,12 @@ import :Dispatch;
 /// surface's partials come from its
 /// own Deriv, so a new surface needs only the velocities of its defining
 /// values; the others answer NotSupported until they bind theirs.
+///
+/// A point of a branch where two surfaces meet has four unknowns and three
+/// equations, S_A = S_B; the fourth is the normal-plane tracking
+/// constraint (BranchPointLinearization), so the point moves within the
+/// plane through it normal to the branch (the owner's choice of
+/// 2026-11-08, docs/sensitivity.rst).
 
 export namespace Stereon {
 
@@ -158,5 +164,81 @@ IntersectVjp(const Line& line, std::span<const LineBinding> lineBindings, const 
 IntersectVjp(const BSplineCurve& curve, std::span<const PoleBinding> poleBindings,
              const Surface& surface, std::span<const SurfaceBinding> surfaceBindings,
              const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
+
+/// A point of a surface–surface intersection to differentiate: a branch of
+/// the result, by its index, at a parameter of its Range (ADR-0009's
+/// shared edge parameter).
+struct BranchSample {
+    std::size_t Branch = 0;
+    double Parameter = 0.0;
+};
+
+/// The values a product gives per sample of a surface–surface
+/// intersection, in this order: the position's velocity x' (three), then
+/// u_A', v_A', u_B' and v_B'.
+inline constexpr std::size_t BranchPointValues = 7;
+
+/// The linearisation of a branch point. The point solves four equations in
+/// z = (u_A, v_A, u_B, v_B): S_A(u_A, v_A) - S_B(u_B, v_B) = 0, and the
+/// tracking constraint T . (S_A(u_A, v_A) - X0) = 0 with X0 and T the
+/// branch's point and unit tangent at the sample's parameter (the
+/// normal-plane constraint): as the geometry moves, the point stays in the
+/// plane through X0 normal to the branch. F_z has the rows [S_Au, S_Av,
+/// -S_Bu, -S_Bv] and [T . S_Au, T . S_Av, 0, 0]; it is singular where the
+/// surfaces are tangent, or where the branch runs inside the plane.
+struct BranchPointLinearization {
+    /// The point on both surfaces, refined from the branch's curves by
+    /// Newton's method on the equations above, and its parameters.
+    Point3 Position;
+    Point2 OnA;
+    Point2 OnB;
+    /// S_A - S_B at the refined parameters: zero to rounding.
+    Vec3 Residual;
+    /// T, and the columns of the surfaces' partials. Named, not an array
+    /// (see CurveSurfaceLinearization).
+    Vec3 Tangent;
+    Vec3 SuA;
+    Vec3 SvA;
+    Vec3 SuB;
+    Vec3 SvB;
+    /// |T . (n_A x n_B)| over unit normals: the sine of the angle between
+    /// the surfaces when T is the branch's direction, 0 at a tangency.
+    double Conditioning;
+    DerivativeStatus Status;
+};
+
+/// The linearisation of `branch` of Intersect(a, b) at its parameter t.
+/// The status: a Tangential or Overlap branch is Nondifferentiable; an
+/// uncertified one, or a point at a pole of either surface's parameters,
+/// Indeterminate; a crossing NearEvent below NearEventSine, else Valid.
+/// InvalidInput for an empty surface, a parameter outside the branch's
+/// Range, or a point Newton's method does not bring onto both surfaces
+/// within the branch's bound.
+[[nodiscard]] Result<BranchPointLinearization>
+Linearize(const Surface& a, const Surface& b, const IntersectionBranch& branch, double t);
+
+/// The forward product of Intersect(a, b) for the seed of `sensitivity`:
+/// for each sample, in order, BranchPointValues values. The bindings of
+/// either surface move it as for a curve–surface intersection; one
+/// parameter may move both. A result with an overlap is Nondifferentiable
+/// as a whole, and so is any sample on a branch that is not a crossing.
+/// NotSupported (a status) unless both surfaces are planes, cylinders,
+/// cones, spheres or tori. InvalidInput as Linearize, for a sample naming
+/// a branch the result does not have, a binding as IntersectJvp refuses it
+/// above, or a seed that was never set.
+[[nodiscard]] Result<SensitivityResult>
+IntersectJvp(const Surface& a, std::span<const SurfaceBinding> bindingsA, const Surface& b,
+             std::span<const SurfaceBinding> bindingsB,
+             const SurfaceSurfaceIntersection& intersection, std::span<const BranchSample> samples,
+             const SensitivityContext& sensitivity);
+
+/// The reverse product: for an adjoint of BranchPointValues components per
+/// sample, one value per parameter of the set. InvalidInput as IntersectJvp,
+/// and for an adjoint of another length.
+[[nodiscard]] Result<SensitivityResult>
+IntersectVjp(const Surface& a, std::span<const SurfaceBinding> bindingsA, const Surface& b,
+             std::span<const SurfaceBinding> bindingsB,
+             const SurfaceSurfaceIntersection& intersection, std::span<const BranchSample> samples,
+             const SensitivityContext& sensitivity);
 
 } // namespace Stereon
