@@ -510,13 +510,11 @@ struct EndSearch {
     return Interval{m} - y * g + (Interval{1.0} - y * j) * (x - Interval{m});
 }
 
-/// Records the critical point of the piece's inflated interval when the
-/// end lies within the resolution of the other curve there and is a
-/// minimum along its own curve.
-[[nodiscard]] Result<void> RecordEnd(EndSearch& e, const Arc& b, const Hodographs& h, Interval x)
+/// The single critical point of a piece's interval, bracketed as Refined does.
+[[nodiscard]] Interval RefinedEnd(const Hodographs& h, const Vec3I& p, Interval x)
 {
     for (int step = 0; step < RefineSteps; ++step) {
-        const std::optional<Interval> k = KrawczykEnd(h, e.End.Point, x);
+        const std::optional<Interval> k = KrawczykEnd(h, p, x);
         if (!k) {
             break;
         }
@@ -526,6 +524,16 @@ struct EndSearch {
         }
         x = next;
     }
+    return x;
+}
+
+/// Records the critical point of the piece's inflated interval when the
+/// end lies within the resolution of the other curve there and is a
+/// minimum along its own curve.
+[[nodiscard]] Result<void> RecordEnd(EndSearch& e, const Arc& b, const Hodographs& h,
+                                     const Interval& box)
+{
+    const Interval x = RefinedEnd(h, e.End.Point, box);
     const Segment& segment = (*e.Other)[b.Index];
     const Interval bracket = OnCurve(segment, InSegment(b, x));
     if (!Intersects(bracket, Intersection(Interval{segment.T0, segment.T1}, e.OtherDomain))) {
