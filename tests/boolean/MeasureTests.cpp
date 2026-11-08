@@ -24,6 +24,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -302,4 +303,39 @@ TEST_CASE("three equal perpendicular cylinders measure the tricylinder",
     REQUIRE(all.has_value());
     CHECK(AllEntities<EntityKind::Solid>(all->Shape)->size() == 1);
     CheckTraced(all->Shape, volumes - 3.0 * two + three, areas - 3.0 * twoArea + threeArea);
+}
+
+TEST_CASE("the measure of a sphere and an ellipsoid", "[boolean][measure]")
+{
+    // 4 pi r^3 / 3 and 4 pi r^2; 4 pi a b c / 3. The ellipsoid's area has no
+    // closed form; the sphere's is checked, and the ellipsoid's measure
+    // lies between the areas of the spheres of its shortest and longest
+    // semi-axes.
+    const Stereon::Context& ctx = BooleanCases::serial;
+    const Stereon::Shape sphere =
+        BooleanCases::Must(MakeSphereSolid(Stereon::Point3{1.0, -2.0, 0.5},
+                                           Stereon::Vec3{0.0, 1.0, 0.0},
+                                           Stereon::Vec3{0.0, 0.0, 1.0}, 1.5, ctx),
+                           "a sphere")
+            .Shape;
+    const ShapeMeasures::Measures s = ShapeMeasures::MeasuresOf(sphere);
+    CHECK(std::abs(s.Volume - 4.0 * pi * 1.5 * 1.5 * 1.5 / 3.0) <= 1e-10);
+    CHECK(std::abs(s.Area - 4.0 * pi * 1.5 * 1.5) <= 1e-10);
+    // The seam, a semicircle; the poles have no length.
+    CHECK(std::abs(s.EdgeLength - pi * 1.5) <= 1e-12);
+
+    for (const auto& [a, b, c] : {std::tuple{3.0, 2.0, 1.0}, std::tuple{1.0, 1.5, 3.0}}) {
+        INFO("semi-axes " << a << ", " << b << ", " << c);
+        const Stereon::Shape ellipsoid =
+            BooleanCases::Must(MakeEllipsoidSolid(Stereon::Point3{}, Stereon::Vec3{1.0, 0.0, 0.0},
+                                                  Stereon::Vec3{0.0, 1.0, 0.0}, a, b, c, ctx),
+                               "an ellipsoid")
+                .Shape;
+        const ShapeMeasures::Measures e = ShapeMeasures::MeasuresOf(ellipsoid);
+        CHECK(std::abs(e.Volume - 4.0 * pi * a * b * c / 3.0) <= 1e-9);
+        const double least = std::min({a, b, c});
+        const double most = std::max({a, b, c});
+        CHECK(e.Area > 4.0 * pi * least * least);
+        CHECK(e.Area < 4.0 * pi * most * most);
+    }
 }
