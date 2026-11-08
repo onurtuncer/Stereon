@@ -342,5 +342,5 @@ and the program checks it bit for bit (:doc:`data_exchange`).
 
 .. code-block:: text
 
-   format version 3, written by 0.1.0, resolution 1e-05 mm
+   format version 4, written by 0.1.0, resolution 1e-05 mm
    curve and surface evaluate to the same bits after the round trip: true

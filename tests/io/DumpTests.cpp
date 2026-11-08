@@ -398,3 +398,24 @@ TEST_CASE("a shape is dumped with its geometry and topology overlays", "[io][dum
     REQUIRE(Stereon::Dump("box", box));
     REQUIRE(std::filesystem::exists(guard.GetPath() / "box.stn"));
 }
+
+TEST_CASE("an ellipsoid is dumped like any surface", "[io][dump][ellipsoid]")
+{
+    // Format version 4 (ADR-0048): the dump holds the ellipsoid itself, so
+    // the viewer draws it from its own evaluation, not from a copy.
+    if constexpr (!Stereon::SerializationAvailable) {
+        return;
+    }
+    const DumpDirectoryGuard guard;
+    const Stereon::Ellipsoid ellipsoid{Point3{1.0, 2.0, 3.0}, 3.0, 2.0, 1.0, X, Y};
+    const auto written = Stereon::DumpAt("ellipsoid", Stereon::Surface(ellipsoid));
+    REQUIRE(written);
+    REQUIRE(written->has_value());
+    const auto loaded = Stereon::LoadGeometry(**written);
+    REQUIRE(loaded);
+    REQUIRE(loaded->FormatVersion == 4);
+    REQUIRE(loaded->Archive.Surfaces.size() == 1);
+    const Stereon::Ellipsoid* back = loaded->Archive.Surfaces.front().Target<Stereon::Ellipsoid>();
+    REQUIRE(back != nullptr);
+    REQUIRE(*back == ellipsoid);
+}
