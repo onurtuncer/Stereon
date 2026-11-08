@@ -83,6 +83,11 @@ jobs:
             --screenshot screenshots/viewer-geometry.png --size 1280x800
           xvfb-run -a -s "-screen 0 1600x1000x24" build/gcc16-debug/viewer/app/stn-view dumps/topology \
             --screenshot screenshots/viewer-topology.png --size 1280x800 --no-panel
+          for shape in steinmetz drilled-box; do
+            mkdir -p "dumps/$shape" && cp "dumps/trimmed/$shape.stn" "dumps/$shape/"
+            xvfb-run -a -s "-screen 0 1600x1000x24" build/gcc16-debug/viewer/app/stn-view "dumps/$shape" \
+              --screenshot "screenshots/viewer-$shape-after.png" --size 1280x800 --no-panel --no-labels
+          done
           ls -l screenshots
       - uses: actions/upload-artifact@v7
         with:

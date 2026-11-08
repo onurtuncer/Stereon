@@ -124,7 +124,8 @@ endforeach()
 # and run with the tests so that they keep compiling; the viewer CI job
 # renders them.
 add_executable(stereon_viewer_dumps ${PROJECT_SOURCE_DIR}/docs/figures/ViewerDumps.cpp)
-target_link_libraries(stereon_viewer_dumps PRIVATE stereon::io stereon_options Catch2::Catch2)
+target_link_libraries(stereon_viewer_dumps PRIVATE stereon::io stereon::boolean stereon_options
+    Catch2::Catch2)
 stereon_anchor_contracts(stereon_viewer_dumps)
 add_test(NAME "docs: the viewer example dumps are written"
     COMMAND stereon_viewer_dumps "${CMAKE_CURRENT_BINARY_DIR}/viewer-dumps")

@@ -10,10 +10,12 @@
 //     stereon_viewer_dumps <directory>
 //
 // writes <directory>/geometry (a B-spline curve with a kink, a B-spline
-// patch, a circle and two plane curves) and <directory>/topology (the
-// closed cylinder of the topology tests, as ShapeArchive stores it). The
-// viewer job of .github/workflows/linux.yml renders each with
-// `stn-view --screenshot` and uploads the images.
+// patch, a circle and two plane curves), <directory>/topology (the closed
+// cylinder of the topology tests, as ShapeArchive stores it) and
+// <directory>/trimmed (two Boolean results whose faces are drawn inside
+// their loops: a box drilled through by a cylinder, and the Steinmetz
+// solid of two cylinders). The viewer job of .github/workflows/linux.yml
+// renders each with `stn-view --screenshot` and uploads the images.
 
 #include "../../tests/topo/BodiesStd.hpp"
 
@@ -24,6 +26,7 @@
 #include <string>
 #include <vector>
 
+import Stereon.Boolean;
 import Stereon.Io;
 
 #include "../../tests/topo/Bodies.hpp"
@@ -112,6 +115,43 @@ bool WriteTopology(const std::filesystem::path& directory)
     return Save(directory, "closed-cylinder", *cylinder);
 }
 
+/// Shapes whose faces only drawing inside their loops shows as they are:
+/// the box's top and bottom with a hole, and the Steinmetz solid's four
+/// lenses, each cut out of a cylinder's lateral face.
+bool WriteTrimmed(const std::filesystem::path& directory)
+{
+    const Stereon::Context ctx = Stereon::Context::Default();
+    const Vec3 ex{1.0, 0.0, 0.0};
+    const Vec3 ey{0.0, 1.0, 0.0};
+    const Vec3 ez{0.0, 0.0, 1.0};
+    const auto box = Stereon::MakeBoxSolid(
+        Stereon::Box3::FromCorners(Point3{0.0, 0.0, 0.0}, Point3{40.0, 30.0, 20.0}), ctx);
+    const auto pin = Stereon::MakeCylinderSolid(Point3{20.0, 15.0, -1.0}, ex, ey, 6.0, 22.0, ctx);
+    const auto upright =
+        Stereon::MakeCylinderSolid(Point3{60.0, 15.0, 0.0}, ex, ey, 9.0, 20.0, ctx);
+    const auto across =
+        Stereon::MakeCylinderSolid(Point3{48.0, 15.0, 10.0}, ey, ez, 9.0, 24.0, ctx);
+    if (!box || !pin || !upright || !across) {
+        std::cerr << "trimmed: a primitive could not be made\n";
+        return false;
+    }
+    const auto drilled =
+        Stereon::Boolean(box->Shape, pin->Shape, Stereon::BooleanOperation::Cut, ctx);
+    const auto steinmetz =
+        Stereon::Boolean(upright->Shape, across->Shape, Stereon::BooleanOperation::Common, ctx);
+    if (!drilled || !steinmetz) {
+        std::cerr << "trimmed: " << (drilled ? steinmetz : drilled).error().GetMessage() << '\n';
+        return false;
+    }
+    const auto first = Stereon::ShapeArchive(drilled->Shape);
+    const auto second = Stereon::ShapeArchive(steinmetz->Shape);
+    if (!first || !second) {
+        std::cerr << "trimmed: " << (first ? second : first).error().GetMessage() << '\n';
+        return false;
+    }
+    return Save(directory, "drilled-box", *first) && Save(directory, "steinmetz", *second);
+}
+
 } // namespace
 
 int main(const int argc, char** argv)
@@ -121,5 +161,8 @@ int main(const int argc, char** argv)
         return 2;
     }
     const std::filesystem::path root(argv[1]);
-    return WriteGeometry(root / "geometry") && WriteTopology(root / "topology") ? 0 : 1;
+    return WriteGeometry(root / "geometry") && WriteTopology(root / "topology") &&
+                   WriteTrimmed(root / "trimmed")
+               ? 0
+               : 1;
 }
