@@ -247,7 +247,8 @@ TEST_CASE("a sphere: two poles, a seam, two pole edges and one face", "[build][p
                                                          Stereon::EdgeCurveKind::Degenerate});
     const auto edges = *Stereon::AllEntities<EntityKind::Edge>(shape);
     const Stereon::EdgeId seam = *edges.begin();
-    REQUIRE(Stereon::CurveOf(shape, seam)->Target<Stereon::Circle>() != nullptr);
+    const Stereon::Curve meridian = *Stereon::CurveOf(shape, seam);
+    REQUIRE(meridian.Target<Stereon::Circle>() != nullptr);
     // The poles lie on the frame's z axis, the seam runs from south to north.
     const auto vertices = *Stereon::AllEntities<EntityKind::Vertex>(shape);
     std::vector<Stereon::VertexId> poles(vertices.begin(), vertices.end());
@@ -279,14 +280,14 @@ TEST_CASE("an ellipsoid: the sphere's topology with a half ellipse for a seam",
         REQUIRE(surface.Target<Stereon::Ellipsoid>() != nullptr);
         const auto edges = *Stereon::AllEntities<EntityKind::Edge>(shape);
         const Stereon::EdgeId seam = *edges.begin();
-        const Stereon::Ellipse* meridian =
-            Stereon::CurveOf(shape, seam)->Target<Stereon::Ellipse>();
+        // The curve is held: Target gives a pointer into it.
+        const Stereon::Curve curve = *Stereon::CurveOf(shape, seam);
+        const Stereon::Ellipse* meridian = curve.Target<Stereon::Ellipse>();
         REQUIRE(meridian != nullptr);
         REQUIRE(meridian->MajorRadius == std::max(a, c));
         REQUIRE(meridian->MinorRadius == std::min(a, c));
         // The seam's ends are the poles, and its middle the vertex at +a x.
         const Stereon::Interval range = Stereon::RangeOf(shape, seam);
-        const Stereon::Curve curve = *Stereon::CurveOf(shape, seam);
         REQUIRE(Stereon::Distance(Eval(curve, range.GetLower()), Point3{0.0, 0.0, -c}) <= 1e-15);
         REQUIRE(Stereon::Distance(Eval(curve, range.GetUpper()), Point3{0.0, 0.0, c}) <= 1e-15);
         REQUIRE(Stereon::Distance(Eval(curve, 0.5 * (range.GetLower() + range.GetUpper())),
