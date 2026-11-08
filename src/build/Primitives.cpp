@@ -310,4 +310,110 @@ Result<OperationResult> MakeCylinderSolid(const Point3& baseCentre, const Vec3& 
     return Commit(std::move(b), context);
 }
 
+namespace {
+
+/// A closed surface about an axis with a pole at each end of it, the
+/// sphere and the ellipsoid: what its one face is built from. The seam is
+/// the meridian at angle 0 from the south pole to the north, on a
+/// parameter t with the latitude v = t - Shift.
+struct Spheroid {
+    Surface Face;
+    Curve Seam;
+    double Shift;
+    Point3 South;
+    Point3 North;
+};
+
+/// One face whose loop runs in (u, v) as the cylinder's lateral loop does,
+/// with both ends collapsed into the poles: along the south pole at
+/// v = -pi/2 from u = 0 to 2 pi, up the seam at u = 2 pi, along the north
+/// pole at v = pi/2 back to u = 0, and down the seam at u = 0. The poles
+/// are Degenerate edges, the seam an Exact one used twice (ADR-0009).
+[[nodiscard]] Result<OperationResult> MakeSpheroid(const Spheroid& s, const Context& context)
+{
+    constexpr double tau = 2.0 * std::numbers::pi;
+    constexpr double pole = std::numbers::pi / 2.0;
+    const double tolerance = context.GetResolution();
+    ShapeBuilder b;
+    STEREON_TRY(const BuilderVertexId south, b.AddVertex(s.South, tolerance));
+    STEREON_TRY(const BuilderVertexId north, b.AddVertex(s.North, tolerance));
+    STEREON_TRY(const CurveRef meridian, b.AddCurve(s.Seam));
+    STEREON_TRY(const BuilderEdgeId seam,
+                b.AddEdge(ExactEdge(south, north, meridian,
+                                    Interval{s.Shift - pole, s.Shift + pole}, tolerance)));
+    const auto poleEdge = [&](const BuilderVertexId at) {
+        EdgeSpec spec;
+        spec.Kind = EdgeCurveKind::Degenerate;
+        spec.Start = at;
+        spec.End = at;
+        spec.Range = Interval{0.0, tau};
+        spec.Tolerance = tolerance;
+        return b.AddEdge(spec);
+    };
+    STEREON_TRY(const BuilderEdgeId southPole, poleEdge(south));
+    STEREON_TRY(const BuilderEdgeId northPole, poleEdge(north));
+
+    STEREON_TRY(const BuilderSolidId solid, b.AddSolid());
+    STEREON_TRY(const BuilderShellId shell, b.AddShell(solid));
+    STEREON_TRY(const SurfaceRef surface, b.AddSurface(s.Face));
+    STEREON_TRY(const BuilderFaceId face, b.AddFace(surface, false));
+    STEREON_TRY_VOID(b.AddFaceToShell(shell, face));
+    STEREON_TRY(const BuilderLoopId loop, b.AddLoop(face));
+    const std::array<std::pair<BuilderEdgeId, std::pair<EdgeUseSense, Curve2d>>, 4> uses{{
+        {southPole, {EdgeUseSense::Same, Curve2d(Line2d{Point2{0.0, -pole}, Vec2{1.0, 0.0}})}},
+        {seam, {EdgeUseSense::Same, Curve2d(Line2d{Point2{tau, -s.Shift}, Vec2{0.0, 1.0}})}},
+        {northPole, {EdgeUseSense::Same, Curve2d(Line2d{Point2{tau, pole}, Vec2{-1.0, 0.0}})}},
+        {seam, {EdgeUseSense::Opposite, Curve2d(Line2d{Point2{0.0, -s.Shift}, Vec2{0.0, 1.0}})}},
+    }};
+    for (const auto& [edge, use] : uses) {
+        STEREON_TRY(const PCurveRef pcurve, b.AddPCurve(use.second));
+        STEREON_TRY_VOID(b.AppendCoedge(loop, edge, use.first, pcurve));
+    }
+    return Commit(std::move(b), context);
+}
+
+} // namespace
+
+Result<OperationResult> MakeSphereSolid(const Point3& center, const Vec3& xAxis, const Vec3& yAxis,
+                                        const double radius, const Context& context)
+{
+    STEREON_PROFILE_SCOPE("build.MakeSphereSolid");
+    STEREON_TRY_VOID(CheckFrame(center, xAxis, yAxis, "MakeSphereSolid"));
+    if (!IsDimension(radius, context)) {
+        return Fail(ErrorCode::InvalidInput,
+                    "MakeSphereSolid: the radius must be finite and larger than the resolution");
+    }
+    const Vec3 z = Cross(xAxis, yAxis);
+    // The meridian at angle 0: c + r cos t x + r sin t z, the latitude t.
+    return MakeSpheroid({Surface(Sphere{center, radius, xAxis, yAxis}),
+                         Curve(Circle{center, radius, xAxis, z}), 0.0, center - radius * z,
+                         center + radius * z},
+                        context);
+}
+
+Result<OperationResult> MakeEllipsoidSolid(const Point3& center, const Vec3& xAxis,
+                                           const Vec3& yAxis, const double a, const double b,
+                                           const double c, const Context& context)
+{
+    STEREON_PROFILE_SCOPE("build.MakeEllipsoidSolid");
+    STEREON_TRY_VOID(CheckFrame(center, xAxis, yAxis, "MakeEllipsoidSolid"));
+    if (!IsDimension(a, context) || !IsDimension(b, context) || !IsDimension(c, context)) {
+        return Fail(ErrorCode::InvalidInput,
+                    "MakeEllipsoidSolid: every semi-axis must be finite and larger than the "
+                    "resolution");
+    }
+    const Vec3 z = Cross(xAxis, yAxis);
+    // The meridian at angle 0 is the half ellipse c + a cos v x + c sin v z.
+    // An Ellipse carries its longer radius first: with a >= c that is this
+    // ellipse on t = v; otherwise it is the ellipse of radii c along z and a
+    // along -x, on which the point of latitude v has the parameter
+    // t = v - pi/2.
+    const bool wide = a >= c;
+    const Curve seam =
+        wide ? Curve(Ellipse{center, a, c, xAxis, z}) : Curve(Ellipse{center, c, a, z, -xAxis});
+    return MakeSpheroid({Surface(Ellipsoid{center, a, b, c, xAxis, yAxis}), seam,
+                         wide ? 0.0 : -std::numbers::pi / 2.0, center - c * z, center + c * z},
+                        context);
+}
+
 } // namespace Stereon

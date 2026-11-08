@@ -151,11 +151,12 @@ sweeps counted together, and the exact patches and projectors are rebuilt
 on load as for trimmed curves. Each version is the next without its new
 records, so a version-1 or version-2 file needs no migration.
 
-No version yet stores an ``Ellipsoid`` (ADR-0048). A version-3 file with
-one would be refused by every existing reader of version 3, so until format
-version 4 adds the record, with its committed file, the writer refuses an
-ellipsoid with ``NotSupported``, alone or as a trimmed surface's basis, and
-the reader refuses an ``Ellipsoid`` record with ``ParseError``.
+Format version 4 adds the ``Ellipsoid`` record (ADR-0048) to ``SRFS``:
+``Center``, the semi-axes ``A``, ``B`` and ``C``, ``XAxis``, ``YAxis`` and
+``RightHanded``, as the reflection serialiser writes them, checked on load
+through ``MakeEllipsoid`` like every other record. An ellipsoid may be a
+trimmed surface's basis. A version-3 file with an ``Ellipsoid`` record is
+refused with ``ParseError``: no writer of version 3 stored one.
 
 Reading
 ~~~~~~~
@@ -197,7 +198,8 @@ added, among them an arc across a circle's seam, a reversed piece of a
 B-spline and a trimmed curve of a trimmed curve, and ``geometry-v3.stn``
 that with trimmed surfaces and sweeps added: a cylinder patch across its
 seam, a reversed corner of a B-spline surface, an extrusion of a trimmed
-profile, a revolution and a band of it. A test reads each and
+profile, a revolution and a band of it, and ``geometry-v4.stn`` that with
+an ellipsoid and a patch of one added. A test reads each and
 requires the kernel to write the same bytes back, apart from the versions
 in the header, so every later version keeps reading the files of every
 earlier one exactly. When the format changes, the version goes up, a
