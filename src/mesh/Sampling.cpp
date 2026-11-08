@@ -15,6 +15,7 @@ module;
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string>
@@ -107,6 +108,23 @@ template <std::size_t D>
     return std::acos(std::clamp(Dot(a, b) / lengths, -1.0, 1.0));
 }
 
+/// The largest magnitude among the point's coordinates.
+template <std::size_t D>
+[[nodiscard]] double MaxAbs(const BasicPointN<double, D>& p)
+{
+    double most = 0.0;
+    for (std::size_t i = 0; i < D; ++i) {
+        most = std::max(most, std::abs(p[i]));
+    }
+    return most;
+}
+
+/// A span this many units in the last place of the coordinates is a point
+/// for display: 64 roundings.
+constexpr double RoundingSpan =
+    64.0 * std::numeric_limits<double>::epsilon(); // STEREON-LINT-ALLOW(epsilon): display rounding,
+                                                   // not a tolerance
+
 /// One segment of a polyline being refined.
 struct Segment {
     double Start = 0.0;
@@ -142,7 +160,23 @@ template <std::size_t D, typename Eval>
         }
     }
     const BasicPointN<double, D> middle = eval(s.Start + width / 2);
-    return FinitePoint<D>(middle) && Turn<D>(middle - p0, p1 - middle) <= tolerance.Angle;
+    if (!FinitePoint<D>(middle)) {
+        return false;
+    }
+    // A segment within rounding of a point has no direction to turn by. At
+    // a sphere's or an ellipsoid's pole the iso-line of constant latitude is
+    // a circle of radius cos(pi/2) R, about 1e-16 R: its halves turned
+    // sharply, every pole's line was refined until the subdivision gave up,
+    // and no whole sphere could be drawn. The scale is the rounding of the
+    // points' coordinates, so the angle still bounds every segment with a
+    // length of its own, however loose the chord tolerance.
+    const BasicVecN<double, D> first = middle - p0;
+    const BasicVecN<double, D> second = p1 - middle;
+    const double scale = std::max({1.0, MaxAbs<D>(p0), MaxAbs<D>(p1)});
+    if (Length(first) + Length(second) <= RoundingSpan * scale) {
+        return true;
+    }
+    return Turn<D>(first, second) <= tolerance.Angle;
 }
 
 /// Appends the refined polyline of one segment, its start already in `out`.
