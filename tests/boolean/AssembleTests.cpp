@@ -626,3 +626,34 @@ TEST_CASE("a hollow solid keeps its cavity through further Booleans", "[boolean]
     REQUIRE_FALSE(Inside(opened.Shape, Point3{5.0, 5.0, 1.0}));
     REQUIRE_FALSE(Inside(opened.Shape, Point3{5.0, 5.0, 6.0}));
 }
+
+TEST_CASE("a sphere or an ellipsoid solid is refused by the Booleans, never half done",
+          "[boolean][assemble][capability]")
+{
+    // Classification and clipping know planes and cylinders (ADR-0048 §4
+    // puts the ellipsoid's Booleans after its solid). Until then every
+    // operation on such a solid fails closed and publishes nothing: with
+    // NotSupported from the classification, or, while a pair of its faces
+    // has no intersection handler yet, with the intersection's
+    // NotImplemented.
+    const Shape box = Box();
+    const auto sphere = Stereon::MakeSphereSolid(Point3{5.0, 5.0, 10.0}, Vec3{1.0, 0.0, 0.0},
+                                                 Vec3{0.0, 1.0, 0.0}, 3.0, ctx);
+    const auto ellipsoid = Stereon::MakeEllipsoidSolid(Point3{5.0, 5.0, 10.0}, Vec3{1.0, 0.0, 0.0},
+                                                       Vec3{0.0, 1.0, 0.0}, 3.0, 2.0, 1.0, ctx);
+    REQUIRE(sphere.has_value());
+    REQUIRE(ellipsoid.has_value());
+    for (const Shape& round : {sphere->Shape, ellipsoid->Shape}) {
+        for (const BooleanOperation operation :
+             {BooleanOperation::Union, BooleanOperation::Common, BooleanOperation::Cut}) {
+            const auto result = Boolean(box, round, operation, ctx);
+            INFO(Stereon::ToString(operation)
+                 << ": "
+                 << (result ? std::string("succeeded") : std::string(result.error().GetMessage())));
+            REQUIRE_FALSE(result.has_value());
+            const Stereon::ErrorCode code = result.error().GetCode();
+            REQUIRE((code == Stereon::ErrorCode::NotSupported ||
+                     code == Stereon::ErrorCode::NotImplemented));
+        }
+    }
+}
