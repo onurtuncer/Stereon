@@ -20,6 +20,7 @@ module;
 #include <optional>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 module Stereon.Intersect;
 
@@ -28,33 +29,44 @@ import Stereon.Robust;
 
 #include "Exact.hpp"
 
+// Two lines meet where they come within the Context's resolution of each
+// other, the rule the B-spline pair follows (SplineCurvePair.cpp), so a
+// Line and the same segment as a degree-1 B-spline meet alike. Two
+// segments' squared distance is convex over the parameter box, so its
+// minimum is one point, or a stretch for parallel supports. Every decision,
+// whether the minimum lies inside the box and whether it is within the
+// resolution, is the sign of a polynomial of degree at most six in the
+// input doubles and the resolution, decided exactly; only the placement of
+// the meeting is rounded.
+
 namespace Stereon::Detail {
 namespace {
 
-// Finite parameters are exact quotients, never rounded before clipping.
-// Degree at most two in numerator and denominator; comparisons have degree
-// at most four. Eight expansion components suffice for each cross product.
+// A parameter, an exact quotient with a positive denominator, or an
+// infinite end of a domain.
 struct LineParameter {
-    Expansion<8> Numerator;
-    Expansion<8> Denominator{1.0};
+    DynamicExpansion Numerator;
+    DynamicExpansion Denominator{1.0};
     int Infinity = 0;
 };
 
 template <std::size_t N, std::size_t D>
 [[nodiscard]] LineParameter Quotient(const Expansion<N>& n, const Expansion<D>& d)
 {
-    if (d.GetSign() == Sign::Negative) {
-        return {Negated(n), Negated(d), 0};
+    DynamicExpansion numerator{n};
+    DynamicExpansion denominator{d};
+    if (denominator.GetSign() == Sign::Negative) {
+        return {Negated(numerator), Negated(denominator), 0};
     }
-    return {n, d, 0};
+    return {std::move(numerator), std::move(denominator), 0};
 }
 
 [[nodiscard]] LineParameter Parameter(const double t)
 {
     if (std::isinf(t)) {
-        return {{}, Expansion<8>{1.0}, t > 0.0 ? 1 : -1};
+        return {DynamicExpansion{}, DynamicExpansion{1.0}, t > 0.0 ? 1 : -1};
     }
-    return {Expansion<8>{t}, Expansion<8>{1.0}, 0};
+    return {DynamicExpansion{t}, DynamicExpansion{1.0}, 0};
 }
 
 [[nodiscard]] Sign CompareParameters(const LineParameter& a, const LineParameter& b)
@@ -66,13 +78,7 @@ template <std::size_t N, std::size_t D>
         .GetSign();
 }
 
-[[nodiscard]] bool InDomain(const LineParameter& t, const Interval& domain)
-{
-    return CompareParameters(t, Parameter(domain.GetLower())) != Sign::Negative &&
-           CompareParameters(t, Parameter(domain.GetUpper())) != Sign::Positive;
-}
-
-[[nodiscard]] Interval Enclosure(const Expansion<8>& value)
+[[nodiscard]] Interval Enclosure(const DynamicExpansion& value)
 {
     Interval result{0.0};
     for (const double term : value.GetComponents()) {
@@ -91,6 +97,9 @@ template <std::size_t N, std::size_t D>
 
 [[nodiscard]] double Estimate(const LineParameter& t)
 {
+    if (t.Infinity != 0) {
+        return t.Infinity * std::numeric_limits<double>::infinity();
+    }
     return t.Numerator.GetEstimate() / t.Denominator.GetEstimate();
 }
 
@@ -102,6 +111,72 @@ template <std::size_t N, std::size_t D>
 [[nodiscard]] std::array<double, 3> Coordinates(const Point3& p)
 {
     return {p.X, p.Y, p.Z};
+}
+
+[[nodiscard]] ExactVector<1> Exactly(const Point3& p)
+{
+    return Exactly(Vec3{p.X, p.Y, p.Z});
+}
+
+// line.Origin + t line.Direction, exactly.
+[[nodiscard]] ExactVector<3> PointAt(const Line& line, const double t)
+{
+    const auto origin = Coordinates(line.Origin);
+    const auto direction = Components(line.Direction);
+    ExactVector<3> point;
+    for (std::size_t i = 0; i < 3; ++i) {
+        point.Hull[i] = Interval{origin[i]} + Interval{direction[i]} * Interval{t};
+        point.Value[i] = [o = origin[i], d = direction[i], t] {
+            return Sum(Expansion<1>{o}, TwoProduct(d, t));
+        };
+    }
+    return point;
+}
+
+// p - q, exactly.
+template <std::size_t A, std::size_t B>
+[[nodiscard]] ExactVector<A + B> Minus(const ExactVector<A>& p, const ExactVector<B>& q)
+{
+    ExactVector<A + B> difference;
+    for (std::size_t i = 0; i < 3; ++i) {
+        difference.Hull[i] = p.Hull[i] - q.Hull[i];
+        difference.Value[i] = [pv = p.Value[i], qv = q.Value[i]] { return Difference(pv(), qv()); };
+    }
+    return difference;
+}
+
+// The sign of numerator - bound denominator: how the quotient compares
+// with a domain's bound, for a positive denominator.
+template <std::size_t N, std::size_t D>
+[[nodiscard]] Sign CompareQuotient(const ExactScalar<N>& numerator,
+                                   const ExactScalar<D>& denominator, const double bound)
+{
+    return FilteredSign(numerator.Hull - Interval{bound} * denominator.Hull, [&] {
+        return Difference(numerator.Value(), Scaled(denominator.Value(), bound)).GetSign();
+    });
+}
+
+// Whether numerator / denominator lies in the domain.
+template <std::size_t N, std::size_t D>
+[[nodiscard]] bool InDomain(const ExactScalar<N>& numerator, const ExactScalar<D>& denominator,
+                            const Interval& domain)
+{
+    const double lower = domain.GetLower();
+    const double upper = domain.GetUpper();
+    return (std::isinf(lower) ||
+            CompareQuotient(numerator, denominator, lower) != Sign::Negative) &&
+           (std::isinf(upper) || CompareQuotient(numerator, denominator, upper) != Sign::Positive);
+}
+
+[[nodiscard]] std::vector<double> FiniteEnds(const Interval& domain)
+{
+    std::vector<double> ends;
+    for (const double end : {domain.GetLower(), domain.GetUpper()}) {
+        if (std::isfinite(end) && std::ranges::find(ends, end) == ends.end()) {
+            ends.push_back(end);
+        }
+    }
+    return ends;
 }
 
 [[nodiscard]] bool HasFiniteParameter(const Interval& domain)
@@ -120,10 +195,11 @@ void IncludeBounds(ExponentRange& range, const Interval& da, const Interval& db)
 }
 
 // Reject unsafe expansion arithmetic before constructing any polynomial.
-// Scalable inputs are explicitly unsupported in this first handler. Including
-// finite domain bounds protects the degree-four endpoint comparisons too.
+// Scalable inputs are explicitly unsupported in this handler. The finite
+// domain bounds and the resolution enter the decisions, so they are in the
+// range too; the decisions have degree at most six.
 [[nodiscard]] Result<void> CheckLines(const Line& a, const Line& b, const Interval& da,
-                                      const Interval& db)
+                                      const Interval& db, const double resolution)
 {
     ExponentRange range;
     for (const auto values : {Coordinates(a.Origin), Components(a.Direction), Coordinates(b.Origin),
@@ -142,15 +218,16 @@ void IncludeBounds(ExponentRange& range, const Interval& da, const Interval& db)
         return Fail(ErrorCode::InvalidInput, "LineLine: domain contains no finite parameter");
     }
     IncludeBounds(range, da, db);
-    if (CheckDomain(range, 4).Status != DomainStatus::Inside) {
-        return Fail(ErrorCode::NotSupported, "LineLine: outside the degree-four exact domain");
+    range.Include(resolution);
+    if (CheckDomain(range, 6).Status != DomainStatus::Inside) {
+        return Fail(ErrorCode::NotSupported, "LineLine: outside the degree-six exact domain");
     }
     return {};
 }
 
-// Bound the returned point's distance from the exact contact on each input.
-// L1 is a conservative Euclidean bound; outward interval sums include both
-// parameter and coordinate rounding. No model tolerance changes the topology.
+// Bound the returned point's distance from the exact point of A at the
+// meeting. L1 is a conservative Euclidean bound; outward interval sums
+// include both parameter and coordinate rounding.
 [[nodiscard]] double PositionError(const Line& line, const LineParameter& t, const Point3& p)
 {
     const auto origin = Coordinates(line.Origin);
@@ -166,9 +243,12 @@ void IncludeBounds(ExponentRange& range, const Interval& da, const Interval& db)
     return error.GetUpper();
 }
 
-[[nodiscard]] Result<CurveCurveIntersection>
-PointResult(const Line& a, const Line& b, const LineParameter& ta, const LineParameter& tb,
-            const Interval& da, const Interval& db, const Context& ctx)
+// The meeting at ta on A and tb on B, placed on A: B's point lies within
+// the resolution of A's, which the decision proved.
+[[nodiscard]] Result<CurveCurveIntersection> PointResult(const Line& a, const LineParameter& ta,
+                                                         const LineParameter& tb,
+                                                         const Interval& da, const Interval& db,
+                                                         const Context& ctx)
 {
     const double t = std::clamp(Estimate(ta), da.GetLower(), da.GetUpper());
     const double s = std::clamp(Estimate(tb), db.GetLower(), db.GetUpper());
@@ -176,10 +256,8 @@ PointResult(const Line& a, const Line& b, const LineParameter& ta, const LinePar
         return Fail(ErrorCode::CertificationFailed, "LineLine: unrepresentable contact parameter");
     }
     const Point3 p = Eval(a, t);
-    const double bound = std::max(PositionError(a, ta, p), PositionError(b, tb, p));
-    // Also cover the caller's evaluation at the rounded parameter on B.
-    const double rounded = PositionError(b, Parameter(s), p);
-    if (!(bound <= ctx.GetResolution() && rounded <= ctx.GetResolution())) {
+    if (!(PositionError(a, ta, p) <= ctx.GetResolution() &&
+          PositionError(a, Parameter(t), p) <= ctx.GetResolution())) {
         return Fail(ErrorCode::CertificationFailed,
                     "LineLine: contact rounding exceeds resolution");
     }
@@ -188,38 +266,121 @@ PointResult(const Line& a, const Line& b, const LineParameter& ta, const LinePar
     return result;
 }
 
+// Where p lies within the resolution of the line over the domain, the
+// parameter of its projection on the line, which then lies in the domain.
+template <std::size_t N>
+[[nodiscard]] std::optional<LineParameter> Projected(const ExactVector<N>& p, const Line& line,
+                                                     const Interval& domain,
+                                                     const double resolution)
+{
+    const auto offset = Minus(p, Exactly(line.Origin));
+    const auto direction = Exactly(line.Direction);
+    const auto numerator = ExactDot(offset, direction);
+    const auto denominator = ExactDot(direction, direction);
+    if (!InDomain(numerator, denominator, domain)) {
+        return std::nullopt;
+    }
+    const auto across = ExactCross(offset, direction);
+    if (Compare(ExactDot(across, across), Exactly(resolution), denominator) == Sign::Positive) {
+        return std::nullopt;
+    }
+    return Quotient(numerator.Value(), denominator.Value());
+}
+
+// Whether two points lie within the resolution of each other.
+[[nodiscard]] bool Close(const ExactVector<3>& p, const ExactVector<3>& q, const double resolution)
+{
+    const auto offset = Minus(p, q);
+    return Compare(ExactDot(offset, offset), Exactly(resolution), Exactly(1.0)) != Sign::Positive;
+}
+
 struct LineEnd {
     LineParameter A;
     LineParameter B;
 };
 
-// Map a source endpoint onto the target's parameter using one non-zero
-// coordinate: (source.origin - target.origin + source.direction * t) / target.direction.
-[[nodiscard]] LineParameter MapEnd(const double sourceOrigin, const double sourceDirection,
-                                   const double targetOrigin, const double targetDirection,
-                                   const double t)
+// The closest approach on the domains' boundary: an end of one segment
+// within the resolution of the other's interior, or of the other's end.
+// The minimum lies on the boundary when the supports' closest approach
+// lies outside the parameter box, so the segments meet exactly when one
+// of these does; the nearest is placed.
+[[nodiscard]] Result<CurveCurveIntersection>
+Boundary(const Line& a, const Line& b, const Interval& da, const Interval& db, const Context& ctx)
 {
-    if (std::isinf(t)) {
-        const bool same = (sourceDirection > 0.0) == (targetDirection > 0.0);
-        return Parameter(same ? t : -t);
+    const double resolution = ctx.GetResolution();
+    std::vector<LineEnd> found;
+    const std::vector<double> endsA = FiniteEnds(da);
+    const std::vector<double> endsB = FiniteEnds(db);
+    for (const double e : endsA) {
+        if (auto s = Projected(PointAt(a, e), b, db, resolution)) {
+            found.push_back({Parameter(e), std::move(*s)});
+        }
+        for (const double f : endsB) {
+            if (Close(PointAt(a, e), PointAt(b, f), resolution)) {
+                found.push_back({Parameter(e), Parameter(f)});
+            }
+        }
     }
-    return Quotient(Sum(TwoDiff(sourceOrigin, targetOrigin), TwoProduct(sourceDirection, t)),
-                    Expansion<1>{targetDirection});
-}
-
-[[nodiscard]] Result<CurveCurveIntersection> OverlapResult(const Line& a, const Line& b,
-                                                           const LineEnd& lo, const LineEnd& hi,
-                                                           const bool same, const Interval& da,
-                                                           const Interval& db, const Context& ctx)
-{
-    const Sign order = CompareParameters(lo.A, hi.A);
-    if (order == Sign::Positive) {
+    for (const double f : endsB) {
+        if (auto t = Projected(PointAt(b, f), a, da, resolution)) {
+            found.push_back({std::move(*t), Parameter(f)});
+        }
+    }
+    if (found.empty()) {
         return CurveCurveIntersection{};
     }
-    if (order == Sign::Zero) {
-        return PointResult(a, b, lo.A, lo.B, da, db, ctx);
+    const auto gap = [&](const LineEnd& end) {
+        return Distance(Eval(a, Estimate(end.A)), Eval(b, Estimate(end.B)));
+    };
+    const auto nearest = std::ranges::min_element(
+        found, [&](const LineEnd& p, const LineEnd& q) { return gap(p) < gap(q); });
+    return PointResult(a, nearest->A, nearest->B, da, db, ctx);
+}
+
+// A source parameter's projection on a parallel target.
+[[nodiscard]] LineParameter Project(const Line& source, const double t, const Line& target,
+                                    const bool same)
+{
+    if (std::isinf(t)) {
+        return Parameter(same ? t : -t);
     }
-    // Topology was decided exactly above. Outward rounding only encloses
+    const auto direction = Exactly(target.Direction);
+    return Quotient(ExactDot(Minus(PointAt(source, t), Exactly(target.Origin)), direction).Value(),
+                    ExactDot(direction, direction).Value());
+}
+
+// Parallel supports within the resolution of each other: an overlap over
+// the stretch both domains cover, a point where it is one parameter, and
+// otherwise their ends' closest approach across the gap.
+[[nodiscard]] Result<CurveCurveIntersection>
+Parallel(const Line& a, const Line& b, const Interval& da, const Interval& db, const Context& ctx)
+{
+    const bool same =
+        SignOf(ExactDot(Exactly(a.Direction), Exactly(b.Direction))) == Sign::Positive;
+    const auto fromA = [&](const double t) -> LineEnd {
+        return {Parameter(t), Project(a, t, b, same)};
+    };
+    const auto fromB = [&](const double s) -> LineEnd {
+        return {Project(b, s, a, same), Parameter(s)};
+    };
+    LineEnd lo = fromA(da.GetLower());
+    LineEnd hi = fromA(da.GetUpper());
+    LineEnd bl = fromB(same ? db.GetLower() : db.GetUpper());
+    LineEnd bh = fromB(same ? db.GetUpper() : db.GetLower());
+    if (CompareParameters(lo.A, bl.A) == Sign::Negative) {
+        lo = std::move(bl);
+    }
+    if (CompareParameters(hi.A, bh.A) == Sign::Positive) {
+        hi = std::move(bh);
+    }
+    const Sign order = CompareParameters(lo.A, hi.A);
+    if (order == Sign::Positive) {
+        return Boundary(a, b, da, db, ctx);
+    }
+    if (order == Sign::Zero) {
+        return PointResult(a, lo.A, lo.B, da, db, ctx);
+    }
+    // The stretch was decided exactly above. Outward rounding only encloses
     // the endpoint parameters and cannot create a false overlap.
     const Interval onA =
         Intersection(da, Interval{Enclosure(lo.A).GetLower(), Enclosure(hi.A).GetUpper()});
@@ -230,59 +391,28 @@ struct LineEnd {
     return result;
 }
 
-[[nodiscard]] Result<CurveCurveIntersection>
-Collinear(const Line& a, const Line& b, const Interval& da, const Interval& db, const Context& ctx)
-{
-    const auto ad = Components(a.Direction);
-    const auto bd = Components(b.Direction);
-    const auto ao = Coordinates(a.Origin);
-    const auto bo = Coordinates(b.Origin);
-    std::size_t axis = 0;
-    while (ad[axis] == 0.0) {
-        ++axis;
-    }
-    const bool same = (ad[axis] > 0.0) == (bd[axis] > 0.0);
-    const auto fromA = [&](const double t) -> LineEnd {
-        return {Parameter(t), MapEnd(ao[axis], ad[axis], bo[axis], bd[axis], t)};
-    };
-    const auto fromB = [&](const double s) -> LineEnd {
-        return {MapEnd(bo[axis], bd[axis], ao[axis], ad[axis], s), Parameter(s)};
-    };
-    const LineEnd al = fromA(da.GetLower());
-    const LineEnd ah = fromA(da.GetUpper());
-    const LineEnd bl = fromB(same ? db.GetLower() : db.GetUpper());
-    const LineEnd bh = fromB(same ? db.GetUpper() : db.GetLower());
-    const LineEnd lo = CompareParameters(al.A, bl.A) == Sign::Negative ? bl : al;
-    const LineEnd hi = CompareParameters(ah.A, bh.A) == Sign::Positive ? bh : ah;
-    return OverlapResult(a, b, lo, hi, same, da, db, ctx);
-}
-
+// Supports that are not parallel: the closest approach of the supports,
+// where it lies in both domains, is the segments' minimum; otherwise the
+// minimum lies on the boundary.
 [[nodiscard]] Result<CurveCurveIntersection> Nonparallel(const Line& a, const Line& b,
                                                          const ExactVector<4>& normal,
                                                          const Interval& da, const Interval& db,
                                                          const Context& ctx)
 {
     const auto w = ExactOffset(b.Origin, a.Origin);
-    if (SignOf(ExactDot(w, normal)) != Sign::Zero) {
-        return CurveCurveIntersection{}; // Skew, however close.
+    const auto squared = ExactDot(normal, normal);
+    const auto onA = ExactDot(ExactCross(w, Exactly(b.Direction)), normal);
+    const auto onB = ExactDot(ExactCross(w, Exactly(a.Direction)), normal);
+    if (!InDomain(onA, squared, da) || !InDomain(onB, squared, db)) {
+        return Boundary(a, b, da, db, ctx);
     }
-    // Choose the largest exact cross component for well-conditioned division.
-    std::size_t axis = 0;
-    for (std::size_t i = 1; i < 3; ++i) {
-        if (std::abs(normal.Value[i]().GetEstimate()) >
-            std::abs(normal.Value[axis]().GetEstimate())) {
-            axis = i;
-        }
-    }
-    const auto denominator = normal.Value[axis]();
-    const LineParameter ta =
-        Quotient(ExactCross(w, Exactly(b.Direction)).Value[axis](), denominator);
-    const LineParameter tb =
-        Quotient(ExactCross(w, Exactly(a.Direction)).Value[axis](), denominator);
-    if (!InDomain(ta, da) || !InDomain(tb, db)) {
+    // The supports' distance is |w . n| / |n|.
+    if (CompareSquared(ExactDot(w, normal), Exactly(ctx.GetResolution()), squared) ==
+        Sign::Positive) {
         return CurveCurveIntersection{};
     }
-    return PointResult(a, b, ta, tb, da, db, ctx);
+    return PointResult(a, Quotient(onA.Value(), squared.Value()),
+                       Quotient(onB.Value(), squared.Value()), da, db, ctx);
 }
 
 } // namespace
@@ -295,15 +425,19 @@ Result<CurveCurveIntersection> LineLine(const Curve& a, const Interval& domainA,
     if (la == nullptr || lb == nullptr) {
         return Fail(ErrorCode::InvalidInput, "LineLine: dispatched for other curve types");
     }
-    STEREON_TRY_VOID(CheckLines(*la, *lb, domainA, domainB));
+    STEREON_TRY_VOID(CheckLines(*la, *lb, domainA, domainB, ctx.GetResolution()));
     const auto normal = ExactCross(Exactly(la->Direction), Exactly(lb->Direction));
     if (!IsExactlyZero(normal)) {
         return Nonparallel(*la, *lb, normal, domainA, domainB, ctx);
     }
-    if (!IsExactlyZero(ExactCross(ExactOffset(lb->Origin, la->Origin), Exactly(la->Direction)))) {
-        return CurveCurveIntersection{}; // Parallel distinct supports.
+    // Parallel supports: their distance is |w x a| / |a|. ADR-0029: only
+    // exactly parallel supports overlap; nearly parallel ones meet at a point.
+    const auto across = ExactCross(ExactOffset(lb->Origin, la->Origin), Exactly(la->Direction));
+    if (Compare(ExactDot(across, across), Exactly(ctx.GetResolution()),
+                ExactDot(Exactly(la->Direction), Exactly(la->Direction))) == Sign::Positive) {
+        return CurveCurveIntersection{};
     }
-    return Collinear(*la, *lb, domainA, domainB, ctx);
+    return Parallel(*la, *lb, domainA, domainB, ctx);
 }
 
 } // namespace Stereon::Detail

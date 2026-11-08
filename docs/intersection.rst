@@ -524,27 +524,60 @@ need not be unit vectors; returned parameters retain each input's speed and
 orientation. Two ``BSplineCurve``\ s have a handler too (*Two B-splines in
 space*, below); other 3D curve pairs still return ``NotImplemented``.
 
-Cross products and the scalar triple product decide parallelism, collinearity
-and coplanarity exactly on the input doubles. Skew and parallel distinct
-supports return an empty result even when closer than the model resolution.
-There is no tolerant snapping. A nonparallel coplanar pair returns one point
-only when its exact rational parameters belong to both requested closed
-domains. Rounded parameters are never used to decide domain membership.
+Two lines meet where they come within the Context's resolution of each
+other, the rule two B-splines follow (*Two B-splines in space*, below), so
+a ``Line`` and the same segment as a degree-1 ``BSplineCurve`` meet alike
+(owner's decision, 2026-11-08). Over the requested domains the squared
+distance of two segments is convex, so its minimum is one point, or a
+stretch when the supports are parallel:
 
-Collinear requested domains return an overlap, a single endpoint contact,
-or proved separation. Endpoint-only contact is a ``CurveCurvePoint``, not a
-zero-length overlap. Overlap intervals enclose the exact endpoint parameters
-with outward rounding, restricted to the requested domains; ``SameDirection``
-records orientation. Whole lines and half-infinite domains are supported.
+- **supports not parallel:** where the supports' closest approach lies in
+  both domains it is the minimum, and the lines meet there when it is
+  within the resolution. Otherwise the minimum lies on the domains'
+  boundary: an end of one segment within the resolution of the other's
+  interior, or of the other's end. The nearest such pair is the meeting,
+  so two edges sharing a vertex meet at it even when their ends are a
+  rounding apart, and a crossing a rounding past a domain's end meets at
+  the end;
+- **parallel supports** (ADR-0029, *tolerant coincidence*): exactly
+  parallel supports within the resolution of each other cannot be told
+  from collinear ones, and they overlap over the stretch both domains
+  cover. Where that stretch is one parameter they meet at a point, and
+  where the domains leave a gap their ends may meet across it. Supports
+  that are not exactly parallel never overlap; they meet at a point, as
+  above.
 
-The handler checks finite origins, finite nonzero directions and the numerical
-domain of its degree-four expansion comparisons, including finite parameter
-bounds. Inputs requiring rescaling or exceeding that domain return
-``NotSupported`` in this initial implementation. Infinite-only domains are
-``InvalidInput``. Point coordinates and rounded parameters must satisfy a
-conservative interval error bound within the Context resolution; otherwise the
-operation returns ``CertificationFailed``. This conservative check may reject
-large-coordinate contacts even when a particular rounded point is exact.
+Every decision, whether the closest approach lies in a domain, whether a
+distance is within the resolution and whether the supports are parallel,
+is the sign of a polynomial of degree at most six in the input doubles and
+the resolution. Each is read from an interval enclosure, then decided
+exactly on expansions when the enclosure straddles zero. A gap of exactly
+the resolution meets, and the next double above it does not. Rounded
+parameters never decide domain membership. Only the placement is rounded.
+A meeting is a ``CurveCurvePoint`` on the first line at its exact
+parameter, rounded and clamped to the domain, so the second line's point
+lies within the resolution of it. An endpoint-only contact is a point, not
+a zero-length overlap. Overlap intervals enclose the exact endpoint
+parameters with outward rounding, restricted to the requested domains;
+``SameDirection`` records orientation. Whole lines and half-infinite
+domains are supported.
+
+OCCT's Boolean decides the same way. ``IntTools_EdgeEdge`` meets two edges,
+lines included, by their distance against the edges' tolerances, and lines
+that are parallel to within ``Precision::Angular()`` and within that
+tolerance give a common part. Here the measure is the Context's
+resolution, not an edge's tolerance, and only exactly parallel supports
+overlap.
+
+The handler checks finite origins, finite nonzero directions and the
+numerical domain of its degree-six expansion comparisons, including finite
+parameter bounds and the resolution. Inputs requiring rescaling or
+exceeding that domain return ``NotSupported``. Infinite-only domains are
+``InvalidInput``. The placed point and its rounded parameter must lie
+within the resolution of the first line's exact point, by a conservative
+interval bound; otherwise the operation returns ``CertificationFailed``.
+This check may reject large-coordinate contacts even when a particular
+rounded point is exact.
 
 Two B-splines in space
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -552,10 +585,10 @@ Two B-splines in space
 ``SplineSpline`` (``src/intersect/SplineCurvePair.cpp``) meets two
 ``BSplineCurve``\ s, polynomial or rational. Two curves in space meet only
 exceptionally. Doubles placed to make them meet, such as two edges sharing
-a vertex, leave them a rounding apart, so a meeting cannot be decided
-exactly the way the line–line handler decides one. It is defined by
-distance instead, at the Context's resolution (ADR-0001: two points closer
-than that cannot be told apart).
+a vertex, leave them a rounding apart, so whether they meet exactly is
+the wrong question. A meeting is defined by distance instead, at the
+Context's resolution (ADR-0001: two points closer than that cannot be told
+apart), as for two lines.
 
 A meeting is a critical point of the squared distance, a root of its
 gradient
@@ -623,12 +656,19 @@ dropped and never reported unproved (ADR-0029). A parabola touching its
 tangent line is the test case. Two identical splines coincide over the
 requested domains' common stretch.
 
-**Lines and splines differ inside the resolution.** The line–line handler
-decides exactly, so two skew ``Line``\ s a resolution apart do not meet,
-while the same two segments as degree-1 B-splines do. Whether lines should
-follow the splines' rule is an open decision for the owner. Until then, a
-caller comparing the two sees the difference only for curves closer than
-the resolution without meeting.
+**Lines and splines meet alike.** A ``Line`` and the same segment as a
+degree-1 B-spline give the same meetings. A random property compares them
+over crossings, near misses around the resolution and vertices a rounding
+apart. Two differences remain, both where the spline cannot settle a pair:
+
+- parallel supports within the resolution overlap as lines, while the
+  splines' search fails with ``IntersectionFailed``, never answering
+  differently;
+- an end contact of two nearly parallel segments, whose supports' closest
+  approach lies far past both ends, is found by the lines' boundary rule
+  but not by the splines' search, which keeps a critical point only just
+  past an end. Searching the ends of the splines' domains as the lines
+  do closes it; that is the next step for the B-spline pair.
 
 Curves against surfaces
 -----------------------
