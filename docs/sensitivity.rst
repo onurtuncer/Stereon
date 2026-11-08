@@ -191,7 +191,8 @@ A result takes its worst point's status, and carries values only for
 ``Valid`` and ``NearEvent``.
 
 ``IntersectJvp`` and ``IntersectVjp`` implement the products for a line or
-a B-spline curve against a plane, a cylinder, a cone, a sphere or a torus.
+a B-spline curve against a plane, a cylinder, a cone, a sphere, a torus or
+an ellipsoid.
 ``LineBinding`` binds a parameter to a coordinate of the line's origin or
 direction. ``SurfaceBinding`` binds one to a value of the surface, each a
 ``Length`` but the semi-angle, an ``Angle``:
@@ -201,7 +202,9 @@ direction. ``SurfaceBinding`` binds one to a value of the surface, each a
 - ``Radius``: a sphere's or a cylinder's radius, a cone's reference radius,
   a torus's major radius;
 - ``MinorRadius``: a torus's tube;
-- ``SemiAngle``: a cone's opening.
+- ``SemiAngle``: a cone's opening;
+- ``SemiAxisA``, ``SemiAxisB``, ``SemiAxisC``: an ellipsoid's semi-axes,
+  along its ``XAxis``, its ``YAxis`` and its axis.
 
 A binding of a value the surface does not have is ``InvalidInput``. The
 surface's partials :math:`S_u`, :math:`S_v` come from its own ``Deriv``.
@@ -214,7 +217,10 @@ At fixed :math:`(u, v)`, with :math:`\hat\rho = \cos u\,X + \sin u\,Y` and
 - a cone's semi-angle moves it by
   :math:`v (\cos a\,\hat\rho - \sin a\,A)`;
 - a torus's minor radius moves it along the tube's normal,
-  :math:`\cos v\,\hat\rho + \sin v\,A`.
+  :math:`\cos v\,\hat\rho + \sin v\,A`;
+- an ellipsoid's semi-axes move it by the factor each multiplies,
+  :math:`\cos v \cos u\,X`, :math:`\cos v \sin u\,Y` and
+  :math:`\sin v\,A`; its poles are detected as the sphere's are.
 
 ``Intersect`` has no line handler for the cone and the torus yet, so their
 points come from B-spline curves, or from a caller's own closed form, which
@@ -319,7 +325,8 @@ on an uncertified branch                   ``Indeterminate``
 at a pole of either surface's parameters   ``Indeterminate``
 =========================================  ============================================
 
-Both surfaces must be planes, cylinders, cones, spheres or tori; other
+Both surfaces must be planes, cylinders, cones, spheres, tori or
+ellipsoids; other
 pairs answer ``NotSupported``. The tests check the forward product against
 a closed form. A plane at height :math:`h` cuts a sphere of radius
 :math:`R` in a circle of radius :math:`\rho = \sqrt{R^2 - h^2}`, whose
