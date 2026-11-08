@@ -268,6 +268,36 @@ the top and the bottom are squares with a hole, which the lines now skip.
 
           After: they stop at the hole's circle.
 
+Validity findings on the shape
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A ``ValidityReport`` names the entities each finding is about, but as text:
+``Edge#8 [Exact Line, tol 1e-05, faces 3|0]``. ``ValidityArchive(shape,
+report)`` draws them where they are (ADR-0035, section 4). It writes the
+shape as ``ShapeArchive`` does, then every vertex, edge and face a finding
+names in red (``FindingColour()``), a coedge as its edge, with a label at the
+first of them giving the rule, the entities' short names and the message.
+The findings' lines are drawn before the shape's own, so they show on top,
+and their labels replace the shape's ``Describe()`` labels, which would bury
+them. ``SelfIntersectionUnchecked``, which every Solid-level report holds,
+is left out. ``DumpAt(name, shape, report)`` writes the same as a dump:
+
+.. code-block:: cpp
+
+   const Stereon::ValidityReport report =
+       Stereon::ValidateTopology(shape, Stereon::ValidityLevel::Solid, ctx);
+   if (!report.IsValid()) {
+       Stereon::DumpAt("before-commit", shape, report);
+   }
+
+.. figure:: figures/viewer-validity.png
+   :width: 100%
+   :alt: An open box: its four top edges drawn in red, each labelled ShellOpen with the shell and the edge it names.
+
+   A box without its top, checked at the Solid level: the shell uses each
+   of the four top edges once, not twice (``ShellOpen``, L01). Each
+   finding draws its edge in red and labels it.
+
 ``stn-view --screenshot file.png`` renders the window once, writes it as a
 PNG and exits; ``--no-labels`` hides the labels. The figures above come
 from the dumps of ``docs/figures/ViewerDumps.cpp``, which the Linux viewer

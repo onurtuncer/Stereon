@@ -259,7 +259,8 @@ void Extend(Point2& lower, Point2& upper, const std::vector<Point2>& points)
 /// in FaceColour, as polylines of the debug chunk. False when the face's
 /// loops or iso-lines cannot be sampled; the caller then draws the surface
 /// over the box the boundary covers instead.
-[[nodiscard]] bool AddFaceLines(const Shape& shape, const FaceId face, DebugChunk& debug)
+[[nodiscard]] bool AddFaceLines(const Shape& shape, const FaceId face, DebugChunk& debug,
+                                const DebugColour colour = FaceColour())
 {
     const std::optional<std::vector<std::vector<Point2>>> loops = FaceLoops(shape, face);
     const std::optional<Box2> box = FaceBox(shape, face);
@@ -274,7 +275,7 @@ void Extend(Point2& lower, Point2& upper, const std::vector<Point2>& points)
     for (const IsoLine& iso : *lines) {
         DebugPolyline line;
         line.Points = iso.Line.Points;
-        line.Colour = FaceColour();
+        line.Colour = colour;
         debug.Polylines.push_back(std::move(line));
     }
     return true;
@@ -295,6 +296,101 @@ void Extend(Point2& lower, Point2& upper, const std::vector<Point2>& points)
         }
     }
     return {};
+}
+
+/// The entity a finding names, found by its Describe() text: the
+/// validator names entities as Describe does. Nothing for a name no live
+/// vertex, edge, coedge or face has.
+struct Named {
+    std::optional<VertexId> Vertex;
+    std::optional<EdgeId> Edge;
+    std::optional<FaceId> Face;
+};
+
+template <EntityKind K, typename Id>
+[[nodiscard]] std::optional<Id> Find(const Shape& shape, const std::string& name)
+{
+    const auto all = AllEntities<K>(shape);
+    if (!all) {
+        return std::nullopt;
+    }
+    for (const Id id : *all) {
+        if (Describe(shape, id) == name) {
+            return id;
+        }
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] Named FindNamed(const Shape& shape, const std::string& name)
+{
+    Named named;
+    named.Vertex = Find<EntityKind::Vertex, VertexId>(shape, name);
+    named.Edge = Find<EntityKind::Edge, EdgeId>(shape, name);
+    named.Face = Find<EntityKind::Face, FaceId>(shape, name);
+    if (!named.Edge) {
+        // A coedge stands for its edge.
+        if (const auto coedge = Find<EntityKind::Coedge, CoedgeId>(shape, name)) {
+            named.Edge = EdgeOf(shape, *coedge);
+        }
+    }
+    return named;
+}
+
+/// "Rule (Edge#8, Shell#0): message": the entities by their short names,
+/// the part of their Describe() text before the bracket.
+[[nodiscard]] std::string FindingText(const ValidityFinding& finding)
+{
+    std::string text(RuleName(finding.Rule));
+    std::string names;
+    for (const std::string& entity : finding.Entities) {
+        names += (names.empty() ? "" : ", ") + entity.substr(0, entity.find(" ["));
+    }
+    if (!names.empty()) {
+        text += " (" + names + ")";
+    }
+    return text + ": " + finding.Message;
+}
+
+/// A finding drawn on the shape: every entity it names in FindingColour,
+/// a vertex as a point, an edge as its polyline, a face as its lines, and
+/// the rule and message as a label at the first of them.
+void AddFinding(const Shape& shape, const ValidityFinding& finding, DebugChunk& debug)
+{
+    std::optional<Point3> anchor;
+    for (const std::string& name : finding.Entities) {
+        const Named named = FindNamed(shape, name);
+        if (named.Vertex) {
+            DebugPoint point;
+            point.Position = PositionOf(shape, *named.Vertex);
+            point.Colour = FindingColour();
+            debug.Points.push_back(point);
+            anchor = anchor.value_or(point.Position);
+        }
+        if (named.Edge) {
+            std::vector<Point3> points = EdgePoints(shape, *named.Edge);
+            if (!points.empty()) {
+                anchor = anchor.value_or(points[points.size() / 2]);
+                DebugPolyline line;
+                line.Points = std::move(points);
+                line.Colour = FindingColour();
+                debug.Polylines.push_back(std::move(line));
+            }
+        }
+        if (named.Face) {
+            const std::size_t before = debug.Polylines.size();
+            if (AddFaceLines(shape, *named.Face, debug, FindingColour()) &&
+                debug.Polylines.size() > before && !debug.Polylines[before].Points.empty()) {
+                const std::vector<Point3>& first = debug.Polylines[before].Points;
+                anchor = anchor.value_or(first[first.size() / 2]);
+            }
+        }
+    }
+    DebugLabel label;
+    label.Position = anchor.value_or(Point3{});
+    label.Text = FindingText(finding);
+    label.Colour = FindingColour();
+    debug.Labels.push_back(std::move(label));
 }
 
 /// Bool for the debugger entry points.
@@ -389,6 +485,15 @@ DumpResult DumpAt(const std::string_view name, const Shape& shape, const SourceL
     return DumpAt(name, std::move(archive), where);
 }
 
+DumpResult DumpAt(const std::string_view name, const Shape& shape, const ValidityReport& report,
+                  const SourceLocation where)
+{
+    if (IsDumpName(name) && !DumpDirectory()) {
+        return std::optional<std::filesystem::path>{};
+    }
+    STEREON_TRY(GeometryArchive archive, ValidityArchive(shape, report));
+    return DumpAt(name, std::move(archive), where);
+}
 DumpResult DumpAt(const std::string_view name, DebugChunk primitives, const SourceLocation where)
 {
     GeometryArchive archive = ArchiveOf(Context{});
@@ -412,6 +517,36 @@ Result<GeometryArchive> ShapeArchive(const Shape& shape)
 DebugColour FaceColour() noexcept
 {
     return Rgb(150, 150, 160);
+}
+
+DebugColour FindingColour() noexcept
+{
+    return Rgb(255, 40, 40);
+}
+
+Result<GeometryArchive> ValidityArchive(const Shape& shape, const ValidityReport& report)
+{
+    STEREON_TRY(GeometryArchive archive, ShapeArchive(shape));
+    DebugChunk overlay;
+    for (const ValidityFinding& finding : report.GetFindings()) {
+        // Every Solid-level report has it: the check it names is not made.
+        if (finding.Rule != TopologyRule::SelfIntersectionUnchecked) {
+            AddFinding(shape, finding, overlay);
+        }
+    }
+    if (overlay.Labels.empty()) {
+        return archive;
+    }
+    // The findings' view: their labels alone, and their primitives first,
+    // since a viewer draws the first of two lines at one depth on top.
+    DebugChunk& debug = *archive.Debug;
+    debug.Labels = std::move(overlay.Labels);
+    overlay.Points.insert(overlay.Points.end(), debug.Points.begin(), debug.Points.end());
+    debug.Points = std::move(overlay.Points);
+    overlay.Polylines.insert(overlay.Polylines.end(), debug.Polylines.begin(),
+                             debug.Polylines.end());
+    debug.Polylines = std::move(overlay.Polylines);
+    return archive;
 }
 
 DebugColour EdgeCurveColour(const EdgeCurveKind kind) noexcept

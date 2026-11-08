@@ -434,3 +434,61 @@ TEST_CASE("an ellipsoid is dumped like any surface", "[io][dump][ellipsoid]")
     REQUIRE(back != nullptr);
     REQUIRE(*back == ellipsoid);
 }
+
+TEST_CASE("a validity report's findings are drawn on the shape they name", "[io][dump][validity]")
+{
+    // A box without its top: the shell is open along the four top edges
+    // (L01, ShellOpen), each named by a finding at the Solid level.
+    const std::vector<Stereon::Point3> points{{0, 0, 0}, {2, 0, 0}, {2, 3, 0}, {0, 3, 0},
+                                              {0, 0, 5}, {2, 0, 5}, {2, 3, 5}, {0, 3, 5}};
+    const std::vector<std::vector<std::size_t>> sides{
+        {0, 3, 2, 1}, {0, 1, 5, 4}, {2, 3, 7, 6}, {0, 4, 7, 3}, {1, 2, 6, 5}};
+    const Stereon::Shape open = TopoTest::MakePolyhedron(points, sides).Freeze();
+    const Stereon::ValidityReport report =
+        Stereon::ValidateTopology(open, Stereon::ValidityLevel::Solid, Stereon::Context::Default());
+    const auto opened = std::ranges::count_if(report.GetFindings(), [](const auto& f) {
+        return f.Rule == Stereon::TopologyRule::ShellOpen;
+    });
+    REQUIRE(opened == 4);
+
+    const auto archive = Stereon::ValidityArchive(open, report);
+    REQUIRE(archive);
+    const DebugChunk& debug = archive->Debug.value();
+    // Each open edge drawn again in the finding's colour, at z = 5.
+    std::size_t red = 0;
+    for (const DebugPolyline& line : debug.Polylines) {
+        if (line.Colour != Stereon::FindingColour()) {
+            continue;
+        }
+        ++red;
+        for (const Stereon::Point3& p : line.Points) {
+            REQUIRE(p.Z == 5.0);
+        }
+    }
+    REQUIRE(red == 4);
+    // Every finding labelled with its rule and message, in its colour.
+    const auto labels = std::ranges::count_if(debug.Labels, [](const DebugLabel& l) {
+        return l.Colour == Stereon::FindingColour() && l.Text.starts_with("ShellOpen (") &&
+               l.Text.find("Edge#") != std::string::npos;
+    });
+    REQUIRE(labels == 4);
+    // The findings' view: their labels alone, their lines drawn first.
+    REQUIRE(debug.Labels.size() == 4);
+    for (std::size_t i = 0; i < 4; ++i) {
+        REQUIRE(debug.Polylines[i].Colour == Stereon::FindingColour());
+    }
+
+    // A valid shape's report draws nothing more than the shape.
+    const Stereon::Shape box = TopoTest::MakeBox().Freeze();
+    const Stereon::ValidityReport clean = Stereon::ValidateTopology(box);
+    const auto plain = Stereon::ShapeArchive(box);
+    const auto drawn = Stereon::ValidityArchive(box, clean);
+    REQUIRE(plain);
+    REQUIRE(drawn);
+    REQUIRE(drawn->Debug == plain->Debug);
+
+    const DumpDirectoryGuard guard;
+    const auto written = Stereon::DumpAt("open-box", open, report);
+    REQUIRE(written);
+    REQUIRE(written->has_value());
+}

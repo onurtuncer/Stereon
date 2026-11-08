@@ -65,6 +65,11 @@ DumpAt(std::string_view name, const Surface& surface,
 /// A shape, as ShapeArchive stores it.
 [[nodiscard]] Result<std::optional<std::filesystem::path>>
 DumpAt(std::string_view name, const Shape& shape, SourceLocation where = SourceLocation::Current());
+/// A shape with a validity report's findings drawn on it, as
+/// ValidityArchive stores it.
+[[nodiscard]] Result<std::optional<std::filesystem::path>>
+DumpAt(std::string_view name, const Shape& shape, const ValidityReport& report,
+       SourceLocation where = SourceLocation::Current());
 /// Debug primitives alone.
 [[nodiscard]] Result<std::optional<std::filesystem::path>>
 DumpAt(std::string_view name, DebugChunk primitives,
@@ -89,6 +94,25 @@ DumpAt(std::string_view name, DebugChunk primitives,
 
 /// The colour ShapeArchive draws a face's iso-lines in.
 [[nodiscard]] DebugColour FaceColour() noexcept;
+
+/// The shape as ShapeArchive stores it, with the report's findings drawn
+/// on it (ADR-0035 section 4): every vertex, edge and face a finding names
+/// in FindingColour, a coedge as its edge, drawn before the shape's own
+/// primitives so that they show on top, and a label at the first of them
+/// with the rule, the entities' short names and the message, "ShellOpen
+/// (Shell#0, Edge#8): the shell uses the edge 1 times, not twice: it is not
+/// closed". The labels are the findings' alone: the shape's Describe()
+/// labels would bury them. Entities are found by their Describe() text, as
+/// the validator names them; one no longer in the shape is skipped, and the
+/// finding's label is still written, at the origin when it names nothing
+/// drawn. SelfIntersectionUnchecked, which every Solid-level report holds,
+/// is left out; a report with nothing else gives ShapeArchive's archive.
+/// Errors as ShapeArchive.
+[[nodiscard]] Result<GeometryArchive> ValidityArchive(const Shape& shape,
+                                                      const ValidityReport& report);
+
+/// The colour ValidityArchive draws a finding's entities in.
+[[nodiscard]] DebugColour FindingColour() noexcept;
 
 /// For a debugger: DumpAt without a source location, true when a file was
 /// written. A null name, dumping switched off and any error give false.
