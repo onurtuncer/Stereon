@@ -961,6 +961,11 @@ Result<SurfaceSurfaceIntersection> ElementaryPair(const Surface& a, const Box2& 
     if (!ea || !eb) {
         return Fail(ErrorCode::InvalidInput, "ElementaryPair: dispatched for other surface types");
     }
+    // The closed forms are for surfaces of revolution; an ellipsoid with
+    // unequal semi-axes is none, and goes to the trace (ADR-0048 §3.4).
+    if (std::holds_alternative<Ellipsoid>(*ea) || std::holds_alternative<Ellipsoid>(*eb)) {
+        return ImplicitTrace(a, boxA, b, boxB, ctx);
+    }
     const Pair p{a, b, *ea, *eb, boxA, boxB, std::max(tolerance, ctx.GetResolution())};
     using Closed =
         Result<std::optional<SurfaceSurfaceIntersection>> (*)(const Pair&, const Context&);
