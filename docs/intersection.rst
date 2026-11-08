@@ -499,7 +499,8 @@ Space curves
 The first v0.2 3D curve handler is ``Line`` against ``Line`` through the
 existing ``Intersect(Curve, domain, Curve, domain, ctx)`` overload. Directions
 need not be unit vectors; returned parameters retain each input's speed and
-orientation. Other 3D curve pairs still return ``NotImplemented``.
+orientation. Two ``BSplineCurve``\ s have a handler too (*Two B-splines in
+space*, below); other 3D curve pairs still return ``NotImplemented``.
 
 Cross products and the scalar triple product decide parallelism, collinearity
 and coplanarity exactly on the input doubles. Skew and parallel distinct
@@ -522,6 +523,90 @@ bounds. Inputs requiring rescaling or exceeding that domain return
 conservative interval error bound within the Context resolution; otherwise the
 operation returns ``CertificationFailed``. This conservative check may reject
 large-coordinate contacts even when a particular rounded point is exact.
+
+Two B-splines in space
+~~~~~~~~~~~~~~~~~~~~~~
+
+``SplineSpline`` (``src/intersect/SplineCurvePair.cpp``) meets two
+``BSplineCurve``\ s, polynomial or rational. Two curves in space meet only
+exceptionally. Doubles placed to make them meet, such as two edges sharing
+a vertex, leave them a rounding apart, so a meeting cannot be decided
+exactly the way the line–line handler decides one. It is defined by
+distance instead, at the Context's resolution (ADR-0001: two points closer
+than that cannot be told apart).
+
+A meeting is a critical point of the squared distance, a root of its
+gradient
+
+.. math::
+
+   G(s, t) = \begin{pmatrix} (a(s) - b(t)) \cdot a'(s) \\
+             -(a(s) - b(t)) \cdot b'(t) \end{pmatrix} = 0,
+
+at which :math:`|a(s) - b(t)|` is within the resolution. Every exact meeting
+is such a point, and so is the closest approach of two curves that pass
+within the resolution of each other.
+
+The search is Algorithm K's, over pairs of pieces of the two splines'
+enclosed Bézier segments. The machinery it shares with the plane handler
+(``src/intersect/BezierArc.hpp``) is the pieces, their halving by interval
+de Casteljau, their evaluation over a parameter interval and Krawczyk's
+step for a two-by-two system. A pair is:
+
+- **apart** when the boxes of the pieces' poles, or their hulls along the
+  common normal of the two pieces' chords, are more than the resolution
+  apart. This is a fat slab, the space analogue of the fat line;
+- **settled by Krawczyk's operator** on :math:`G`, over the pair's box
+  inflated by an eighth. The Jacobian
+
+  .. math::
+
+     \begin{pmatrix} a' \cdot a' + (a - b) \cdot a'' & -a' \cdot b' \\
+                     -a' \cdot b' & b' \cdot b' - (a - b) \cdot b'' \end{pmatrix}
+
+  is enclosed from the poles and their first and second hodographs, with
+  :math:`C' = (X' - C W')/W` and :math:`C'' = (X'' - 2 C' W' - C W'')/W`.
+  Near a meeting it is the Gram matrix of the two tangents, regular unless
+  they are parallel;
+- **halved** otherwise.
+
+A single critical point is bracketed by iterating
+:math:`X \leftarrow K(X) \cap X`. Its distance, enclosed over the
+bracket, decides it:
+
+- within the resolution, it is a meeting, a ``CurveCurvePoint`` placed at
+  the bracket's middle;
+- beyond the resolution, it is a near miss and is not reported;
+- across the resolution, it cannot be decided at the resolution, and the
+  intersection fails with ``IntersectionFailed``.
+
+A bracket is placed only as precisely as the crossing's angle allows. The
+gradient's rounding is amplified by the Jacobian's inverse, about
+:math:`1/\sin^2\theta` for curves crossing at :math:`\theta`. Two cubics
+crossing at 12.5° are placed to about :math:`10^{-11}`, six orders below
+the resolution.
+
+A critical point of the polynomials continued a little past a requested
+domain's end becomes a meeting at that end when the distance there is
+within the resolution, so two edges sharing a vertex meet at it even when
+their ends are a rounding apart. A critical point just past a segment's end
+inside the domain belongs to the neighbouring segment, which proves it.
+Critical points proved from overlapping boxes are one.
+
+Some pairs cannot be settled: a pair that is neither apart nor settled
+when its pieces can no longer be halved, or a search past :math:`2^{16}`
+pairs. These are tangent curves, an overlap, or a meeting too nearly
+tangential to separate, and they fail with ``IntersectionFailed``, never
+dropped and never reported unproved (ADR-0029). A parabola touching its
+tangent line is the test case. Two identical splines coincide over the
+requested domains' common stretch.
+
+**Lines and splines differ inside the resolution.** The line–line handler
+decides exactly, so two skew ``Line``\ s a resolution apart do not meet,
+while the same two segments as degree-1 B-splines do. Whether lines should
+follow the splines' rule is an open decision for the owner. Until then, a
+caller comparing the two sees the difference only for curves closer than
+the resolution without meeting.
 
 Curves against surfaces
 -----------------------
