@@ -13,6 +13,7 @@ module;
 
 export module Stereon.Io:Dump;
 
+import Stereon.Intersect;
 import Stereon.Mesh;
 import :Debug;
 import :GeometryArchive;
@@ -113,6 +114,34 @@ DumpAt(std::string_view name, DebugChunk primitives,
 
 /// The colour ValidityArchive draws a finding's entities in.
 [[nodiscard]] DebugColour FindingColour() noexcept;
+
+/// A surface–surface intersection as a dump: both surfaces, each trimmed to
+/// its requested box when the box is bounded (an unbounded one is drawn
+/// around the scene), every branch's pcurves on A and on B for the
+/// Parameter space window, and as debug primitives every branch's 3D curve
+/// over its range in its contact's colour (ContactColour), every isolated
+/// point, and a label for each, "branch 0: Crossing, OppositeSide, bound
+/// 2.1e-07" or "point 0: bound inf". An overlap region is labelled at the
+/// first point of its first boundary branch, or at A's origin. Errors from
+/// sampling a branch.
+[[nodiscard]] Result<GeometryArchive> IntersectionArchive(const Surface& a, const Box2& boxA,
+                                                          const Surface& b, const Box2& boxB,
+                                                          const SurfaceSurfaceIntersection& result);
+
+/// A curve–surface intersection as a dump: the curve over its domain when
+/// bounded, the surface over its box when bounded, every point as a debug
+/// point in its contact's colour with a label, "t = 0.25: Crossing", and
+/// every overlap as the curve's polyline over its range in the overlap's
+/// colour, with its pcurve for the Parameter space window. Errors from
+/// sampling an overlap.
+[[nodiscard]] Result<GeometryArchive> IntersectionArchive(const Curve& curve,
+                                                          const Interval& domain,
+                                                          const Surface& surface, const Box2& box,
+                                                          const CurveSurfaceIntersection& result);
+
+/// The colour IntersectionArchive draws a branch or point of the contact
+/// in: red for a crossing, orange for a touch, green for an overlap.
+[[nodiscard]] DebugColour ContactColour(ContactType contact) noexcept;
 
 /// For a debugger: DumpAt without a source location, true when a file was
 /// written. A null name, dumping switched off and any error give false.
