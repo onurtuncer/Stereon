@@ -298,6 +298,49 @@ is left out. ``DumpAt(name, shape, report)`` writes the same as a dump:
    of the four top edges once, not twice (``ShellOpen``, L01). Each
    finding draws its edge in red and labels it.
 
+Intersection results
+~~~~~~~~~~~~~~~~~~~~
+
+``IntersectionArchive`` turns an intersection result into a dump, so a
+traced branch can be looked at where it lies:
+
+- for a surface–surface result, both surfaces, each trimmed to its
+  requested box when the box is bounded; every branch's 3D curve over its
+  range in its contact's colour (``ContactColour()``: red for a crossing,
+  orange for a touch, green for an overlap), labelled with its index,
+  contact, side transition and certified bound; every isolated point,
+  labelled with its bound; and every branch's pcurves on A and on B, which
+  the **Parameter space** window draws;
+- for a curve–surface result, the curve over its domain and the surface
+  over its box, every point in its contact's colour labelled with its
+  parameter and contact, and every overlap as the curve's polyline over its
+  range with its pcurve.
+
+.. code-block:: cpp
+
+   const auto result = Stereon::Intersect(a, boxA, b, boxB, ctx);
+   if (result) {
+       if (const auto archive = Stereon::IntersectionArchive(a, boxA, b, boxB, *result)) {
+           Stereon::DumpAt("cylinder-sphere", *archive);
+       }
+   }
+
+.. figure:: figures/viewer-intersection.png
+   :width: 100%
+   :alt: A cylinder through a sphere off its axis, the two traced branches in red with their labels, and their pcurves on both surfaces in the Parameter space window.
+
+   A cylinder of radius 1 through a sphere of radius 2 off its axis: two
+   closed curves, each a traced and certified branch, labelled with its
+   bound. The Parameter space window shows the four pcurves, two on each
+   surface.
+
+Drawing this figure exposed a gap in the display sampler: a whole sphere,
+or ellipsoid, could not be drawn, since the line of constant latitude at a
+pole is a circle of radius about :math:`10^{-16}` whose halves turn
+sharply, and its refinement never ended. A segment within rounding of a
+point now passes the angle test; the angle still bounds every segment with
+a length of its own.
+
 ``stn-view --screenshot file.png`` renders the window once, writes it as a
 PNG and exits; ``--no-labels`` hides the labels. The figures above come
 from the dumps of ``docs/figures/ViewerDumps.cpp``, which the Linux viewer
