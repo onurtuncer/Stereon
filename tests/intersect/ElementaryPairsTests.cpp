@@ -103,6 +103,22 @@ double TurnOf(const Stereon::SurfaceSurfaceIntersection& result)
 
 } // namespace
 
+TEST_CASE("a sphere within the tolerance of a cone's axis does not touch it at two points",
+          "[intersect][elementary]")
+{
+    // Tangent along a circle; off the axis by less than the tolerance, the
+    // contact is still that circle, not the two nearest points of a meridian.
+    const Surface cone{Cone{Point3{}, 0.0, pi / 6.0, X, Y, true}};
+    const Box2 box{Interval{0.0, 2.0 * pi}, Interval{-8.0, 8.0}};
+    for (const double offset : {1e-15, 1e-7, 5e-6}) {
+        const Surface sphere{Sphere{Point3{offset, 0.0, 4.0}, 2.0, X, Y, true}};
+        const auto result = Intersect(sphere, Box2::Everything(), cone, box, 1e-5, ctx);
+        INFO("offset " << offset << ": " << IntersectTest::ErrorText(result));
+        // Refused, or answered with curves: never only isolated points.
+        REQUIRE((!result || !result->Branches.empty()));
+    }
+}
+
 TEST_CASE("a fillet torus touches the cylinder round it along one circle",
           "[intersect][elementary]")
 {
