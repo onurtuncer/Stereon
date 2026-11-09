@@ -1369,8 +1369,21 @@ apart than the pair tolerance along some axis,
    \quad\text{(or the same with } A, B \text{ exchanged, or along } y \text{ or } z\text{)},
 
 the surfaces are proved disjoint and the result is empty. That proof holds
-over any requested domains. Otherwise the pair returns ``NotImplemented``,
-never an empty result it has not proved (``src/intersect/GenericSSI.cpp``).
+over any requested domains.
+
+When the whole nets overlap, the second stage looks closer. Each surface is
+cut into its Bézier patches over the requested domains, by Boehm's knot
+insertion and de Casteljau's algorithm in outward-rounded interval
+arithmetic, so that the enclosed poles hold those of the surface as given.
+Pairs of patches are examined depth first: the same test on their nets drops
+a pair, and otherwise the larger patch is halved. When every pair is dropped
+the surfaces are proved disjoint over the domains and the result is empty.
+
+A pair whose patches are both within the tolerance, or cannot be cut further,
+may hold an intersection: the pair returns ``NotImplemented`` until branch
+discovery and marching exist, never an empty result it has not proved. A
+search past its budget of :math:`2^{14}` pairs returns
+``IntersectionFailed``, naming the pair (``src/intersect/GenericSSI.cpp``).
 
 A B-spline surface against a plane, cylinder, cone, sphere or torus reports
 ``NotImplemented``.
