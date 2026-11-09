@@ -5,6 +5,8 @@
 # degenerate cases per exact predicate (Orient2D, Orient3D, InCircle,
 # InSphere) against the exact integer oracle, with no disagreement allowed.
 # Too long for every pull request, where 20 000 cases per predicate run.
+# Also every placement and scale of corpus/curved-ssi/, of which a pull
+# request runs one placement per configuration.
 
 name: Robustness
 
@@ -33,7 +35,9 @@ jobs:
       - uses: actions/checkout@v7
       - name: Configure
         run: cmake --preset gcc16-release
-      - name: Build the robust tests
-        run: cmake --build --preset gcc16-release --target stereon_robust_tests
+      - name: Build the robust and intersection tests
+        run: cmake --build --preset gcc16-release --target stereon_robust_tests stereon_intersect_tests
       - name: Run the exhaustive suite
         run: ./build/gcc16-release/tests/stereon_robust_tests "[exhaustive]" --durations yes
+      - name: Run the whole curved-ssi corpus (every placement and scale)
+        run: ./build/gcc16-release/tests/stereon_intersect_tests "[exhaustive]" --durations yes

@@ -28,6 +28,7 @@ The case ID is the path below `corpus/` without the extension, e.g. `analytic-ss
 | Suite | Purpose | Spec |
 | --- | --- | --- |
 | [`analytic-ssi/`](analytic-ssi/) | Plane, sphere and cylinder intersections under tolerance | [RS-0001](../docs/research/RS-0001-tolerant-analytic-intersection.md), ADR-0010 |
+| [`curved-ssi/`](curved-ssi/) | Cones, tori and ellipsoids against every analytic surface, with closed-form topology | ADR-0010, ADR-0029 |
 | [`curve-curve/`](curve-curve/) | Pairs of 3D curves with a known closest approach around the resolution | ADR-0001, ADR-0029 |
 
 ## Case format `stereon-corpus-case/1`
