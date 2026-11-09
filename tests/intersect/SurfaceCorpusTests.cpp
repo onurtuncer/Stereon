@@ -128,6 +128,22 @@ void CheckResult(const Stereon::SurfaceSurfaceIntersection& r, const JsonValue& 
 {
     if (expected["overlap"].AsBool()) {
         CHECK_FALSE(r.Overlaps.empty());
+        CHECK(r.Branches.empty());
+        CHECK(r.Points.empty());
+        for (const auto& overlap : r.Overlaps) {
+            CHECK(overlap.FullDomain);
+            CHECK(overlap.Distance <= std::max(tolerance, IntersectTest::ctx.GetResolution()));
+            const auto da = overlap.OnA;
+            for (const double u : {0.25, 0.5, 0.75}) {
+                for (const double v : {0.25, 0.5, 0.75}) {
+                    const Stereon::Point2 uv{
+                        da.X.IsBounded() ? da.X.GetLower() + u * Width(da.X) : u,
+                        da.Y.IsBounded() ? da.Y.GetLower() + v * Width(da.Y) : v};
+                    CHECK(Distance(Eval(a, uv), Eval(b, Mapped(overlap.AToB, uv))) <=
+                          std::max(tolerance, IntersectTest::ctx.GetResolution()));
+                }
+            }
+        }
         return;
     }
     CHECK(r.Overlaps.empty());
@@ -140,6 +156,7 @@ void CheckResult(const Stereon::SurfaceSurfaceIntersection& r, const JsonValue& 
     for (const Stereon::IntersectionBranch& branch : r.Branches) {
         CHECK(branch.Contact == contact);
         CHECK(branch.IsCertified());
+        CHECK(branch.Bound <= std::max(tolerance, IntersectTest::ctx.GetResolution()));
         CHECK(IntersectTest::PcurveDeviation(branch, a, b, 100) <= branch.Bound + tolerance);
     }
     for (const JsonValue& witness : expected["witnesses"].AsArray()) {
