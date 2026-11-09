@@ -453,12 +453,11 @@ struct DomainEnd {
     return ends;
 }
 
-/// Whether the squared distance is proved to grow from the end inward,
-/// d . tangent of the wrong sign: then the end is no minimum along its
-/// curve, and the meeting, if any, lies inside, where the pair search
-/// finds it. Undecided keeps the end; the merge below folds a meeting
-/// found both ways into one.
-[[nodiscard]] bool GrowsInward(const DomainEnd& end, const Vec3I& toOther)
+/// Whether the squared distance is proved to shrink from the end inward:
+/// then the end is no minimum along its curve, and the meeting, if any,
+/// lies inside, where the pair search finds it. Undecided keeps the end;
+/// the merge below folds a meeting found both ways into one.
+[[nodiscard]] bool ShrinksInward(const DomainEnd& end, const Vec3I& toOther)
 {
     // d/dt |C - Q|² / 2 = (C - Q) . C'; the end is a minimum along C when
     // it decreases towards the end: (C - Q) . C' side < 0.
@@ -556,7 +555,7 @@ struct EndSearch {
         return std::unexpected(
             EndUnresolved(e, "a closest approach within rounding of the resolution"));
     }
-    if (GrowsInward(e.End, jet->Point)) {
+    if (ShrinksInward(e.End, jet->Point)) {
         return {};
     }
     const Interval end{e.End.T};
@@ -618,7 +617,7 @@ struct EndSearch {
                     search.Handler + ": the ends at " + Number(a.T) + " and " + Number(b.T) +
                         " lie within rounding of the resolution apart");
     }
-    if (!GrowsInward(a, b.Point) && !GrowsInward(b, a.Point)) {
+    if (!ShrinksInward(a, b.Point) && !ShrinksInward(b, a.Point)) {
         search.Found.push_back({Interval{a.T}, Interval{b.T}});
     }
     return {};

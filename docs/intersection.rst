@@ -653,9 +653,9 @@ curves meet as two lines do (*Space curves*, above):
   decided against the resolution as above;
 - **two ends** within the resolution of each other.
 
-An end is kept only where the distance is not proved to grow from it
-inward, :math:`(C - Q) \cdot C'` pointing the wrong way for that side;
-otherwise the minimum lies inside, where the pair search finds it. So two
+An end is dropped when the distance is proved to shrink from it inward,
+the sign of :math:`(C - Q) \cdot C'` being the wrong one for that side:
+the minimum then lies inside, where the pair search finds it. So two
 edges sharing a vertex meet at it even when their ends are a rounding
 apart. The same goes for a stem ending a rounding short of a bar, and for
 nearly parallel segments touching end to end whose supports' closest
