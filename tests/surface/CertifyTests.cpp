@@ -419,8 +419,8 @@ TEST_CASE("repeated knots do not turn unavailable derivatives into zero",
     const std::vector<double> z{0, 0, .25, .5, 1};
     std::vector<Point3> poles;
     for (std::size_t i = 0; i < z.size(); ++i) {
-        poles.push_back({i * .25, 0, z[i]});
-        poles.push_back({i * .25, 1, z[i]});
+        poles.push_back({static_cast<double>(i) * .25, 0, z[i]});
+        poles.push_back({static_cast<double>(i) * .25, 1, z[i]});
     }
     const auto surface = Stereon::MakeBSplineSurface(2, 1, ku, kv, poles);
     REQUIRE(surface.has_value());
