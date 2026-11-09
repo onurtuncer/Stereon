@@ -171,11 +171,6 @@ void CheckCase(const JsonValue& c, const bool swapped)
         CHECK((expected.Has("may_fail_closed") && FailsClosed(result.error().GetCode())));
         return;
     }
-    if (expected.Has("known_defect")) {
-        // Answered, wrongly, for the reason the case gives: nothing to hold
-        // it to until the kernel is fixed and the mark removed.
-        return;
-    }
     CheckResult(*result, expected, a, b, tolerance, c["inputs"]["scale"].AsNumber());
 }
 

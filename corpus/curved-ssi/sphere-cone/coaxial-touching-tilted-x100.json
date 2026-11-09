@@ -90,7 +90,6 @@
         185.0
       ]
     ],
-    "may_fail_closed": "a tangency or node away from the closed forms; the trace may fail closed",
-    "known_defect": "axes a rounding apart: two contact points are reported in place of the tangent circle"
+    "may_fail_closed": "a tangency or node away from the closed forms; the trace may fail closed"
   }
 }

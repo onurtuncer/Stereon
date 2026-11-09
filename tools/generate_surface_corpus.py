@@ -101,15 +101,12 @@ def regime(
     hard=None,
     placements=tuple(PLACEMENTS),
     hard_large=None,
-    defect=None,
 ):
     """A configuration and its answer. `hard` allows a refusal everywhere,
-    `hard_large` only at the larger scale; `defect` is (placement, reason)
-    for a known wrong answer of the kernel."""
+    `hard_large` only at the larger scale."""
     return {
         "placements": placements,
         "hard_large": hard_large,
-        "defect": defect,
         "name": name,
         "a": a,
         "b": b,
@@ -217,7 +214,6 @@ def sphere_cone():
         contact="tangential",
         witnesses=[(2 * co * s * 2, 0.0, 4 * co * co)],
         hard=TANGENT_REASON,
-        defect=("tilted", "axes a rounding apart: two contact points are reported in place of the tangent circle"),
     )
     yield regime("coaxial-two", sphere(z_at(4.0), 3.0), c, curves=2, witnesses=along(0.0, 4.0, 3.0))
     # The upper circle is at v = 8.04: past the default box.
@@ -481,8 +477,6 @@ def case_for(family, r, placement_name, scale):
         reason = r["hard_large"]
     if reason:
         expected["may_fail_closed"] = reason
-    if r["defect"] and r["defect"][0] == placement_name:
-        expected["known_defect"] = r["defect"][1]
     a, b = family.split("-")
     return {
         "format": "stereon-corpus-case/1",

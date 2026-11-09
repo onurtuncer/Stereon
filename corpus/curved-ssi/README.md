@@ -39,7 +39,6 @@ The answer never comes from the kernel. Each configuration's topology follows fr
 | `contact` | `crossing` or `tangential`, for every branch |
 | `witnesses` | Points known to lie on the intersection, at least one on each component the argument can place |
 | `may_fail_closed` | Present when the case may be refused with `IntersectionFailed`, `CertificationFailed`, `NotSupported` or `NotImplemented`, with the reason. It never excuses a wrong answer |
-| `known_defect` | Present when the kernel is known to answer the case wrongly, with what it does. The result is not checked until the defect is fixed and the mark removed |
 
 ## What the kernel is held to
 
