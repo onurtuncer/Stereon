@@ -766,8 +766,10 @@ NearestOnPart(const ProfilePart& part, const double rho, const double z)
     const double z = HeightOf(axis, point);
     const Vec3 radial = (point - axis.Origin) - z * axis.Direction;
     const double rho = Length(radial);
-    if (!(rho > 0.0)) {
-        return std::nullopt; // On the axis: a whole circle is nearest.
+    if (!(rho > tol)) {
+        // On the axis within the tolerance: the distance varies by at most
+        // 2 rho around the circle, so a whole circle is nearest, not points.
+        return std::nullopt;
     }
     const Vec3 out = radial / rho;
     Nearest nearest;
