@@ -123,7 +123,9 @@ def case_for(a, b, placement, gap_name, ratio):
     unit = tuple(c / length(normal) for c in normal)
     gap = ratio * RESOLUTION
     target = add(point_a, unit, gap)
-    origin_b = add(target, on_frame(FRAMES[1], *pb), -1.0)
+    # Rounded to a grid far below the gaps: the last digits of a platform's
+    # cos and cosh would otherwise change the files between machines.
+    origin_b = tuple(round(c, 12) for c in add(target, on_frame(FRAMES[1], *pb), -1.0))
     case_id = f"curve-curve/{a}-{b}/{gap_name}-{placement}"
     return {
         "format": "stereon-corpus-case/1",

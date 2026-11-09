@@ -68,6 +68,7 @@
 #include <limits>
 #include <numbers>
 #include <string>
+#include <string_view>
 #include <vector>
 
 import Stereon.Intersect;
@@ -830,7 +831,7 @@ TEST_CASE("3D curve pairs agree with GeomAPI_ExtremaCurveCurve on the corpus",
         INFO(c["id"].AsString());
         const auto ours = Intersect(StereonTest::CurveFrom(curves[0]), da,
                                     StereonTest::CurveFrom(curves[1]), db, ctx);
-        INFO(ours.has_value() ? "" : ours.error().GetMessage());
+        INFO((ours.has_value() ? std::string_view{} : ours.error().GetMessage()));
         REQUIRE(ours.has_value());
         GeomAPI_ExtremaCurveCurve extrema(GeomCurveOf(curves[0]), GeomCurveOf(curves[1]),
                                           da.GetLower(), da.GetUpper(), db.GetLower(),
