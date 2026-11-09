@@ -1,11 +1,12 @@
 # ADR-0010: Surface–surface intersection strategy
 
-- **Status:** Accepted in part: the analytic table (2026-10-20); the generic path stays Proposed until Phase 2
+- **Status:** Accepted: the analytic table (2026-10-20) and the generic path (2026-11-09); the Phase 2 verification below remains open
 - **Date:** 2026-09-28
 - **Revised:** 2026-10-10 (completeness and accuracy as separate obligations; contact types)
 - **Revised:** 2026-10-14 (dimension-aware outcomes and independent side-transition evidence in ADR-0029)
 - **Revised:** 2026-10-20 (the decisions on acceptance below: the analytic table accepted, a cylinder–cylinder handler for skew and intersecting axes, a Tier A corpus for the Boolean prototype)
 - **Accepted (analytic table):** 2026-10-20 by Onur Tuncer, before the Boolean prototype that builds on it (`docs/planning/boolean-prototype-plan.md`, decision D7). The generic path (subdivision, marching, normal-cone pruning) and the Phase 2 verification below stay Proposed until Phase 2.
+- **Accepted (generic path):** 2026-11-09 by Onur Tuncer: subdivision, normal-cone pruning and marching as proposed, without change, before the work that builds them. The Phase 2 exit gate under *Verification* still applies.
 - **Owner:** Onur Tuncer
 - **Phase:** 2
 
@@ -40,6 +41,10 @@ Adopt option 4.
 - **The analytic table is accepted; the generic path is not yet.** The Boolean prototype builds the handlers for plane–plane, plane–cylinder and cylinder–cylinder. Subdivision, marching and normal-cone pruning stay Proposed, and are decided with the Phase 2 work that builds them.
 - **Cylinder–cylinder in full, including skew and intersecting axes.** Parallel axes have closed forms (lines, or a coaxial overlap). Skew and intersecting axes give a quartic with no closed form, which RS-0001 leaves as Tier B; the prototype handles it with a dedicated handler rather than `NotSupported`. On one cylinder, at angle u, the other cylinder's equation is a quadratic in the height v, so the curve is the two branches v±(u) where its discriminant is not negative, meeting at the branch points where it vanishes, found exactly. Each branch's pcurves on both cylinders are B-splines fitted to the closed form and certified by interval evaluation of the residual (decision D3), and the edges are ADR-0009 `Intersection` edges with a cached 3D curve. Tangency between the cylinders (a double root along a branch) is decided exactly and reported as such.
 - **The corpus.** The prototype needs a complete Tier A analytic corpus, plus the cylinder–cylinder cases above, with analytic ground truth and OCCT agreement, before its handlers merge: every plane–plane, plane–cylinder and cylinder–cylinder configuration, disjoint, tangent, crossing and coincident, near-degenerate on either side of each decision, and loosened. The 500-case corpus stays the gate of the generic path.
+
+### Decision on acceptance (2026-11-09)
+
+- **The generic path is accepted as proposed.** Bézier subdivision, interval and normal-cone pruning, seed collection, marching and the explicit treatment of special points stand as written under *Decision*. Acceptance settles the approach; it is not evidence that the path works, which the exit gate under *Verification* must still show.
 
 ## Consequences
 
