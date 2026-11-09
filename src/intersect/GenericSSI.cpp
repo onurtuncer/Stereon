@@ -1208,16 +1208,6 @@ enum class Settled : std::uint8_t { Done, Cut };
     return Settled::Done;
 }
 
-void AddTouch(Findings& found, const IntersectionPoint& touch, const double join)
-{
-    const bool known = std::ranges::any_of(found.Touches, [&](const IntersectionPoint& t) {
-        return Distance(t.Position, touch.Position) <= join;
-    });
-    if (!known) {
-        found.Touches.push_back(touch);
-    }
-}
-
 /// The largest distance a pair of enclosed points can be apart, and the
 /// smallest.
 [[nodiscard]] Interval DistanceBetween(const Bounds& r)
@@ -1234,7 +1224,8 @@ void AddTouch(Findings& found, const IntersectionPoint& touch, const double join
 /// solution rules out only tangency, not a crossing, and a saddle has
 /// branches through it; both are cut further, and a saddle ends in failure
 /// at the smallest pair.
-[[nodiscard]] Settled SettleTouch(const PatchPair& pair, const SearchSettings& s, Findings& found)
+[[nodiscard]] Settled SettleTouch(const PatchPair& pair, const SearchSettings& s,
+                                  [[maybe_unused]] Findings& found)
 {
     if (!s.Polynomial) {
         return Settled::Cut;
@@ -1255,8 +1246,10 @@ void AddTouch(Findings& found, const IntersectionPoint& touch, const double join
                             LocalAt(b, pair.B.Parameters, m[2], m[3], n))) {
         return Settled::Cut;
     }
-    AddTouch(found, {Middle(onA), Point2{m[0], m[1]}, Point2{m[2], m[3]}, gap.GetUpper()}, s.Join);
-    return Settled::Done;
+    // A nearby extremum does not exclude a surrounding crossing loop.
+    // Until isolation of the zero set is proved, fail closed rather than
+    // discard the remainder of this patch pair.
+    return Settled::Cut;
 }
 
 [[nodiscard]] Settled Settle(const PatchPair& pair, const SearchSettings& s, Findings& found)
@@ -1618,12 +1611,15 @@ ChainSamples(const Marcher& m, const std::vector<Arc>& arcs, const Chain& chain)
     return {Intersection(domain.X, requested.X), Intersection(domain.Y, requested.Y)};
 }
 
-[[nodiscard]] std::vector<PatchPair> AllPairs(const std::vector<Patch>& a,
-                                              const std::vector<Patch>& b)
+[[nodiscard]] Result<std::vector<PatchPair>> AllPairs(const std::vector<Patch>& a,
+                                                      const std::vector<Patch>& b)
 {
     std::vector<PatchPair> pairs;
     for (const Patch& pa : a) {
         for (const Patch& pb : b) {
+            if (pairs.size() >= PairBudget) {
+                return Fail(ErrorCode::IntersectionFailed, "Initial patch-pair budget exceeded");
+            }
             pairs.push_back({pa, pb});
         }
     }
@@ -1665,7 +1661,8 @@ SSIResult NurbsHull(const Surface& a, const Box2& domainA, const Surface& b, con
     STEREON_TRY(const std::vector<Patch> patchesB, PatchesOver(*sb, domainB));
     const SearchSettings settings{tolerance, 0x1p-7 * ctx.GetResolution(),
                                   sa->Weights.empty() && sb->Weights.empty()};
-    STEREON_TRY(const Findings found, SearchPairs(AllPairs(patchesA, patchesB), settings));
+    STEREON_TRY(std::vector<PatchPair> pairs, AllPairs(patchesA, patchesB));
+    STEREON_TRY(const Findings found, SearchPairs(std::move(pairs), settings));
     return Assembled(found, a, SearchedDomain(*sa, domainA), b, SearchedDomain(*sb, domainB),
                      settings, ctx);
 }

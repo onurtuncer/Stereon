@@ -818,7 +818,8 @@ struct SurfaceEnclosure {
     {
         Homogeneous4 hull = PoleHull(f, u, v);
         const ActiveSpans spans = SpansOver(f, u, v);
-        if (spans.U0 != spans.U1 || spans.V0 != spans.V1) {
+        if (spans.U0 != spans.U1 || spans.V0 != spans.V1 || (du == nullptr && f.DegreeU > 0) ||
+            (dv == nullptr && f.DegreeV > 0)) {
             return hull;
         }
         const double mu = 0.5 * (u.GetLower() + u.GetUpper());

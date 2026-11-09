@@ -1431,3 +1431,11 @@ Related design decisions
 
 
 
+
+Generic SSI audit restriction
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Isolated extrema currently fail closed: proximity and a definite relative
+second form alone do not exclude a surrounding crossing loop. Isolated-touch
+output is disabled pending a proof of the zero set over the patch pair.
+Initial patch-pair allocation is capped by the same budget as subdivision.

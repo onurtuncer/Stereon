@@ -362,16 +362,21 @@ TEST_CASE("a rational quarter cylinder is cut along its exact line",
     }
 }
 
-TEST_CASE("an isolated touch is a point", "[intersect][generic][special]")
+TEST_CASE("near extrema never replace closed loops with isolated touches",
+          "[intersect][generic][regression]")
 {
     const Surface bowl{Paraboloid()};
-    const Surface flat{Patch(0.0)};
-    const auto result = Intersect(flat, bowl, ctx);
-    INFO(IntersectTest::ErrorText(result));
-    REQUIRE(result.has_value());
-    REQUIRE(result->Branches.empty());
-    REQUIRE(result->Points.size() == 1);
-    REQUIRE(Distance(result->Points[0].Position, Point3{0.5, 0.5, 0.0}) <= 1e-6);
+    for (const double height : {0.0, 5e-7}) {
+        const auto result = Intersect(bowl, Box2::Everything(), Surface{Patch(height)},
+                                      Box2::Everything(), 1e-6, ctx);
+        if (result) {
+            REQUIRE(height > 0.0);
+            REQUIRE_FALSE(result->Branches.empty());
+            REQUIRE(result->Points.empty());
+        } else {
+            REQUIRE(result.error().GetCode() == ErrorCode::IntersectionFailed);
+        }
+    }
 }
 
 TEST_CASE("tangency along a curve and a branch point fail closed", "[intersect][generic][special]")
@@ -435,4 +440,26 @@ TEST_CASE("direct NURBS construction cannot bypass factory weight bounds",
         Intersect(Surface{invalid}, middle, Surface{Patch(100.0)}, middle, 0.0, ctx);
     REQUIRE_FALSE(result.has_value());
     REQUIRE(result.error().GetCode() == ErrorCode::InvalidInput);
+}
+
+TEST_CASE("initial SSI patch pairs obey the search budget", "[intersect][generic][regression]")
+{
+    constexpr int count = 130;
+    std::vector<double> knots{0.0};
+    for (int i = 0; i < count; ++i) {
+        knots.push_back(static_cast<double>(i) / (count - 1));
+    }
+    knots.push_back(1.0);
+    std::vector<Point3> poles;
+    for (int i = 0; i < count; ++i) {
+        for (int j = 0; j < count; ++j) {
+            poles.push_back(
+                {static_cast<double>(i) / (count - 1), static_cast<double>(j) / (count - 1), 0.0});
+        }
+    }
+    const auto many = Stereon::MakeBSplineSurface(1, 1, knots, knots, poles);
+    REQUIRE(many.has_value());
+    const auto result = Intersect(Surface{*many}, Surface{Patch(0.0)}, ctx);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error().GetCode() == ErrorCode::IntersectionFailed);
 }

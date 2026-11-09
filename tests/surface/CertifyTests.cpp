@@ -410,3 +410,27 @@ TEST_CASE("a certificate on a B-spline surface refuses a curve off it", "[surfac
         REQUIRE(c.error().GetCode() == ErrorCode::CertificationFailed);
     }
 }
+
+TEST_CASE("repeated knots do not turn unavailable derivatives into zero",
+          "[surface][certify][regression]")
+{
+    const std::vector<double> ku{0, 0, 0, .5, .5, 1, 1, 1};
+    const std::vector<double> kv{0, 0, 1, 1};
+    const std::vector<double> z{0, 0, .25, .5, 1};
+    std::vector<Point3> poles;
+    for (std::size_t i = 0; i < z.size(); ++i) {
+        poles.push_back({i * .25, 0, z[i]});
+        poles.push_back({i * .25, 1, z[i]});
+    }
+    const auto surface = Stereon::MakeBSplineSurface(2, 1, ku, kv, poles);
+    REQUIRE(surface.has_value());
+    const auto curve = Stereon::MakeBSplineCurve(
+        1, {0, 0, 1, 1}, std::vector<Point3>{{.125, .5, 0}, {.375, .5, .125}});
+    const auto pc =
+        Stereon::MakeBSplineCurve(1, {0, 0, 1, 1}, std::vector<Point2>{{.125, .5}, {.375, .5}});
+    REQUIRE(curve.has_value());
+    REQUIRE(pc.has_value());
+    const auto certificate =
+        CertifyDeviation(Curve{*curve}, Surface{*surface}, Curve2d{*pc}, Interval{0, 1}, 1e-6);
+    REQUIRE_FALSE(certificate.has_value());
+}
