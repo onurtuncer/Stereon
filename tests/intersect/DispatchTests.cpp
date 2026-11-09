@@ -106,17 +106,13 @@ TEST_CASE("every built-in pair has a handler that names both types", "[intersect
         }
     }
 
-    // Line-line is implemented; the remaining 3D curve pairs still name
-    // their types in NotImplemented diagnostics, ordered as called.
+    // Every 3D curve pair has a handler: it answers, or fails closed.
     REQUIRE(Intersect(SomeLine(), SomeLine(), ctx).has_value());
-    const auto lineCircle = Intersect(SomeLine(), SomeCircle(), ctx);
-    REQUIRE_FALSE(lineCircle.has_value());
-    REQUIRE(lineCircle.error().GetCode() == ErrorCode::NotImplemented);
-    REQUIRE(MessageOf(lineCircle.error()).starts_with("Line x Circle"));
-    REQUIRE(
-        MessageOf(Intersect(SomeCircle(), SomeLine(), ctx).error()).starts_with("Circle x Line"));
-    REQUIRE(MessageOf(Intersect(SomeCircle(), SomeCircle(), ctx).error())
-                .starts_with("Circle x Circle"));
+    for (const auto& result :
+         {Intersect(SomeLine(), SomeCircle(), ctx), Intersect(SomeCircle(), SomeLine(), ctx)}) {
+        REQUIRE(result.has_value());
+    }
+    REQUIRE(Intersect(SomeCircle(), SomeCircle(), ctx).has_value());
 
     // Every pair of planes, cylinders, cones, spheres and tori has its
     // analytic handler (M3, v0.2); a B-spline surface against an analytic

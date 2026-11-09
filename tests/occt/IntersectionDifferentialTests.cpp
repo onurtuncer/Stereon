@@ -20,6 +20,8 @@
 // OCCT is LGPL-2.1 and linked only into this test (ADR-0008); build it with
 // tools/occt/build_occt.sh and configure with -DSTEREON_WITH_OCCT=ON.
 
+#include "Json.hpp"
+#include <GeomAPI_ExtremaCurveCurve.hxx>
 #include <GeomAPI_IntSS.hxx>
 #include <GeomAPI_ProjectPointOnCurve.hxx>
 #include <Geom_BSplineCurve.hxx>
@@ -28,7 +30,9 @@
 #include <Geom_ConicalSurface.hxx>
 #include <Geom_CylindricalSurface.hxx>
 #include <Geom_Ellipse.hxx>
+#include <Geom_Hyperbola.hxx>
 #include <Geom_Line.hxx>
+#include <Geom_Parabola.hxx>
 #include <Geom_Plane.hxx>
 #include <Geom_SphericalSurface.hxx>
 #include <Geom_ToroidalSurface.hxx>
@@ -60,6 +64,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <filesystem>
 #include <limits>
 #include <numbers>
 #include <string>
@@ -67,6 +72,7 @@
 
 import Stereon.Intersect;
 
+#include "CurveCorpus.hpp"
 #include "OcctConversion.hpp"
 
 using Stereon::Curve;
@@ -773,5 +779,66 @@ TEST_CASE("circles and ellipses against the quadrics agree with IntAna_IntConicQ
         RequireConicAgreesWithConicQuad(ellipse, occtEllipse, sphere);
         RequireConicAgreesWithConicQuad(ellipse, occtEllipse, cylinder);
         RequireConicAgreesWithConicQuad(ellipse, occtEllipse, cone);
+    }
+}
+
+// The 3D curve pairs against GeomAPI_ExtremaCurveCurve on every case of
+// corpus/curve-curve/: Stereon finds a meeting exactly when OCCT's least
+// distance between the two trimmed curves, ends included, is within the
+// resolution. Distances within a tenth of it are left undecided here.
+namespace {
+
+occ::handle<Geom_Curve> GeomCurveOf(const StereonTest::JsonValue& c)
+{
+    const std::string type = c["type"].AsString();
+    if (type == "bspline") {
+        return ToOcct(StereonTest::SplineFrom(c));
+    }
+    if (type == "line") {
+        return new Geom_Line(gp_Lin(ToOcct(StereonTest::PointFrom(c["origin"])),
+                                    ToDir(StereonTest::VectorFrom(c["direction"]))));
+    }
+    const Vec3 x = StereonTest::VectorFrom(c["x_axis"]);
+    const Vec3 y = StereonTest::VectorFrom(c["y_axis"]);
+    const Point3 at = StereonTest::PointFrom(c[type == "parabola" ? "vertex" : "center"]);
+    const gp_Ax2 frame = ConicFrame(at, x, y);
+    if (type == "circle") {
+        return new Geom_Circle(frame, c["radius"].AsNumber());
+    }
+    if (type == "ellipse") {
+        return new Geom_Ellipse(frame, c["major"].AsNumber(), c["minor"].AsNumber());
+    }
+    if (type == "parabola") {
+        return new Geom_Parabola(frame, c["focal"].AsNumber());
+    }
+    return new Geom_Hyperbola(frame, c["major"].AsNumber(), c["minor"].AsNumber());
+}
+
+} // namespace
+
+TEST_CASE("3D curve pairs agree with GeomAPI_ExtremaCurveCurve on the corpus",
+          "[occt][intersect][curve-curve]")
+{
+    const double resolution = ctx.GetResolution();
+    const auto files = StereonTest::CurveCorpusFiles();
+    REQUIRE(files.size() >= 168);
+    for (const auto& file : files) {
+        const StereonTest::JsonValue c = StereonTest::ReadJsonFile(file);
+        const auto& curves = c["inputs"]["curves"];
+        const Stereon::Interval da = StereonTest::DomainFrom(curves[0]);
+        const Stereon::Interval db = StereonTest::DomainFrom(curves[1]);
+        INFO(c["id"].AsString());
+        const auto ours = Intersect(StereonTest::CurveFrom(curves[0]), da,
+                                    StereonTest::CurveFrom(curves[1]), db, ctx);
+        INFO(ours.has_value() ? "" : ours.error().GetMessage());
+        REQUIRE(ours.has_value());
+        GeomAPI_ExtremaCurveCurve extrema(GeomCurveOf(curves[0]), GeomCurveOf(curves[1]),
+                                          da.GetLower(), da.GetUpper(), db.GetLower(),
+                                          db.GetUpper());
+        const double least = extrema.TotalLowerDistance();
+        INFO("OCCT's least distance " << least);
+        if (std::abs(least - resolution) > 0.1 * resolution) {
+            CHECK(ours->IsEmpty() == (least > resolution));
+        }
     }
 }
