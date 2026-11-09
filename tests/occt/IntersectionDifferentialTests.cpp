@@ -21,9 +21,11 @@
 // tools/occt/build_occt.sh and configure with -DSTEREON_WITH_OCCT=ON.
 
 #include "Json.hpp"
-#include <GeomAPI_ExtremaCurveCurve.hxx>
+#include <Extrema_LocateExtCC.hxx>
+#include <Extrema_POnCurv.hxx>
 #include <GeomAPI_IntSS.hxx>
 #include <GeomAPI_ProjectPointOnCurve.hxx>
+#include <GeomAdaptor_Curve.hxx>
 #include <Geom_BSplineCurve.hxx>
 #include <Geom_BSplineSurface.hxx>
 #include <Geom_Circle.hxx>
@@ -783,10 +785,12 @@ TEST_CASE("circles and ellipses against the quadrics agree with IntAna_IntConicQ
     }
 }
 
-// The 3D curve pairs against GeomAPI_ExtremaCurveCurve on every case of
-// corpus/curve-curve/: Stereon finds a meeting exactly when OCCT's least
-// distance between the two trimmed curves, ends included, is within the
-// resolution. Distances within a tenth of it are left undecided here.
+// The 3D curve pairs against OCCT's local solver, Extrema_LocateExtCC, on
+// every case of corpus/curve-curve/, whose claim is local too: started at
+// the case's parameters, OCCT finds the extremum there at the case's gap, and
+// Stereon finds a meeting there exactly when that distance is within the
+// resolution. The global GeomAPI_ExtremaCurveCurve is not used: over these
+// cases it had not finished after 85 minutes in CI, where the job takes 4.
 namespace {
 
 occ::handle<Geom_Curve> GeomCurveOf(const StereonTest::JsonValue& c)
@@ -817,7 +821,7 @@ occ::handle<Geom_Curve> GeomCurveOf(const StereonTest::JsonValue& c)
 
 } // namespace
 
-TEST_CASE("3D curve pairs agree with GeomAPI_ExtremaCurveCurve on the corpus",
+TEST_CASE("3D curve pairs agree with Extrema_LocateExtCC on the corpus",
           "[occt][intersect][curve-curve]")
 {
     const double resolution = ctx.GetResolution();
@@ -828,18 +832,28 @@ TEST_CASE("3D curve pairs agree with GeomAPI_ExtremaCurveCurve on the corpus",
         const auto& curves = c["inputs"]["curves"];
         const Stereon::Interval da = StereonTest::DomainFrom(curves[0]);
         const Stereon::Interval db = StereonTest::DomainFrom(curves[1]);
+        const double ta = c["expected"]["parameters"][0].AsNumber();
+        const double tb = c["expected"]["parameters"][1].AsNumber();
         INFO(c["id"].AsString());
+        const GeomAdaptor_Curve onA(GeomCurveOf(curves[0]), da.GetLower(), da.GetUpper());
+        const GeomAdaptor_Curve onB(GeomCurveOf(curves[1]), db.GetLower(), db.GetUpper());
+        const Extrema_LocateExtCC occt(onA, onB, ta, tb);
+        REQUIRE(occt.IsDone());
+        const double distance = std::sqrt(occt.SquareDistance());
+        Extrema_POnCurv pointA;
+        Extrema_POnCurv pointB;
+        occt.Point(pointA, pointB);
+        INFO("OCCT's distance " << distance);
+        CHECK(std::abs(distance - c["expected"]["gap"].AsNumber()) <= 1e-9);
+        CHECK(std::abs(pointA.Parameter() - ta) <= 1e-6);
+        CHECK(std::abs(pointB.Parameter() - tb) <= 1e-6);
         const auto ours = Intersect(StereonTest::CurveFrom(curves[0]), da,
                                     StereonTest::CurveFrom(curves[1]), db, ctx);
         INFO((ours.has_value() ? std::string_view{} : ours.error().GetMessage()));
         REQUIRE(ours.has_value());
-        GeomAPI_ExtremaCurveCurve extrema(GeomCurveOf(curves[0]), GeomCurveOf(curves[1]),
-                                          da.GetLower(), da.GetUpper(), db.GetLower(),
-                                          db.GetUpper());
-        const double least = extrema.TotalLowerDistance();
-        INFO("OCCT's least distance " << least);
-        if (std::abs(least - resolution) > 0.1 * resolution) {
-            CHECK(ours->IsEmpty() == (least > resolution));
-        }
+        const bool found = std::ranges::any_of(ours->Points, [&](const auto& p) {
+            return std::abs(p.ParameterA - ta) <= 1e-4 && std::abs(p.ParameterB - tb) <= 1e-4;
+        });
+        CHECK(found == (distance <= resolution));
     }
 }

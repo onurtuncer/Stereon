@@ -13,4 +13,4 @@ Each family is an unordered pair of the types line, circle, ellipse, parabola, h
 
 The claim of a case is local: the curves meet near `expected.parameters` exactly when `expected.meets` is true. A pair may also meet elsewhere.
 
-`tests/intersect/CurveCorpusTests.cpp` runs every case in both orders. `tests/occt/IntersectionDifferentialTests.cpp` compares every case with OCCT's least distance between the curves.
+`tests/intersect/CurveCorpusTests.cpp` runs every case in both orders. `tests/occt/IntersectionDifferentialTests.cpp` compares every case with OCCT's local solver, `Extrema_LocateExtCC`, started at the case's parameters.
