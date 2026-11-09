@@ -1371,19 +1371,52 @@ apart than the pair tolerance along some axis,
 the surfaces are proved disjoint and the result is empty. That proof holds
 over any requested domains.
 
-When the whole nets overlap, the second stage looks closer. Each surface is
-cut into its Bézier patches over the requested domains, by Boehm's knot
-insertion and de Casteljau's algorithm in outward-rounded interval
-arithmetic, so that the enclosed poles hold those of the surface as given.
-Pairs of patches are examined depth first: the same test on their nets drops
-a pair, and otherwise the larger patch is halved. When every pair is dropped
-the surfaces are proved disjoint over the domains and the result is empty.
+When the whole nets overlap, each surface is cut into its Bézier patches over
+the requested domains, by Boehm's knot insertion and de Casteljau's algorithm
+in outward-rounded interval arithmetic, so that the enclosed poles hold those
+of the surface as given. Pairs of patches are examined depth first and cut,
+off-centre so that a symmetric branch does not lie along a cut, until each
+pair is settled in one of three ways.
 
-A pair whose patches are both within the tolerance, or cannot be cut further,
-may hold an intersection: the pair returns ``NotImplemented`` until branch
-discovery and marching exist, never an empty result it has not proved. A
-search past its budget of :math:`2^{14}` pairs returns
-``IntersectionFailed``, naming the pair (``src/intersect/GenericSSI.cpp``).
+*Apart.* The same test on the two patches' nets, as above.
+
+*Transverse.* A direction :math:`L` with
+
+.. math::
+
+   L \cdot (\mathbf{n}_A \times \mathbf{n}_B) > 0
+
+over the whole pair, the normals enclosed from the partial derivatives' nets.
+Every branch inside advances along :math:`L`, so none closes up inside the
+pair and each leaves through its boundary (the loop test of Sederberg and
+Meyers on the cones of normals). The roots of the pair's eight boundary
+curves against the other patch, isolated by Krawczyk's operator, are then all
+the branch ends: none proves that the pair holds no branch, two are one arc,
+and more need a smaller pair.
+
+*An isolated touch*, for polynomial surfaces. Every tangential contact solves
+
+.. math::
+
+   S_A - S_B - \lambda\,\mathbf{n}_B = 0, \qquad
+   \partial_u S_A \cdot \mathbf{n}_B = 0, \qquad
+   \partial_v S_A \cdot \mathbf{n}_B = 0,
+
+and at an isolated touch this system is regular, as the gradient of the
+distance is not. A unique solution within the tolerance, where the relative
+second form of the two surfaces is definite, is a point of the result.
+
+Arcs join at shared seeds into branches, every free end on a boundary of the
+domains. Each arc is marched by Newton's method on :math:`S_A = S_B` and
+:math:`L \cdot S_A = s`, halving chords until they hold, and the polylines in
+space and on both surfaces are certified by ``CertifyDeviation``, tightened
+until they pass. They are polylines because a fitted cubic pcurve can leave a
+surface's domain.
+
+Whatever cannot be settled fails: a tangency along a curve, a branch point, an
+overlap, any tangency of rational surfaces, and a search past its budget of
+:math:`2^{14}` pairs return ``IntersectionFailed``, naming the patches, never
+a partial or an unproved empty result (``src/intersect/GenericSSI.cpp``).
 
 A B-spline surface against a plane, cylinder, cone, sphere or torus reports
 ``NotImplemented``.

@@ -27,6 +27,7 @@ module;
 
 module Stereon.Surface;
 
+import :BSplineSurface;
 import :Certify;
 import :Cone;
 import :Cylinder;
@@ -338,9 +339,13 @@ struct SurfaceJet {
     std::array<std::array<IVec3, TaylorOrder + 1>, TaylorOrder + 1> Partial;
 };
 
-/// The surface: its jet at enclosed parameters, to an order.
+/// The surface: its jet at enclosed parameters, to an order. HasTaylor is
+/// false for a surface that may be less smooth than the Taylor form needs
+/// along the pcurve, a B-spline across its knot lines, whose jet holds the
+/// point and the first partials only.
 struct SurfaceTrace {
     std::function<SurfaceJet(const IPoint2&, int)> Jet;
+    bool HasTaylor = true;
 };
 
 /// The jet of a closed form at x, a parameter or a span, to the order `top`.
@@ -646,6 +651,246 @@ template <std::size_t D>
     return Trace<D>{[c](const Interval& span) { return c->Jets(span); }, c->Breaks()};
 }
 
+// --- B-spline surfaces over parameter boxes ---------------------------------
+
+/// A homogeneous value (w P, w), enclosed.
+using Homogeneous4 = std::array<Interval, 4>;
+
+/// A tensor-product B-spline of enclosed homogeneous poles: a surface or one
+/// of its partial derivatives, Poles[i * CountV + j], i along u.
+struct TensorSpline {
+    int DegreeU = 0;
+    int DegreeV = 0;
+    std::vector<double> KnotsU;
+    std::vector<double> KnotsV;
+    std::size_t CountU = 0;
+    std::size_t CountV = 0;
+    std::vector<Homogeneous4> Poles;
+};
+
+[[nodiscard]] TensorSpline HomogeneousOf(const BSplineSurface& s)
+{
+    TensorSpline t{s.DegreeU, s.DegreeV, s.KnotsU, s.KnotsV, PoleCountU(s), PoleCountV(s), {}};
+    t.Poles.reserve(s.Poles.size());
+    for (std::size_t i = 0; i < s.Poles.size(); ++i) {
+        const Interval w{s.Weights.empty() ? 1.0 : s.Weights[i]};
+        const Point3& p = s.Poles[i];
+        t.Poles.push_back({w * Interval{p.X}, w * Interval{p.Y}, w * Interval{p.Z}, w});
+    }
+    return t;
+}
+
+/// The derivative along one direction, as DerivativeCurve along each line:
+/// degree one lower, poles d (P_{i+1} - P_i) / (u_{i+d+1} - u_{i+1}).
+/// Nothing at degree 0 or for a knot difference not proved positive.
+[[nodiscard]] std::optional<TensorSpline> PartialOf(const TensorSpline& s, const bool alongU)
+{
+    const auto d = static_cast<std::size_t>(alongU ? s.DegreeU : s.DegreeV);
+    const std::vector<double>& knots = alongU ? s.KnotsU : s.KnotsV;
+    if (d == 0) {
+        return std::nullopt;
+    }
+    TensorSpline t = s;
+    (alongU ? t.DegreeU : t.DegreeV) -= 1;
+    (alongU ? t.CountU : t.CountV) -= 1;
+    (alongU ? t.KnotsU : t.KnotsV).assign(knots.begin() + 1, knots.end() - 1);
+    t.Poles.clear();
+    const Interval degree{static_cast<double>(d)};
+    for (std::size_t i = 0; i < t.CountU; ++i) {
+        for (std::size_t j = 0; j < t.CountV; ++j) {
+            const std::size_t k = alongU ? i : j;
+            const Interval step = Interval{knots[k + d + 1]} - Interval{knots[k + 1]};
+            if (!(step.GetLower() > 0.0)) {
+                return std::nullopt;
+            }
+            const Homogeneous4& low = s.Poles[i * s.CountV + j];
+            const Homogeneous4& high =
+                s.Poles[(alongU ? i + 1 : i) * s.CountV + (alongU ? j : j + 1)];
+            Homogeneous4 pole;
+            for (std::size_t c = 0; c < pole.size(); ++c) {
+                pole[c] = (high[c] - low[c]) * (degree / step);
+            }
+            t.Poles.push_back(pole);
+        }
+    }
+    return t;
+}
+
+[[nodiscard]] std::size_t SpanIn(const std::vector<double>& knots, const int degree,
+                                 const std::size_t count, const double t)
+{
+    const auto p = static_cast<std::size_t>(degree);
+    return FindSpan(knots, degree, count, std::clamp(t, knots[p], knots[count]));
+}
+
+/// The first and last active span over the box, per direction.
+struct ActiveSpans {
+    std::size_t U0;
+    std::size_t U1;
+    std::size_t V0;
+    std::size_t V1;
+};
+
+[[nodiscard]] ActiveSpans SpansOver(const TensorSpline& s, const Interval& u, const Interval& v)
+{
+    return {SpanIn(s.KnotsU, s.DegreeU, s.CountU, u.GetLower()),
+            SpanIn(s.KnotsU, s.DegreeU, s.CountU, u.GetUpper()),
+            SpanIn(s.KnotsV, s.DegreeV, s.CountV, v.GetLower()),
+            SpanIn(s.KnotsV, s.DegreeV, s.CountV, v.GetUpper())};
+}
+
+/// The hull of the poles active over the box: the convex hull property,
+/// per knot span, so it also holds across knot lines.
+[[nodiscard]] Homogeneous4 PoleHull(const TensorSpline& s, const Interval& u, const Interval& v)
+{
+    const ActiveSpans spans = SpansOver(s, u, v);
+    Homogeneous4 hull;
+    for (std::size_t i = spans.U0 - static_cast<std::size_t>(s.DegreeU); i <= spans.U1; ++i) {
+        for (std::size_t j = spans.V0 - static_cast<std::size_t>(s.DegreeV); j <= spans.V1; ++j) {
+            const Homogeneous4& pole = s.Poles[i * s.CountV + j];
+            for (std::size_t c = 0; c < hull.size(); ++c) {
+                hull[c] = Hull(hull[c], pole[c]);
+            }
+        }
+    }
+    return hull;
+}
+
+[[nodiscard]] double MagnitudeOf(const TensorSpline& s)
+{
+    double magnitude = 0.0;
+    for (const Homogeneous4& pole : s.Poles) {
+        for (const Interval& c : pole) {
+            magnitude = std::max({magnitude, std::abs(c.GetLower()), std::abs(c.GetUpper())});
+        }
+    }
+    return magnitude;
+}
+
+/// The spline's value at (u, v). The basis functions are rounded doubles,
+/// so the sum is widened by a margin of the form of EnclosedPoint's.
+[[nodiscard]] Homogeneous4 ValueAt(const TensorSpline& s, const double magnitude, const double u,
+                                   const double v)
+{
+    const auto p = static_cast<std::size_t>(s.DegreeU);
+    const auto q = static_cast<std::size_t>(s.DegreeV);
+    const std::size_t su = SpanIn(s.KnotsU, s.DegreeU, s.CountU, u);
+    const std::size_t sv = SpanIn(s.KnotsV, s.DegreeV, s.CountV, v);
+    std::vector<double> nu(p + 1);
+    std::vector<double> nv(q + 1);
+    BasisFunctions(s.KnotsU, s.DegreeU, su, std::clamp(u, s.KnotsU[p], s.KnotsU[s.CountU]), nu);
+    BasisFunctions(s.KnotsV, s.DegreeV, sv, std::clamp(v, s.KnotsV[q], s.KnotsV[s.CountV]), nv);
+    Homogeneous4 sum{Interval{0.0}, Interval{0.0}, Interval{0.0}, Interval{0.0}};
+    for (std::size_t i = 0; i <= p; ++i) {
+        for (std::size_t j = 0; j <= q; ++j) {
+            const Homogeneous4& pole = s.Poles[(su - p + i) * s.CountV + (sv - q + j)];
+            const Interval basis = Interval{nu[i]} * Interval{nv[j]};
+            for (std::size_t c = 0; c < sum.size(); ++c) {
+                sum[c] = sum[c] + basis * pole[c];
+            }
+        }
+    }
+    const auto terms = static_cast<double>(p + q + 2);
+    for (Interval& c : sum) {
+        c = Inflated(c, 8.0 * terms * terms * 0x1p-53 * magnitude);
+    }
+    return sum;
+}
+
+/// A B-spline surface and the partial derivatives its first-order jet needs
+/// over a box. The second partials narrow the first by a mean-value form;
+/// those above the degree are absent, and zero within one knot span.
+struct SurfaceEnclosure {
+    TensorSpline S;
+    TensorSpline Su;
+    TensorSpline Sv;
+    std::optional<TensorSpline> Suu;
+    std::optional<TensorSpline> Suv;
+    std::optional<TensorSpline> Svv;
+    double Magnitude = 0.0;
+
+    /// The spline's enclosure over the box: its active poles' hull, met,
+    /// within one knot span, with its value at the midpoint plus its
+    /// derivatives' enclosures times the offsets.
+    [[nodiscard]] Homogeneous4 Over(const TensorSpline& f, const TensorSpline* du,
+                                    const TensorSpline* dv, const Interval& u,
+                                    const Interval& v) const
+    {
+        Homogeneous4 hull = PoleHull(f, u, v);
+        const ActiveSpans spans = SpansOver(f, u, v);
+        if (spans.U0 != spans.U1 || spans.V0 != spans.V1) {
+            return hull;
+        }
+        const double mu = 0.5 * (u.GetLower() + u.GetUpper());
+        const double mv = 0.5 * (v.GetLower() + v.GetUpper());
+        const Homogeneous4 at = ValueAt(f, Magnitude, mu, mv);
+        const Homogeneous4 slopeU = du != nullptr ? PoleHull(*du, u, v)
+                                                  : Homogeneous4{Interval{0.0}, Interval{0.0},
+                                                                 Interval{0.0}, Interval{0.0}};
+        const Homogeneous4 slopeV = dv != nullptr ? PoleHull(*dv, u, v)
+                                                  : Homogeneous4{Interval{0.0}, Interval{0.0},
+                                                                 Interval{0.0}, Interval{0.0}};
+        const Interval offsetU = OffsetOver(u, mu);
+        const Interval offsetV = OffsetOver(v, mv);
+        for (std::size_t c = 0; c < hull.size(); ++c) {
+            const Interval met =
+                Intersection(hull[c], at[c] + slopeU[c] * offsetU + slopeV[c] * offsetV);
+            if (!met.IsEmpty()) {
+                hull[c] = met;
+            }
+        }
+        return hull;
+    }
+
+    /// The point and first partials at enclosed parameters, by the quotient
+    /// rule on the homogeneous enclosures. A weight not proved positive
+    /// leaves everything unbounded, which certifies nothing.
+    [[nodiscard]] SurfaceJet JetAt(const IPoint2& uv) const
+    {
+        const Interval u = uv.X.Value;
+        const Interval v = uv.Y.Value;
+        const Homogeneous4 h = Over(S, &Su, &Sv, u, v);
+        const Homogeneous4 hu = Over(Su, Suu ? &*Suu : nullptr, Suv ? &*Suv : nullptr, u, v);
+        const Homogeneous4 hv = Over(Sv, Suv ? &*Suv : nullptr, Svv ? &*Svv : nullptr, u, v);
+        SurfaceJet jet{};
+        if (!(h[3].GetLower() > 0.0)) {
+            const IntervalScalar wide{Interval::Everything()};
+            jet.Point = {wide, wide, wide};
+            jet.Partial[1][0] = {wide, wide, wide};
+            jet.Partial[0][1] = {wide, wide, wide};
+            return jet;
+        }
+        const std::array<Interval, 3> point{h[0] / h[3], h[1] / h[3], h[2] / h[3]};
+        const auto partial = [&](const Homogeneous4& d) {
+            const auto c = [&](const std::size_t k) {
+                return IntervalScalar{(d[k] - point[k] * d[3]) / h[3]};
+            };
+            return IVec3{c(0), c(1), c(2)};
+        };
+        jet.Point = {IntervalScalar{point[0]}, IntervalScalar{point[1]}, IntervalScalar{point[2]}};
+        jet.Partial[1][0] = partial(hu);
+        jet.Partial[0][1] = partial(hv);
+        return jet;
+    }
+};
+
+[[nodiscard]] std::optional<SurfaceTrace> SplineSurfaceTrace(const BSplineSurface& surface)
+{
+    TensorSpline s = HomogeneousOf(surface);
+    std::optional<TensorSpline> su = PartialOf(s, true);
+    std::optional<TensorSpline> sv = PartialOf(s, false);
+    if (!su || !sv) {
+        return std::nullopt;
+    }
+    SurfaceEnclosure e{std::move(s), std::move(*su), std::move(*sv), {}, {}, {}, 0.0};
+    e.Suu = PartialOf(e.Su, true);
+    e.Suv = PartialOf(e.Su, false);
+    e.Svv = PartialOf(e.Sv, false);
+    e.Magnitude = MagnitudeOf(e.S);
+    const auto c = std::make_shared<const SurfaceEnclosure>(std::move(e));
+    return SurfaceTrace{[c](const IPoint2& uv, int) { return c->JetAt(uv); }, false};
+}
+
 // --- The erased operands --------------------------------------------------
 
 [[nodiscard]] std::optional<CurveTrace> TraceOf(const Curve& curve)
@@ -707,6 +952,9 @@ template <std::size_t D>
     }
     if (const Ellipsoid* ellipsoid = surface.Target<Ellipsoid>()) {
         return SurfaceOf(Enclosed(*ellipsoid));
+    }
+    if (const BSplineSurface* spline = surface.Target<BSplineSurface>()) {
+        return SplineSurfaceTrace(*spline);
     }
     return std::nullopt;
 }
@@ -905,7 +1153,7 @@ struct SpanBounds {
     const Interval offset = OffsetOver(span, m);
     SpanBounds bounds{Length(f0 + slope * IntervalScalar{offset}).GetUpper(),
                       Length(f0).GetLower()};
-    if (bounds.Upper <= target) {
+    if (bounds.Upper <= target || !s.HasTaylor) {
         return bounds;
     }
     const std::array<IVec3, TaylorOrder + 1> surfaceAt = Composed(at, pcurveAt, 1, order - 1);
@@ -1178,7 +1426,8 @@ Result<DeviationCertificate> CertifyDeviation(const Curve& curve, const Surface&
     if (!c || !p || !s) {
         return Fail(ErrorCode::NotSupported,
                     "CertifyDeviation: interval evaluation covers lines, conics and non-rational "
-                    "B-splines on planes, cylinders, cones, spheres, tori and ellipsoids");
+                    "B-splines on planes, cylinders, cones, spheres, tori, ellipsoids and "
+                    "B-spline surfaces");
     }
     // Analytic curves on a plane, or on a cylinder along a ruling or a
     // unit-speed turn, have a bound over the whole range in one step; one
