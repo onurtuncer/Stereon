@@ -279,11 +279,12 @@ using SurfaceHandler = Result<SurfaceSurfaceIntersection> (*)(const Surface&, co
 Result<CurveCurveIntersection> LineLine(const Curve&, const Interval&, const Curve&,
                                         const Interval&, const Context&);
 
-/// Two B-spline curves in space: their meetings, critical points of the
-/// distance within the Context's resolution, proved by subdivision and
-/// Krawczyk's operator (SplineCurvePair.cpp).
-Result<CurveCurveIntersection> SplineSpline(const Curve&, const Interval&, const Curve&,
-                                            const Interval&, const Context&);
+/// Every pair of 3D curves but two lines: B-splines, and lines and conics
+/// as enclosed Bezier pieces. Their meetings are the minima of the distance
+/// over the domains within the Context's resolution, proved by subdivision
+/// and Krawczyk's operator (SplineCurvePair.cpp).
+Result<CurveCurveIntersection> CurvePair(const Curve&, const Interval&, const Curve&,
+                                         const Interval&, const Context&);
 
 /// The analytic handlers (ADR-0010's table, RS-0001 Tier A): every
 /// configuration decision is the sign of a polynomial in the input doubles
@@ -438,20 +439,6 @@ Result<CurveSurfaceIntersection> LineTorus(const Curve&, const Interval&, const 
 /// SplineSurface.cpp.
 Result<CurveSurfaceIntersection> ConicSurface(const Curve&, const Interval&, const Surface&,
                                               const Box2&, const Context&);
-
-template <typename A, typename B>
-Result<CurveCurveIntersection> CurveStub(const Curve&, const Interval&, const Curve&,
-                                         const Interval&, const Context&)
-{
-    // The names are read at compile time.
-    constexpr std::string_view nameA = GeometryTypeName<A>;
-    constexpr std::string_view nameB = GeometryTypeName<B>;
-    std::string message(nameA);
-    message += " x ";
-    message += nameB;
-    message += " intersection is not implemented yet (ADR-0010)";
-    return Fail(ErrorCode::NotImplemented, std::move(message));
-}
 
 template <typename A, typename B>
 Result<SurfaceSurfaceIntersection> SurfaceStub(const Surface&, const Box2&, const Surface&,
@@ -747,10 +734,8 @@ struct CurveStubOf {
     static constexpr CurveHandler Call = [] {
         if constexpr (std::same_as<A, Line> && std::same_as<B, Line>) {
             return &LineLine;
-        } else if constexpr (std::same_as<A, BSplineCurve> && std::same_as<B, BSplineCurve>) {
-            return &SplineSpline;
         } else {
-            return &CurveStub<A, B>;
+            return &CurvePair;
         }
     }();
 };

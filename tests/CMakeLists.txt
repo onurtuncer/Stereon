@@ -194,6 +194,8 @@ if(STEREON_WITH_OCCT)
         PRIVATE stereon::intersect stereon::boolean stereon_options Catch2::Catch2WithMain
                 TKernel TKMath TKG2d TKG3d TKGeomBase TKGeomAlgo TKBRep TKTopAlgo TKPrim TKBO)
     target_include_directories(stereon_occt_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/support")
+    target_compile_definitions(stereon_occt_tests PRIVATE
+        STEREON_CORPUS_DIR="${PROJECT_SOURCE_DIR}/corpus")
     stereon_anchor_contracts(stereon_occt_tests)
     catch_discover_tests(stereon_occt_tests TEST_PREFIX "occt: " DISCOVERY_MODE PRE_TEST)
 endif()

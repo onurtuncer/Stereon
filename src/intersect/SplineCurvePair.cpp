@@ -17,8 +17,10 @@ module;
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <limits>
 #include <memory>
+#include <numbers>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -33,8 +35,11 @@ import Stereon.Robust;
 #include "Analytic.hpp"
 #include "Bernstein.hpp"
 #include "BezierArc.hpp"
+#include "ConicArc.hpp"
 
-/// Two B-spline curves in space, polynomial or rational. Two curves in space
+/// Two curves in space: B-splines, polynomial or rational, and lines and
+/// conics as enclosed Bezier pieces of the same search, every pair but two
+/// lines (LineLine.cpp). Two curves in space
 /// meet only exceptionally: doubles placed to make them meet leave them a
 /// rounding apart. So a meeting is defined by distance (ADR-0001: points
 /// closer than the resolution cannot be told apart): a critical point of
@@ -78,8 +83,14 @@ import Stereon.Robust;
 /// when the pieces can no longer be halved, or a search past the budget,
 /// fails with IntersectionFailed: tangent curves, an overlap, or a meeting
 /// too nearly tangential to separate is never dropped and never reported
-/// unproved (ADR-0029). Two identical splines coincide: their overlap is
+/// unproved (ADR-0029). Two identical curves coincide: their overlap is
 /// the requested domains' common stretch on the identity map.
+///
+/// A circle, an ellipse or a hyperbola is cut into rational quadratic arcs
+/// (ConicArc.hpp); a meeting found on an arc's linear parameter is mapped
+/// back to the conic's. An unbounded domain is clipped to where its curve
+/// can come near the other, bounded curve; two unbounded domains are
+/// NotSupported.
 
 namespace Stereon::Detail {
 
@@ -286,6 +297,8 @@ struct PairSearch {
     double Resolution = 0.0;
     std::vector<Meeting> Found;
     std::size_t Pairs = 0;
+    bool ClosedA = false;
+    bool ClosedB = false;
     std::string Handler;
 };
 
@@ -623,6 +636,22 @@ struct EndSearch {
     return {};
 }
 
+/// Each of one curve's ends against the other curve's stretch.
+[[nodiscard]] Result<void> EndsAgainst(PairSearch& search, const std::vector<DomainEnd>& ends,
+                                       const bool swapped)
+{
+    const std::vector<Segment>& other = swapped ? search.A : search.B;
+    const Interval& domain = swapped ? search.DomainA : search.DomainB;
+    for (const DomainEnd& end : ends) {
+        EndSearch e{&search, end, &other, domain, swapped, 0, {}};
+        for (std::size_t j = 0; j < other.size(); ++j) {
+            STEREON_TRY_VOID(VisitEnd(e, Arc{j, 0.0, 1.0, other[j].Poles}, 0));
+        }
+        search.Found.insert(search.Found.end(), e.Found.begin(), e.Found.end());
+    }
+    return {};
+}
+
 /// The minima of the distance on the boundary of the parameter box: each
 /// end of one curve against the other's stretch, and the corners. A
 /// meeting inside the box is the pair search's; one on the boundary is a
@@ -632,23 +661,13 @@ struct EndSearch {
 /// end to end, whose closest approach lies far past both.
 [[nodiscard]] Result<void> SearchEnds(PairSearch& search)
 {
-    const std::vector<DomainEnd> endsA = EndsOf(search.A, search.DomainA);
-    const std::vector<DomainEnd> endsB = EndsOf(search.B, search.DomainB);
-    for (const bool swapped : {false, true}) {
-        for (const DomainEnd& end : swapped ? endsB : endsA) {
-            EndSearch e{&search,
-                        end,
-                        swapped ? &search.A : &search.B,
-                        swapped ? search.DomainA : search.DomainB,
-                        swapped,
-                        0,
-                        {}};
-            for (std::size_t j = 0; j < e.Other->size(); ++j) {
-                STEREON_TRY_VOID(VisitEnd(e, Arc{j, 0.0, 1.0, (*e.Other)[j].Poles}, 0));
-            }
-            search.Found.insert(search.Found.end(), e.Found.begin(), e.Found.end());
-        }
-    }
+    // A closed curve's whole domain has no ends: it runs on through its seam.
+    const std::vector<DomainEnd> endsA =
+        search.ClosedA ? std::vector<DomainEnd>{} : EndsOf(search.A, search.DomainA);
+    const std::vector<DomainEnd> endsB =
+        search.ClosedB ? std::vector<DomainEnd>{} : EndsOf(search.B, search.DomainB);
+    STEREON_TRY_VOID(EndsAgainst(search, endsA, false));
+    STEREON_TRY_VOID(EndsAgainst(search, endsB, true));
     for (const DomainEnd& a : endsA) {
         for (const DomainEnd& b : endsB) {
             STEREON_TRY_VOID(Corner(search, a, b));
@@ -669,6 +688,154 @@ struct EndSearch {
     return {};
 }
 
+// --- Every curve as enclosed Bezier pieces --------------------------------
+
+/// How a piece's linear parameter between its ends maps to the curve's.
+enum class ParameterMap : std::uint8_t { Same, Angle, Hyperbolic };
+
+/// A curve over a bounded domain: its enclosed pieces, each [T0, T1] of
+/// the curve's own parameter at its ends, and the map between them.
+struct PieceCurve {
+    std::vector<Segment> Segments;
+    Interval Domain;
+    ParameterMap Map = ParameterMap::Same;
+    bool Closed = false;
+    std::string Name;
+};
+
+/// The curve's parameter at u, linear on a piece between its ends.
+[[nodiscard]] double CurveParameter(const PieceCurve& c, const double u)
+{
+    if (c.Map == ParameterMap::Same) {
+        return u;
+    }
+    const auto piece =
+        std::ranges::find_if(c.Segments, [&](const Segment& s) { return s.T0 <= u && u <= s.T1; });
+    if (piece == c.Segments.end()) {
+        return u;
+    }
+    const double s = (u - piece->T0) / (piece->T1 - piece->T0);
+    return c.Map == ParameterMap::Angle ? AngleAt(piece->T0, piece->T1, s)
+                                        : HyperbolicAt(piece->T0, piece->T1, s);
+}
+
+/// A one-parameter domain is searched on a piece around it.
+[[nodiscard]] Interval BuildRange(const Interval& domain)
+{
+    return domain.GetLower() == domain.GetUpper()
+               ? Interval{domain.GetLower() - 0.5, domain.GetUpper() + 0.5}
+               : domain;
+}
+
+/// Cuts the range into `count` pieces and makes each with `piece`.
+template <typename Piece>
+[[nodiscard]] std::vector<Segment> Cut(const Interval& range, const double count, Piece&& piece)
+{
+    const auto n = static_cast<std::size_t>(count);
+    const double width = Width(range);
+    std::vector<Segment> segments;
+    for (std::size_t k = 0; k < n; ++k) {
+        const double t0 = range.GetLower() + width * (static_cast<double>(k) / count);
+        const double t1 = k + 1 == n
+                              ? range.GetUpper()
+                              : range.GetLower() + width * (static_cast<double>(k + 1) / count);
+        Segment segment = piece(t0, t1);
+        segment.T0 = t0;
+        segment.T1 = t1;
+        segments.push_back(std::move(segment));
+    }
+    return segments;
+}
+
+[[nodiscard]] HPoint PolePoint(const Point3& origin, const Interval& along, const Vec3& axis,
+                               const Interval& across, const Vec3& other)
+{
+    return {Interval{origin.X} + along * Interval{axis.X} + across * Interval{other.X},
+            Interval{origin.Y} + along * Interval{axis.Y} + across * Interval{other.Y},
+            Interval{origin.Z} + along * Interval{axis.Z} + across * Interval{other.Z},
+            Interval{1.0}};
+}
+
+[[nodiscard]] PieceCurve Pieces(const Line& line, const Interval& domain)
+{
+    const Vec3 none{};
+    const auto end = [&](const double t) {
+        return PolePoint(line.Origin, Interval{t}, line.Direction, Interval{0.0}, none);
+    };
+    const Interval range = BuildRange(domain);
+    return {{Segment{range.GetLower(),
+                     range.GetUpper(),
+                     {end(range.GetLower()), end(range.GetUpper())}}},
+            domain,
+            ParameterMap::Same,
+            false,
+            "Line"};
+}
+
+/// A parabola's arc is the quadratic Bezier whose middle pole is the blossom
+/// of its two end parameters; it keeps the parabola's parameter.
+[[nodiscard]] PieceCurve Pieces(const Parabola& parabola, const Interval& domain)
+{
+    const Interval scale = Interval{1.0} / (Interval{4.0} * Interval{parabola.FocalLength});
+    const auto pole = [&](const double r, const double s) {
+        const Interval a{r};
+        const Interval b{s};
+        return PolePoint(parabola.Vertex, a * b * scale, parabola.XAxis, (a + b) * Interval{0.5},
+                         parabola.YAxis);
+    };
+    const Interval range = BuildRange(domain);
+    const double lower = range.GetLower();
+    const double upper = range.GetUpper();
+    return {{Segment{lower, upper, {pole(lower, lower), pole(lower, upper), pole(upper, upper)}}},
+            domain,
+            ParameterMap::Same,
+            false,
+            "Parabola"};
+}
+
+/// Whether the domain is a whole turn, whose ends are no ends: the curve
+/// runs on through the seam.
+[[nodiscard]] bool WholeTurn(const Interval& domain)
+{
+    return Width(domain) >= 2.0 * std::numbers::pi * (1.0 - 0x1p-40);
+}
+
+template <typename Conic>
+[[nodiscard]] PieceCurve ConicPieces(const Conic& conic, const ConicData& data,
+                                     const Interval& domain, std::string name)
+{
+    static_cast<void>(conic);
+    const Interval range = BuildRange(domain);
+    const double count = std::max(1.0, std::ceil(Width(range) / (0.5 * std::numbers::pi)));
+    return {Cut(range, count,
+                [&](const double t0, const double t1) { return ArcSegment(data, t0, t1); }),
+            domain, ParameterMap::Angle, WholeTurn(domain), std::move(name)};
+}
+
+/// The widest stretch of a hyperbola's parameter on one piece: its arc's
+/// weight, cosh of half of it, stays moderate.
+constexpr double HyperbolaPiece = 1.0;
+
+[[nodiscard]] PieceCurve Pieces(const Hyperbola& h, const Interval& domain)
+{
+    const ConicData data{h.Center, Times(h.MajorRadius, h.XAxis), Times(h.MinorRadius, h.YAxis)};
+    const Interval range = BuildRange(domain);
+    const double count = std::max(1.0, std::ceil(Width(range) / HyperbolaPiece));
+    return {Cut(range, count,
+                [&](const double t0, const double t1) { return HyperbolicSegment(data, t0, t1); }),
+            domain, ParameterMap::Hyperbolic, false, "Hyperbola"};
+}
+
+[[nodiscard]] bool AllFinite(const std::initializer_list<double> values)
+{
+    return std::ranges::all_of(values, [](const double v) { return std::isfinite(v); });
+}
+
+[[nodiscard]] bool FiniteFrame(const Point3& p, const Vec3& x, const Vec3& y)
+{
+    return AllFinite({p.X, p.Y, p.Z, x.X, x.Y, x.Z, y.X, y.Y, y.Z});
+}
+
 [[nodiscard]] Result<void> CheckSpline(const BSplineCurve& curve, const Interval& domain,
                                        const std::string_view where)
 {
@@ -682,12 +849,207 @@ struct EndSearch {
     return CheckPeriodicDomain(curve, domain, where);
 }
 
+[[nodiscard]] bool Valid(const Line& l)
+{
+    return FiniteFrame(l.Origin, l.Direction, Vec3{}) && l.Direction != Vec3{};
+}
+
+[[nodiscard]] bool Valid(const Circle& o)
+{
+    return FiniteFrame(o.Center, o.XAxis, o.YAxis) && AllFinite({o.Radius}) && o.Radius > 0.0;
+}
+
+[[nodiscard]] bool Valid(const Ellipse& e)
+{
+    return FiniteFrame(e.Center, e.XAxis, e.YAxis) && AllFinite({e.MajorRadius, e.MinorRadius}) &&
+           e.MinorRadius > 0.0;
+}
+
+[[nodiscard]] bool Valid(const Hyperbola& h)
+{
+    return FiniteFrame(h.Center, h.XAxis, h.YAxis) && AllFinite({h.MajorRadius, h.MinorRadius}) &&
+           h.MinorRadius > 0.0;
+}
+
+[[nodiscard]] bool Valid(const Parabola& p)
+{
+    return FiniteFrame(p.Vertex, p.XAxis, p.YAxis) && AllFinite({p.FocalLength}) &&
+           p.FocalLength > 0.0;
+}
+
+/// Whether the curve, when it is a T, has valid data.
+template <typename T>
+[[nodiscard]] bool ValidIf(const Curve& c)
+{
+    const T* curve = c.Target<T>();
+    return curve == nullptr || Valid(*curve);
+}
+
+[[nodiscard]] bool ValidCurve(const Curve& c)
+{
+    return ValidIf<Line>(c) && ValidIf<Circle>(c) && ValidIf<Ellipse>(c) && ValidIf<Hyperbola>(c) &&
+           ValidIf<Parabola>(c);
+}
+
+/// The curve's enclosed pieces over a bounded domain.
+[[nodiscard]] Result<PieceCurve> PiecesOf(const Curve& c, const Interval& domain)
+{
+    if (const BSplineCurve* s = c.Target<BSplineCurve>()) {
+        STEREON_TRY(std::vector<Segment> segments, SegmentsOf(*s));
+        const bool closed = Period(*s) > 0.0 && Contains(domain, Domain(*s));
+        return PieceCurve{Reaching(std::move(segments), domain), domain, ParameterMap::Same, closed,
+                          "BSplineCurve"};
+    }
+    if (const Line* l = c.Target<Line>()) {
+        return Pieces(*l, domain);
+    }
+    if (const Circle* o = c.Target<Circle>()) {
+        const ConicData data{o->Center, Times(o->Radius, o->XAxis), Times(o->Radius, o->YAxis)};
+        return ConicPieces(*o, data, domain, "Circle");
+    }
+    if (const Ellipse* e = c.Target<Ellipse>()) {
+        const ConicData data{e->Center, Times(e->MajorRadius, e->XAxis),
+                             Times(e->MinorRadius, e->YAxis)};
+        return ConicPieces(*e, data, domain, "Ellipse");
+    }
+    if (const Hyperbola* h = c.Target<Hyperbola>()) {
+        return Pieces(*h, domain);
+    }
+    if (const Parabola* p = c.Target<Parabola>()) {
+        return Pieces(*p, domain);
+    }
+    return Fail(ErrorCode::NotImplemented, "Intersect: a curve type with no enclosed pieces");
+}
+
+// --- Unbounded domains ----------------------------------------------------
+
+/// A ball holding a bounded curve, with room to spare.
+struct Ball {
+    Point3 Center;
+    double Radius = 0.0;
+};
+
+/// The ball of the pieces' poles (they hold the curve, the weights being
+/// positive), widened past the resolution so that a curve clipped to it
+/// ends more than the resolution from the bounded curve.
+[[nodiscard]] Ball BallOf(const std::vector<Segment>& segments, const double resolution)
+{
+    Box3 box = Box3::Empty();
+    for (const Segment& s : segments) {
+        for (const HPoint& h : s.Poles) {
+            const Point3 p = Nominal3(h);
+            box.X = Hull(box.X, Interval{p.X});
+            box.Y = Hull(box.Y, Interval{p.Y});
+            box.Z = Hull(box.Z, Interval{p.Z});
+        }
+    }
+    const Point3 center{Midpoint(box.X), Midpoint(box.Y), Midpoint(box.Z)};
+    double radius = 0.0;
+    for (const Segment& s : segments) {
+        for (const HPoint& h : s.Poles) {
+            radius = std::max(radius, Distance(Nominal3(h), center));
+        }
+    }
+    const double scale = std::max({1.0, radius, Length(center - Point3{})});
+    return {center, radius + 2.0 * resolution + 0x1p-30 * scale};
+}
+
+/// The parameters of an unbounded curve that can lie in the ball.
+[[nodiscard]] Result<Interval> Reach(const Curve& c, const Ball& ball)
+{
+    if (const Line* l = c.Target<Line>()) {
+        const double along =
+            Dot(ball.Center - l->Origin, l->Direction) / Dot(l->Direction, l->Direction);
+        const double half = ball.Radius / Length(l->Direction);
+        const double slack = 0x1p-30 * (std::abs(along) + half);
+        return Interval{along - half - slack, along + half + slack};
+    }
+    if (const Parabola* p = c.Target<Parabola>()) {
+        // Off the axis by |t|, the axes being orthonormal.
+        const double reach = (Distance(p->Vertex, ball.Center) + ball.Radius) * (1.0 + 0x1p-30);
+        return Interval{-reach, reach};
+    }
+    if (const Hyperbola* h = c.Target<Hyperbola>()) {
+        // Off the major axis by b |sinh t|, the axes being orthonormal.
+        const double reach =
+            std::asinh((Distance(h->Center, ball.Center) + ball.Radius) / h->MinorRadius) *
+            (1.0 + 0x1p-30);
+        return Interval{-reach, reach};
+    }
+    return Fail(ErrorCode::InvalidInput,
+                "Intersect: a curve of bounded parameter given an unbounded domain");
+}
+
+/// The requested domain on the curve, checked: nothing past the curve's
+/// own domain, and at most one turn of a circle or an ellipse.
+[[nodiscard]] Result<Interval> RequestedOf(const Curve& c, const Interval& requested)
+{
+    if (!ValidCurve(c)) {
+        return Fail(ErrorCode::InvalidInput, "Intersect: invalid curve data");
+    }
+    if (const BSplineCurve* s = c.Target<BSplineCurve>()) {
+        STEREON_TRY_VOID(CheckSpline(*s, requested, "BSplineCurve x curve"));
+        return Intersection(requested, Domain(*s));
+    }
+    if (c.Target<Circle>() != nullptr || c.Target<Ellipse>() != nullptr) {
+        if (!requested.IsBounded()) {
+            return Fail(ErrorCode::InvalidInput, "Intersect: a conic's domain must be bounded");
+        }
+        if (Width(requested) > 2.0 * std::numbers::pi * (1.0 + 0x1p-40)) {
+            return Fail(ErrorCode::NotSupported,
+                        "Intersect: a conic's domain of more than one turn");
+        }
+        return requested;
+    }
+    return Intersection(requested, Domain(c));
+}
+
+/// Both curves' pieces; an unbounded domain is first clipped to where its
+/// curve can come near the other, bounded one.
+struct BuiltPair {
+    PieceCurve A;
+    PieceCurve B;
+};
+
+[[nodiscard]] Result<PieceCurve> ClippedPieces(const Curve& c, const Interval& domain,
+                                               const PieceCurve& other, const double resolution)
+{
+    STEREON_TRY(const Interval reach, Reach(c, BallOf(other.Segments, resolution)));
+    const Interval clipped = Intersection(domain, reach);
+    if (clipped.IsEmpty()) {
+        return PieceCurve{{}, clipped, ParameterMap::Same, false, ""};
+    }
+    return PiecesOf(c, clipped);
+}
+
+[[nodiscard]] Result<BuiltPair> Build(const Curve& a, const Interval& da, const Curve& b,
+                                      const Interval& db, const double resolution)
+{
+    if (!da.IsBounded() && !db.IsBounded()) {
+        return Fail(ErrorCode::NotSupported,
+                    "Intersect: two curves of unbounded domains; request a bounded one");
+    }
+    if (!da.IsBounded()) {
+        STEREON_TRY(PieceCurve pb, PiecesOf(b, db));
+        STEREON_TRY(PieceCurve pa, ClippedPieces(a, da, pb, resolution));
+        return BuiltPair{std::move(pa), std::move(pb)};
+    }
+    STEREON_TRY(PieceCurve pa, PiecesOf(a, da));
+    if (!db.IsBounded()) {
+        STEREON_TRY(PieceCurve pb, ClippedPieces(b, db, pa, resolution));
+        return BuiltPair{std::move(pa), std::move(pb)};
+    }
+    STEREON_TRY(PieceCurve pb, PiecesOf(b, db));
+    return BuiltPair{std::move(pa), std::move(pb)};
+}
+
 /// Adds a meeting, or folds it into one already found within the
 /// resolution of it on both curves (ADR-0001: points closer than that
 /// cannot be told apart), keeping the nearer: a meeting at a domain's end
-/// found both by the pair search and on the boundary.
-void Merge(std::vector<CurveCurvePoint>& points, const CurveCurvePoint& p, const BSplineCurve& a,
-           const BSplineCurve& b, const double resolution)
+/// found both by the pair search and on the boundary, or at a closed
+/// curve's seam from the pieces on both sides.
+void Merge(std::vector<CurveCurvePoint>& points, const CurveCurvePoint& p, const Curve& a,
+           const Curve& b, const double resolution)
 {
     const auto gap = [&](const CurveCurvePoint& q) {
         return Distance(Eval(a, q.ParameterA), Eval(b, q.ParameterB));
@@ -704,52 +1066,84 @@ void Merge(std::vector<CurveCurvePoint>& points, const CurveCurvePoint& p, const
     points.push_back(p);
 }
 
-} // namespace
-
-Result<CurveCurveIntersection> SplineSpline(const Curve& a, const Interval& domainA, const Curve& b,
-                                            const Interval& domainB, const Context& ctx)
+template <typename T>
+[[nodiscard]] bool SameCurve(const Curve& a, const Curve& b)
 {
-    const BSplineCurve* sa = a.Target<BSplineCurve>();
-    const BSplineCurve* sb = b.Target<BSplineCurve>();
-    if (sa == nullptr || sb == nullptr) {
-        return Fail(ErrorCode::InvalidInput, "SplineSpline: dispatched for other curve types");
-    }
-    PairSearch search;
-    search.Handler = "BSplineCurve x BSplineCurve";
-    STEREON_TRY_VOID(CheckSpline(*sa, domainA, search.Handler));
-    STEREON_TRY_VOID(CheckSpline(*sb, domainB, search.Handler));
-    search.DomainA = Intersection(domainA, Domain(*sa));
-    search.DomainB = Intersection(domainB, Domain(*sb));
+    const T* x = a.Target<T>();
+    const T* y = b.Target<T>();
+    return x != nullptr && y != nullptr && *x == *y;
+}
+
+/// Two identical curves coincide on the requested domains' common stretch.
+/// A circle or an ellipse is compared in its base turn: outside it, the
+/// same point has another parameter, so the search answers (it fails).
+[[nodiscard]] bool Identical(const Curve& a, const Interval& da, const Curve& b, const Interval& db)
+{
+    const Interval turn{0.0, 2.0 * std::numbers::pi};
+    const bool conic = SameCurve<Circle>(a, b) || SameCurve<Ellipse>(a, b);
+    return SameCurve<BSplineCurve>(a, b) || SameCurve<Parabola>(a, b) ||
+           SameCurve<Hyperbola>(a, b) || (conic && Contains(turn, da) && Contains(turn, db));
+}
+
+[[nodiscard]] CurveCurveIntersection Coincident(const Interval& da, const Interval& db)
+{
     CurveCurveIntersection result;
-    if (search.DomainA.IsEmpty() || search.DomainB.IsEmpty()) {
-        return result;
+    const Interval common = Intersection(da, db);
+    if (!common.IsEmpty()) {
+        result.Overlaps.push_back({common, common, true});
     }
-    if (*sa == *sb) {
-        result.Overlaps.push_back({Intersection(search.DomainA, search.DomainB),
-                                   Intersection(search.DomainA, search.DomainB), true});
-        if (result.Overlaps.front().OnA.IsEmpty()) {
-            result.Overlaps.clear();
-        }
-        return result;
-    }
+    return result;
+}
+
+[[nodiscard]] Result<CurveCurveIntersection> Searched(const Curve& a, const PieceCurve& pa,
+                                                      const Curve& b, const PieceCurve& pb,
+                                                      const Context& ctx)
+{
+    PairSearch search;
+    search.Handler = pa.Name + " x " + pb.Name;
+    search.DomainA = pa.Domain;
+    search.DomainB = pb.Domain;
+    search.ClosedA = pa.Closed;
+    search.ClosedB = pb.Closed;
     search.Resolution = ctx.GetResolution();
-    STEREON_TRY(std::vector<Segment> segmentsA, SegmentsOf(*sa));
-    STEREON_TRY(std::vector<Segment> segmentsB, SegmentsOf(*sb));
-    search.A = Reaching(std::move(segmentsA), search.DomainA);
-    search.B = Reaching(std::move(segmentsB), search.DomainB);
+    search.A = pa.Segments;
+    search.B = pb.Segments;
     STEREON_TRY_VOID(SearchAll(search));
     STEREON_TRY_VOID(SearchEnds(search));
+    CurveCurveIntersection result;
+    const auto placed = [](const PieceCurve& c, const Interval& on) {
+        const double u = std::clamp(Midpoint(on), c.Domain.GetLower(), c.Domain.GetUpper());
+        return std::clamp(CurveParameter(c, u), c.Domain.GetLower(), c.Domain.GetUpper());
+    };
     for (const Meeting& m : Distinct(std::move(search.Found))) {
-        const double ta =
-            std::clamp(Midpoint(m.OnA), search.DomainA.GetLower(), search.DomainA.GetUpper());
-        const double tb =
-            std::clamp(Midpoint(m.OnB), search.DomainB.GetLower(), search.DomainB.GetUpper());
-        Merge(result.Points, {ta, tb, Eval(*sa, ta)}, *sa, *sb, search.Resolution);
+        const double ta = placed(pa, m.OnA);
+        const double tb = placed(pb, m.OnB);
+        Merge(result.Points, {ta, tb, Eval(a, ta)}, a, b, search.Resolution);
     }
     std::ranges::sort(result.Points, [](const CurveCurvePoint& p, const CurveCurvePoint& q) {
         return p.ParameterA < q.ParameterA;
     });
     return result;
+}
+
+} // namespace
+
+Result<CurveCurveIntersection> CurvePair(const Curve& a, const Interval& domainA, const Curve& b,
+                                         const Interval& domainB, const Context& ctx)
+{
+    STEREON_TRY(const Interval da, RequestedOf(a, domainA));
+    STEREON_TRY(const Interval db, RequestedOf(b, domainB));
+    if (da.IsEmpty() || db.IsEmpty()) {
+        return CurveCurveIntersection{};
+    }
+    if (Identical(a, da, b, db)) {
+        return Coincident(da, db);
+    }
+    STEREON_TRY(const BuiltPair built, Build(a, da, b, db, ctx.GetResolution()));
+    if (built.A.Domain.IsEmpty() || built.B.Domain.IsEmpty()) {
+        return CurveCurveIntersection{};
+    }
+    return Searched(a, built.A, b, built.B, ctx);
 }
 
 } // namespace Stereon::Detail

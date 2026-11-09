@@ -521,8 +521,9 @@ Space curves
 The first v0.2 3D curve handler is ``Line`` against ``Line`` through the
 existing ``Intersect(Curve, domain, Curve, domain, ctx)`` overload. Directions
 need not be unit vectors; returned parameters retain each input's speed and
-orientation. Two ``BSplineCurve``\ s have a handler too (*Two B-splines in
-space*, below); other 3D curve pairs still return ``NotImplemented``.
+orientation. Every other pair of the built-in 3D curves has a handler too
+(*Two B-splines in space* and *Lines and conics against other curves*,
+below).
 
 Two lines meet where they come within the Context's resolution of each
 other, the rule two B-splines follow (*Two B-splines in space*, below), so
@@ -582,7 +583,7 @@ rounded point is exact.
 Two B-splines in space
 ~~~~~~~~~~~~~~~~~~~~~~
 
-``SplineSpline`` (``src/intersect/SplineCurvePair.cpp``) meets two
+``CurvePair`` (``src/intersect/SplineCurvePair.cpp``) meets two
 ``BSplineCurve``\ s, polynomial or rational. Two curves in space meet only
 exceptionally. Doubles placed to make them meet, such as two edges sharing
 a vertex, leave them a rounding apart, so whether they meet exactly is
@@ -682,6 +683,51 @@ apart, and a fixed case over nearly parallel segments touching end to end.
 One difference remains, where the spline cannot settle a pair and never
 answers differently: parallel supports within the resolution overlap as
 lines, while the splines' search fails with ``IntersectionFailed``.
+
+Lines and conics against other curves
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Every pair of ``Line``, ``Circle``, ``Ellipse``, ``Hyperbola``, ``Parabola``
+and ``BSplineCurve`` other than two lines goes through the same search and
+the same rule. Each curve becomes a list of enclosed Bézier pieces,
+computed from the doubles given, so a piece encloses the curve as given
+and not a rounded NURBS form of it:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Curve
+     - Pieces
+     - Parameter returned
+   * - ``Line``
+     - one degree-1 piece
+     - the line's own
+   * - ``Parabola``
+     - one quadratic, its middle pole the blossom of its end parameters
+     - the parabola's own
+   * - ``Circle``, ``Ellipse``
+     - rational quadratic arcs of at most a quarter turn
+     - the angle, by :math:`\tan((t-m)/2) = \tan(h/2)(2s-1)`
+   * - ``Hyperbola``
+     - rational quadratic arcs of width at most 1
+     - by :math:`\tanh((t-m)/2) = \tanh(h/2)(2s-1)`
+
+A whole turn of a circle or an ellipse, and the whole domain of a periodic
+B-spline, has no ends: the curve runs on through its seam, and a meeting
+there, reached from the pieces on both sides, is one. A circle or an ellipse
+takes a bounded domain of at most one turn, and more is ``NotSupported``.
+
+A curve with an unbounded domain is clipped first to the parameters that
+can come within a ball round the other, bounded curve. The ball is wider
+than the resolution, so a clipped end is never a meeting. Two unbounded
+domains are ``NotSupported``, so a caller meeting a whole line with a whole
+parabola or hyperbola requests a bounded domain on one of them.
+
+Two identical curves of one type coincide over the requested domains'
+common stretch; a circle or an ellipse is compared in its base turn. Anything
+else the search cannot settle fails with ``IntersectionFailed``: a line
+tangent to a circle, two circles equidistant all round, or two different
+descriptions of one curve.
 
 Curves against surfaces
 -----------------------
