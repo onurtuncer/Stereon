@@ -695,6 +695,17 @@ void LogTangency(const Meets& meets, const Context& ctx)
     return result;
 }
 
+[[nodiscard]] bool UnresolvedConeAngles(const Pair& p)
+{
+    const auto* a = std::get_if<Cone>(&p.A);
+    const auto* b = std::get_if<Cone>(&p.B);
+    if (!a || !b) {
+        return false;
+    }
+    const double difference = std::abs(a->SemiAngle) - std::abs(b->SemiAngle);
+    return difference != 0.0 && std::abs(std::sin(difference)) <= 0x1p-40;
+}
+
 /// The coaxial closed form, when the surfaces share an axis and their
 /// circles can be given exactly; nothing otherwise, for the trace.
 [[nodiscard]] Result<std::optional<SurfaceSurfaceIntersection>> Coaxial(const Pair& p,
@@ -703,6 +714,10 @@ void LogTangency(const Meets& meets, const Context& ctx)
     const std::optional<Axis3> axis = CommonAxis(p.A, p.B);
     if (!axis) {
         return std::optional<SurfaceSurfaceIntersection>{};
+    }
+    if (UnresolvedConeAngles(p)) {
+        return Fail(ErrorCode::IntersectionFailed,
+                    "Nearly parallel unequal cone profiles require refinement");
     }
     const Meets meets = MeetProfiles(ProfileOf(p.A, *axis), ProfileOf(p.B, *axis), p.Tolerance);
     if (meets.Coincident) {

@@ -419,3 +419,12 @@ TEST_CASE("boxes clip the circles of coaxial surfaces", "[intersect][elementary]
     REQUIRE(above.has_value());
     REQUIRE(CirclesOf(*above, cylinder, torus, ContactType::Crossing).size() == 1);
 }
+
+TEST_CASE("unequal near-parallel cones cannot be declared coincident", "[intersect][regression]")
+{
+    const Surface a{Cone{Point3{}, 0.0, pi / 4.0, X, Y, true}};
+    const Surface b{Cone{Point3{}, 0.0, pi / 4.0 + 0x1p-42, X, Y, true}};
+    const auto result = Intersect(a, b, ctx);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error().GetCode() == Stereon::ErrorCode::IntersectionFailed);
+}
