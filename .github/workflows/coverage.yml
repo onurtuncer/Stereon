@@ -46,10 +46,13 @@ jobs:
         run: cmake --build --preset gcc16-coverage
       - name: Test
         run: ctest --preset gcc16-coverage
+      # The threshold (2^40; gcovr's default is 2^32) is for gcov's own counter bugs. Interval's
+      # arithmetic is genuinely run more than 2^32 times, and the random properties move the
+      # total back and forth across the default.
       - name: Collect coverage
         run: |
           gcovr --version | head -1
-          gcovr --root . --filter 'src/' --gcov-executable gcov             --exclude-unreachable-branches --exclude-throw-branches             --cobertura coverage.xml --print-summary             build/gcc16-coverage
+          gcovr --root . --filter 'src/' --gcov-suspicious-hits-threshold 1099511627776 --gcov-executable gcov             --exclude-unreachable-branches --exclude-throw-branches             --cobertura coverage.xml --print-summary             build/gcc16-coverage
       - name: Upload to Codecov
         uses: codecov/codecov-action@v7
         with:

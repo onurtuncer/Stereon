@@ -641,12 +641,30 @@ gradient's rounding is amplified by the Jacobian's inverse, about
 crossing at 12.5° are placed to about :math:`10^{-11}`, six orders below
 the resolution.
 
-A critical point of the polynomials continued a little past a requested
-domain's end becomes a meeting at that end when the distance there is
-within the resolution, so two edges sharing a vertex meet at it even when
-their ends are a rounding apart. A critical point just past a segment's end
+A critical point outside the requested domains is not a meeting. There
+the distance's minimum over the domains lies on their boundary, and the
+curves meet as two lines do (*Space curves*, above):
+
+- **an end against the other curve's stretch.** The end's squared
+  distance to the other curve has critical points at the roots of
+  :math:`g(t) = (b(t) - P) \cdot b'(t)`, which Krawczyk's operator proves
+  over the halved pieces of the other curve, with
+  :math:`g' = b' \cdot b' + (b - P) \cdot b''`, and whose distance is
+  decided against the resolution as above;
+- **two ends** within the resolution of each other.
+
+An end is dropped when the distance is proved to shrink from it inward,
+the sign of :math:`(C - Q) \cdot C'` being the wrong one for that side:
+the minimum then lies inside, where the pair search finds it. So two
+edges sharing a vertex meet at it even when their ends are a rounding
+apart. The same goes for a stem ending a rounding short of a bar, and for
+nearly parallel segments touching end to end whose supports' closest
+approach lies far past both. A critical point just past a segment's end
 inside the domain belongs to the neighbouring segment, which proves it.
-Critical points proved from overlapping boxes are one.
+Critical points proved from overlapping boxes are one, and so are meetings
+within the resolution of each other on both curves (ADR-0001), the nearer
+kept: a meeting at an end the rounding leaves undecided is found both
+inside and on the boundary.
 
 Some pairs cannot be settled: a pair that is neither apart nor settled
 when its pieces can no longer be halved, or a search past :math:`2^{16}`
@@ -657,18 +675,13 @@ tangent line is the test case. Two identical splines coincide over the
 requested domains' common stretch.
 
 **Lines and splines meet alike.** A ``Line`` and the same segment as a
-degree-1 B-spline give the same meetings. A random property compares them
-over crossings, near misses around the resolution and vertices a rounding
-apart. Two differences remain, both where the spline cannot settle a pair:
-
-- parallel supports within the resolution overlap as lines, while the
-  splines' search fails with ``IntersectionFailed``, never answering
-  differently;
-- an end contact of two nearly parallel segments, whose supports' closest
-  approach lies far past both ends, is found by the lines' boundary rule
-  but not by the splines' search, which keeps a critical point only just
-  past an end. Searching the ends of the splines' domains as the lines
-  do closes it; that is the next step for the B-spline pair.
+degree-1 B-spline give the same meetings, placed within the resolution
+of each other on each curve. A random property compares them over
+crossings, near misses around the resolution and vertices a rounding
+apart, and a fixed case over nearly parallel segments touching end to end.
+One difference remains, where the spline cannot settle a pair and never
+answers differently: parallel supports within the resolution overlap as
+lines, while the splines' search fails with ``IntersectionFailed``.
 
 Curves against surfaces
 -----------------------

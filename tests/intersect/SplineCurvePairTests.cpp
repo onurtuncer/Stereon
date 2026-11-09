@@ -217,3 +217,49 @@ TEST_CASE("identical splines overlap, tangent ones fail closed", "[intersect][cu
         CHECK(r.error().GetCode() == ErrorCode::IntersectionFailed);
     }
 }
+
+TEST_CASE("nearly parallel splines touching end to end meet at the ends",
+          "[intersect][curve-curve][spline]")
+{
+    // The supports' closest approach lies ten units behind both segments,
+    // far past the pair search's reach, while the end of one lies 1.4e-6
+    // from the start of the other: the distance's minimum over the domains
+    // is on their boundary, where the end search finds it. Two lines meet
+    // here too (LineLineTests), so the two handlers agree.
+    const BSplineCurve a = Segment(Point3{0.0, 0.0, 0.0}, Point3{1.0, 0.0, 0.0});
+    const BSplineCurve b =
+        Segment(Point3{1.0 + 1e-6, 1e-6, 0.0}, Point3{2.0 + 1e-6, 1e-6 + 1e-7, 0.0});
+    for (const bool swapped : {false, true}) {
+        INFO("swapped " << swapped);
+        const auto r = swapped ? Meet(b, a) : Meet(a, b);
+        INFO(IntersectTest::ErrorText(r));
+        REQUIRE(r.has_value());
+        REQUIRE(r->Points.size() == 1);
+        CHECK(r->Points[0].ParameterA == (swapped ? 0.0 : 1.0));
+        CHECK(r->Points[0].ParameterB == (swapped ? 1.0 : 0.0));
+    }
+    // 2e-5 apart, beyond the resolution: no meeting.
+    const BSplineCurve far = Segment(Point3{1.0 + 2e-5, 0.0, 0.0}, Point3{2.0 + 2e-5, 1e-7, 0.0});
+    const auto apart = Meet(a, far);
+    REQUIRE(apart.has_value());
+    CHECK(apart->IsEmpty());
+}
+
+TEST_CASE("a spline ending a rounding short of another's interior meets it there",
+          "[intersect][curve-curve][spline]")
+{
+    // A T: the stem's end against the bar's interior, and a crossing a
+    // rounding past the stem's end, both found on the boundary.
+    const BSplineCurve bar = Cubic(Point3{-1.0, 0.0, 0.0}, Point3{-0.3, 0.2, 0.0},
+                                   Point3{0.3, -0.2, 0.0}, Point3{1.0, 0.0, 0.0});
+    for (const double short_ : {3e-6, 1e-13, -1e-13}) {
+        INFO("short " << short_);
+        const BSplineCurve stem = Segment(Point3{0.0, 1.0, 0.5}, Point3{0.0, short_, 0.0});
+        const auto r = Meet(stem, bar);
+        INFO(IntersectTest::ErrorText(r));
+        REQUIRE(r.has_value());
+        REQUIRE(r->Points.size() == 1);
+        CHECK_THAT(r->Points[0].ParameterA, WithinAbs(1.0, 1e-9));
+        CHECK_THAT(r->Points[0].ParameterB, WithinAbs(0.5, 1e-5));
+    }
+}

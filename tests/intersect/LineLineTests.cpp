@@ -340,3 +340,23 @@ TEST_CASE("a 3D line meets as the same segment as a degree-1 B-spline does",
         }
     });
 }
+
+TEST_CASE("nearly parallel segments touching end to end meet as lines and as splines",
+          "[intersect][line3d][spline]")
+{
+    // The supports' closest approach lies ten units behind both segments;
+    // the end of one is 1.4e-6 from the start of the other.
+    const Line a{Point3{}, Vec3{1.0, 0.0, 0.0}};
+    const Line b{Point3{1.0 + 1e-6, 1e-6, 0.0}, Vec3{1.0, 1e-7, 0.0}};
+    const Interval unit{0.0, 1.0};
+    const auto lines = Meet(a, b, unit, unit);
+    REQUIRE(lines.has_value());
+    REQUIRE(lines->Points.size() == 1);
+    const auto splines = Intersect(Curve{Flat(a, unit)}, unit, Curve{Flat(b, unit)}, unit, ctx);
+    REQUIRE(splines.has_value());
+    REQUIRE(splines->Points.size() == 1);
+    CHECK(lines->Points[0].ParameterA == 1.0);
+    CHECK(lines->Points[0].ParameterB == 0.0);
+    CHECK(splines->Points[0].ParameterA == 1.0);
+    CHECK(splines->Points[0].ParameterB == 0.0);
+}
