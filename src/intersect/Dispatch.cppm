@@ -429,6 +429,13 @@ Result<CurveSurfaceIntersection> LineCone(const Curve&, const Interval&, const S
 Result<CurveSurfaceIntersection> LineTorus(const Curve&, const Interval&, const Surface&,
                                            const Box2&, const Context&);
 
+/// Any built-in curve against a B-spline surface: its enclosed Bezier pieces
+/// against the surface's patches, crossings isolated by Krawczyk's operator
+/// on C(s) - S(u, v); a tangent contact or a curve in the surface fails
+/// closed. Defined in CurveSplineSurface.cpp.
+Result<CurveSurfaceIntersection> CurveSplineSurface(const Curve&, const Interval&, const Surface&,
+                                                    const Box2&, const Context&);
+
 /// A circle or an ellipse against a plane, a cylinder, a cone, a sphere, a
 /// torus or an ellipsoid: the conic cut into rational quadratic arcs of at
 /// most a quarter
@@ -716,7 +723,9 @@ consteval CurveSurfaceHandler ConicAgainstSurface()
 template <typename A, typename B>
 consteval CurveSurfaceHandler CurveSurfaceHandlerFor()
 {
-    if constexpr (std::same_as<A, Line>) {
+    if constexpr (std::same_as<B, BSplineSurface>) {
+        return &CurveSplineSurface;
+    } else if constexpr (std::same_as<A, Line>) {
         return LineAgainstSurface<B>();
     } else if constexpr (std::same_as<A, BSplineCurve>) {
         return SplineAgainstSurface<B>();
