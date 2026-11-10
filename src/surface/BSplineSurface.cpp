@@ -1240,4 +1240,46 @@ Result<BSplineCurve> IsoCurve(const BSplineSurface& surface, const ParameterDire
     return curve;
 }
 
+Vec3 PoleVelocity(const BSplineSurface& surface, const std::size_t pole,
+                  const PoleComponent component, const Point2& uv)
+{
+    const int p = surface.DegreeU;
+    const int q = surface.DegreeV;
+    const std::size_t columns = PoleCountV(surface);
+    const std::size_t ku = FindSpan(surface.KnotsU, p, PoleCountU(surface), uv.X);
+    const std::size_t kv = FindSpan(surface.KnotsV, q, columns, uv.Y);
+    const std::size_t i = pole / columns;
+    const std::size_t j = pole % columns;
+    if (i + static_cast<std::size_t>(p) < ku || i > ku || j + static_cast<std::size_t>(q) < kv ||
+        j > kv) {
+        return {};
+    }
+    std::vector<double> nu(static_cast<std::size_t>(p) + 1);
+    std::vector<double> nv(static_cast<std::size_t>(q) + 1);
+    BasisFunctions(surface.KnotsU, p, ku, uv.X, nu);
+    BasisFunctions(surface.KnotsV, q, kv, uv.Y, nv);
+    // W and S over the window of poles that are not zero at uv.
+    double w = 0.0;
+    Vec3 weighted{};
+    for (int a = 0; a <= p; ++a) {
+        for (int c = 0; c <= q; ++c) {
+            const std::size_t index = (ku - static_cast<std::size_t>(p - a)) * columns +
+                                      (kv - static_cast<std::size_t>(q - c));
+            const double nw = nu[static_cast<std::size_t>(a)] * nv[static_cast<std::size_t>(c)] *
+                              Detail::SurfaceWeightOf(surface, index);
+            w += nw;
+            weighted += nw * ToVec(surface.Poles[index]);
+        }
+    }
+    const double basis =
+        nu[i + static_cast<std::size_t>(p) - ku] * nv[j + static_cast<std::size_t>(q) - kv];
+    if (component == PoleComponent::Weight) {
+        return (basis / w) * (ToVec(surface.Poles[pole]) - weighted / w);
+    }
+    const double rational = basis * Detail::SurfaceWeightOf(surface, pole) / w;
+    return {component == PoleComponent::X ? rational : 0.0,
+            component == PoleComponent::Y ? rational : 0.0,
+            component == PoleComponent::Z ? rational : 0.0};
+}
+
 } // namespace Stereon

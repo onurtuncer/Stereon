@@ -257,9 +257,23 @@ moving the line's direction, through every surface; the Taylor and
 transpose properties run on random cubic B-splines, rational half the
 time with weight bindings, through spheres, cylinders and planes; and a
 B-spline touching a plane, the undecided touch the B-spline handler
-reports, is ``Nondifferentiable``. Other pairs answer ``NotSupported``; each
-new curve–surface handler binds its geometry's parameters to the same
-system.
+reports, is ``Nondifferentiable``.
+
+A ``BSplineSurface`` binds its poles and weights the same way: a
+``SurfaceBinding`` with ``SurfaceComponent::PoleX``, ``PoleY`` or ``PoleZ``
+(a ``Length``) or ``PoleWeight`` (``Dimensionless``) and the ``Pole`` it
+moves, the index into ``Poles``, row by row. The surface's side of the
+system is ``PoleVelocity(surface, pole, component, uv)``, the velocity of
+:math:`S(u, v)` at fixed :math:`(u, v)`: :math:`R_{ij} e_c` for a coordinate
+and :math:`N_i N_j (P_{ij} - S) / W` for a weight. It is checked against the
+derivative of evaluating the surface over dual numbers, every component of
+random polynomial and rational surfaces. The products are checked against a
+closed form, a vertical line through a flat bilinear patch rising with a
+corner pole by :math:`R_{11}(u, v)`, and the Taylor and transpose
+properties run on random lines through random bicubic patches, rational half
+the time, with three poles bound. Other surfaces (extrusions, revolutions)
+answer ``NotSupported``; each new curve–surface handler binds its
+geometry's parameters to the same system.
 
 Branch points of two surfaces
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -325,9 +339,11 @@ on an uncertified branch                   ``Indeterminate``
 at a pole of either surface's parameters   ``Indeterminate``
 =========================================  ============================================
 
-Both surfaces must be planes, cylinders, cones, spheres, tori or
-ellipsoids; other
-pairs answer ``NotSupported``. The tests check the forward product against
+Both surfaces must be planes, cylinders, cones, spheres, tori,
+ellipsoids or B-spline surfaces, whose poles and weights bind as above, so
+the branches of the generic SSI have products too; other pairs answer
+``NotSupported``. Two crossing bilinear patches, one flat, are checked
+against the closed form of raising the flat one's corner pole. The tests check the forward product against
 a closed form. A plane at height :math:`h` cuts a sphere of radius
 :math:`R` in a circle of radius :math:`\rho = \sqrt{R^2 - h^2}`, whose
 point moves radially by :math:`(R \dot R - h \dot h) / \rho` and up by

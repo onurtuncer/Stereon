@@ -759,6 +759,17 @@ template <Scalar T>
 [[nodiscard]] Result<BSplineCurve> IsoCurve(const BSplineSurface& surface,
                                             ParameterDirection direction, double value);
 
+/// The velocity of Eval(surface, uv) with respect to one component of one
+/// pole, per unit of the component, at fixed (u, v) (ADR-0021): R_ij(u, v)
+/// e_c for a coordinate and N_i(u) N_j(v) (P_ij - S(u, v)) / W(u, v) for a
+/// weight, with W the sum of N_k N_l w_kl and R_ij = N_i N_j w_ij / W, as
+/// the curve's PoleVelocity. The pole is Poles[pole], (i, j) row by row;
+/// zero where its basis function vanishes. A polynomial surface's weights
+/// are 1 and may move. The pole must exist and uv lie in the domain; the
+/// caller has checked both.
+[[nodiscard]] Vec3 PoleVelocity(const BSplineSurface& surface, std::size_t pole,
+                                PoleComponent component, const Point2& uv);
+
 static_assert(SurfaceGeometry<BSplineSurface>);
 
 } // namespace Stereon
