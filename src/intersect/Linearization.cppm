@@ -37,10 +37,11 @@ import :Dispatch;
 /// carries no derivative carries none as a whole (ADR-0021, section 5).
 ///
 /// The pairs so far are a line or a B-spline curve against a plane, a
-/// cylinder, a cone, a sphere, a torus or an ellipsoid, the parameters bound to
-/// coordinates of the line's origin and direction, to the curve's poles and
-/// weights (PoleBinding, as EvalJvp takes them), and to the surface's
-/// origin, its radii, a cone's semi-angle and an ellipsoid's semi-axes. The
+/// cylinder, a cone, a sphere, a torus, an ellipsoid or a B-spline surface,
+/// the parameters bound to coordinates of the line's origin and direction,
+/// to the curve's poles and weights (PoleBinding, as EvalJvp takes them),
+/// and to the surface's origin, its radii, a cone's semi-angle, an
+/// ellipsoid's semi-axes and a B-spline surface's poles and weights. The
 /// surface's partials come from its
 /// own Deriv, so a new surface needs only the velocities of its defining
 /// values; the others answer NotSupported until they bind theirs.
@@ -76,8 +77,10 @@ struct LineBinding {
 /// (a sphere's, a cylinder's, a cone's reference radius, a torus's major
 /// radius); a torus's MinorRadius; an ellipsoid's SemiAxisA, SemiAxisB and
 /// SemiAxisC, along its XAxis, YAxis and axis; each a Length; or a cone's
-/// SemiAngle, an Angle. The frame is fixed: turning a surface is a later
-/// binding.
+/// SemiAngle, an Angle. A B-spline surface's poles move instead: a
+/// coordinate of the binding's Pole (PoleX, PoleY, PoleZ), a Length, or its
+/// weight (PoleWeight), Dimensionless, as PoleVelocity moves them. The
+/// frame is fixed: turning a surface is a later binding.
 enum class SurfaceComponent : std::uint8_t {
     OriginX,
     OriginY,
@@ -88,11 +91,19 @@ enum class SurfaceComponent : std::uint8_t {
     SemiAxisA,
     SemiAxisB,
     SemiAxisC,
+    PoleX,
+    PoleY,
+    PoleZ,
+    PoleWeight,
 };
 
+/// A design parameter bound to one defining value of a surface. Pole is
+/// the index into a B-spline surface's Poles, (i, j) row by row, for the
+/// pole components, and unused otherwise.
 struct SurfaceBinding {
     ParameterId Parameter;
     SurfaceComponent Component = SurfaceComponent::OriginX;
+    std::size_t Pole = 0;
 };
 
 /// The values a product gives per point of a curve–surface intersection,
@@ -139,11 +150,12 @@ Linearize(const BSplineCurve& curve, const Surface& surface, const CurveSurfaceP
 /// `sensitivity`: for each point of `intersection`, in its order,
 /// CurveSurfacePointValues values. `intersection` is the result of
 /// intersecting these two geometries. NotSupported (a status) for a
-/// surface other than a plane, a cylinder, a cone, a sphere, a torus or an
-/// ellipsoid.
+/// surface other than a plane, a cylinder, a cone, a sphere, a torus, an
+/// ellipsoid or a B-spline surface.
 /// InvalidInput for a binding whose parameter is not of the context's set,
-/// is not a Length (an Angle for a SemiAngle), or moves a value the surface
-/// does not have, or for a seed that was never set.
+/// is not a Length (an Angle for a SemiAngle, Dimensionless for a
+/// PoleWeight), or moves a value the surface does not have (a pole it does
+/// not have included), or for a seed that was never set.
 [[nodiscard]] Result<SensitivityResult>
 IntersectJvp(const Line& line, std::span<const LineBinding> lineBindings, const Surface& surface,
              std::span<const SurfaceBinding> surfaceBindings,

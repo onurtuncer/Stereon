@@ -171,14 +171,25 @@ template <typename Side>
 {
     return surface.Target<Plane>() != nullptr || surface.Target<Sphere>() != nullptr ||
            surface.Target<Cylinder>() != nullptr || surface.Target<Cone>() != nullptr ||
-           surface.Target<Torus>() != nullptr || surface.Target<Ellipsoid>() != nullptr;
+           surface.Target<Torus>() != nullptr || surface.Target<Ellipsoid>() != nullptr ||
+           surface.Target<BSplineSurface>() != nullptr;
 }
 
-/// Whether the surface has the value a component moves: every surface its
-/// origin, all but the plane and the ellipsoid a Radius, the torus a
-/// MinorRadius, the cone a SemiAngle, the ellipsoid its three semi-axes.
-[[nodiscard]] bool Has(const Surface& surface, const SurfaceComponent component)
+[[nodiscard]] bool IsPoleComponent(const SurfaceComponent component)
 {
+    return component == SurfaceComponent::PoleX || component == SurfaceComponent::PoleY ||
+           component == SurfaceComponent::PoleZ || component == SurfaceComponent::PoleWeight;
+}
+
+/// Whether an analytic surface has the value a component moves: every one
+/// its origin, all but the plane and the ellipsoid a Radius, the torus a
+/// MinorRadius, the cone a SemiAngle, the ellipsoid its three semi-axes;
+/// none a pole.
+[[nodiscard]] bool HasAnalytic(const Surface& surface, const SurfaceComponent component)
+{
+    if (IsPoleComponent(component)) {
+        return false;
+    }
     switch (component) {
     case SurfaceComponent::Radius:
         return surface.Target<Plane>() == nullptr && surface.Target<Ellipsoid>() == nullptr;
@@ -193,6 +204,17 @@ template <typename Side>
     default:
         return true;
     }
+}
+
+/// Whether the surface has the value a binding moves: an analytic surface
+/// as HasAnalytic says, a B-spline surface its poles and weights and
+/// nothing else.
+[[nodiscard]] bool Has(const Surface& surface, const SurfaceBinding& binding)
+{
+    if (const BSplineSurface* spline = surface.Target<BSplineSurface>()) {
+        return IsPoleComponent(binding.Component) && binding.Pole < spline->Poles.size();
+    }
+    return HasAnalytic(surface, binding.Component);
 }
 
 /// Whether a point has a derivative, and why not when it has none.
@@ -345,8 +367,14 @@ template <typename S>
 /// locally: subtracting world positions loses accuracy after translation.
 /// The cone's and the torus's are ConePartial's and TorusPartial's.
 [[nodiscard]] Vec3 SurfacePartial(const Surface& surface, const Point2& uv,
-                                  const SurfaceComponent component)
+                                  const SurfaceBinding& binding)
 {
+    const SurfaceComponent component = binding.Component;
+    if (const BSplineSurface* spline = surface.Target<BSplineSurface>()) {
+        const auto pole = static_cast<PoleComponent>(static_cast<int>(component) -
+                                                     static_cast<int>(SurfaceComponent::PoleX));
+        return PoleVelocity(*spline, binding.Pole, pole, uv);
+    }
     if (component == SurfaceComponent::OriginX || component == SurfaceComponent::OriginY ||
         component == SurfaceComponent::OriginZ) {
         return UnitAlong(static_cast<int>(component));
@@ -376,16 +404,20 @@ template <typename S>
                                                 const std::string_view where)
 {
     for (const SurfaceBinding& b : bindings) {
-        const ParameterQuantity quantity = b.Component == SurfaceComponent::SemiAngle
-                                               ? ParameterQuantity::Angle
-                                               : ParameterQuantity::Length;
+        ParameterQuantity quantity = ParameterQuantity::Length;
+        if (b.Component == SurfaceComponent::SemiAngle) {
+            quantity = ParameterQuantity::Angle;
+        } else if (b.Component == SurfaceComponent::PoleWeight) {
+            quantity = ParameterQuantity::Dimensionless;
+        }
         STEREON_TRY_VOID(CheckParameter(set, b.Parameter, quantity, where));
-        if (!Has(surface, b.Component)) {
+        if (!Has(surface, b)) {
             return Fail(ErrorCode::InvalidInput,
                         std::string(where) +
                             ": a binding of a value the surface does not have (a radius on a "
                             "plane or an ellipsoid, a minor radius off a torus, a semi-angle "
-                            "off a cone, a semi-axis off an ellipsoid)");
+                            "off a cone, a semi-axis off an ellipsoid, a pole off a B-spline "
+                            "surface or past its last, an analytic value on one)");
         }
     }
     return {};
@@ -495,7 +527,7 @@ Velocities(const Side& curve, const std::span<const SurfaceBinding> surfaceBindi
         onCurve += rate(b.Parameter) * curve.Partial(b, point.Parameter);
     }
     for (const SurfaceBinding& b : surfaceBindings) {
-        onSurface += rate(b.Parameter) * SurfacePartial(surface, point.OnSurface, b.Component);
+        onSurface += rate(b.Parameter) * SurfacePartial(surface, point.OnSurface, b);
     }
     return {onCurve, onSurface};
 }
@@ -565,8 +597,7 @@ void AccumulatePoint(const Side& curve, const std::span<const SurfaceBinding> su
     }
     for (const SurfaceBinding& b : surfaceBindings) {
         values[b.Parameter.GetIndex()] +=
-            set.GetReference(b.Parameter) *
-            Dot(y, SurfacePartial(surface, point.OnSurface, b.Component));
+            set.GetReference(b.Parameter) * Dot(y, SurfacePartial(surface, point.OnSurface, b));
     }
 }
 
@@ -951,7 +982,7 @@ CheckSurfaces(const Surface& a, const std::span<const SurfaceBinding> bindingsA,
     Vec3 velocity{};
     for (const SurfaceBinding& b : bindings) {
         velocity += seed[b.Parameter.GetIndex()] * set.GetReference(b.Parameter) *
-                    SurfacePartial(surface, uv, b.Component);
+                    SurfacePartial(surface, uv, b);
     }
     return velocity;
 }
@@ -1007,13 +1038,11 @@ void AccumulateBranch(const Surface& a, const std::span<const SurfaceBinding> bi
     const Vec3 onA = xBar - onB - y[3] * s.Tangent;
     for (const SurfaceBinding& binding : bindingsA) {
         values[binding.Parameter.GetIndex()] +=
-            set.GetReference(binding.Parameter) *
-            Dot(onA, SurfacePartial(a, s.OnA, binding.Component));
+            set.GetReference(binding.Parameter) * Dot(onA, SurfacePartial(a, s.OnA, binding));
     }
     for (const SurfaceBinding& binding : bindingsB) {
         values[binding.Parameter.GetIndex()] +=
-            set.GetReference(binding.Parameter) *
-            Dot(onB, SurfacePartial(b, s.OnB, binding.Component));
+            set.GetReference(binding.Parameter) * Dot(onB, SurfacePartial(b, s.OnB, binding));
     }
 }
 
