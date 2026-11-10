@@ -27,6 +27,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -1427,4 +1428,358 @@ TEST_CASE("radius products are independent of world translation",
             REQUIRE(std::abs((*vjp->GetValues())[9] - 1.0) < 1e-12);
         }
     }
+}
+
+// --- Circles and ellipses ----------------------------------------------------
+
+namespace {
+
+using Stereon::Circle;
+using Stereon::ConicBinding;
+using Stereon::ConicComponent;
+using Stereon::Ellipse;
+
+/// The conic's bindings, its centre then its radii, in order.
+template <typename C>
+std::vector<ConicComponent> ConicComponentsOf()
+{
+    std::vector<ConicComponent> components{ConicComponent::CenterX, ConicComponent::CenterY,
+                                           ConicComponent::CenterZ};
+    if constexpr (std::is_same_v<C, Circle>) {
+        components.push_back(ConicComponent::Radius);
+    } else {
+        components.insert(components.end(),
+                          {ConicComponent::MajorRadius, ConicComponent::MinorRadius});
+    }
+    return components;
+}
+
+struct ConicModel {
+    SensitivityContext Sensitivity{ParameterSet{}};
+    std::vector<ConicBinding> ConicBindings;
+    std::vector<SurfaceBinding> SurfaceBindings;
+};
+
+/// The conic's bindings, then the surface's, one parameter each.
+template <typename C, typename S>
+ConicModel ConicModelFor(const std::vector<double>& references)
+{
+    const std::vector<ConicComponent> conic = ConicComponentsOf<C>();
+    const std::vector<SurfaceComponent> surface = ComponentsOf<S>();
+    ParameterSet set;
+    std::vector<ParameterId> ids;
+    for (std::size_t k = 0; k < references.size(); ++k) {
+        const ParameterQuantity quantity =
+            k < conic.size() ? ParameterQuantity::Length : QuantityOf(surface[k - conic.size()]);
+        ids.push_back(*set.Add("p" + std::to_string(k), quantity, references[k]));
+    }
+    ConicModel model{SensitivityContext(std::move(set)), {}, {}};
+    for (std::size_t k = 0; k < conic.size(); ++k) {
+        model.ConicBindings.push_back({ids[k], conic[k]});
+    }
+    for (std::size_t k = 0; k < surface.size(); ++k) {
+        model.SurfaceBindings.push_back({ids[conic.size() + k], surface[k]});
+    }
+    return model;
+}
+
+/// The conic and the surface moved by `step` times the seed.
+template <typename C, typename S>
+std::pair<C, S> MovedConic(C conic, S surface, const std::vector<double>& seed,
+                           const std::vector<double>& references, const double step)
+{
+    const auto d = [&](const std::size_t k) { return step * seed[k] * references[k]; };
+    conic.Center = conic.Center + Vec3{d(0), d(1), d(2)};
+    if constexpr (std::is_same_v<C, Circle>) {
+        conic.Radius += d(3);
+        MoveSurface(surface, d, 4);
+    } else {
+        conic.MajorRadius += d(3);
+        conic.MinorRadius += d(4);
+        MoveSurface(surface, d, 5);
+    }
+    return {conic, surface};
+}
+
+template <typename C, typename S>
+std::vector<double> ConicJvp(ConicModel& model, const C& conic, const S& surface,
+                             const std::vector<double>& seed)
+{
+    RC_ASSERT(model.Sensitivity.SetSeed(seed).has_value());
+    const auto jvp =
+        Stereon::IntersectJvp(conic, model.ConicBindings, Surface{surface}, model.SurfaceBindings,
+                              Meet(conic, surface), model.Sensitivity);
+    if (!jvp) {
+        RC_FAIL(IntersectTest::ErrorText(jvp));
+    }
+    RC_ASSERT(jvp->GetStatus() == DerivativeStatus::Valid);
+    const auto values = jvp->GetValues();
+    return {values->begin(), values->end()};
+}
+
+/// Every crossing well away from a tangency and from the surface's poles:
+/// near a sphere's pole the angle u moves fast and bends sharply with the
+/// geometry, a derivative too nonlinear for the steps below, though Valid.
+/// The partials within a factor of ten of each other keep it away.
+template <typename C, typename S>
+bool ConicWellConditioned(const C& conic, const S& surface)
+{
+    const CurveSurfaceIntersection at = Meet(conic, surface);
+    if (at.Points.empty() || !at.Overlaps.empty()) {
+        return false;
+    }
+    return std::ranges::all_of(at.Points, [&](const CurveSurfacePoint& p) {
+        const auto lin = Stereon::Linearize(conic, Surface{surface}, p);
+        return lin && lin->Conditioning >= 0.25 && Length(lin->Su) >= 0.1 * Length(lin->Sv) &&
+               Length(lin->Sv) >= 0.1 * Length(lin->Su);
+    });
+}
+
+/// The Taylor residual falls by second order, and <J v, w> = <v, J^T w>.
+/// Angles (the conic's t, the surface's u and v) are compared modulo a
+/// turn: a step may carry one over a seam.
+template <typename C, typename S>
+void RequireConicProducts(const C& conic, const S& surface)
+{
+    const auto [references, seed] =
+        RandomSeed(ConicComponentsOf<C>().size() + SurfaceParameters<S>());
+    ConicModel model = ConicModelFor<C, S>(references);
+    const std::vector<double> jv = ConicJvp(model, conic, surface, seed);
+    const std::vector<double> base = Points(conic, surface);
+    // A conic meets a quadric up to four times, a line twice: a conic that
+    // passes near the surface away from its crossings gains two under a
+    // step, a new regime, not an error of the derivative. Such steps are
+    // discarded; the crossings that exist were checked transverse.
+    for (const double h : {1e-2, 1e-3}) {
+        const auto [c, s] = MovedConic(conic, surface, seed, references, h);
+        RC_PRE(Points(c, s).size() == base.size());
+    }
+    // Points come in order of the conic's angle, so a crossing near t = 0
+    // that a step carries past the seam comes last: each base point is
+    // paired with the moved point nearest it in space.
+    const auto residual = [&](const double h) {
+        const auto [c, s] = MovedConic(conic, surface, seed, references, h);
+        const std::vector<double> moved = Points(c, s);
+        const std::size_t count = base.size() / Values;
+        std::vector<double> r(base.size());
+        for (std::size_t i = 0; i < count; ++i) {
+            const auto gap = [&](const std::size_t j) {
+                return Distance(
+                    Point3{base[Values * i], base[Values * i + 1], base[Values * i + 2]},
+                    Point3{moved[Values * j], moved[Values * j + 1], moved[Values * j + 2]});
+            };
+            std::size_t nearest = 0;
+            for (std::size_t j = 1; j < count; ++j) {
+                nearest = gap(j) < gap(nearest) ? j : nearest;
+            }
+            for (std::size_t k = 0; k < Values; ++k) {
+                const double difference = moved[Values * nearest + k] - base[Values * i + k];
+                const bool angle = k >= 3;
+                r[Values * i + k] =
+                    (angle ? std::remainder(difference, tau) : difference) - h * jv[Values * i + k];
+            }
+        }
+        return Norm(r);
+    };
+    const double coarse = residual(1e-2);
+    const double fine = residual(1e-3);
+    RC_ASSERT(fine <= coarse / 30.0 + 1e-10 * (1.0 + Norm(base)));
+
+    std::vector<double> w;
+    for (std::size_t i = 0; i < jv.size(); ++i) {
+        w.push_back(*rc::gen::inRange(-10, 11) / 10.0);
+    }
+    RC_ASSERT(model.Sensitivity.SetAdjoint(w).has_value());
+    const auto vjp =
+        Stereon::IntersectVjp(conic, model.ConicBindings, Surface{surface}, model.SurfaceBindings,
+                              Meet(conic, surface), model.Sensitivity);
+    RC_ASSERT(vjp.has_value());
+    RC_ASSERT(vjp->GetStatus() == DerivativeStatus::Valid);
+    const auto jtw = *vjp->GetValues();
+    double left = 0.0;
+    double right = 0.0;
+    double scale = 0.0;
+    for (std::size_t i = 0; i < jv.size(); ++i) {
+        left += jv[i] * w[i];
+        scale += std::abs(jv[i] * w[i]);
+    }
+    for (std::size_t k = 0; k < seed.size(); ++k) {
+        right += seed[k] * jtw[k];
+        scale += std::abs(seed[k] * jtw[k]);
+    }
+    RC_ASSERT(std::abs(left - right) <= 1e-12 * (1.0 + scale));
+}
+
+/// A random orthonormal frame: X in the xy-plane at angle theta, Y tilted
+/// out of it by phi.
+std::pair<Vec3, Vec3> RandomFrame()
+{
+    const double theta = *rc::gen::inRange(0, 64) * tau / 64.0;
+    const double phi = *rc::gen::inRange(-16, 17) * tau / 64.0;
+    return {Vec3{std::cos(theta), std::sin(theta), 0.0},
+            Vec3{-std::sin(theta) * std::cos(phi), std::cos(theta) * std::cos(phi), std::sin(phi)}};
+}
+
+/// A circle or an ellipse near the origin, its radii in [1, 3].
+template <typename C>
+C RandomConic()
+{
+    const auto [x, y] = RandomFrame();
+    const Point3 center{Coordinate() / 4.0, Coordinate() / 4.0, Coordinate() / 4.0};
+    if constexpr (std::is_same_v<C, Circle>) {
+        return Circle{center, *rc::gen::inRange(10, 31) / 10.0, x, y};
+    } else {
+        const double a = *rc::gen::inRange(15, 31) / 10.0;
+        return Ellipse{center, a, a * *rc::gen::inRange(4, 10) / 10.0, x, y};
+    }
+}
+
+/// A sphere, a cylinder about z and a plane through the origin, each
+/// crossing a conic near the origin.
+Sphere RandomSphere()
+{
+    return Sphere{Point3{Coordinate() / 2.0, Coordinate() / 2.0, Coordinate() / 2.0},
+                  *rc::gen::inRange(10, 31) / 10.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+}
+
+Cylinder RandomCylinder()
+{
+    return Cylinder{Point3{Coordinate() / 2.0, Coordinate() / 2.0, 0.0},
+                    *rc::gen::inRange(10, 31) / 10.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+}
+
+Plane RandomPlane()
+{
+    const auto [x, y] = RandomFrame();
+    return Plane{Point3{Coordinate() / 4.0, Coordinate() / 4.0, Coordinate() / 4.0}, x, y};
+}
+
+template <typename C>
+void RequireConicProperties()
+{
+    const C conic = RandomConic<C>();
+    switch (*rc::gen::inRange(0, 3)) {
+    case 0: {
+        const Sphere sphere = RandomSphere();
+        RC_PRE(ConicWellConditioned(conic, sphere));
+        RequireConicProducts(conic, sphere);
+        break;
+    }
+    case 1: {
+        const Cylinder cylinder = RandomCylinder();
+        RC_PRE(ConicWellConditioned(conic, cylinder));
+        RequireConicProducts(conic, cylinder);
+        break;
+    }
+    default: {
+        const Plane plane = RandomPlane();
+        RC_PRE(ConicWellConditioned(conic, plane));
+        RequireConicProducts(conic, plane);
+        break;
+    }
+    }
+}
+
+/// The circle of radius 2 about the origin in the xz-plane, and the
+/// ellipse of semi-axes 3 and 2 in it; the plane z = 1 cuts both.
+const Circle UpCircle{Point3{}, 2.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 0.0, 1.0}};
+const Ellipse UpEllipse{Point3{}, 3.0, 2.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 0.0, 1.0}};
+const Plane Shelf{Point3{0.0, 0.0, 1.0}, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+
+/// The forward product for one binding moved at unit rate.
+template <typename C>
+std::vector<double> RateOf(const C& conic, const ConicComponent component)
+{
+    ParameterSet set;
+    const ParameterId p = *set.Add("p", ParameterQuantity::Length, 1.0);
+    SensitivityContext sensitivity(std::move(set));
+    REQUIRE(sensitivity.SetSeed(std::vector<double>{1.0}).has_value());
+    const std::vector<ConicBinding> bindings{{p, component}};
+    const auto at = Stereon::Intersect(Stereon::Curve{conic}, Surface{Shelf}, ctx);
+    REQUIRE(at.has_value());
+    const auto jvp = Stereon::IntersectJvp(conic, bindings, Surface{Shelf}, {}, *at, sensitivity);
+    INFO(IntersectTest::ErrorText(jvp));
+    REQUIRE(jvp.has_value());
+    REQUIRE(jvp->GetStatus() == DerivativeStatus::Valid);
+    const auto values = jvp->GetValues();
+    return {values->begin(), values->end()};
+}
+
+} // namespace
+
+TEST_CASE("a circle's and an ellipse's crossings of a plane move as their closed forms say",
+          "[intersect][linearization][conic]")
+{
+    const double root3 = std::sqrt(3.0);
+    SECTION("a circle: its radius and its centre's height")
+    {
+        // sin t = 1 / 2: t = pi / 6 at x = sqrt 3, then 5 pi / 6 at -sqrt 3.
+        // A growing radius moves x by r / x and t by -(h / r^2) / cos t; a
+        // rising centre moves x by (h - c) / x and t by -1 / (r cos t).
+        const std::vector<double> radius = RateOf(UpCircle, ConicComponent::Radius);
+        const std::vector<double> rising = RateOf(UpCircle, ConicComponent::CenterZ);
+        REQUIRE(radius.size() == 2 * Values);
+        for (const auto& [k, x, cosine] :
+             {std::tuple{0, root3, root3 / 2.0}, std::tuple{1, -root3, -root3 / 2.0}}) {
+            const std::size_t at = Values * static_cast<std::size_t>(k);
+            CHECK(std::abs(radius[at] - 2.0 / x) <= 1e-14);
+            CHECK(std::abs(radius[at + 2]) <= 1e-14);
+            CHECK(std::abs(radius[at + 3] + 0.25 / cosine) <= 1e-14);
+            CHECK(std::abs(radius[at + 4] - 2.0 / x) <= 1e-14);
+            CHECK(std::abs(rising[at] - 1.0 / x) <= 1e-14);
+            CHECK(std::abs(rising[at + 2]) <= 1e-14);
+            CHECK(std::abs(rising[at + 3] + 0.5 / cosine) <= 1e-14);
+        }
+    }
+    SECTION("an ellipse: its major and minor radii")
+    {
+        // 2 sin t = 1: t = pi / 6 at x = 3 sqrt 3 / 2. The major radius moves
+        // x by cos t and leaves t; the minor one moves t by -(h / b^2) /
+        // cos t = -1 / (2 sqrt 3), and x by -a sin t t' = 3 / (4 sqrt 3).
+        const std::vector<double> major = RateOf(UpEllipse, ConicComponent::MajorRadius);
+        const std::vector<double> minor = RateOf(UpEllipse, ConicComponent::MinorRadius);
+        REQUIRE(major.size() == 2 * Values);
+        CHECK(std::abs(major[0] - root3 / 2.0) <= 1e-14);
+        CHECK(std::abs(major[3]) <= 1e-14);
+        CHECK(std::abs(minor[0] - 3.0 / (4.0 * root3)) <= 1e-14);
+        CHECK(std::abs(minor[2]) <= 1e-14);
+        CHECK(std::abs(minor[3] + 1.0 / (2.0 * root3)) <= 1e-14);
+    }
+}
+
+TEST_CASE("circle and ellipse crossings: second-order Taylor decay and the transpose",
+          "[intersect][linearization][conic][property]")
+{
+    rc::prop("circles through spheres, cylinders and planes",
+             [] { RequireConicProperties<Circle>(); });
+    rc::prop("ellipses through spheres, cylinders and planes",
+             [] { RequireConicProperties<Ellipse>(); });
+}
+
+TEST_CASE("a conic's bindings are refused where it has no such radius",
+          "[intersect][linearization][conic]")
+{
+    ParameterSet set;
+    const ParameterId length = *set.Add("p", ParameterQuantity::Length, 1.0);
+    const ParameterId angle = *set.Add("a", ParameterQuantity::Angle, 1.0);
+    SensitivityContext sensitivity(std::move(set));
+    REQUIRE(sensitivity.SetSeed(std::vector<double>{1.0, 1.0}).has_value());
+    const auto code = [](const auto& result) { return result.error().GetCode(); };
+    const auto circleAt = Stereon::Intersect(Stereon::Curve{UpCircle}, Surface{Shelf}, ctx);
+    const auto ellipseAt = Stereon::Intersect(Stereon::Curve{UpEllipse}, Surface{Shelf}, ctx);
+    REQUIRE(circleAt.has_value());
+    REQUIRE(ellipseAt.has_value());
+    for (const ConicComponent component :
+         {ConicComponent::MajorRadius, ConicComponent::MinorRadius}) {
+        const std::vector<ConicBinding> bad{{length, component}};
+        REQUIRE(code(Stereon::IntersectJvp(UpCircle, bad, Surface{Shelf}, {}, *circleAt,
+                                           sensitivity)) == ErrorCode::InvalidInput);
+    }
+    const std::vector<ConicBinding> radius{{length, ConicComponent::Radius}};
+    REQUIRE(code(Stereon::IntersectJvp(UpEllipse, radius, Surface{Shelf}, {}, *ellipseAt,
+                                       sensitivity)) == ErrorCode::InvalidInput);
+    // A centre is moved by a length, never an angle.
+    const std::vector<ConicBinding> turned{{angle, ConicComponent::CenterX}};
+    REQUIRE(code(Stereon::IntersectJvp(UpCircle, turned, Surface{Shelf}, {}, *circleAt,
+                                       sensitivity)) == ErrorCode::InvalidInput);
 }

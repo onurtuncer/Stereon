@@ -21,6 +21,7 @@ module;
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -139,6 +140,60 @@ struct SplineSide {
     {
         return std::isfinite(t) && Contains(Domain(Geometry), t);
     }
+};
+
+/// Whether a conic has the radius a component moves: a circle its Radius,
+/// an ellipse its MajorRadius and MinorRadius, every conic its centre.
+template <typename Conic>
+[[nodiscard]] bool HasRadius(const ConicComponent component)
+{
+    if (component == ConicComponent::Radius) {
+        return std::is_same_v<Conic, Circle>;
+    }
+    if (component == ConicComponent::MajorRadius || component == ConicComponent::MinorRadius) {
+        return std::is_same_v<Conic, Ellipse>;
+    }
+    return true;
+}
+
+/// A circle's or an ellipse's side: its derivative, and dC/d(component) at
+/// the angle t at fixed frame: a unit for a centre coordinate, cos t X +
+/// sin t Y for a circle's radius, cos t X and sin t Y for an ellipse's
+/// major and minor radii.
+template <typename Conic>
+struct ConicSide {
+    const Conic& Geometry;
+    std::span<const ConicBinding> Bindings;
+
+    [[nodiscard]] Point3 At(const double t) const { return Eval(Geometry, t); }
+    [[nodiscard]] Vec3 Tangent(const double t) const { return Deriv(Geometry, t, 1); }
+    [[nodiscard]] Vec3 Partial(const ConicBinding& b, const double t) const
+    {
+        switch (b.Component) {
+        case ConicComponent::Radius:
+            return std::cos(t) * Geometry.XAxis + std::sin(t) * Geometry.YAxis;
+        case ConicComponent::MajorRadius:
+            return std::cos(t) * Geometry.XAxis;
+        case ConicComponent::MinorRadius:
+            return std::sin(t) * Geometry.YAxis;
+        default:
+            return UnitAlong(static_cast<int>(b.Component));
+        }
+    }
+    [[nodiscard]] Result<void> Check(const ParameterSet& set, const std::string_view where) const
+    {
+        for (const ConicBinding& b : Bindings) {
+            STEREON_TRY_VOID(CheckParameter(set, b.Parameter, ParameterQuantity::Length, where));
+            if (!HasRadius<Conic>(b.Component)) {
+                return Fail(ErrorCode::InvalidInput,
+                            std::string(where) +
+                                ": a binding of a radius the conic does not have (a major or "
+                                "minor radius on a circle, a radius on an ellipse)");
+            }
+        }
+        return {};
+    }
+    [[nodiscard]] static bool Covers(const double t) { return std::isfinite(t); }
 };
 
 /// The surface's partials come from its own Deriv, so any surface fits. At
@@ -645,6 +700,18 @@ Result<CurveSurfaceLinearization> Linearize(const BSplineCurve& curve, const Sur
     return LinearizeOn(SplineSide{curve, {}}, surface, point);
 }
 
+Result<CurveSurfaceLinearization> Linearize(const Circle& circle, const Surface& surface,
+                                            const CurveSurfacePoint& point)
+{
+    return LinearizeOn(ConicSide<Circle>{circle, {}}, surface, point);
+}
+
+Result<CurveSurfaceLinearization> Linearize(const Ellipse& ellipse, const Surface& surface,
+                                            const CurveSurfacePoint& point)
+{
+    return LinearizeOn(ConicSide<Ellipse>{ellipse, {}}, surface, point);
+}
+
 Result<SensitivityResult>
 IntersectJvp(const Line& line, const std::span<const LineBinding> lineBindings,
              const Surface& surface, const std::span<const SurfaceBinding> surfaceBindings,
@@ -676,6 +743,42 @@ IntersectVjp(const BSplineCurve& curve, const std::span<const PoleBinding> poleB
              const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity)
 {
     return VjpOn(SplineSide{curve, poleBindings}, surface, surfaceBindings, intersection,
+                 sensitivity);
+}
+
+Result<SensitivityResult>
+IntersectJvp(const Circle& circle, const std::span<const ConicBinding> conicBindings,
+             const Surface& surface, const std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity)
+{
+    return JvpOn(ConicSide<Circle>{circle, conicBindings}, surface, surfaceBindings, intersection,
+                 sensitivity);
+}
+
+Result<SensitivityResult>
+IntersectJvp(const Ellipse& ellipse, const std::span<const ConicBinding> conicBindings,
+             const Surface& surface, const std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity)
+{
+    return JvpOn(ConicSide<Ellipse>{ellipse, conicBindings}, surface, surfaceBindings, intersection,
+                 sensitivity);
+}
+
+Result<SensitivityResult>
+IntersectVjp(const Circle& circle, const std::span<const ConicBinding> conicBindings,
+             const Surface& surface, const std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity)
+{
+    return VjpOn(ConicSide<Circle>{circle, conicBindings}, surface, surfaceBindings, intersection,
+                 sensitivity);
+}
+
+Result<SensitivityResult>
+IntersectVjp(const Ellipse& ellipse, const std::span<const ConicBinding> conicBindings,
+             const Surface& surface, const std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity)
+{
+    return VjpOn(ConicSide<Ellipse>{ellipse, conicBindings}, surface, surfaceBindings, intersection,
                  sensitivity);
 }
 
