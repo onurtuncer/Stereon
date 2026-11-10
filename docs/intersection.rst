@@ -972,6 +972,66 @@ the count its distance decides from a sphere or a cylinder. Against a
 torus it may fail closed instead, which it does from :math:`k = 40` and
 at an exact touch of the tube's top.
 
+Curves against B-spline surfaces
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``CurveSplineSurface`` (``src/intersect/CurveSplineSurface.cpp``) meets any
+built-in curve, ``Line``, ``Circle``, ``Ellipse``, ``Hyperbola``,
+``Parabola`` or ``BSplineCurve``, with a ``BSplineSurface``, polynomial or
+rational. The curve becomes the enclosed Bézier pieces of *Lines and conics
+against other curves* (``CurvePieces.hpp``), and the surface the enclosed
+Bézier patches of the generic SSI (``BezierPatch.hpp``, *Two B-spline
+surfaces*). Every pair of a piece and a patch is settled as one of:
+
+- **apart**, when the boxes of the piece's poles and of the patch's net are
+  disjoint, so their convex hulls are;
+- **one crossing or none**, by Krawczyk's operator on
+  :math:`F(s, u, v) = C(s) - S(u, v)` over the pair's parameter box, with
+  the Jacobian :math:`[C'(s), -S_u, -S_v]` enclosed over it. A unique root
+  is a transverse crossing: the contraction proves the Jacobian regular, so
+  the curve's tangent is not in the surface's tangent plane there;
+- **cut**, the piece or the patch, whichever is larger in space.
+
+A crossing is a ``CurveSurfacePoint`` with ``Crossing`` contact and
+``Decided`` true, at the curve's own parameter (an arc's parameter mapped
+back to a conic's) and the surface's parameters. A root found from two
+pieces or two patches that share a boundary is one point. Unlike two
+curves in space, a curve crosses a surface robustly, so meetings are exact
+roots and not decided at the resolution.
+
+What cannot be settled fails with ``IntersectionFailed``, never dropped:
+
+- a pair that can no longer be cut, or a search past :math:`2^{16}` pairs.
+  These are a tangent contact, a curve lying in the surface, or a crossing
+  too nearly tangential to isolate;
+- a crossing within rounding of the end of a requested domain, on the curve
+  or on the surface, which cannot be placed on either side of it.
+
+The exception is a seam. When the surface's first and last rows of poles
+across a direction are the same, the surface closes on itself there, as a
+NURBS cylinder does at angle 0. If the whole of that direction's domain is
+requested, a crossing within rounding of its end is placed at the end. It
+is reported once, though the patches on both sides find it.
+
+A curve with an unbounded domain is clipped first to a ball around the
+surface's patches, as against a bounded curve. The surface is searched over
+the requested box met with its own domain; a periodic B-spline surface is
+not wrapped.
+
+The tests have three oracles:
+
+- the saddle :math:`z = u^2 - v^2`, a degree-2 B-spline exactly, which a
+  line through a known point crosses at that point's parameters;
+- a NURBS cylinder from ``ToBSpline``, crossed where the analytic
+  cylinder's own handler crosses it;
+- a line tangent to the saddle, and one along it, which fail closed.
+
+``tests/occt/IntersectionDifferentialTests.cpp`` compares lines through
+known points of a wavy bicubic patch and lines across a NURBS cylinder with
+OCCT's ``GeomAPI_IntCS``. Both kernels must find the same number of points,
+each of Stereon's within :math:`10^{-7}` of one of OCCT's. The same 48
+lines run without OCCT in the kernel's own tests.
+
 Plane curves
 ------------
 

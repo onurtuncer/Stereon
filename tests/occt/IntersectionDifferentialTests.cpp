@@ -23,6 +23,7 @@
 #include "Json.hpp"
 #include <Extrema_LocateExtCC.hxx>
 #include <Extrema_POnCurv.hxx>
+#include <GeomAPI_IntCS.hxx>
 #include <GeomAPI_IntSS.hxx>
 #include <GeomAPI_ProjectPointOnCurve.hxx>
 #include <GeomAdaptor_Curve.hxx>
@@ -855,5 +856,65 @@ TEST_CASE("3D curve pairs agree with Extrema_LocateExtCC on the corpus",
             return std::abs(p.ParameterA - ta) <= 1e-4 && std::abs(p.ParameterB - tb) <= 1e-4;
         });
         CHECK(found == (distance <= resolution));
+    }
+}
+
+// Curves against B-spline surfaces against GeomAPI_IntCS: lines through
+// known points of a bicubic patch and of a rational cylinder, transverse by
+// construction. The two kernels must find the same number of points, each
+// of Stereon's within 1e-7 of one of OCCT's.
+namespace {
+
+Stereon::BSplineSurface WavyPatch()
+{
+    const std::vector<double> knots{0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0};
+    std::vector<Point3> poles;
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            const double z = 0.4 * std::sin(1.3 * i + 0.7 * j) - 0.1 * i * j;
+            poles.push_back({i / 3.0 * 4.0, j / 3.0 * 3.0, z});
+        }
+    }
+    return *Stereon::MakeBSplineSurface(3, 3, knots, knots, poles, {});
+}
+
+void RequireAgreesWithIntCS(const Line& line, const Stereon::BSplineSurface& surface)
+{
+    const Surface ours{surface};
+    const auto result = Intersect(Curve{line}, ours, ctx);
+    INFO((result.has_value() ? std::string_view{} : result.error().GetMessage()));
+    REQUIRE(result.has_value());
+    GeomAPI_IntCS occt(new Geom_Line(ToOcct(line)), ToOcct(surface));
+    REQUIRE(occt.IsDone());
+    REQUIRE(static_cast<int>(result->Points.size()) == occt.NbPoints());
+    for (const Stereon::CurveSurfacePoint& p : result->Points) {
+        double nearest = std::numeric_limits<double>::infinity();
+        for (int i = 1; i <= occt.NbPoints(); ++i) {
+            nearest = std::min(nearest, occt.Point(i).Distance(ToOcct(p.Position)));
+        }
+        CHECK(nearest <= 1e-7);
+    }
+}
+
+} // namespace
+
+TEST_CASE("lines against B-spline surfaces agree with GeomAPI_IntCS",
+          "[occt][intersect][spline-surface]")
+{
+    const Stereon::BSplineSurface patch = WavyPatch();
+    const Cylinder cylinder{Point3{1.0, -2.0, 0.5}, 2.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+    const auto rational =
+        Stereon::ToBSpline(cylinder, Stereon::Box2{Stereon::Interval{0.0, 2.0 * std::numbers::pi},
+                                                   Stereon::Interval{-20.0, 20.0}});
+    REQUIRE(rational.has_value());
+    for (int k = 0; k < 24; ++k) {
+        INFO("case " << k);
+        const double u = 0.05 + 0.9 * std::fmod(0.37 * (k + 1), 1.0);
+        const double v = 0.05 + 0.9 * std::fmod(0.61 * (k + 1), 1.0);
+        const Vec3 d{0.15 * std::cos(k), 0.15 * std::sin(k), 1.0};
+        const Point3 onPatch = Eval(Surface{patch}, Stereon::Point2{u, v});
+        RequireAgreesWithIntCS(Line{onPatch - 2.0 * d, d}, patch);
+        const Vec3 across{std::cos(0.7 * k), std::sin(0.7 * k), 0.3 * std::cos(1.1 * k)};
+        RequireAgreesWithIntCS(Line{Point3{1.0, -2.0, 0.5 + 0.2 * k - 2.0}, across}, *rational);
     }
 }
