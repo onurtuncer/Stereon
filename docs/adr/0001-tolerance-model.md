@@ -1,6 +1,6 @@
 # ADR-0001: Tolerance model
 
-- **Status:** Accepted
+- **Status:** Accepted; the pair rule (entity pairs use the larger of their tolerances) and the absolute-only ceiling superseded by [ADR-0050](0050-tolerant-topology.md) on 2026-11-10
 - **Date:** 2026-09-28
 - **Revised:** 2026-10-10 (coincidence is not identity; merge policy; three tolerance concepts)
 - **Revised:** 2026-10-14 (purpose-specific policy extension in ADR-0028)

@@ -58,7 +58,7 @@ About 65 working days in sequence. M0 comes first, and M1 needs none of it. M1, 
 | # | Question | Decision |
 | --- | --- | --- |
 | D1 | Snapping (RS-0001 G3, G4) or nominal geometry (O4)? | **Nominal first.** Decide exactly on the input doubles, growing and logging a tolerance where a result needs it. Snapping comes as a `Context` option after RS-0001's go/no-go |
-| D2 | The pair tolerance: the larger of the two (ADR-0001) or the sum (RS-0001 O1)? | **The larger**, as ADR-0001 states; RS-0001's O1 is answered |
+| D2 | The pair tolerance: the larger of the two (ADR-0001) or the sum (RS-0001 O1)? | **The larger**, as ADR-0001 states; RS-0001's O1 is answered. Superseded by ADR-0050 (accepted 2026-11-10): the sum, with the prototype's fixtures rerun when step 0.2-T1 moves the code |
 | D3 | How are the prototype's edges certified? | **Interval bounds for the analytic branches now** (M4), stored as `Certified` |
 | D4 | What are "loosened inputs"? | **Two fixture families**: loosened edges and vertices (raised tolerances, geometry perturbed within them) for ADR-0001, and surfaces moved within RS-0001's admissible placements for the corpus |
 | D5 | The 1e-2 mm variant equals the ceiling | **That variant raises the ceiling in its `Context`**, as ADR-0001 says a caller does |

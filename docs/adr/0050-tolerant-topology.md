@@ -1,8 +1,9 @@
 # ADR-0050: Tolerant topology
 
-- **Status:** Proposed. On acceptance it supersedes two rules of ADR-0001: the pair rule (the larger of two tolerances becomes their sum) and the ceiling (an absolute ceiling becomes one relative to the model, capped by the absolute one). The rest of ADR-0001 stands.
+- **Status:** Accepted; the verification below remains open. It supersedes two rules of ADR-0001: the pair rule (the larger of two tolerances becomes their sum) and the ceiling (an absolute ceiling becomes one relative to the model, capped by the absolute one). The rest of ADR-0001 stands.
 - **Date:** 2026-11-09
 - **Revised:** 2026-11-10 (numbered 0050; aligned with what ADR-0001, ADR-0009, ADR-0018 and the code already provide; the owner's decisions on the pair rule, the ceiling and pcurve authority)
+- **Accepted:** 2026-11-10 by Onur Tuncer, as revised on that date and without change, before step 0.2-T1, which builds on it. The code keeps ADR-0001's pair rule and absolute ceiling until 0.2-T1 moves it; the checklist under *Verification* is the evidence still owed, and a failure there reopens this ADR.
 - **Owner:** Onur Tuncer
 - **Phase:** 2 (v0.2 "Intersections", interim steps 0.2-T1 and 0.2-T2), completed in v0.3 (0.3-T3)
 - **Related:** ADR-0001, ADR-0004, ADR-0006, ADR-0009, ADR-0010, ADR-0018, ADR-0025, ADR-0027, ADR-0028, ADR-0029, ADR-0030, ADR-0044, ADR-0051
@@ -159,7 +160,7 @@ Interim steps (roadmap revision 0.5):
 | 0.2-T2 | v0.2 | Intersection results that create edges report the certified fit error and the gap that become tolerances, with their causes (ADR-0029 §6, ADR-0010) |
 | 0.3-T3 | v0.3 | Pcurve synthesis for every face coedge; `tighten()` and `heal()`; certified G01/G02 bounds; the tolerant regression suite run through validation in CI |
 
-Accepted when:
+Verified when:
 
 - [ ] The regression suite of tolerant models passes the Geometric checks: hand-built gaps at 1e-6, 1e-4 and 1e-2 of the bounding diagonal, the last rejected where it exceeds `res_max`.
 - [ ] No tolerance is written outside `SetTolerance`, and every growth carries a cause from the closed set (a CI check).
