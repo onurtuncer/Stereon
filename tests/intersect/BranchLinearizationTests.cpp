@@ -643,16 +643,63 @@ TEST_CASE("branch products refuse bad input and other surfaces",
                   .error()
                   .GetCode() == ErrorCode::InvalidInput);
     }
-    SECTION("a B-spline surface has no bindings yet: NotSupported")
+    SECTION("a surface with no bindings, an extrusion: NotSupported")
     {
-        const std::vector<double> knots{0.0, 0.0, 1.0, 1.0};
-        const auto patch = Stereon::MakeBSplineSurface(
-            1, 1, knots, knots,
-            {{0.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {1.0, 0.0, 0.0}, {1.0, 1.0, 0.0}}, {});
-        REQUIRE(patch.has_value());
-        const auto result = Stereon::IntersectJvp(Surface{c.Cut}, bindings, Surface{*patch}, none,
-                                                  *at, samples, sensitivity);
+        const Surface extrusion{Stereon::ExtrusionSurface(
+            Stereon::Curve{Stereon::Line{Point3{}, Vec3{1.0, 0.0, 0.0}}}, Vec3{0.0, 1.0, 0.0})};
+        const auto result = Stereon::IntersectJvp(Surface{c.Cut}, bindings, extrusion, none, *at,
+                                                  samples, sensitivity);
         REQUIRE(result.has_value());
         CHECK(result->GetStatus() == DerivativeStatus::NotSupported);
+    }
+}
+
+TEST_CASE("two B-spline patches' branch moves with a pole as its closed form says",
+          "[intersect][linearization][branch][spline-surface]")
+{
+    // A: the flat bilinear patch z = 0 over the unit square, pole (i, j) at
+    // (i, j, 0). B: the vertical patch x = 0.5, (u, v) to (0.5, u, 2 v - 1).
+    // They meet along x = 0.5, z = 0. Raising A's pole (1, 1), index 3, by
+    // p makes A's height p u v: at the branch point (0.5, y, 0), which the
+    // normal-plane constraint keeps at its y, the point rises by 0.5 y,
+    // B's v by half that, and nothing else moves.
+    const std::vector<double> knots{0.0, 0.0, 1.0, 1.0};
+    const auto a = Stereon::MakeBSplineSurface(
+        1, 1, knots, knots, {{0.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {1.0, 0.0, 0.0}, {1.0, 1.0, 0.0}},
+        {});
+    const auto b = Stereon::MakeBSplineSurface(
+        1, 1, knots, knots, {{0.5, 0.0, -1.0}, {0.5, 0.0, 1.0}, {0.5, 1.0, -1.0}, {0.5, 1.0, 1.0}},
+        {});
+    REQUIRE(a.has_value());
+    REQUIRE(b.has_value());
+    const auto at = Stereon::Intersect(Surface{*a}, Surface{*b}, ctx);
+    INFO(IntersectTest::ErrorText(at));
+    REQUIRE(at.has_value());
+    REQUIRE_FALSE(at->Branches.empty());
+    ParameterSet set;
+    const ParameterId p = *set.Add("p", ParameterQuantity::Length, 1.0);
+    SensitivityContext sensitivity(std::move(set));
+    REQUIRE(sensitivity.SetSeed(std::vector<double>{1.0}).has_value());
+    const std::vector<SurfaceBinding> lift{{p, SurfaceComponent::PoleZ, 3}};
+    const std::vector<BranchSample> samples = SamplesOf(*at);
+    const auto jvp =
+        Stereon::IntersectJvp(Surface{*a}, lift, Surface{*b}, {}, *at, samples, sensitivity);
+    INFO(IntersectTest::ErrorText(jvp));
+    REQUIRE(jvp.has_value());
+    REQUIRE(jvp->GetStatus() == DerivativeStatus::Valid);
+    const auto values = *jvp->GetValues();
+    REQUIRE(values.size() == Values * samples.size());
+    for (std::size_t k = 0; k < samples.size(); ++k) {
+        const auto lin = Stereon::Linearize(Surface{*a}, Surface{*b},
+                                            at->Branches[samples[k].Branch], samples[k].Parameter);
+        REQUIRE(lin.has_value());
+        const double y = lin->Position.Y;
+        CHECK_THAT(values[Values * k], WithinAbs(0.0, 1e-12));
+        CHECK_THAT(values[Values * k + 1], WithinAbs(0.0, 1e-12));
+        CHECK_THAT(values[Values * k + 2], WithinAbs(0.5 * y, 1e-12));
+        CHECK_THAT(values[Values * k + 3], WithinAbs(0.0, 1e-12));
+        CHECK_THAT(values[Values * k + 4], WithinAbs(0.0, 1e-12));
+        CHECK_THAT(values[Values * k + 5], WithinAbs(0.0, 1e-12));
+        CHECK_THAT(values[Values * k + 6], WithinAbs(0.25 * y, 1e-12));
     }
 }

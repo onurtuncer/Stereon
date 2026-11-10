@@ -775,18 +775,228 @@ TEST_CASE("invalid sensitivity input is refused, and other surfaces are NotSuppo
                                            CurveSurfaceIntersection{}, model.Sensitivity)) ==
                 ErrorCode::InvalidInput);
     }
-    // A B-spline surface has no bindings yet: a NotSupported status, never
-    // a value.
+    // A B-spline surface's poles: none past its last, no radius on it, a
+    // weight moved by a dimensionless parameter, and no pole on a plane.
     const std::vector<double> knots{0.0, 0.0, 1.0, 1.0};
     const auto patch = Stereon::MakeBSplineSurface(
         1, 1, knots, knots, {{0.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {1.0, 0.0, 0.0}, {1.0, 1.0, 0.0}},
         {});
     REQUIRE(patch.has_value());
-    const auto unsupported = Stereon::IntersectJvp(up, model.LineBindings, Surface{*patch}, {},
+    for (const SurfaceBinding& bad : {SurfaceBinding{length, SurfaceComponent::PoleZ, 4},
+                                      SurfaceBinding{length, SurfaceComponent::Radius},
+                                      SurfaceBinding{length, SurfaceComponent::PoleWeight, 0}}) {
+        const std::vector<SurfaceBinding> bindings{bad};
+        REQUIRE(code(Stereon::IntersectJvp(up, model.LineBindings, Surface{*patch}, bindings,
+                                           CurveSurfaceIntersection{}, model.Sensitivity)) ==
+                ErrorCode::InvalidInput);
+    }
+    const std::vector<SurfaceBinding> pole{{length, SurfaceComponent::PoleZ, 0}};
+    REQUIRE(code(Stereon::IntersectJvp(up, model.LineBindings, Surface{ground}, pole, at,
+                                       model.Sensitivity)) == ErrorCode::InvalidInput);
+    // A surface with no bindings, an extrusion: a NotSupported status,
+    // never a value.
+    const Surface extrusion{Stereon::ExtrusionSurface(
+        Stereon::Curve{Line{Point3{}, Vec3{1.0, 0.0, 0.0}}}, Vec3{0.0, 1.0, 0.0})};
+    const auto unsupported = Stereon::IntersectJvp(up, model.LineBindings, extrusion, {},
                                                    CurveSurfaceIntersection{}, model.Sensitivity);
     REQUIRE(unsupported.has_value());
     REQUIRE(unsupported->GetStatus() == DerivativeStatus::NotSupported);
     REQUIRE_FALSE(unsupported->GetValues().has_value());
+}
+
+namespace {
+
+using Stereon::BSplineSurface;
+
+/// The bilinear patch over the unit square in the plane z = 0, pole (i, j)
+/// at (i, j, 0), rational with weights (1, 2, 3, 4) when asked.
+BSplineSurface FlatPatch(const bool rational)
+{
+    const std::vector<double> knots{0.0, 0.0, 1.0, 1.0};
+    return *Stereon::MakeBSplineSurface(
+        1, 1, knots, knots, {{0.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {1.0, 0.0, 0.0}, {1.0, 1.0, 0.0}},
+        rational ? std::vector<double>{1.0, 2.0, 3.0, 4.0} : std::vector<double>{});
+}
+
+/// A bicubic patch over [0, 4] x [0, 3], its heights random, its weights
+/// random in [0.5, 2] when rational.
+BSplineSurface RandomPatch(const bool rational)
+{
+    const std::vector<double> knots{0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0};
+    std::vector<Point3> poles;
+    std::vector<double> weights;
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            poles.push_back({i / 3.0 * 4.0, j / 3.0 * 3.0, *rc::gen::inRange(-5, 6) / 10.0});
+            if (rational) {
+                weights.push_back(*rc::gen::inRange(5, 21) / 10.0);
+            }
+        }
+    }
+    return *Stereon::MakeBSplineSurface(3, 3, knots, knots, std::move(poles), std::move(weights));
+}
+
+/// The line's six bindings, then each pole's components: x, y, z, and the
+/// weight of a rational patch.
+Model SplineSurfaceModel(const std::vector<double>& references,
+                         const std::vector<std::size_t>& poles, const bool rational)
+{
+    ParameterSet set;
+    std::vector<ParameterId> ids;
+    const std::size_t perPole = rational ? 4 : 3;
+    for (std::size_t k = 0; k < references.size(); ++k) {
+        const bool weight = k >= 6 && (k - 6) % perPole == 3;
+        ids.push_back(*set.Add(
+            "p" + std::to_string(k),
+            weight ? ParameterQuantity::Dimensionless : ParameterQuantity::Length, references[k]));
+    }
+    Model model{SensitivityContext(std::move(set)), {}, {}};
+    for (std::size_t k = 0; k < 6; ++k) {
+        model.LineBindings.push_back({ids[k], static_cast<LineComponent>(k)});
+    }
+    for (std::size_t k = 6; k < references.size(); ++k) {
+        const std::size_t c = (k - 6) % perPole;
+        model.SurfaceBindings.push_back(
+            {ids[k], static_cast<SurfaceComponent>(static_cast<int>(SurfaceComponent::PoleX) + c),
+             poles[(k - 6) / perPole]});
+    }
+    return model;
+}
+
+/// The line and the patch moved by `step` times the seed.
+std::pair<Line, BSplineSurface> MovedPatch(Line line, BSplineSurface patch, const Model& model,
+                                           const std::vector<double>& seed,
+                                           const std::vector<double>& references, const double step)
+{
+    const auto d = [&](const std::size_t k) { return step * seed[k] * references[k]; };
+    line.Origin = line.Origin + Vec3{d(0), d(1), d(2)};
+    line.Direction = line.Direction + Vec3{d(3), d(4), d(5)};
+    for (std::size_t k = 0; k < model.SurfaceBindings.size(); ++k) {
+        const SurfaceBinding& b = model.SurfaceBindings[k];
+        Point3& pole = patch.Poles[b.Pole];
+        switch (b.Component) {
+        case SurfaceComponent::PoleX:
+            pole.X += d(6 + k);
+            break;
+        case SurfaceComponent::PoleY:
+            pole.Y += d(6 + k);
+            break;
+        case SurfaceComponent::PoleZ:
+            pole.Z += d(6 + k);
+            break;
+        default:
+            patch.Weights[b.Pole] += d(6 + k);
+            break;
+        }
+    }
+    return {line, patch};
+}
+
+} // namespace
+
+TEST_CASE("the crossing of a B-spline surface moves with its poles as its closed form says",
+          "[intersect][linearization][spline-surface]")
+{
+    // A vertical line through (0.3, 0.4) crosses the flat patch at u = 0.3,
+    // v = 0.4. Raising pole (1, 1), index 3, by p makes the patch's height
+    // p R_11(u, v): the point rises by R_11 = u v w_11 / W, t with it, and
+    // (u, v) stay, the patch's x and y being unmoved.
+    const Line up{Point3{0.3, 0.4, -1.0}, Vec3{0.0, 0.0, 1.0}};
+    for (const bool rational : {false, true}) {
+        INFO((rational ? "rational" : "polynomial"));
+        const BSplineSurface patch = FlatPatch(rational);
+        const auto at = Stereon::Intersect(Stereon::Curve{up}, Surface{patch}, ctx);
+        REQUIRE(at.has_value());
+        REQUIRE(at->Points.size() == 1u);
+        ParameterSet set;
+        const ParameterId p = *set.Add("p", ParameterQuantity::Length, 1.0);
+        SensitivityContext sensitivity(std::move(set));
+        REQUIRE(sensitivity.SetSeed(std::vector<double>{1.0}).has_value());
+        const std::vector<SurfaceBinding> lift{{p, SurfaceComponent::PoleZ, 3}};
+        const auto jvp = Stereon::IntersectJvp(up, {}, Surface{patch}, lift, *at, sensitivity);
+        REQUIRE(jvp.has_value());
+        REQUIRE(jvp->GetStatus() == DerivativeStatus::Valid);
+        const auto values = *jvp->GetValues();
+        REQUIRE(values.size() == Values);
+        const Stereon::Point2 uv = at->Points[0].OnSurface;
+        const Vec3 rate = Stereon::PoleVelocity(patch, 3, Stereon::PoleComponent::Z, uv);
+        const double w = rational ? 4.0 / (1.0 * (1 - uv.X) * (1 - uv.Y) + 2.0 * (1 - uv.X) * uv.Y +
+                                           3.0 * uv.X * (1 - uv.Y) + 4.0 * uv.X * uv.Y)
+                                  : 1.0;
+        CHECK(std::abs(rate.Z - uv.X * uv.Y * w) <= 1e-15);
+        CHECK(std::abs(values[0]) <= 1e-15);
+        CHECK(std::abs(values[1]) <= 1e-15);
+        CHECK(std::abs(values[2] - rate.Z) <= 1e-15);
+        CHECK(std::abs(values[3] - rate.Z) <= 1e-15);
+        CHECK(std::abs(values[4]) <= 1e-15);
+        CHECK(std::abs(values[5]) <= 1e-15);
+    }
+}
+
+TEST_CASE("B-spline surface crossings: second-order Taylor decay and the transpose",
+          "[intersect][linearization][spline-surface][property]")
+{
+    rc::prop("in the line, and in the poles and weights of the patch", [] {
+        const bool rational = *rc::gen::arbitrary<bool>();
+        const BSplineSurface patch = RandomPatch(rational);
+        const double u = *rc::gen::inRange(2, 9) / 10.0;
+        const double v = *rc::gen::inRange(2, 9) / 10.0;
+        const int k = *rc::gen::inRange(0, 64);
+        const Vec3 d{0.15 * std::cos(k), 0.15 * std::sin(k), 1.0};
+        const Point3 on = Eval(Surface{patch}, Stereon::Point2{u, v});
+        const Line line{on - 2.0 * d, d};
+        const std::size_t count = Meet(line, patch).Points.size();
+        RC_PRE(count >= 1u && WellConditioned(line, patch, count));
+        // Every point inside the domain, so that a step leaves the count.
+        for (const CurveSurfacePoint& p : Meet(line, patch).Points) {
+            RC_PRE(p.OnSurface.X > 0.05 && p.OnSurface.X < 0.95 && p.OnSurface.Y > 0.05 &&
+                   p.OnSurface.Y < 0.95);
+        }
+        std::vector<std::size_t> poles;
+        for (int n = 0; n < 3; ++n) {
+            poles.push_back(*rc::gen::inRange<std::size_t>(0, patch.Poles.size()));
+        }
+        const auto [references, seed] = RandomSeed(6 + poles.size() * (rational ? 4 : 3));
+        Model model = SplineSurfaceModel(references, poles, rational);
+        const std::vector<double> jv = Jvp(model, line, patch, seed);
+        const std::vector<double> base = Points(line, patch);
+        const auto residual = [&](const double h) {
+            const auto [l, s] = MovedPatch(line, patch, model, seed, references, h);
+            const std::vector<double> moved = Points(l, s);
+            RC_ASSERT(moved.size() == base.size());
+            std::vector<double> r(base.size());
+            for (std::size_t i = 0; i < base.size(); ++i) {
+                r[i] = moved[i] - base[i] - h * jv[i];
+            }
+            return Norm(r);
+        };
+        const double coarse = residual(1e-2);
+        const double fine = residual(1e-3);
+        RC_ASSERT(fine <= coarse / 30.0 + 1e-10 * (1.0 + Norm(base)));
+
+        std::vector<double> w;
+        for (std::size_t i = 0; i < jv.size(); ++i) {
+            w.push_back(*rc::gen::inRange(-10, 11) / 10.0);
+        }
+        RC_ASSERT(model.Sensitivity.SetAdjoint(w).has_value());
+        const auto vjp =
+            Stereon::IntersectVjp(line, model.LineBindings, Surface{patch}, model.SurfaceBindings,
+                                  Meet(line, patch), model.Sensitivity);
+        RC_ASSERT(vjp.has_value());
+        const auto jtw = *vjp->GetValues();
+        double left = 0.0;
+        double right = 0.0;
+        double scale = 0.0;
+        for (std::size_t i = 0; i < jv.size(); ++i) {
+            left += jv[i] * w[i];
+            scale += std::abs(jv[i] * w[i]);
+        }
+        for (std::size_t i = 0; i < seed.size(); ++i) {
+            right += seed[i] * jtw[i];
+            scale += std::abs(seed[i] * jtw[i]);
+        }
+        RC_ASSERT(std::abs(left - right) <= 1e-12 * (1.0 + scale));
+    });
 }
 
 TEST_CASE("JVP and VJP reject intersection results from stale geometry",
