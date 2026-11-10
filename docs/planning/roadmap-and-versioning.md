@@ -39,7 +39,7 @@ Interim steps break a release gate into reviewable stages with their own evidenc
 | 0.3-F1 | v0.3 | ADR-0051: the `ShapeQueries` workspace keyed by snapshot and numerical context; tolerance-widened convexity; the face adjacency graph; loops and vertex convexity | 0.2-T1; ADR-0036, ADR-0037 | Synthetic-corpus edges classified as constructed, or `indeterminate` where an injected gap makes them so; no stale result in the edit fuzz test |
 | 0.3-F2 | v0.3 | ADR-0051: canonical classification (analytic type check; freeform plane/sphere/cylinder/cone/torus fits with boundary verification); face roles; UV sampling; a reference recogniser in a separate library | 0.3-F1 | An in-kernel NURBS cylinder reports `Cylinder` within `res_abs`; the reference recogniser uses only the public API |
 
-The v0.4 planar Boolean gate requires 0.3-F1; the v0.6 tolerance-growth gate and the v0.8 STEP gate complete ADR-0050's and ADR-0051's acceptance.
+The v0.4 planar Boolean gate requires 0.3-F1; the v0.6 tolerance-growth gate and the v0.8 STEP gate close ADR-0050's verification (accepted 2026-11-10) and complete ADR-0051's acceptance.
 
 ## Milestones and exit evidence
 
