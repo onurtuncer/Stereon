@@ -51,7 +51,8 @@ Out of scope for v1.0: parametric feature history, sheet metal, drafting, variab
 | External polymorphism | Geometry types (`Line`, `BSplineCurve`, `Cylinder`, `BSplineSurface`, …) are plain structs with no base class. `Curve` and `Surface` wrappers erase them; any type that satisfies the concept plugs in. A closed `std::variant` fast path keeps hot loops free of virtual dispatch. |
 | Data-oriented topology | Vertices, edges, coedges, loops, faces, shells and solids live in structure-of-arrays stores addressed by typed 32-bit handles. Radial coedge rings support non-manifold intermediate results. |
 | Immutable shapes | A mutable `ShapeBuilder` freezes into an immutable `Shape`. Copy-on-write pages make snapshots and undo cheap and make shapes safe to share across threads. |
-| Explicit tolerances | A global model resolution plus per-edge and per-vertex tolerances that only grow through explicit, logged operations. |
+| Explicit tolerances | A global model resolution plus per-edge and per-vertex tolerances that only grow through explicit operations with a typed cause, bounded by a ceiling relative to the model ([ADR-0001](docs/adr/0001-tolerance-model.md), [ADR-0050](docs/adr/0050-tolerant-topology.md)). |
+| Shape queries for consumers | Face adjacency with tolerance-aware edge convexity and canonical surface identity (a NURBS that is really a cylinder reports as one), shared by Booleans, recognisers and machining services; feature recognisers live above the kernel ([ADR-0051](docs/adr/0051-face-adjacency-and-canonical-surfaces.md)). |
 | History maps | Every operation reports which input entities generated, modified or deleted which output entities. |
 | C++26 throughout | Contracts on every geometric operation, static reflection for serialisation and bindings, `std::execution` for parallelism, `std::simd` in evaluators. |
 
@@ -142,8 +143,8 @@ Each phase ends with an exit gate checked in CI. The [detailed roadmap and versi
 | --- | --- | --- |
 | Phase 0 / 0.0.x | Foundations (M1): build/CI, math, predicates, type erasure, controlled-edit prototype, debug viewer, diagnostics and minimal persistence prototype | ✅ Exit gate met |
 | v0.1 "Geometry" | Analytic/NURBS evaluation, fitting and projection; geometry persistence and numerical-domain checks (M1/M4) | ✅ Released as 0.1.0 |
-| v0.2 "Intersections" | Curve/curve, curve/surface and surface/surface services; explicit tangency, overlap, coincidence and unresolved outcomes (M2/M4); intersection linearisation for shape sensitivities (ADR-0021) | 🚧 In progress |
-| v0.3 "Solids" | Planar construction, sectioning and imprinting (M2); curved/trimmed construction, primitives, extrude/revolve/sweep/loft, sewing, history and native persistence (M4/M6); certified discretisation, ray–face queries and tri-dexel conversion of analytic solids (M7) | Planned |
+| v0.2 "Intersections" | Curve/curve, curve/surface and surface/surface services; explicit tangency, overlap, coincidence and unresolved outcomes (M2/M4); intersection linearisation for shape sensitivities (ADR-0021); tolerant-topology discipline where tolerances originate (ADR-0050, steps 0.2-T1/T2) | 🚧 In progress |
+| v0.3 "Solids" | Planar construction, sectioning and imprinting (M2); curved/trimmed construction, primitives, extrude/revolve/sweep/loft, sewing, history and native persistence (M4/M6); certified discretisation, ray–face queries and tri-dexel conversion of analytic solids (M7); tightening and healing (ADR-0050, 0.3-T3); face adjacency and canonical surface queries (ADR-0051, 0.3-F1/F2) | Planned |
 | v0.4 "Planar Booleans" | Validated union/cut/common on the declared planar/polyhedral subset, with lineage and tags (M3) | Planned |
 | v0.5 "Curved Booleans" | Bounded analytic/trimmed-spline Boolean integration; seams, poles, tangencies and certificates (M4); tri-dexel conversion and closest-point queries on trimmed B-spline faces (M7) | Planned |
 | v0.6 "Booleans" | Broad declared real-part corpus, robustness, comparison, tolerance-growth and determinism gates (M3/M4) | Planned |
