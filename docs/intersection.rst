@@ -281,7 +281,8 @@ A declared configuration says so in the result:
 - **A tangent circle declared within the tolerance** lies up to the gap
   away from one surface, by construction. It is certified against the pair
   tolerance, not the resolution, and its ``Bound`` records the deviation
-  actually proved.
+  actually proved, with ``BoundCause`` ``TolerantCoincidence`` when that is
+  past the resolution.
 
 The generated corpus sweeps (``corpus/analytic-ssi/sweep-*``) found both
 defects. Concentric spheres whose radii differed within the tolerance were
@@ -1386,6 +1387,15 @@ their pcurves, over the whole range, within the Context's resolution. A
 branch over an unbounded range stays uncertified until a face's loops
 bound it. A branch that cannot be certified fails the intersection with
 ``CertificationFailed``, never a partial success (ADR-0029).
+
+The bound is the tolerance an edge made from the branch must have, and
+``BoundCause`` says why it is that large (ADR-0050, step 0.2-T2):
+``CertificateWidening`` for the error of a curve computed or fitted, within
+the resolution, and ``TolerantCoincidence`` for a tangency declared within
+the pair tolerance, whose bound is past the resolution. A tolerant overlap's
+``Distance`` is the gap the edges on the other side grow to cover, cause
+``TolerantCoincidence``. The corpus tests check this evidence on every case
+(``IntersectTest::CheckToleranceEvidence``).
 
 The proof is ``CertifyDeviation(curve, surface, pcurve, range, target)``
 in ``Stereon.Surface``, which the topology's cached edge curves use too.

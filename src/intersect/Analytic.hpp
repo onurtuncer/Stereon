@@ -158,6 +158,11 @@ struct LineQuadratic {
     STEREON_TRY(const DeviationCertificate onB,
                 CertifyDeviation(branch.Curve3d, b, branch.OnB, branch.Range, target));
     branch.Bound = std::max(onA.Bound, onB.Bound);
+    // A bound past the resolution is the declaration's gap, not the fit's
+    // (ADR-0050): the edge made from it grows for a tolerant coincidence.
+    if (declared > 0.0 && branch.Bound > ctx.GetResolution()) {
+        branch.BoundCause = ToleranceCause::TolerantCoincidence;
+    }
     return {};
 }
 

@@ -69,7 +69,7 @@ Every surface has a `tolerance` of at least the resolution, 1e-5 mm (ADR-0001). 
 
 The seed cases assume these provisional rules until RS-0001 settles them:
 
-1. A case's tolerance is the pair's: the generator writes the degeneracy's τ on both surfaces, and the tests read the larger of the two values written as the pair tolerance, not their sum. Surfaces carry no tolerance of their own (ADR-0050); its sum rule, which replaced ADR-0001's larger of the two on 2026-11-10, applies to vertices and edges, and in the Boolean to faces through their boundaries. `plane-plane/unequal-tolerances` is decided alike under both rules.
+1. A case's tolerance is the pair's: the generator writes the degeneracy's τ on both surfaces, and the tests read the larger of the two values written as the pair tolerance, not their sum (the owner's decision of 2026-11-10). Surfaces carry no tolerance of their own (ADR-0050); its sum rule, which replaced ADR-0001's larger of the two on 2026-11-10, applies to vertices and edges, and in the Boolean to faces through their boundaries. `plane-plane/unequal-tolerances` is decided alike under both rules.
 2. In a snap, the surface with the higher operand index moves, by the smallest admissible displacement. A plane moves along its normal. A sphere or cylinder moves its centre or axis before changing its radius.
 3. Pairs are decided in operand order (`A-B`, `A-C`, `B-C`, …), and a snap is accepted only if every surface's total displacement stays within its tolerance (G4).
 

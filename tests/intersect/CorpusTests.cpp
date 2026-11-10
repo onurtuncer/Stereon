@@ -221,6 +221,7 @@ void CheckCase(const std::filesystem::path& file)
     if (!result) {
         return;
     }
+    IntersectTest::CheckToleranceEvidence(*result, tolerance);
     if (expected["nominal"]["tier"].AsString() == "B") {
         REQUIRE(IsSkewCylinders(surfaces));
         const std::string want = expected["nominal"]["configuration"].AsString();
@@ -277,4 +278,69 @@ TEST_CASE("every pair case of the corpus is decided as required", "[intersect][c
     }
     // The 1024 generated sweeps and the hand-written pairs.
     REQUIRE(count >= 1050);
+}
+
+namespace {
+
+/// Half the side of the bounded parameter boxes, in mm: far beyond every
+/// case's geometry, so that a bounded box cuts only what runs to infinity.
+constexpr double BoundedReach = 1000.0;
+
+/// The surface's domain with every unbounded direction cut to the reach:
+/// a plane's square, a cylinder's turn over a finite height, a sphere's
+/// own chart.
+Box2 BoundedBoxOf(const Surface& surface)
+{
+    const Box2 domain = Domain(surface);
+    const auto cut = [](const Stereon::Interval& i) {
+        return i.IsBounded() ? i : Stereon::Interval{-BoundedReach, BoundedReach};
+    };
+    return Box2{cut(domain.X), cut(domain.Y)};
+}
+
+} // namespace
+
+TEST_CASE("every pair case over bounded boxes carries its tolerance evidence",
+          "[intersect][corpus][tolerance]")
+{
+    // ADR-0050, step 0.2-T2: over whole surfaces a line or a ruling has an
+    // unbounded range and makes no edge, so the evidence check passes it
+    // over. Over bounded boxes every branch is a segment an edge could be
+    // made from, certified with its bound and cause. A handler that cannot
+    // answer a bounded box fails closed, never with a wrong result.
+    std::size_t checked = 0;
+    std::size_t lines = 0;
+    for (const std::string& family : Families()) {
+        for (const std::filesystem::path& file : CasesIn(family)) {
+            const JsonValue c = StereonTest::ReadJsonFile(file);
+            if (c["operation"]["name"].AsString() != "intersect" || c["expected"].Has("kernel")) {
+                continue;
+            }
+            INFO(c["id"].AsString());
+            const JsonValue& surfaces = c["inputs"]["surfaces"];
+            const double tolerance =
+                std::max(surfaces[0]["tolerance"].AsNumber(), surfaces[1]["tolerance"].AsNumber());
+            const Surface a = SurfaceOf(surfaces[0]);
+            const Surface b = SurfaceOf(surfaces[1]);
+            const auto result =
+                Intersect(a, BoundedBoxOf(a), b, BoundedBoxOf(b), tolerance, IntersectTest::ctx);
+            if (!result) {
+                INFO(IntersectTest::ErrorText(result));
+                const ErrorCode code = result.error().GetCode();
+                CHECK((code == ErrorCode::IntersectionFailed || code == ErrorCode::NotSupported ||
+                       code == ErrorCode::NotImplemented));
+                continue;
+            }
+            for (const Stereon::IntersectionBranch& branch : result->Branches) {
+                CHECK(branch.Range.IsBounded());
+                lines += CurveOf(branch) == "line" ? std::size_t{1} : std::size_t{0};
+            }
+            IntersectTest::CheckToleranceEvidence(*result, tolerance);
+            ++checked;
+        }
+    }
+    // Most cases answer, and the lines and rulings the whole-surface run
+    // passes over are among them.
+    REQUIRE(checked >= 1000);
+    REQUIRE(lines >= 100);
 }

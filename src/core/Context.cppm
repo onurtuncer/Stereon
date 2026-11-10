@@ -276,6 +276,51 @@ private:
     JournalSink m_JournalSink;
 };
 
+/// Why a tolerance changed: ADR-0050's closed set of growth causes, and
+/// Tighten for a tolerance lowered to the error achieved. Every change
+/// names one; free text is detail, never the cause.
+enum class ToleranceCause : std::uint8_t {
+    /// An intersection curve not meeting an existing edge or vertex.
+    AbsorbGap,
+    /// ADR-0001's merge policy: vertices identified as one.
+    MergeVertices,
+    /// A Spatial edge upgraded to Intersection or Exact (ADR-0009 §1).
+    PromoteEdge,
+    /// The edge tolerances that cover a tolerant coincidence (ADR-0029 §6).
+    TolerantCoincidence,
+    /// A cache or pcurve certificate widened (ADR-0009 §4).
+    CertificateWidening,
+    /// An uncertified branch widened within the healing budget (ADR-0010).
+    HealingBudget,
+    /// A tolerance read from a file.
+    Import,
+    /// A tolerance lowered to the error achieved; never a growth.
+    Tighten,
+};
+
+[[nodiscard]] constexpr std::string_view ToString(const ToleranceCause cause) noexcept
+{
+    switch (cause) {
+    case ToleranceCause::AbsorbGap:
+        return "AbsorbGap";
+    case ToleranceCause::MergeVertices:
+        return "MergeVertices";
+    case ToleranceCause::PromoteEdge:
+        return "PromoteEdge";
+    case ToleranceCause::TolerantCoincidence:
+        return "TolerantCoincidence";
+    case ToleranceCause::CertificateWidening:
+        return "CertificateWidening";
+    case ToleranceCause::HealingBudget:
+        return "HealingBudget";
+    case ToleranceCause::Import:
+        return "Import";
+    case ToleranceCause::Tighten:
+        return "Tighten";
+    }
+    return "ToleranceCause";
+}
+
 /// ADR-0050's pair tolerance of two entities: the sum of theirs, rounded up
 /// so that it is never below the exact sum.
 [[nodiscard]] inline double PairTolerance(const double a, const double b) noexcept

@@ -188,6 +188,7 @@ void CheckCase(const JsonValue& c, const bool swapped)
         CHECK((expected.Has("may_fail_closed") && FailsClosed(result.error().GetCode())));
         return;
     }
+    IntersectTest::CheckToleranceEvidence(*result, tolerance);
     CheckResult(*result, expected, a, b, tolerance, c["inputs"]["scale"].AsNumber());
 }
 

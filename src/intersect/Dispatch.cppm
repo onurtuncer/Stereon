@@ -81,7 +81,9 @@ struct IntersectionPoint {
 /// on the shared parameter (ADR-0009), the parameter range of the branch
 /// inside the requested domains, how the surfaces meet along it, the side
 /// transition across it, and the certified bound on its deviation from both
-/// surfaces (ADR-0009 section 4; infinite when not certified).
+/// surfaces (ADR-0009 section 4; infinite when not certified) with what made
+/// it that large: the tolerance an edge made from the branch must have, and
+/// its cause (ADR-0050).
 struct IntersectionBranch {
     Curve Curve3d;
     Curve2d OnA;
@@ -90,6 +92,13 @@ struct IntersectionBranch {
     ContactType Contact = ContactType::Crossing;
     SideTransition Transition = SideTransition::Unresolved;
     double Bound = std::numeric_limits<double>::infinity();
+    /// CertificateWidening: the Bound is the certified error of the curve
+    /// computed or fitted, within the Context's resolution.
+    /// TolerantCoincidence: the handler declared the branch within the pair
+    /// tolerance (a tangency within it, ADR-0029 section 6), and the Bound,
+    /// past the resolution, covers how far its curve lies from a surface by
+    /// construction.
+    ToleranceCause BoundCause = ToleranceCause::CertificateWidening;
 
     /// True when the bound is a proved one.
     [[nodiscard]] bool IsCertified() const noexcept
@@ -129,6 +138,8 @@ struct OverlapRegion {
     bool SameOrientation = true;
     CoincidenceEvidence Evidence = CoincidenceEvidence::Exact;
     /// The distance between tolerantly coincident supports; 0 when exact.
+    /// The gap the edges on the other side grow to cover, cause
+    /// TolerantCoincidence (ADR-0050).
     double Distance = 0.0;
     /// True when the overlap fills both requested domains.
     bool FullDomain = false;

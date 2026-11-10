@@ -331,8 +331,9 @@ void AddBranch(Networks& a, Networks& b, const Shape& sa, const Shape& sb, const
 /// The branch an edge of one face makes on a coincident face of the other
 /// body: its own curve, its pcurve on the coincident plane, the edge's own
 /// pcurve as the second, over the edge's range, its bound the edge's
-/// tolerance and the planes' distance. NotSupported for an edge without a
-/// line, circle or ellipse of its own.
+/// tolerance and the planes' distance, a tolerant coincidence's gap when
+/// that is above zero (ADR-0050). NotSupported for an edge without a line,
+/// circle or ellipse of its own.
 [[nodiscard]] Result<IntersectionBranch> BoundaryBranch(const Shape& shape, const CoedgeId coedge,
                                                         const Plane& onto, const double distance)
 {
@@ -354,6 +355,9 @@ void AddBranch(Networks& a, Networks& b, const Shape& sa, const Shape& sb, const
     branch.Contact = ContactType::Overlap;
     branch.Transition = SideTransition::Unresolved;
     branch.Bound = ToleranceOf(shape, edge) + distance;
+    if (distance > 0.0) { // STEREON-LINT-ALLOW(epsilon): exactly coincident or not
+        branch.BoundCause = ToleranceCause::TolerantCoincidence;
+    }
     return branch;
 }
 
