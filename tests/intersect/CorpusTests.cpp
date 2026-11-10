@@ -221,6 +221,7 @@ void CheckCase(const std::filesystem::path& file)
     if (!result) {
         return;
     }
+    IntersectTest::CheckToleranceEvidence(*result, tolerance);
     if (expected["nominal"]["tier"].AsString() == "B") {
         REQUIRE(IsSkewCylinders(surfaces));
         const std::string want = expected["nominal"]["configuration"].AsString();

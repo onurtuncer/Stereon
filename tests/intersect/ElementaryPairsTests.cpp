@@ -247,7 +247,11 @@ TEST_CASE("a tangent circle declared within the tolerance is certified within it
             // gap, within the tolerance.
             REQUIRE(arc.Bound >= 4e-4);
             REQUIRE(arc.Bound <= 1e-3);
+            // And says why: a gap declared within the pair tolerance, the
+            // tolerance an edge made from it must have (ADR-0050).
+            REQUIRE(arc.BoundCause == Stereon::ToleranceCause::TolerantCoincidence);
         }
+        IntersectTest::CheckToleranceEvidence(*touch, 1e-3);
     }
 }
 

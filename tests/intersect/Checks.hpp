@@ -155,4 +155,40 @@ template <typename T>
         [&lines](const Stereon::LogRecord& record) { lines.emplace_back(record.Message); });
 }
 
+/// ADR-0050, step 0.2-T2: every component of a result that would make an
+/// edge carries the tolerance the edge needs and its cause. A bounded branch
+/// is certified: within the resolution for a curve computed or fitted
+/// (CertificateWidening), or past it and within the pair tolerance for a
+/// tangency declared within that (TolerantCoincidence). A branch over an
+/// unbounded range makes no edge until a face's loops bound it. A tolerant
+/// overlap gives its distance, above zero and within the pair tolerance;
+/// an exact one, zero.
+inline void CheckToleranceEvidence(const Stereon::SurfaceSurfaceIntersection& result,
+                                   const double tolerance)
+{
+    const double resolution = ctx.GetResolution();
+    for (const Stereon::IntersectionBranch& branch : result.Branches) {
+        if (!branch.Range.IsBounded()) {
+            continue;
+        }
+        CHECK(branch.IsCertified());
+        if (branch.BoundCause == Stereon::ToleranceCause::TolerantCoincidence) {
+            CHECK(branch.Contact == Stereon::ContactType::Tangential);
+            CHECK(branch.Bound > resolution);
+            CHECK(branch.Bound <= std::max(tolerance, resolution));
+        } else {
+            CHECK(branch.BoundCause == Stereon::ToleranceCause::CertificateWidening);
+            CHECK(branch.Bound <= resolution);
+        }
+    }
+    for (const Stereon::OverlapRegion& overlap : result.Overlaps) {
+        if (overlap.Evidence == Stereon::CoincidenceEvidence::Tolerant) {
+            CHECK(overlap.Distance > 0.0);
+            CHECK(overlap.Distance <= std::max(tolerance, resolution));
+        } else {
+            CHECK(overlap.Distance == 0.0);
+        }
+    }
+}
+
 } // namespace IntersectTest
