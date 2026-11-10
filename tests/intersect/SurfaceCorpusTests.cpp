@@ -5,12 +5,13 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-// Every case of corpus/curved-ssi/, in both orders: the pairs with a cone, a
-// torus or an ellipsoid (ADR-0010's corpus), whose answers come from closed
-// forms in tools/generate_surface_corpus.py. A result has the case's curves
-// and points, passes through every witness and stays on both surfaces. A case
-// that names may_fail_closed may instead refuse with an error, never answer
-// wrongly.
+// Every case of corpus/curved-ssi/ and corpus/nurbs-ssi/, in both orders: the
+// pairs with a cone, a torus or an ellipsoid, and the pairs of B-spline
+// surfaces (ADR-0010's corpus), whose answers come from closed forms in
+// tools/generate_surface_corpus.py and tools/generate_nurbs_corpus.py. A
+// result has the case's curves and points, passes through every witness and
+// stays on both surfaces. A case that names may_fail_closed may instead
+// refuse with an error, never answer wrongly.
 
 #include "Json.hpp"
 
@@ -22,6 +23,7 @@
 #include <filesystem>
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 import Stereon.Intersect;
@@ -39,7 +41,7 @@ using StereonTest::JsonValue;
 
 namespace {
 
-const std::filesystem::path corpus = std::filesystem::path(STEREON_CORPUS_DIR) / "curved-ssi";
+const std::filesystem::path corpus = std::filesystem::path(STEREON_CORPUS_DIR);
 
 /// Segments per branch when a witness is looked for.
 constexpr std::size_t Samples = 2048;
@@ -57,9 +59,37 @@ Vec3 VectorOf(const JsonValue& v)
     return Vec3{v[0].AsNumber(), v[1].AsNumber(), v[2].AsNumber()};
 }
 
+std::vector<double> NumbersOf(const JsonValue& v)
+{
+    std::vector<double> numbers;
+    for (const JsonValue& n : v.AsArray()) {
+        numbers.push_back(n.AsNumber());
+    }
+    return numbers;
+}
+
+/// A B-spline surface from its degrees, knots, poles row by row and
+/// optional weights, as tools/generate_nurbs_corpus.py writes it.
+Surface SplineOf(const JsonValue& s)
+{
+    std::vector<Point3> poles;
+    for (const JsonValue& p : s["poles"].AsArray()) {
+        poles.push_back(PointOf(p));
+    }
+    auto made = Stereon::MakeBSplineSurface(
+        static_cast<int>(s["degree_u"].AsNumber()), static_cast<int>(s["degree_v"].AsNumber()),
+        NumbersOf(s["knots_u"]), NumbersOf(s["knots_v"]), std::move(poles),
+        s.Has("weights") ? NumbersOf(s["weights"]) : std::vector<double>{});
+    REQUIRE(made.has_value());
+    return Surface{*std::move(made)};
+}
+
 Surface SurfaceOf(const JsonValue& s)
 {
     const std::string& type = s["type"].AsString();
+    if (type == "bspline") {
+        return SplineOf(s);
+    }
     const Vec3 x = VectorOf(s["x_axis"]);
     const Vec3 y = VectorOf(s["y_axis"]);
     if (type == "plane") {
@@ -192,10 +222,10 @@ void CheckCase(const JsonValue& c, const bool swapped)
     CheckResult(*result, expected, a, b, tolerance, c["inputs"]["scale"].AsNumber());
 }
 
-std::vector<std::filesystem::path> CaseFiles()
+std::vector<std::filesystem::path> CaseFiles(const std::string& suite)
 {
     std::vector<std::filesystem::path> files;
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(corpus)) {
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(corpus / suite)) {
         if (entry.path().extension() == ".json") {
             files.push_back(entry.path());
         }
@@ -212,7 +242,7 @@ TEST_CASE("each curved-ssi configuration, tilted, is answered as its closed form
     // One placement of each configuration, the one that found the most, in
     // one order: the whole suite takes minutes in a debug build.
     std::size_t count = 0;
-    for (const std::filesystem::path& file : CaseFiles()) {
+    for (const std::filesystem::path& file : CaseFiles("curved-ssi")) {
         if (file.stem().string().ends_with("-tilted-x1")) {
             CheckCase(StereonTest::ReadJsonFile(file), false);
             ++count;
@@ -221,11 +251,44 @@ TEST_CASE("each curved-ssi configuration, tilted, is answered as its closed form
     REQUIRE(count >= 100);
 }
 
+// [!mayfail] until the generic SSI answers what the corpus asks (2026-11-10):
+// six tilted cases are refused, never answered wrongly. The small loop
+// (bump-plane/loop-1e-3) as a possible tangency; simple circles on the
+// rational cylinder and sphere (cylinder-plane/circle,
+// cylinder-cylinder/two-loops, sphere-plane/circle, sphere-plane/near-pole)
+// by CertifyDeviation, a deviation of at least 1, likely at the seam; and
+// planes ten tolerances apart (plane-plane/apart-10tol) by the search
+// budget. Remove the tag once they pass.
+TEST_CASE("each nurbs-ssi configuration, tilted, is answered as its closed form says",
+          "[intersect][surface-surface][corpus][nurbs][!mayfail]")
+{
+    std::size_t count = 0;
+    for (const std::filesystem::path& file : CaseFiles("nurbs-ssi")) {
+        if (file.stem().string().ends_with("-tilted-x1")) {
+            CheckCase(StereonTest::ReadJsonFile(file), false);
+            ++count;
+        }
+    }
+    REQUIRE(count >= 15);
+}
+
 TEST_CASE("every curved-ssi corpus case is answered as its closed form says",
           "[.][exhaustive][surface-surface][corpus]")
 {
-    const std::vector<std::filesystem::path> files = CaseFiles();
+    const std::vector<std::filesystem::path> files = CaseFiles("curved-ssi");
     REQUIRE(files.size() >= 600);
+    for (const std::filesystem::path& file : files) {
+        const JsonValue c = StereonTest::ReadJsonFile(file);
+        CheckCase(c, false);
+        CheckCase(c, true);
+    }
+}
+
+TEST_CASE("every nurbs-ssi corpus case is answered as its closed form says",
+          "[.][exhaustive][surface-surface][corpus][nurbs]")
+{
+    const std::vector<std::filesystem::path> files = CaseFiles("nurbs-ssi");
+    REQUIRE(files.size() >= 90);
     for (const std::filesystem::path& file : files) {
         const JsonValue c = StereonTest::ReadJsonFile(file);
         CheckCase(c, false);

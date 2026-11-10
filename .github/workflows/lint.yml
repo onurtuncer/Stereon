@@ -84,6 +84,7 @@ jobs:
           python tools/generate_corpus.py --check
           python tools/generate_curve_corpus.py --check
           python tools/generate_surface_corpus.py --check
+          python tools/generate_nurbs_corpus.py --check
       - name: Regression cases of the base branch are all kept (corpus/README.md)
         if: github.event_name == 'pull_request'
         run: |
