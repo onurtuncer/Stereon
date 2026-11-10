@@ -241,16 +241,18 @@ public:
     /// every edge the face uses, which was S(c(t)) on the old surface.
     [[nodiscard]] Result<void> SetSurface(BuilderFaceId face, SurfaceRef surface);
 
-    /// Sets an entity's tolerance, the explicit operation through which
-    /// ADR-0001 lets a local tolerance change, and logs the change with its
-    /// reason. Commit() reports it in the OperationResult, warns when it grew,
-    /// and fails with ToleranceExceeded for a tolerance above the Context's
-    /// ceiling or, when the Context forbids growth, for any that grew.
-    /// InvalidInput unless the tolerance is finite and not negative.
+    /// Sets an entity's tolerance, the one write path through which ADR-0001
+    /// and ADR-0050 let a local tolerance change, and logs the change with
+    /// its cause and the detail. Commit() reports it in the OperationResult,
+    /// warns when it grew, and fails with ToleranceExceeded for a tolerance
+    /// above the model's ceiling (Context::GetToleranceCeiling(diagonal))
+    /// or, when the Context forbids growth, for any that grew. InvalidInput
+    /// unless the tolerance is finite and not negative, and for Tighten
+    /// above the entity's tolerance.
     [[nodiscard]] Result<void> SetTolerance(BuilderVertexId vertex, double tolerance,
-                                            std::string_view reason);
+                                            ToleranceCause cause, std::string_view detail);
     [[nodiscard]] Result<void> SetTolerance(BuilderEdgeId edge, double tolerance,
-                                            std::string_view reason);
+                                            ToleranceCause cause, std::string_view detail);
 
     /// Builds the cached 3D curve of an Intersection or Trim edge (ADR-0009,
     /// section 5) from its primary coedge: S(c(t)) sampled at CacheSamples
@@ -596,7 +598,8 @@ private:
     void DropCache(std::uint32_t edge);
     template <EntityKind K>
     [[nodiscard]] Result<void> SetToleranceOf(BuilderId<K> h, double tolerance,
-                                              std::string_view reason, const char* operation);
+                                              ToleranceCause cause, std::string_view reason,
+                                              const char* operation);
     void DetachCoedge(std::uint32_t coedge, bool passPrimaryOn);
     void RemoveLoopAt(std::uint32_t loop);
     template <EntityKind P, EntityKind C>
@@ -784,8 +787,15 @@ export namespace Stereon::Detail {
 /// cached curves (G06).
 [[nodiscard]] ValidityReport ValidateGeometry(const TopologyTables& tables);
 
-/// G04: every live tolerance within the Context's [resolution, ceiling],
-/// added to `report`.
+/// The model's bounding diagonal for ADR-0050's relative ceiling: of the
+/// box of its live vertices, of points along its edges' 3D curves and of its
+/// faces' surfaces where these are bounded (a sphere, a torus, a B-spline).
+/// Infinite when that box is empty or a point: the model has no measurable
+/// extent, and only the absolute ceiling applies.
+[[nodiscard]] double ModelDiagonal(const TopologyTables& tables);
+
+/// G04: every live tolerance within [resolution, res_max] of the Context,
+/// res_max from the tables' ModelDiagonal(), added to `report`.
 void ValidateTolerances(const TopologyTables& tables, const Context& context,
                         ValidityReport& report);
 

@@ -155,7 +155,7 @@ public:
         for (std::size_t i = 0; i < network.Vertices.size(); ++i) {
             const NetworkVertex& v = network.Vertices[i];
             if (static_cast<bool>(v.Crossing) == static_cast<bool>(crossing) &&
-                Distance(v.Position, position) <= std::max(v.Tolerance, tolerance)) {
+                Coincident(Distance(v.Position, position), v.Tolerance, tolerance)) {
                 return i;
             }
         }
@@ -383,13 +383,20 @@ void AddBranch(Networks& a, Networks& b, const Shape& sa, const Shape& sb, const
     return {};
 }
 
+/// The plane of a coincident face of A, with the face's tolerance, against
+/// which an edge's pair tolerance is summed (ADR-0050).
+struct CoincidentPlane {
+    Plane Geometry;
+    double Tolerance = 0.0;
+};
+
 /// A coincidence of two faces: NotSupported unless both are planes (the
 /// prototype imprints coincident planar faces; coincident cylinders wait),
 /// otherwise each face's boundary imprinted onto the other.
 [[nodiscard]] Result<void> AddCoincidence(Networks& a, Networks& b, const Shape& sa,
                                           const Shape& sb, const FaceData& fa, const FaceData& fb,
-                                          const OverlapRegion& overlap, std::vector<Plane>& planes,
-                                          const Context& ctx)
+                                          const OverlapRegion& overlap,
+                                          std::vector<CoincidentPlane>& planes, const Context& ctx)
 {
     const Plane* pa = fa.Surface.Target<Plane>();
     if (pa == nullptr || fb.Surface.Target<Plane>() == nullptr) {
@@ -400,7 +407,7 @@ void AddBranch(Networks& a, Networks& b, const Shape& sa, const Shape& sb, const
     }
     STEREON_TRY_VOID(ImprintBoundary(a, sa, fa, sb, fb.Face, overlap.Distance, ctx));
     STEREON_TRY_VOID(ImprintBoundary(b, sb, fb, sa, fa.Face, overlap.Distance, ctx));
-    planes.push_back(*pa);
+    planes.push_back({*pa, fa.Tolerance});
     return {};
 }
 
@@ -462,8 +469,8 @@ struct PairWork {
     return std::pair{std::move(clipA), std::move(clipB)};
 }
 
-/// One pair's work: the intersection at the pair tolerance, the larger of
-/// the two faces' (ADR-0001, decision D2), within which exactly parallel
+/// One pair's work: the intersection at the pair tolerance, the sum of
+/// the two faces' (ADR-0050), within which exactly parallel
 /// faces are declared coincident, and the clips of the branches that bound
 /// no coincidence (a coincidence's own boundary branches bound the faces'
 /// parameter boxes, not the faces: the faces' boundaries imprinted on each
@@ -473,7 +480,7 @@ void WorkOnPair(PairWork& work, const Shape& sa, const Shape& sb, const FaceData
                 const FaceData& fb, const Context& ctx)
 {
     work.Meeting = Intersect(fa.Surface, fa.Parameters, fb.Surface, fb.Parameters,
-                             std::max(fa.Tolerance, fb.Tolerance), ctx);
+                             PairTolerance(fa.Tolerance, fb.Tolerance), ctx);
     if (!work.Meeting) {
         return;
     }
@@ -531,8 +538,8 @@ void WorkOnChunk(void* state, const std::size_t begin, const std::size_t end)
 /// coincidences and branches added to the networks, so that nothing depends
 /// on the thread count.
 [[nodiscard]] Result<void> Gather(Networks& a, Networks& b, const Shape& sa, const Shape& sb,
-                                  std::vector<SharedPiece>& shared, std::vector<Plane>& planes,
-                                  const Context& ctx)
+                                  std::vector<SharedPiece>& shared,
+                                  std::vector<CoincidentPlane>& planes, const Context& ctx)
 {
     STEREON_TRY(const std::vector<FaceData> facesA, FacesOf(sa, ctx));
     STEREON_TRY(const std::vector<FaceData> facesB, FacesOf(sb, ctx));
@@ -633,20 +640,22 @@ struct EdgeTrace {
                      PositionOf(shape, EndOf(shape, edge)), ToleranceOf(shape, edge)};
 }
 
-/// Whether the trace lies on the plane: its ends and middle within its
-/// tolerance of it.
-[[nodiscard]] bool OnPlane(const EdgeTrace& trace, const Plane& plane)
+/// Whether the trace lies on the coincident face's plane: its ends and
+/// middle within the pair tolerance of the edge and the face (ADR-0050).
+[[nodiscard]] bool OnPlane(const EdgeTrace& trace, const CoincidentPlane& on)
 {
+    const Plane& plane = on.Geometry;
     const Vec3 n = Normalized(Cross(plane.XAxis, plane.YAxis));
     return std::ranges::all_of(
-        std::array{trace.Start, trace.Middle, trace.End},
-        [&](const Point3& p) { return std::abs(Dot(p - plane.Origin, n)) <= trace.Tolerance; });
+        std::array{trace.Start, trace.Middle, trace.End}, [&](const Point3& p) {
+            return Coincident(std::abs(Dot(p - plane.Origin, n)), trace.Tolerance, on.Tolerance);
+        });
 }
 
 /// The edges of the body that lie on one of the coincident planes, but for
 /// those a piece of the intersection already pairs.
 [[nodiscard]] Result<std::vector<EdgeTrace>> OnPlanes(const Shape& shape,
-                                                      const std::vector<Plane>& planes,
+                                                      const std::vector<CoincidentPlane>& planes,
                                                       const std::set<std::uint32_t>& paired)
 {
     std::vector<EdgeTrace> traces;
@@ -654,8 +663,8 @@ struct EdgeTrace {
     for (const EdgeId edge : edges) {
         const std::optional<EdgeTrace> trace =
             paired.contains(edge.GetIndex()) ? std::nullopt : TraceOf(shape, edge);
-        if (trace &&
-            std::ranges::any_of(planes, [&](const Plane& p) { return OnPlane(*trace, p); })) {
+        if (trace && std::ranges::any_of(
+                         planes, [&](const CoincidentPlane& p) { return OnPlane(*trace, p); })) {
             traces.push_back(*trace);
         }
     }
@@ -663,11 +672,12 @@ struct EdgeTrace {
 }
 
 /// Whether two traces are one edge: ends together, either way round, and
-/// middles together, within the larger tolerance.
+/// middles together, within the pair tolerance (ADR-0050).
 [[nodiscard]] bool SameEdge(const EdgeTrace& a, const EdgeTrace& b)
 {
-    const double tolerance = std::max(a.Tolerance, b.Tolerance);
-    const auto near = [&](const Point3& p, const Point3& q) { return Distance(p, q) <= tolerance; };
+    const auto near = [&](const Point3& p, const Point3& q) {
+        return Coincident(Distance(p, q), a.Tolerance, b.Tolerance);
+    };
     const bool along = near(a.Start, b.Start) && near(a.End, b.End);
     const bool against = near(a.Start, b.End) && near(a.End, b.Start);
     return (along || against) && near(a.Middle, b.Middle);
@@ -678,7 +688,7 @@ struct EdgeTrace {
 /// the same edge. Their transition is Unresolved: an overlap's boundary
 /// separates regions without saying which side they are on.
 [[nodiscard]] Result<void> PairCoincidentEdges(const Shape& a, const Shape& b,
-                                               const std::vector<Plane>& planes,
+                                               const std::vector<CoincidentPlane>& planes,
                                                std::vector<SharedEdge>& shared)
 {
     if (planes.empty()) {
@@ -711,7 +721,7 @@ Result<ImprintedBodies> ImprintBodies(const Shape& a, const Shape& b, const Cont
     Networks networksA(a);
     Networks networksB(b);
     std::vector<SharedPiece> shared;
-    std::vector<Plane> planes; // the planes of coincident faces
+    std::vector<CoincidentPlane> planes; // the planes of coincident faces
     STEREON_TRY_VOID(Gather(networksA, networksB, a, b, shared, planes, ctx));
     STEREON_TRY(const Imprinted bodyA, ImprintBody(a, networksA, ctx));
     STEREON_TRY(const Imprinted bodyB, ImprintBody(b, networksB, ctx));

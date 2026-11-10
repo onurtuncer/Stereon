@@ -72,7 +72,7 @@ order or thread count.
 
 .. code-block:: cpp
 
-   // With the pair's tolerance, the larger of the two faces' (ADR-0001).
+   // With the pair's tolerance, the sum of the two faces' (ADR-0050).
    const auto result = Stereon::Intersect(plane, boxA, cylinder, boxB, tolerance, ctx);
 
 The configurations:

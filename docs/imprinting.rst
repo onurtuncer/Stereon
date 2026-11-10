@@ -167,8 +167,8 @@ crossing; ordering keeps one.
 **End crossings.** A branch end lying within an edge's tolerance of that
 edge is a crossing of the edge, whether or not the plane curve intersection
 found a root there: a B-spline pcurve's root at the very end of its domain
-can be missed by subdivision. The tolerance is the larger of the edge's and
-the branch's certified bound. Such a crossing is bracketed, not decided,
+can be missed by subdivision. The tolerance is the pair tolerance, the sum
+of the edge's and the branch's certified bound (ADR-0050). Such a crossing is bracketed, not decided,
 and it too snaps to a vertex.
 
 **Ordering.** Crossings are sorted by their parameter on the branch, and a
@@ -245,8 +245,9 @@ vertex to an end vertex:
   vertex, made once per crossing;
 - any other end is a **junction**, where the branch passes from this face
   of the other body to the next one or ends inside the face. Junctions are
-  merged by position: a junction within the larger of the two tolerances
-  of an existing junction of the same face's network *is* that junction.
+  merged by position: a junction within the pair tolerance, the sum of the
+  two (ADR-0050), of an existing junction of the same face's network *is*
+  that junction.
   Crossings and junctions never merge with each other;
 - a stretch covering the whole branch with no crossing at either end is a
   loop, its start and end one vertex, only when the branch is a closed
@@ -325,10 +326,10 @@ Pairing coincident edges
 After both bodies are imprinted, every edge of A that lies on one of the
 coincident planes is paired with the edge of B it coincides with. An edge
 lies on a plane when its ends and its middle (on its own curve, or for an
-edge without one, on its primary side :math:`S(p(t))`) are within the
-edge's tolerance of the plane. Two such edges are one when their ends
-coincide, either way round, and their middles coincide, all within the
-larger of their tolerances. Each edge of B pairs at most once, with the
+edge without one, on its primary side :math:`S(p(t))`) are within the pair
+tolerance of the edge and the coincident face of the plane. Two such edges
+are one when their ends coincide, either way round, and their middles
+coincide, all within the pair tolerance, the sum of theirs (ADR-0050). Each edge of B pairs at most once, with the
 first edge of A that matches, and edges already paired as pieces of the
 intersection are left out. The pairs are ``SharedEdge``\ s with transition
 ``Unresolved``: the boundary of an overlap separates regions without saying

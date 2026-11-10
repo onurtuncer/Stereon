@@ -292,7 +292,8 @@ TEST_CASE("a cache is dropped whenever a pcurve, the primary or a surface of its
     SECTION("what the cache was not built from may change")
     {
         ShapeBuilder edit = Must(ShapeBuilder::Open(base));
-        Must(edit.SetTolerance(edit.Handle(e), 1e-4, "a looser hinge"));
+        Must(edit.SetTolerance(edit.Handle(e), 1e-4, Stereon::ToleranceCause::AbsorbGap,
+                               "a looser hinge"));
         const OperationResult result = MustCommit(std::move(edit));
         REQUIRE(Stereon::CachedCurveOf(result.Shape, At<EntityKind::Edge>(result.Shape, 0))
                     .has_value());
@@ -689,8 +690,10 @@ TEST_CASE("tolerance changes are reported, and the Context decides what may grow
     SECTION("a growth: reported, warned about, and the edge modified")
     {
         ShapeBuilder edit = Must(ShapeBuilder::Open(a));
-        Must(edit.SetTolerance(edgeOf(edit, 3), 1e-4, "closing a gap"));
-        Must(edit.SetTolerance(edgeOf(edit, 3), 1e-3, "and a wider one"));
+        Must(edit.SetTolerance(edgeOf(edit, 3), 1e-4, Stereon::ToleranceCause::AbsorbGap,
+                               "closing a gap"));
+        Must(edit.SetTolerance(edgeOf(edit, 3), 1e-3, Stereon::ToleranceCause::AbsorbGap,
+                               "and a wider one"));
         const OperationResult result = MustCommit(std::move(edit));
         REQUIRE(result.ToleranceChanges.size() == 1); // one per entity
         const Stereon::ToleranceChange& change = result.ToleranceChanges[0];
@@ -699,8 +702,11 @@ TEST_CASE("tolerance changes are reported, and the Context decides what may grow
         REQUIRE(change.Old == Tight);
         REQUIRE(change.New == 1e-3);
         REQUIRE(change.Reason == "closing a gap; and a wider one");
+        REQUIRE(change.Causes == std::vector{Stereon::ToleranceCause::AbsorbGap,
+                                             Stereon::ToleranceCause::AbsorbGap});
         REQUIRE(result.Warnings.size() == 1);
         REQUIRE(result.Warnings[0].Code == DiagnosticCode::ToleranceGrown);
+        REQUIRE(result.Warnings[0].Message.find("AbsorbGap") != std::string::npos);
         REQUIRE(result.Warnings[0].Entities.at(0).find("Edge#3") != std::string::npos);
         REQUIRE(Fate(result, EntityKind::Edge, 3).Relation == HistoryRelation::Modified);
         REQUIRE(Stereon::ToleranceOf(result.Shape, At<EntityKind::Edge>(result.Shape, 3)) == 1e-3);
@@ -710,19 +716,22 @@ TEST_CASE("tolerance changes are reported, and the Context decides what may grow
         // A finer resolution than the default, so the edge may go below it.
         const Context fine = Context::Default().WithResolution(1e-8);
         ShapeBuilder edit = Must(ShapeBuilder::Open(a));
-        Must(edit.SetTolerance(edgeOf(edit, 0), 1e-8, "tighter"));
-        Must(edit.SetTolerance(edgeOf(edit, 1), 1e-3, "looser"));
-        Must(edit.SetTolerance(edgeOf(edit, 1), Tight, "back"));
+        Must(edit.SetTolerance(edgeOf(edit, 0), 1e-8, Stereon::ToleranceCause::Tighten, "tighter"));
+        Must(
+            edit.SetTolerance(edgeOf(edit, 1), 1e-3, Stereon::ToleranceCause::AbsorbGap, "looser"));
+        Must(edit.SetTolerance(edgeOf(edit, 1), Tight, Stereon::ToleranceCause::Tighten, "back"));
         const OperationResult result = MustCommit(std::move(edit), fine);
         REQUIRE(result.ToleranceChanges.size() == 1);
         REQUIRE(result.ToleranceChanges[0].Index == 0);
+        REQUIRE(result.ToleranceChanges[0].Causes == std::vector{Stereon::ToleranceCause::Tighten});
         REQUIRE(result.Warnings.empty());
         REQUIRE(Fate(result, EntityKind::Edge, 1).Relation == HistoryRelation::Unchanged);
     }
     SECTION("growth fails when the Context says so")
     {
         ShapeBuilder edit = Must(ShapeBuilder::Open(a));
-        Must(edit.SetTolerance(edgeOf(edit, 3), 1e-4, "closing a gap"));
+        Must(edit.SetTolerance(edgeOf(edit, 3), 1e-4, Stereon::ToleranceCause::AbsorbGap,
+                               "closing a gap"));
         const Context strict = Context::Default().WithToleranceGrowthPolicy(ToleranceGrowth::Fail);
         REQUIRE(CommitError(std::move(edit), strict, ErrorCode::ToleranceExceeded)
                     .find("closing a gap") != std::string::npos);
@@ -730,16 +739,44 @@ TEST_CASE("tolerance changes are reported, and the Context decides what may grow
     SECTION("no tolerance above the ceiling")
     {
         ShapeBuilder edit = Must(ShapeBuilder::Open(a));
-        Must(edit.SetTolerance(edit.Handle(a.Resolve(box.Vertices[0])), 0.5, "huge"));
+        Must(edit.SetTolerance(edit.Handle(a.Resolve(box.Vertices[0])), 0.5,
+                               Stereon::ToleranceCause::AbsorbGap, "huge"));
         REQUIRE(CommitError(std::move(edit), Context::Default(), ErrorCode::ToleranceExceeded)
                     .find("ceiling") != std::string::npos);
+    }
+    SECTION("no tolerance above a thousandth of the model's diagonal (ADR-0050)")
+    {
+        // The box's diagonal is sqrt(38), about 6.16 mm: 7e-3 is under the
+        // Context's absolute ceiling of 1e-2 but over the model's 6.16e-3.
+        ShapeBuilder edit = Must(ShapeBuilder::Open(a));
+        Must(edit.SetTolerance(edgeOf(edit, 3), 7e-3, Stereon::ToleranceCause::AbsorbGap,
+                               "a gap the box is too small for"));
+        REQUIRE(CommitError(std::move(edit), Context::Default(), ErrorCode::ToleranceExceeded)
+                    .find("model's ceiling") != std::string::npos);
+        // Ten times larger, the same tolerance is within the model's ceiling.
+        Body large = MakeBox(20.0, 30.0, 50.0);
+        const Shape big = std::move(large).Freeze();
+        ShapeBuilder wider = Must(ShapeBuilder::Open(big));
+        Must(wider.SetTolerance(wider.Handle(big.Resolve(large.Edges[3])), 7e-3,
+                                Stereon::ToleranceCause::AbsorbGap, "the same gap"));
+        REQUIRE(MustCommit(std::move(wider)).ToleranceChanges.size() == 1);
+    }
+    SECTION("Tighten never raises a tolerance")
+    {
+        ShapeBuilder edit = Must(ShapeBuilder::Open(a));
+        REQUIRE(edit.SetTolerance(edgeOf(edit, 0), 1e-3, Stereon::ToleranceCause::Tighten, "up")
+                    .error()
+                    .GetCode() == ErrorCode::InvalidInput);
     }
     SECTION("a tolerance that is not finite and non-negative is refused")
     {
         ShapeBuilder edit = Must(ShapeBuilder::Open(a));
-        REQUIRE(edit.SetTolerance(edgeOf(edit, 0), -1.0, "negative").error().GetCode() ==
-                ErrorCode::InvalidInput);
-        REQUIRE(edit.SetTolerance(edgeOf(edit, 0), std::numeric_limits<double>::infinity(), "")
+        REQUIRE(
+            edit.SetTolerance(edgeOf(edit, 0), -1.0, Stereon::ToleranceCause::AbsorbGap, "negative")
+                .error()
+                .GetCode() == ErrorCode::InvalidInput);
+        REQUIRE(edit.SetTolerance(edgeOf(edit, 0), std::numeric_limits<double>::infinity(),
+                                  Stereon::ToleranceCause::AbsorbGap, "")
                     .error()
                     .GetCode() == ErrorCode::InvalidInput);
     }
@@ -779,13 +816,15 @@ TEST_CASE("every published tolerance is within the Context's bounds, logged or n
         Body box = MakeBox();
         const Shape a = std::move(box).Freeze();
         ShapeBuilder loosen = Must(ShapeBuilder::Open(a));
-        Must(loosen.SetTolerance(loosen.Handle(a.Resolve(box.Edges[0])), 1e-3, "a gap"));
+        Must(loosen.SetTolerance(loosen.Handle(a.Resolve(box.Edges[0])), 1e-3,
+                                 Stereon::ToleranceCause::AbsorbGap, "a gap"));
         const Shape loose = MustCommit(std::move(loosen)).Shape;
         const Context lower = Context::Default().WithToleranceCeiling(1e-4);
         CommitError(Must(ShapeBuilder::Open(loose)), lower, ErrorCode::ToleranceExceeded);
         ShapeBuilder noop = Must(ShapeBuilder::Open(loose));
         const Stereon::EdgeId e = At<EntityKind::Edge>(loose, 0);
-        Must(noop.SetTolerance(noop.Handle(e), 1e-3, "the same"));
+        Must(noop.SetTolerance(noop.Handle(e), 1e-3, Stereon::ToleranceCause::AbsorbGap,
+                               "the same"));
         CommitError(std::move(noop), lower, ErrorCode::ToleranceExceeded);
         // CompactShape publishes under the same bounds.
         REQUIRE(Stereon::CompactShape(loose, lower).error().GetCode() ==

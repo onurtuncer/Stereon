@@ -423,19 +423,21 @@ repeat (a split, a merge or a many-to-many change), so an input entity
 deleted and also continued, or continued unchanged and also into a merge,
 and a result entity generated and also continuing an input, are refused.
 
-``builder.SetTolerance(entity, value, reason)`` is the explicit operation
-through which ADR-0001 lets a local tolerance change. ``Commit`` reports
-one change per entity: the first old value, the last new one, and the
-reasons in order. It warns with ``ToleranceGrown`` for a tolerance that
-grew. It fails with ``ToleranceExceeded`` for a tolerance above the
-``Context``'s ceiling, and for any growth when the ``Context`` sets
+``builder.SetTolerance(entity, value, cause, detail)`` is the one
+operation through which ADR-0001 and ADR-0050 let a local tolerance
+change, with a ``ToleranceCause`` from a closed set (:doc:`tolerances`).
+``Commit`` reports one change per entity: the first old value, the last new
+one, and the causes and details in order. It warns with ``ToleranceGrown``
+for a tolerance that grew. It fails with ``ToleranceExceeded`` for a
+tolerance above the model's ceiling, a thousandth of its bounding diagonal
+capped by the ``Context``'s, and for any growth when the ``Context`` sets
 ``ToleranceGrowth::Fail``.
 
 The log is not the only check. ``Commit`` and ``CompactShape`` hold every
 live vertex and edge of what they publish to ADR-0001's bounds under their
 ``Context``, including entities made with their tolerance and entities kept
 unchanged from a shape published under another ``Context``. A tolerance
-above the ceiling is ``ToleranceExceeded``, and one below the resolution is
+above the model's ceiling is ``ToleranceExceeded``, and one below the resolution is
 ``InvalidInput``. A model built at a finer resolution says so with
 ``Context::WithResolution``.
 
@@ -518,7 +520,7 @@ G03   ``LoopParameterGap``    consecutive coedges of a loop do not meet in the f
                               carried onto the surface by its first derivatives, than the
                               junction's tolerances allow; a jump of a period across a seam is one
 G04   ``ToleranceBounds``     a vertex or edge tolerance below the ``Context``'s resolution or above
-                              its ceiling (ADR-0001)
+                              the model's ceiling (ADR-0001, ADR-0050)
 G05   ``EdgeSurfaces``        the faces of a ``Trim`` edge are not on one surface, or those of an
                               ``Intersection`` edge all are
 G06   ``CacheDeviation``      an edge's cached curve leaves its tolerance tube, or a ``Certified``
@@ -688,9 +690,12 @@ It retains a common cache with the larger bound, or drops differing caches.
 
 ``MergeVertices`` sorts unique candidates by slot index and clusters against
 the first candidate's original position and tolerance. It never averages or
-chains through a previous cluster member. The representative's tolerance is
-the maximum of member tolerances and the context resolution; the exact pair
-predicate guarantees that this contains the cluster radius. Growth is logged,
+chains through a previous cluster member. A candidate joins a cluster when
+its distance from the representative is within the pair tolerance, the sum
+of their tolerances (ADR-0050), decided by an exact predicate, and within
+the context ceiling. The representative's tolerance is the maximum of the
+member tolerances, their distances from it rounded up, and the context
+resolution. Growth is logged with the ``MergeVertices`` cause,
 the context ceiling and growth policy are enforced, and every incident endpoint
 trace is checked before redirecting edges. Unsupported exact-predicate domains
 are explicit failures. The operation uses a candidate transaction, so failed

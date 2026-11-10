@@ -8,11 +8,13 @@
 // Tolerance variants (the Boolean prototype's M9; ADR-0001's verification):
 // union, cut and common on boxes and cylinders whose tolerances are loosened
 // from 1e-4 to 1e-2 mm (decision D4), the 1e-2 variant raising the ceiling
-// in its Context (decision D5). Every result is valid at the Geometric
-// level; faces within the pair tolerance of each other, the larger of the
-// two (decision D2), are one face, and beyond it are two; every tolerance
-// that grows is logged, and refused under ToleranceGrowth::Fail or above the
-// ceiling. Then the merge-policy test: vertex chains at 0.8x the pair
+// in its Context (decision D5), on solids large enough that the model's
+// ceiling, a thousandth of its diagonal (ADR-0050), admits it; on smaller
+// ones it is refused. Every result is valid at the Geometric level; faces
+// within the pair tolerance of each other, the sum of the two (ADR-0050),
+// are one face, and beyond it are two; every tolerance that grows is logged
+// with its cause, and refused under ToleranceGrowth::Fail or above the
+// ceiling. Then the merge-policy test: vertex chains at 0.6x the pair
 // tolerance cluster by ADR-0001's rules 1 to 4 exactly, byte-identically
 // across thread counts and repeated runs, and a permuted input changes the
 // clusters only as rule 1 predicts.
@@ -89,11 +91,12 @@ OperationResult Run(const Shape& a, const Shape& b, const BooleanOperation opera
     return std::move(*result);
 }
 
-/// Every tolerance that grew is logged, and warned of with its reason.
+/// Every tolerance that grew is logged with its cause, and warned of.
 void RequireGrowthLogged(const OperationResult& result)
 {
     std::size_t grown = 0;
     for (const Stereon::ToleranceChange& change : result.ToleranceChanges) {
+        REQUIRE_FALSE(change.Causes.empty());
         REQUIRE_FALSE(change.Reason.empty());
         grown += change.New > change.Old ? 1 : 0;
     }
@@ -124,8 +127,10 @@ TEST_CASE("loosened boxes and cylinders give the results the exact ones do", "[b
     for (const double t : Loosened) {
         CAPTURE(t);
         const Context context = ContextFor(t);
-        const Shape a = LooseBox(Point3{}, Point3{10.0, 10.0, 10.0}, t);
-        const Shape corner = LooseBox(Point3{5.0, 5.0, 5.0}, Point3{15.0, 15.0, 15.0}, t);
+        // 100 mm boxes: the smallest result, the 50 mm common, has a
+        // ceiling of 8.7e-2 by its diagonal, above every variant's growth.
+        const Shape a = LooseBox(Point3{}, Point3{100.0, 100.0, 100.0}, t);
+        const Shape corner = LooseBox(Point3{50.0, 50.0, 50.0}, Point3{150.0, 150.0, 150.0}, t);
         REQUIRE(CountOf<EntityKind::Face>(Run(a, corner, BooleanOperation::Union, context).Shape) ==
                 12);
         REQUIRE(CountOf<EntityKind::Face>(
@@ -133,7 +138,7 @@ TEST_CASE("loosened boxes and cylinders give the results the exact ones do", "[b
         REQUIRE(CountOf<EntityKind::Face>(Run(a, corner, BooleanOperation::Cut, context).Shape) ==
                 9);
 
-        const Shape drum = LooseDrum(Point3{5.0, 5.0, -2.0}, 3.0, 15.0, t);
+        const Shape drum = LooseDrum(Point3{50.0, 50.0, -20.0}, 30.0, 150.0, t);
         for (const auto& [operation, faces] :
              {std::pair{BooleanOperation::Union, 10}, std::pair{BooleanOperation::Common, 3},
               std::pair{BooleanOperation::Cut, 7}}) {
@@ -145,12 +150,28 @@ TEST_CASE("loosened boxes and cylinders give the results the exact ones do", "[b
     }
 }
 
+TEST_CASE("a loosened variant beyond the model's ceiling is refused (ADR-0050)",
+          "[boolean][tolerance]")
+{
+    // The common of two 10 mm boxes is a 5 mm cube: its ceiling is 8.7e-3,
+    // a thousandth of its diagonal, below inputs loosened to 1e-2, whatever
+    // the Context's absolute ceiling.
+    const double t = 1e-2;
+    const Shape a = LooseBox(Point3{}, Point3{10.0, 10.0, 10.0}, t);
+    const Shape corner = LooseBox(Point3{5.0, 5.0, 5.0}, Point3{15.0, 15.0, 15.0}, t);
+    const auto refused = Boolean(a, corner, BooleanOperation::Common, ContextFor(t));
+    REQUIRE_FALSE(refused.has_value());
+    REQUIRE(refused.error().GetCode() == ErrorCode::ToleranceExceeded);
+    REQUIRE(std::string(refused.error().GetMessage()).find("model's ceiling") != std::string::npos);
+}
+
 TEST_CASE("faces within the pair tolerance are one face, beyond it two", "[boolean][tolerance]")
 {
     for (const double t : Loosened) {
         CAPTURE(t);
         const Context context = ContextFor(t);
-        // A at the resolution, B loosened to t: the pair tolerance is t.
+        // A at the resolution, B loosened to t: the pair tolerance is the
+        // sum, t and the resolution.
         const Shape a = LooseBox(Point3{}, Point3{10.0, 10.0, 10.0}, context.GetResolution());
         const Shape near = LooseBox(Point3{10.0 + 0.8 * t, 0.0, 0.0}, Point3{20.0, 10.0, 10.0}, t);
         const OperationResult united = Run(a, near, BooleanOperation::Union, context);
@@ -169,6 +190,15 @@ TEST_CASE("faces within the pair tolerance are one face, beyond it two", "[boole
         REQUIRE(CountOf<EntityKind::Face>(apart.Shape) == 12);
         REQUIRE(CountOf<EntityKind::Solid>(apart.Shape) == 2);
         REQUIRE(apart.ToleranceChanges.empty());
+
+        // Both loosened to t, 1.5 t apart: within the sum, 2 t, one face,
+        // where the larger of the two, t, would have left two (ADR-0050).
+        const Shape both = LooseBox(Point3{}, Point3{10.0, 10.0, 10.0}, t);
+        const Shape past = LooseBox(Point3{10.0 + 1.5 * t, 0.0, 0.0}, Point3{20.0, 10.0, 10.0}, t);
+        const OperationResult summed = Run(both, past, BooleanOperation::Union, context);
+        REQUIRE(CountOf<EntityKind::Face>(summed.Shape) == 10);
+        REQUIRE(CountOf<EntityKind::Solid>(summed.Shape) == 1);
+        RequireGrowthLogged(summed);
     }
 }
 
@@ -248,15 +278,16 @@ constexpr unsigned ThreadCounts[] = {1U, 2U, 8U, 32U, 0U};
 
 } // namespace
 
-TEST_CASE("vertex chains at 0.8x the pair tolerance cluster by the representative rule",
+TEST_CASE("vertex chains at 0.6x the pair tolerance cluster by the representative rule",
           "[boolean][tolerance][merge][determinism]")
 {
     for (const double t : Loosened) {
         CAPTURE(t);
         const Context context = ContextFor(t);
-        const double step = 0.8 * t;
-        // A - B - C - D collinear: B joins A; C, 1.6 t from A, opens its own
-        // cluster though it is 0.8 t from B (rule 3: within the tolerance of
+        // The pair tolerance is 2 t, the sum (ADR-0050).
+        const double step = 1.2 * t;
+        // A - B - C - D collinear: B joins A; C, 2.4 t from A, opens its own
+        // cluster though it is 1.2 t from B (rule 3: within the tolerance of
         // the representative, not of any member); D joins C.
         const std::vector<double> chain{0.0, step, 2.0 * step, 3.0 * step};
         const Merged forward = MergeChain(chain, t, context);

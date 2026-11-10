@@ -149,8 +149,10 @@ TEST_CASE("M5 vertex merging uses fixed representatives and sorted inputs", "[to
     for (const bool reverse : {false, true}) {
         ShapeBuilder b;
         const auto a = Must(b.AddVertex({0, 0, 0}, 0.001));
-        const auto c = Must(b.AddVertex({0.0008, 0, 0}, 0.001));
-        const auto d = Must(b.AddVertex({0.0016, 0, 0}, 0.001));
+        // The pair tolerance is 0.002, the sum (ADR-0050): c joins a; d,
+        // 0.0012 from c but 0.0024 from a, opens its own cluster.
+        const auto c = Must(b.AddVertex({0.0012, 0, 0}, 0.001));
+        const auto d = Must(b.AddVertex({0.0024, 0, 0}, 0.001));
         std::array vertices{a, c, d};
         if (reverse) {
             std::ranges::reverse(vertices);
@@ -332,7 +334,8 @@ TEST_CASE("M5 endpoint containment failure rolls back earlier merge clusters", "
     REQUIRE(b.Count<EntityKind::Vertex>() == 5);
     REQUIRE(b.GetTopologyEvents().empty());
     REQUIRE(b.Validate().IsValid());
-    Must(b.SetTolerance(firstMember, 0.001, "the rolled-back handle remains live"));
+    Must(b.SetTolerance(firstMember, 0.001, Stereon::ToleranceCause::MergeVertices,
+                        "the rolled-back handle remains live"));
 }
 
 TEST_CASE("M5 separating a ring refuses to disconnect its shell", "[topo][euler][m5]")

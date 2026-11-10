@@ -293,14 +293,12 @@ ShapeBuilder::MergeVerticesImpl(const std::span<const BuilderVertexId> vertices,
             // ADR-0001, rule 3: within the pair tolerance of the
             // representative, never of another member, and within the
             // healing budget (the ceiling) of it, which bounds the cluster's
-            // radius. With the pair tolerance the larger of the two (decision
-            // D2 of the Boolean plan) the second test follows from the first
-            // for published tolerances; it is kept so that the rule holds if
-            // that choice changes.
+            // radius. The pair tolerance is the sum of the two (ADR-0050),
+            // which can exceed the ceiling, so the second test matters.
             const auto& representative = m_Tables.Vertices[cluster.front().GetIndex()];
             const auto comparison =
                 CompareDistance(member.Position, representative.Position,
-                                std::max(member.Tolerance, representative.Tolerance));
+                                PairTolerance(member.Tolerance, representative.Tolerance));
             const auto budget = CompareDistance(member.Position, representative.Position,
                                                 context.GetToleranceCeiling());
             if (!comparison.Supported || !budget.Supported) {
@@ -373,7 +371,8 @@ Result<void> ShapeBuilder::MergeVertexCluster(const std::vector<BuilderVertexId>
     }
     STEREON_TRY_VOID(CheckMergeEndpoints(cluster, original.Position, tolerance));
     if (tolerance != original.Tolerance) {
-        STEREON_TRY_VOID(SetTolerance(kept, tolerance, "deterministic vertex merge"));
+        STEREON_TRY_VOID(SetTolerance(kept, tolerance, ToleranceCause::MergeVertices,
+                                      "deterministic vertex merge"));
     }
     for (const auto vertex : cluster) {
         if (vertex == kept) {

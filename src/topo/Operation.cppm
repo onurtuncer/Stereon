@@ -134,13 +134,61 @@ private:
     std::vector<HistoryEntry> m_Entries;
 };
 
-/// One entity's tolerance as an operation changed it (ADR-0001: entity, old
-/// value, new value, reason). Index is the entity's index in the result.
+/// Why a tolerance changed: ADR-0050's closed set of growth causes, and
+/// Tighten for a tolerance lowered to the error achieved. Every change
+/// names one; free text is detail, never the cause.
+enum class ToleranceCause : std::uint8_t {
+    /// An intersection curve not meeting an existing edge or vertex.
+    AbsorbGap,
+    /// ADR-0001's merge policy: vertices identified as one.
+    MergeVertices,
+    /// A Spatial edge upgraded to Intersection or Exact (ADR-0009 §1).
+    PromoteEdge,
+    /// The edge tolerances that cover a tolerant coincidence (ADR-0029 §6).
+    TolerantCoincidence,
+    /// A cache or pcurve certificate widened (ADR-0009 §4).
+    CertificateWidening,
+    /// An uncertified branch widened within the healing budget (ADR-0010).
+    HealingBudget,
+    /// A tolerance read from a file.
+    Import,
+    /// A tolerance lowered to the error achieved; never a growth.
+    Tighten,
+};
+
+[[nodiscard]] constexpr std::string_view ToString(const ToleranceCause cause) noexcept
+{
+    switch (cause) {
+    case ToleranceCause::AbsorbGap:
+        return "AbsorbGap";
+    case ToleranceCause::MergeVertices:
+        return "MergeVertices";
+    case ToleranceCause::PromoteEdge:
+        return "PromoteEdge";
+    case ToleranceCause::TolerantCoincidence:
+        return "TolerantCoincidence";
+    case ToleranceCause::CertificateWidening:
+        return "CertificateWidening";
+    case ToleranceCause::HealingBudget:
+        return "HealingBudget";
+    case ToleranceCause::Import:
+        return "Import";
+    case ToleranceCause::Tighten:
+        return "Tighten";
+    }
+    return "ToleranceCause";
+}
+
+/// One entity's tolerance as an operation changed it (ADR-0001, ADR-0050:
+/// entity, old value, new value, the causes and their detail). Index is the
+/// entity's index in the result. An entity changed more than once has one
+/// change with every cause in order and their details joined by "; ".
 struct ToleranceChange {
     EntityKind Kind = EntityKind::Vertex;
     std::uint32_t Index = NoEntity;
     double Old = 0.0;
     double New = 0.0;
+    std::vector<ToleranceCause> Causes;
     std::string Reason;
 };
 
