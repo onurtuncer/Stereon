@@ -339,3 +339,98 @@ TEST_CASE("B-splines of low degree are certified, rational ones refused, and the
                 .error()
                 .GetCode() == ErrorCode::NotSupported);
 }
+
+namespace {
+
+/// A biquadratic bump over the unit square with an interior knot in u, so
+/// that a pcurve crosses a knot line; rational when asked.
+Stereon::BSplineSurface Bump(const bool rational)
+{
+    std::vector<Stereon::Point3> poles;
+    std::vector<double> weights;
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            poles.push_back({i / 3.0, j / 2.0, (i == 1 || i == 2) && j == 1 ? 1.0 : 0.0});
+            weights.push_back(j == 1 ? 2.0 : 1.0);
+        }
+    }
+    const std::vector<double> knotsU{0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0};
+    const std::vector<double> knotsV{0.0, 0.0, 0.0, 1.0, 1.0, 1.0};
+    const auto made = Stereon::MakeBSplineSurface(2, 2, knotsU, knotsV, poles,
+                                                  rational ? weights : std::vector<double>{});
+    REQUIRE(made.has_value());
+    return *made;
+}
+
+/// The polyline of `count` chords of the surface along v = 1/2, and its
+/// parameters, on a shared parameter u.
+std::pair<Stereon::BSplineCurve, Stereon::BSplineCurve2d>
+ChordsAlong(const Stereon::Surface& surface, const int count, const double offset)
+{
+    std::vector<Stereon::Point3> points;
+    std::vector<Stereon::Point2> parameters;
+    std::vector<double> knots{0.0};
+    for (int k = 0; k <= count; ++k) {
+        const double u = static_cast<double>(k) / count;
+        const Stereon::Point3 p = Eval(surface, Stereon::Point2{u, 0.5});
+        points.push_back({p.X, p.Y, p.Z + offset});
+        parameters.push_back({u, 0.5});
+        knots.push_back(u);
+    }
+    knots.push_back(1.0);
+    const auto curve = Stereon::MakeBSplineCurve(1, knots, points);
+    const auto pcurve = Stereon::MakeBSplineCurve(1, knots, parameters);
+    REQUIRE(curve.has_value());
+    REQUIRE(pcurve.has_value());
+    return {*curve, *pcurve};
+}
+
+} // namespace
+
+TEST_CASE("chords of a B-spline surface certify across a knot line", "[surface][certify]")
+{
+    for (const bool rational : {false, true}) {
+        const Stereon::Surface surface{Bump(rational)};
+        const auto [curve, pcurve] = ChordsAlong(surface, 1024, 0.0);
+        const auto c =
+            CertifyDeviation(Curve{curve}, surface, Curve2d{pcurve}, Interval{0.0, 1.0}, 1e-5);
+        REQUIRE(c.has_value());
+        REQUIRE(c->Bound <= 1e-5);
+    }
+}
+
+TEST_CASE("a certificate on a B-spline surface refuses a curve off it", "[surface][certify]")
+{
+    for (const bool rational : {false, true}) {
+        const Stereon::Surface surface{Bump(rational)};
+        const auto [curve, pcurve] = ChordsAlong(surface, 256, 1e-3);
+        const auto c =
+            CertifyDeviation(Curve{curve}, surface, Curve2d{pcurve}, Interval{0.0, 1.0}, 1e-5);
+        REQUIRE_FALSE(c.has_value());
+        REQUIRE(c.error().GetCode() == ErrorCode::CertificationFailed);
+    }
+}
+
+TEST_CASE("repeated knots do not turn unavailable derivatives into zero",
+          "[surface][certify][regression]")
+{
+    const std::vector<double> ku{0, 0, 0, .5, .5, 1, 1, 1};
+    const std::vector<double> kv{0, 0, 1, 1};
+    const std::vector<double> z{0, 0, .25, .5, 1};
+    std::vector<Point3> poles;
+    for (std::size_t i = 0; i < z.size(); ++i) {
+        poles.push_back({static_cast<double>(i) * .25, 0, z[i]});
+        poles.push_back({static_cast<double>(i) * .25, 1, z[i]});
+    }
+    const auto surface = Stereon::MakeBSplineSurface(2, 1, ku, kv, poles);
+    REQUIRE(surface.has_value());
+    const auto curve = Stereon::MakeBSplineCurve(
+        1, {0, 0, 1, 1}, std::vector<Point3>{{.125, .5, 0}, {.375, .5, .125}});
+    const auto pc =
+        Stereon::MakeBSplineCurve(1, {0, 0, 1, 1}, std::vector<Point2>{{.125, .5}, {.375, .5}});
+    REQUIRE(curve.has_value());
+    REQUIRE(pc.has_value());
+    const auto certificate =
+        CertifyDeviation(Curve{*curve}, Surface{*surface}, Curve2d{*pc}, Interval{0, 1}, 1e-6);
+    REQUIRE_FALSE(certificate.has_value());
+}
