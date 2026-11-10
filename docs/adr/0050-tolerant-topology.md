@@ -4,6 +4,7 @@
 - **Date:** 2026-11-09
 - **Revised:** 2026-11-10 (numbered 0050; aligned with what ADR-0001, ADR-0009, ADR-0018 and the code already provide; the owner's decisions on the pair rule, the ceiling and pcurve authority)
 - **Accepted:** 2026-11-10 by Onur Tuncer, as revised on that date and without change, before step 0.2-T1, which builds on it. The code keeps ADR-0001's pair rule and absolute ceiling until 0.2-T1 moves it; the checklist under *Verification* is the evidence still owed, and a failure there reopens this ADR.
+- **Amended:** 2026-11-10 by Onur Tuncer, after acceptance: `Tighten` joins the closed set of causes (decision 3), the cause of every lowering, which decision 6 makes a reported operation and `SetTolerance` already performs.
 - **Owner:** Onur Tuncer
 - **Phase:** 2 (v0.2 "Intersections", interim steps 0.2-T1 and 0.2-T2), completed in v0.3 (0.3-T3)
 - **Related:** ADR-0001, ADR-0004, ADR-0006, ADR-0009, ADR-0010, ADR-0018, ADR-0025, ADR-0027, ADR-0028, ADR-0029, ADR-0030, ADR-0044, ADR-0051
@@ -71,7 +72,7 @@ Every vertex and edge carries its own tolerance, and tolerance growth is governe
    - for `Exact` and `Spatial` edges, the 3D curve is.
 
    So a face stays watertight in its own domain even where 3D curves disagree, while exact analytic edges keep their exact curve.
-3. **Tolerance grows only through a named cause.** `SetTolerance` remains the single write path. Its free-text reason is replaced by a cause from a closed set, with free text kept as detail:
+3. **Tolerance changes only through a named cause.** `SetTolerance` remains the single write path. Its free-text reason is replaced by a cause from a closed set, with free text kept as detail: seven causes of growth, and `Tighten` for a lowering:
 
    | Cause | Origin |
    | --- | --- |
@@ -82,11 +83,12 @@ Every vertex and edge carries its own tolerance, and tolerance growth is governe
    | `CertificateWidening` | ADR-0009 §4 |
    | `HealingBudget` | ADR-0010, an uncertified branch widened within the healing budget |
    | `Import` | tolerances read from a file |
+   | `Tighten` | a tolerance lowered to the achieved error (decision 6); refused if it would raise one |
 
    No algorithm writes the field directly. Growth without a recorded cause is a bug, not a feature, and a CI check rejects any other writer.
 4. **Tolerance has a ceiling relative to the model, capped absolutely.** Every entity tolerance is bounded by `res_max = min(1e-3 × the model's bounding diagonal, the Context's absolute ceiling)`. The absolute ceiling is ADR-0001's, 0.01 mm by default, so a large model never accepts millimetre gaps and a small one gets a tighter bound. An operation that would exceed `res_max` fails with `ToleranceExceeded` instead of producing a model that cannot be reasoned about. This supersedes ADR-0001's absolute-only ceiling.
 5. **Pair tests use the sum.** Two entities coincide when their distance is at most `tol(a) + tol(b)`, never a bare epsilon and never `res_abs` alone. This supersedes ADR-0001's "entity pairs use the larger of their tolerances". The merge policy's pair tolerance (ADR-0001 step 3) and ADR-0029's tolerant coincidence follow it. One helper, `coincident(a, b)`, implements it, and code review rejects bare epsilons (ADR-0001's epsilon lint already enforces part of this).
-6. **Tightening is a first-class operation.** `tighten(entity)` and `heal()` (below) lower tolerances to the achieved error. A successful Boolean leaves tolerances no worse than its inputs plus the SSI approximation error.
+6. **Tightening is a first-class operation.** `tighten(entity)` and `heal()` (below) lower tolerances to the achieved error, through `SetTolerance` with the cause `Tighten`. A successful Boolean leaves tolerances no worse than its inputs plus the SSI approximation error.
 7. **Invariants are checked.** The existing Geometric rules G01, G02 and G04 are the three invariants below, with G04 reading `res_max`. Certified distance bounds replace their samples where interval evaluation exists (ADR-0001 already anticipates this). `validate()` is ADR-0018's checker at its Geometric level; no second checker is added.
 
 ### Data model
