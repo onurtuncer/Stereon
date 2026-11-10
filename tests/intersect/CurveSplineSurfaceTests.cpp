@@ -290,8 +290,7 @@ TEST_CASE("a crossing at a closed surface's seam is one point at the domain's en
     // lies within rounding of the domain's end: it is placed at an end,
     // once, not refused (the first run of the bicubic-and-cylinder cases
     // found it refused).
-    const Cylinder cylinder{Point3{1.0, -2.0, 0.5}, 2.0, Vec3{1.0, 0.0, 0.0},
-                            Vec3{0.0, 1.0, 0.0}};
+    const Cylinder cylinder{Point3{1.0, -2.0, 0.5}, 2.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
     const Surface rational{
         *Stereon::ToBSpline(cylinder, Box2{Interval{0.0, 2.0 * pi}, Interval{-20.0, 20.0}})};
     const Curve line{Line{Point3{-3.0, -2.0, 0.0}, Vec3{1.0, 0.0, 0.0}}};
