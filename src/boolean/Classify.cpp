@@ -457,8 +457,8 @@ template <typename G>
 }
 
 /// The largest tolerance of the face's edges, and the resolution: how far a
-/// point may lie from the face's plane and still be on the face, the pair
-/// tolerance of ADR-0001 as the face sees it.
+/// point may lie from the face's plane and still be on the face: the face's
+/// part of the pair tolerance (ADR-0050).
 [[nodiscard]] Result<double> FaceTolerance(const Shape& shape, const FaceId face,
                                            const Context& ctx)
 {
@@ -474,8 +474,8 @@ template <typename G>
 }
 
 /// Whether the seed lies on the other body's planar face: within the pair
-/// tolerance of its plane, the larger of the two faces' (ADR-0001, decision
-/// D2), as the imprint declared them coincident, and strictly inside its
+/// tolerance of its plane, the sum of the two faces' (ADR-0050), as the
+/// imprint declared them coincident, and strictly inside its
 /// loops. The other face's tolerance alone would make the decision
 /// one-sided: a loose face 0.8 t from a tight one is on it seen from the
 /// tight face and off it seen from the loose one.
@@ -485,9 +485,8 @@ template <typename G>
     const Surface surface = SurfaceOf(other, face); // Target points into it
     const Plane* plane = surface.Target<Plane>();
     STEREON_TRY(const double theirs, FaceTolerance(other, face, ctx));
-    const double tolerance = std::max(ownTolerance, theirs);
     const Vec3 n = Normalized(Cross(plane->XAxis, plane->YAxis));
-    if (std::abs(Dot(seed - plane->Origin, n)) > tolerance) {
+    if (!Coincident(std::abs(Dot(seed - plane->Origin, n)), ownTolerance, theirs)) {
         return false;
     }
     STEREON_TRY(const std::optional<bool> inside,

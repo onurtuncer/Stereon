@@ -306,6 +306,12 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME "tools: epsilon lint"
         COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/check_epsilon.py"
                 --root "${PROJECT_SOURCE_DIR}")
+    add_test(NAME "tools: tolerance-write lint self-test"
+        COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/check_tolerance_writes.py"
+                --self-test)
+    add_test(NAME "tools: tolerance-write lint"
+        COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/check_tolerance_writes.py"
+                --root "${PROJECT_SOURCE_DIR}")
     add_test(NAME "tools: literal lint self-test"
         COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/check_literals.py" --self-test)
     add_test(NAME "tools: literal lint"

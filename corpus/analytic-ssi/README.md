@@ -69,7 +69,7 @@ Every surface has a `tolerance` of at least the resolution, 1e-5 mm (ADR-0001). 
 
 The seed cases assume these provisional rules until RS-0001 settles them:
 
-1. A pair's tolerance is the larger of the two (ADR-0001). This answers RS-0001's O1, decided for the Boolean prototype on 2026-10-20 (decision D2 of `docs/planning/boolean-prototype-plan.md`); `plane-plane/unequal-tolerances` is the case where the choice changes the answer.
+1. A case's tolerance is the pair's: the generator writes the degeneracy's τ on both surfaces, and the tests read the larger of the two values written as the pair tolerance, not their sum. Surfaces carry no tolerance of their own (ADR-0050); its sum rule, which replaced ADR-0001's larger of the two on 2026-11-10, applies to vertices and edges, and in the Boolean to faces through their boundaries. `plane-plane/unequal-tolerances` is decided alike under both rules.
 2. In a snap, the surface with the higher operand index moves, by the smallest admissible displacement. A plane moves along its normal. A sphere or cylinder moves its centre or axis before changing its radius.
 3. Pairs are decided in operand order (`A-B`, `A-C`, `B-C`, …), and a snap is accepted only if every surface's total displacement stays within its tolerance (G4).
 
@@ -95,6 +95,6 @@ The seed cases assume these provisional rules until RS-0001 settles them:
 - the `tolerant` configuration where it is `coincident`: exactly parallel supports within the pair tolerance are declared coincident (ADR-0029 section 6), with `Tolerant` evidence unless the doubles coincide;
 - the `tolerant` configuration, for a pair with a sphere: the elementary-pair handler also declares a tangency where the profiles meet within the pair tolerance of one.
 
-The pair tolerance is the larger of the two. A traced branch, a fitted curve, counts as the closed conic the case names.
+The pair tolerance is the case's τ (rule 1 above). A traced branch, a fitted curve, counts as the closed conic the case names.
 
 Cylinders whose axes are not parallel are Tier B, a quartic, but the kernel decides them too (ADR-0010's decisions on acceptance; the Boolean prototype's M3b), so their cases carry the configuration the handler must find, from the distance between the axes against the sum and the difference of the radii: `one_loop` between them, `two_loops` below the difference (one cylinder through the other), `internal_tangent` at the difference (the loops meet at a node), `two_ellipses` for meeting axes and equal radii, `tangent_point` at the sum. A case may add `expected.kernel`, `{"outcome": <error code>, "reason": ...}`, where the kernel must refuse the case instead: geometry that leaves the size box of ADR-0001, say.

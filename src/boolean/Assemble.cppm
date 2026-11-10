@@ -22,9 +22,9 @@ import :Classify;
 /// regions outside B with B's regions inside A turned inside out. A piece of
 /// the intersection, an edge in each body, becomes one edge used by both
 /// bodies' faces, the edge of A where a kept face of A uses it; its end
-/// vertices are identified within the pair tolerance, the larger of the
-/// two, A's position kept and the tolerance grown and logged where B's was
-/// larger (ADR-0001's representative policy). What no kept face uses is not
+/// vertices are identified within the pair tolerance, the sum of the two
+/// (ADR-0050), A's position kept and the tolerance grown and logged to
+/// cover B's vertex (ADR-0001's representative policy). What no kept face uses is not
 /// copied, so the result is regularised: a contact of lower dimension leaves
 /// nothing behind. The faces fall into shells by the edges they share; a
 /// shell made only of B's reversed faces is a void of the solid around it,

@@ -9,9 +9,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <limits>
 #include <memory>
 #include <set>
 #include <string>
@@ -87,6 +89,35 @@ TEST_CASE("settings change by making a modified copy", "[core][context]")
     REQUIRE(base.GetResolution() == 1e-5);
     REQUIRE(base.GetScheduler() == Scheduler::Parallel);
     REQUIRE(base.GetLogLevel() == LogLevel::Info);
+}
+
+TEST_CASE("the model's ceiling is a thousandth of its diagonal, capped by the Context's",
+          "[core][context][tolerance]")
+{
+    const Context ctx = Context::Default(); // resolution 1e-5, ceiling 1e-2
+    REQUIRE(ctx.GetToleranceCeiling(5.0) == Context::RelativeToleranceCeiling * 5.0);
+    REQUIRE(ctx.GetToleranceCeiling(100.0) == 1e-2); // capped by the absolute ceiling
+    REQUIRE(ctx.GetToleranceCeiling(1e-4) == 1e-5);  // never below the resolution
+    REQUIRE(ctx.GetToleranceCeiling(std::numeric_limits<double>::infinity()) == 1e-2);
+    REQUIRE(ctx.WithToleranceCeiling(0.1).GetToleranceCeiling(1000.0) == 0.1);
+}
+
+TEST_CASE("the pair tolerance is the sum, never below the exact one (ADR-0050)",
+          "[core][context][tolerance]")
+{
+    REQUIRE(Stereon::PairTolerance(1e-3, 2e-3) >= 3e-3);
+    REQUIRE(Stereon::Coincident(1.5e-3, 1e-3, 1e-3)); // past either, within the sum
+    REQUIRE_FALSE(Stereon::Coincident(2.5e-3, 1e-3, 1e-3));
+    REQUIRE(Stereon::Coincident(0.0, 0.0, 0.0));
+    rc::prop("PairTolerance(a, b) is a + b or the next double above, and symmetric", [] {
+        const double a = *rc::gen::inRange(0, 1'000'000) * 1e-9;
+        const double b = *rc::gen::inRange(0, 1'000'000) * 1e-7;
+        const double sum = Stereon::PairTolerance(a, b);
+        RC_ASSERT(sum == Stereon::PairTolerance(b, a));
+        const long double exact = static_cast<long double>(a) + static_cast<long double>(b);
+        RC_ASSERT(static_cast<long double>(sum) >= exact);
+        RC_ASSERT(sum <= std::nextafter(a + b, std::numeric_limits<double>::infinity()));
+    });
 }
 
 TEST_CASE("log records reach the sink at or above the threshold with their location",

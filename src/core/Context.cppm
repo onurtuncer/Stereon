@@ -10,8 +10,10 @@ module;
 #include <Stereon/Core/Contracts.hpp>
 #include <Stereon/Core/Parallel.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <string_view>
 #include <utility>
@@ -74,6 +76,9 @@ public:
     static constexpr double DefaultResolution = 1e-5;
     static constexpr double DefaultAngularResolution = 1e-11;
     static constexpr double DefaultToleranceCeiling = 1e-2;
+    /// ADR-0050: no tolerance exceeds this share of the model's bounding
+    /// diagonal, whatever the absolute ceiling allows.
+    static constexpr double RelativeToleranceCeiling = 1e-3;
     /// Half the side of the size box: all geometry lies within ±500 m.
     static constexpr double SizeBoxHalfWidth = 500'000.0;
     /// ADR-0004: Compact() is due when fewer than this share of the slots of a
@@ -90,8 +95,21 @@ public:
     /// cannot be told apart by one comparison.
     [[nodiscard]] double GetResolution() const noexcept { return m_Resolution; }
     [[nodiscard]] double GetAngularResolution() const noexcept { return m_AngularResolution; }
-    /// A local tolerance above this fails the operation with ToleranceExceeded.
+    /// The absolute ceiling: a local tolerance above this fails the operation
+    /// with ToleranceExceeded, however large the model.
     [[nodiscard]] double GetToleranceCeiling() const noexcept { return m_ToleranceCeiling; }
+    /// ADR-0050's res_max for a model whose bounding diagonal is given: the
+    /// relative ceiling, capped by the absolute one, and never below the
+    /// resolution, so that every model admits a tolerance. A diagonal that is
+    /// not finite (a model with no measurable extent) leaves the absolute one.
+    [[nodiscard]] double GetToleranceCeiling(const double modelDiagonal) const noexcept
+    {
+        if (!std::isfinite(modelDiagonal)) {
+            return m_ToleranceCeiling;
+        }
+        return std::max(m_Resolution,
+                        std::min(RelativeToleranceCeiling * modelDiagonal, m_ToleranceCeiling));
+    }
     [[nodiscard]] ToleranceGrowth GetToleranceGrowthPolicy() const noexcept
     {
         return m_ToleranceGrowth;
@@ -257,5 +275,23 @@ private:
     LogSink m_LogSink;
     JournalSink m_JournalSink;
 };
+
+/// ADR-0050's pair tolerance of two entities: the sum of theirs, rounded up
+/// so that it is never below the exact sum.
+[[nodiscard]] inline double PairTolerance(const double a, const double b) noexcept
+{
+    const double sum = a + b;
+    // The rounding error of the sum, exactly (Knuth's TwoSum).
+    const double bPart = sum - a;
+    const double error = (a - (sum - bPart)) + (b - bPart);
+    return error > 0.0 ? std::nextafter(sum, std::numeric_limits<double>::infinity()) : sum;
+}
+
+/// ADR-0050's coincidence of two entities: their distance is at most the
+/// sum of their tolerances.
+[[nodiscard]] inline bool Coincident(const double distance, const double a, const double b) noexcept
+{
+    return distance <= PairTolerance(a, b);
+}
 
 } // namespace Stereon

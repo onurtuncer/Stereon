@@ -17,6 +17,7 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <limits>
 #include <optional>
 #include <string>
 #include <utility>
@@ -559,34 +560,110 @@ namespace {
 
 void CheckToleranceBound(ValidityReport& report, const TopologyTables& tables,
                          const EntityKind kind, const std::uint32_t index, const double tolerance,
-                         const Context& context)
+                         const Context& context, const double ceiling)
 {
-    if (tolerance >= context.GetResolution() && tolerance <= context.GetToleranceCeiling()) {
+    if (tolerance >= context.GetResolution() && tolerance <= ceiling) {
         return;
     }
     report.Add({.Rule = TopologyRule::ToleranceBounds,
                 .Entities = {DescribeEntity(tables, kind, index)},
-                .Message = std::format("the tolerance {} is outside the Context's [resolution, "
+                .Message = std::format("the tolerance {} is outside the model's [resolution, "
                                        "ceiling] of [{}, {}]",
-                                       tolerance, context.GetResolution(),
-                                       context.GetToleranceCeiling())});
+                                       tolerance, context.GetResolution(), ceiling)});
+}
+
+/// Points along each edge's 3D curve at which ModelDiagonal() measures it:
+/// the ends and the quarters of its range, enough to span a closed circle.
+constexpr int ExtentIntervals = 4;
+
+[[nodiscard]] Box3 WithFinite(const Box3& box, const Box3& other)
+{
+    return !other.IsEmpty() && std::isfinite(Length(Diagonal(other))) ? Hull(box, other) : box;
+}
+
+[[nodiscard]] Box3 WithFinite(const Box3& box, const Point3& p)
+{
+    return std::isfinite(p.X) && std::isfinite(p.Y) && std::isfinite(p.Z) ? Hull(box, p) : box;
+}
+
+[[nodiscard]] Box3 WithVertices(Box3 box, const TopologyTables& tables)
+{
+    for (std::uint32_t v = 0; v < tables.Vertices.GetSize(); ++v) {
+        if (tables.IsLive<EntityKind::Vertex>(v)) {
+            box = WithFinite(box, tables.Vertices[v].Position);
+        }
+    }
+    return box;
+}
+
+/// The points along an edge's own 3D curve; none for an edge without one
+/// or with a range that is not finite.
+[[nodiscard]] Box3 WithEdge(Box3 box, const TopologyTables& tables, const EdgeRecord& edge)
+{
+    const Interval range = edge.Range;
+    if (!edge.Curve.IsValid() || !std::isfinite(range.GetLower()) ||
+        !std::isfinite(range.GetUpper())) {
+        return box;
+    }
+    const Curve& curve = tables.Curves[edge.Curve.GetIndex()];
+    if (curve.IsEmpty()) {
+        return box;
+    }
+    for (int k = 0; k <= ExtentIntervals; ++k) {
+        const double t = std::clamp(range.GetLower() + Width(range) * k / ExtentIntervals,
+                                    range.GetLower(), range.GetUpper());
+        box = WithFinite(box, Eval(curve, t));
+    }
+    return box;
+}
+
+[[nodiscard]] Box3 WithFaces(Box3 box, const TopologyTables& tables)
+{
+    for (std::uint32_t f = 0; f < tables.Faces.GetSize(); ++f) {
+        const SurfaceRef surface = tables.Faces[f].Surface;
+        if (tables.IsLive<EntityKind::Face>(f) && surface.IsValid() &&
+            tables.Surfaces.HoldsGeometry(surface.GetIndex())) {
+            box = WithFinite(box, BoundingBox(tables.Surfaces[surface.GetIndex()]));
+        }
+    }
+    return box;
 }
 
 } // namespace
 
+double ModelDiagonal(const TopologyTables& tables)
+{
+    Box3 box = WithVertices(Box3::Empty(), tables);
+    for (std::uint32_t e = 0; e < tables.Edges.GetSize(); ++e) {
+        if (tables.IsLive<EntityKind::Edge>(e)) {
+            box = WithEdge(box, tables, tables.Edges[e]);
+        }
+    }
+    box = WithFaces(box, tables);
+    if (box.IsEmpty()) {
+        return std::numeric_limits<double>::infinity();
+    }
+    const double diagonal = Length(Diagonal(box));
+    // A point has no extent to measure the ceiling against.
+    return diagonal == 0.0 // STEREON-LINT-ALLOW(epsilon): exactly a point, not a tolerance
+               ? std::numeric_limits<double>::infinity()
+               : diagonal;
+}
+
 void ValidateTolerances(const TopologyTables& tables, const Context& context,
                         ValidityReport& report)
 {
+    const double ceiling = context.GetToleranceCeiling(ModelDiagonal(tables));
     for (std::uint32_t v = 0; v < tables.Vertices.GetSize(); ++v) {
         if (tables.IsLive<EntityKind::Vertex>(v)) {
             CheckToleranceBound(report, tables, EntityKind::Vertex, v, tables.Vertices[v].Tolerance,
-                                context);
+                                context, ceiling);
         }
     }
     for (std::uint32_t e = 0; e < tables.Edges.GetSize(); ++e) {
         if (tables.IsLive<EntityKind::Edge>(e)) {
             CheckToleranceBound(report, tables, EntityKind::Edge, e, tables.Edges[e].Tolerance,
-                                context);
+                                context, ceiling);
         }
     }
 }

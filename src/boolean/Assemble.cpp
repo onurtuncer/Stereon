@@ -192,14 +192,14 @@ void Record(Work& w, const EntityKind kind, const std::uint32_t target, const st
     return kept;
 }
 
-/// Identifies B's vertex with A's: within the pair tolerance, the larger
-/// of the two (decision D2), of A's, whose position the result keeps.
+/// Identifies B's vertex with A's: within the pair tolerance, the sum of
+/// the two (ADR-0050), of A's, whose position the result keeps.
 [[nodiscard]] Result<void> Identify(Work& w, const VertexId a, const VertexId b)
 {
     const Shape& sa = w.Bodies.A.Shape;
     const Shape& sb = w.Bodies.B.Shape;
-    const double tolerance = std::max(ToleranceOf(sa, a), ToleranceOf(sb, b));
-    if (Distance(PositionOf(sa, a), PositionOf(sb, b)) > tolerance) {
+    if (!Coincident(Distance(PositionOf(sa, a), PositionOf(sb, b)), ToleranceOf(sa, a),
+                    ToleranceOf(sb, b))) {
         return Fail(ErrorCode::IntersectionFailed,
                     "Boolean: a piece of the intersection ends at " + std::string(Describe(sa, a)) +
                         " in one body and at " + std::string(Describe(sb, b)) +
@@ -222,6 +222,30 @@ void Record(Work& w, const EntityKind kind, const std::uint32_t target, const st
     const Point3 start = PositionOf(sa, StartOf(sa, a));
     return StartOf(sb, b) == EndOf(sb, b) || Distance(start, PositionOf(sb, StartOf(sb, b))) <=
                                                  Distance(start, PositionOf(sb, EndOf(sb, b)));
+}
+
+/// How far apart a pair's two edges are: the larger distance of their
+/// matching ends and, where both have a 3D curve, of their middles, rounded
+/// up a step. The result's edge grows to it (ADR-0001, rule 4), since the
+/// pair rule (ADR-0050) lets the two lie further apart than either's
+/// tolerance; G02 checks the whole edge at commit.
+[[nodiscard]] double GapOf(const Work& w, const SharedPair& pair)
+{
+    const Shape& sa = w.Bodies.A.Shape;
+    const Shape& sb = w.Bodies.B.Shape;
+    const EdgeId a = pair.Edges[BodyA];
+    const EdgeId b = pair.Edges[BodyB];
+    const VertexId bStart = pair.Along ? StartOf(sb, b) : EndOf(sb, b);
+    const VertexId bEnd = pair.Along ? EndOf(sb, b) : StartOf(sb, b);
+    double gap = std::max(Distance(PositionOf(sa, StartOf(sa, a)), PositionOf(sb, bStart)),
+                          Distance(PositionOf(sa, EndOf(sa, a)), PositionOf(sb, bEnd)));
+    const std::optional<Curve> ca = CurveOf(sa, a);
+    const std::optional<Curve> cb = CurveOf(sb, b);
+    if (ca && cb) {
+        gap = std::max(gap, Distance(Eval(*ca, Midpoint(RangeOf(sa, a))),
+                                     Eval(*cb, Midpoint(RangeOf(sb, b)))));
+    }
+    return std::nextafter(gap, std::numeric_limits<double>::infinity());
 }
 
 /// The pieces of the intersection and the edges paired on coincident faces:
@@ -316,16 +340,25 @@ struct Carried {
     w.Vertices[key] = made;
     Record(w, EntityKind::Vertex, made.GetIndex(), body,
            w.Origin[body].Of(EntityKind::Vertex, vertex.GetIndex()));
+    // ADR-0001, rule 4: the largest of the tolerances and of the distances
+    // to the identified vertices, rounded up a step, so that the vertex
+    // covers B's positions, which the pair rule lets lie past either
+    // tolerance alone.
     double tolerance = own;
+    const Point3 at = PositionOf(shape, vertex);
     for (const VertexId b :
          body == BodyA ? w.Aliased[vertex.GetIndex()] : std::vector<VertexId>{}) {
-        tolerance = std::max(tolerance, ToleranceOf(w.Bodies.B.Shape, b));
+        const Shape& sb = w.Bodies.B.Shape;
+        const double reach = std::nextafter(Distance(PositionOf(sb, b), at),
+                                            std::numeric_limits<double>::infinity());
+        tolerance = std::max({tolerance, ToleranceOf(sb, b), reach});
         Record(w, EntityKind::Vertex, made.GetIndex(), BodyB,
                w.Origin[BodyB].Of(EntityKind::Vertex, b.GetIndex()));
     }
     if (tolerance > own) {
-        STEREON_TRY_VOID(w.Builder.SetTolerance(
-            made, tolerance, "Boolean: identified with the other body's vertex (ADR-0001)"));
+        STEREON_TRY_VOID(w.Builder.SetTolerance(made, tolerance, ToleranceCause::MergeVertices,
+                                                "Boolean: identified with the other body's "
+                                                "vertex (ADR-0001)"));
     }
     return made;
 }
@@ -363,9 +396,9 @@ struct Carried {
 }
 
 /// The result's edge for an edge of the representative body: its kind,
-/// range and curve, between the result's vertices for its ends, at the
-/// larger tolerance of the pair's two edges when it is a piece of the
-/// intersection.
+/// range and curve, between the result's vertices for its ends, grown to
+/// the larger tolerance of the pair's two edges and the gap between them
+/// when it is a piece of the intersection.
 [[nodiscard]] Result<BuilderEdgeId> MakeEdge(Work& w, const std::uint8_t body, const EdgeId edge,
                                              const std::optional<std::size_t> pair)
 {
@@ -388,11 +421,12 @@ struct Carried {
     }
     const SharedPair& shared = w.Pairs[*pair];
     const std::uint8_t other = body == BodyA ? BodyB : BodyA;
-    const double tolerance =
-        std::max(spec.Tolerance, ToleranceOf(w.ShapeOf(other), shared.Edges[other]));
+    const double tolerance = std::max(
+        {spec.Tolerance, ToleranceOf(w.ShapeOf(other), shared.Edges[other]), GapOf(w, shared)});
     if (tolerance > spec.Tolerance) {
-        STEREON_TRY_VOID(w.Builder.SetTolerance(
-            made, tolerance, "Boolean: one piece of the intersection with the other body's"));
+        STEREON_TRY_VOID(
+            w.Builder.SetTolerance(made, tolerance, ToleranceCause::AbsorbGap,
+                                   "Boolean: one piece of the intersection with the other body's"));
     }
     const std::optional<std::uint32_t> ownOrigin =
         w.Origin[body].Of(EntityKind::Edge, edge.GetIndex());

@@ -327,7 +327,7 @@ Result<BuilderVertexId> ShapeBuilder::AddVertex(const Point3& position, const do
     STEREON_TRY_VOID(Detail::CheckNonNegative(tolerance, "the tolerance", "AddVertex"));
     Detail::VertexRecord record;
     record.Position = position;
-    record.Tolerance = tolerance;
+    record.Tolerance = tolerance; // STEREON-LINT-ALLOW(tolerance-write): a new vertex
     return Allocate<EntityKind::Vertex>(record);
 }
 
@@ -360,7 +360,7 @@ Result<BuilderEdgeId> ShapeBuilder::AddEdge(const EdgeSpec& spec)
     record.End = Link(spec.End);
     record.Curve = spec.Curve;
     record.Range = spec.Range;
-    record.Tolerance = spec.Tolerance;
+    record.Tolerance = spec.Tolerance; // STEREON-LINT-ALLOW(tolerance-write): a new edge
     record.Kind = spec.Kind;
     const BuilderEdgeId edge = Allocate<EntityKind::Edge>(record);
     LinkAtVertex(edge.GetIndex(), spec.Start.GetIndex(), true);
@@ -584,18 +584,27 @@ void ShapeBuilder::DropCache(const std::uint32_t edge)
 
 template <EntityKind K>
 Result<void> ShapeBuilder::SetToleranceOf(const BuilderId<K> h, const double tolerance,
-                                          const std::string_view reason, const char* operation)
+                                          const ToleranceCause cause, const std::string_view reason,
+                                          const char* operation)
 {
     STEREON_TRY_VOID(Require(h, operation));
     STEREON_TRY_VOID(Detail::CheckNonNegative(tolerance, "the tolerance", operation));
     const double old = m_Tables.template Table<K>()[h.GetIndex()].Tolerance;
-    m_Tables.template Table<K>().Modify(h.GetIndex(),
-                                        [&](Detail::Record<K>& r) { r.Tolerance = tolerance; });
+    if (cause == ToleranceCause::Tighten && tolerance > old) {
+        return Fail(ErrorCode::InvalidInput,
+                    std::format("{}: Tighten would raise the tolerance from {} to {}", operation,
+                                old, tolerance));
+    }
+    // The one write of a tolerance after creation (ADR-0050).
+    m_Tables.template Table<K>().Modify(h.GetIndex(), [&](Detail::Record<K>& r) {
+        r.Tolerance = tolerance; // STEREON-LINT-ALLOW(tolerance-write): SetTolerance itself
+    });
     ToleranceChange change;
     change.Kind = K;
     change.Index = h.GetIndex();
     change.Old = old;
     change.New = tolerance;
+    change.Causes.push_back(cause);
     change.Reason = std::string(reason);
     m_ToleranceChanges.push_back(std::move(change));
     Advance();
@@ -603,15 +612,15 @@ Result<void> ShapeBuilder::SetToleranceOf(const BuilderId<K> h, const double tol
 }
 
 Result<void> ShapeBuilder::SetTolerance(const BuilderVertexId vertex, const double tolerance,
-                                        const std::string_view reason)
+                                        const ToleranceCause cause, const std::string_view detail)
 {
-    return SetToleranceOf(vertex, tolerance, reason, "SetTolerance");
+    return SetToleranceOf(vertex, tolerance, cause, detail, "SetTolerance");
 }
 
 Result<void> ShapeBuilder::SetTolerance(const BuilderEdgeId edge, const double tolerance,
-                                        const std::string_view reason)
+                                        const ToleranceCause cause, const std::string_view detail)
 {
-    return SetToleranceOf(edge, tolerance, reason, "SetTolerance");
+    return SetToleranceOf(edge, tolerance, cause, detail, "SetTolerance");
 }
 
 namespace {
@@ -1163,8 +1172,8 @@ namespace {
 
 /// The builder's SetTolerance() calls as one change per entity still live in
 /// the result, ordered by kind and index: the first old value, the last new
-/// one and every reason in order; none where the value came back to where it
-/// started.
+/// one and every cause and reason in order; none where the value came back
+/// to where it started.
 [[nodiscard]] std::vector<ToleranceChange> Coalesced(std::vector<ToleranceChange> calls,
                                                      const Detail::TopologyTables& result)
 {
@@ -1177,6 +1186,7 @@ namespace {
             changes.push_back(std::move(call));
         } else {
             same->New = call.New;
+            same->Causes.insert(same->Causes.end(), call.Causes.begin(), call.Causes.end());
             same->Reason += "; " + call.Reason;
         }
     }
@@ -1206,45 +1216,61 @@ namespace {
     return warning;
 }
 
+/// A change's causes, named and in order: "AbsorbGap, MergeVertices".
+[[nodiscard]] std::string CausesOf(const ToleranceChange& change)
+{
+    std::string named;
+    for (const ToleranceCause cause : change.Causes) {
+        named += (named.empty() ? "" : ", ") + std::string(ToString(cause));
+    }
+    return named;
+}
+
 /// ToleranceExceeded for a change the Context does not allow (ADR-0001,
-/// ADR-0006): above the ceiling, or any growth when growth fails.
+/// ADR-0006, ADR-0050): above the model's ceiling, or any growth when
+/// growth fails.
 [[nodiscard]] Result<void> CheckTolerances(const std::vector<ToleranceChange>& changes,
-                                           const Context& context, const Shape& shape)
+                                           const Context& context, const double ceiling,
+                                           const Shape& shape)
 {
     for (const ToleranceChange& c : changes) {
-        if (c.New > context.GetToleranceCeiling()) {
+        if (c.New > ceiling) {
             return Fail(ErrorCode::ToleranceExceeded,
-                        std::format("Commit: the tolerance of {} would be {}, above the "
-                                    "Context's ceiling of {}",
-                                    Named(shape, c.Kind, c.Index), c.New,
-                                    context.GetToleranceCeiling()));
+                        std::format("Commit: the tolerance of {} would be {} ({}: {}), above the "
+                                    "model's ceiling of {}",
+                                    Named(shape, c.Kind, c.Index), c.New, CausesOf(c), c.Reason,
+                                    ceiling));
         }
         if (c.New > c.Old && context.GetToleranceGrowthPolicy() == ToleranceGrowth::Fail) {
             return Fail(ErrorCode::ToleranceExceeded,
-                        std::format("Commit: the tolerance of {} grew from {} to {} ({}), and the "
-                                    "Context fails any tolerance growth",
-                                    Named(shape, c.Kind, c.Index), c.Old, c.New, c.Reason));
+                        std::format("Commit: the tolerance of {} grew from {} to {} ({}: {}), and "
+                                    "the Context fails any tolerance growth",
+                                    Named(shape, c.Kind, c.Index), c.Old, c.New, CausesOf(c),
+                                    c.Reason));
         }
     }
     return {};
 }
 
-/// ADR-0001's bounds on every live vertex and edge of a result, whatever its
-/// change log says: an entity made with its tolerance, or kept from a shape
-/// published under another Context, has no SetTolerance() entry to check.
-/// ToleranceExceeded above the Context's ceiling; InvalidInput below its
-/// resolution, which every local tolerance is at least.
+/// ADR-0001's and ADR-0050's bounds on every live vertex and edge of a
+/// result, whatever its change log says: an entity made with its tolerance,
+/// or kept from a shape published under another Context, has no
+/// SetTolerance() entry to check. ToleranceExceeded above the model's
+/// ceiling, `ceiling`; InvalidInput below the Context's resolution, which
+/// every local tolerance is at least.
 [[nodiscard]] Result<void> CheckToleranceBounds(const Detail::TopologyTables& t,
-                                                const Context& context, const Shape& shape,
-                                                const char* operation)
+                                                const Context& context, const double ceiling,
+                                                const Shape& shape, const char* operation)
 {
     const auto check = [&](const EntityKind kind, const std::uint32_t index,
                            const double tolerance) -> Result<void> {
-        if (tolerance > context.GetToleranceCeiling()) {
+        if (tolerance > ceiling) {
             return Fail(ErrorCode::ToleranceExceeded,
-                        std::format("{}: the tolerance of {} is {}, above the Context's ceiling "
-                                    "of {}",
-                                    operation, Named(shape, kind, index), tolerance,
+                        std::format("{}: the tolerance of {} is {}, above the model's ceiling "
+                                    "of {} (ADR-0050: the smaller of {} of its diagonal and the "
+                                    "Context's {})",
+                                    operation, Named(shape, kind, index), tolerance, ceiling,
+                                    Context::RelativeToleranceCeiling,
                                     context.GetToleranceCeiling()));
         }
         if (tolerance < context.GetResolution()) {
@@ -1285,10 +1311,10 @@ namespace {
     std::vector<Diagnostic> warnings;
     for (const ToleranceChange& c : changes) {
         if (c.New > c.Old) {
-            warnings.push_back(
-                MakeWarning(DiagnosticCode::ToleranceGrown,
-                            std::format("tolerance grew from {} to {}: {}", c.Old, c.New, c.Reason),
-                            Named(shape, c.Kind, c.Index)));
+            warnings.push_back(MakeWarning(DiagnosticCode::ToleranceGrown,
+                                           std::format("tolerance grew from {} to {} ({}): {}",
+                                                       c.Old, c.New, CausesOf(c), c.Reason),
+                                           Named(shape, c.Kind, c.Index)));
         }
     }
     if (before != nullptr) {
@@ -1354,8 +1380,9 @@ struct Prepared {
     }
     const Detail::TopologyTables& result = frozen->GetSnapshot()->GetTables();
     std::vector<ToleranceChange> changes = Coalesced(std::move(calls), result);
-    STEREON_TRY_VOID(CheckTolerances(changes, context, *frozen));
-    STEREON_TRY_VOID(CheckToleranceBounds(result, context, *frozen, "Commit"));
+    const double ceiling = context.GetToleranceCeiling(Detail::ModelDiagonal(result));
+    STEREON_TRY_VOID(CheckTolerances(changes, context, ceiling, *frozen));
+    STEREON_TRY_VOID(CheckToleranceBounds(result, context, ceiling, *frozen, "Commit"));
     // A result that fails the Geometric level is a kernel bug or a caller's
     // inconsistent geometry; either way it is not published (ADR-0006).
     prepared.Geometric = ChecksGeometry(context);
@@ -1457,7 +1484,9 @@ Result<OperationResult> CompactShape(const Shape& shape, const Context& context)
         }
     }
     const Detail::TopologyTables& source = shape.GetSnapshot()->GetTables();
-    STEREON_TRY_VOID(CheckToleranceBounds(source, context, shape, "CompactShape"));
+    STEREON_TRY_VOID(CheckToleranceBounds(
+        source, context, context.GetToleranceCeiling(Detail::ModelDiagonal(source)), shape,
+        "CompactShape"));
     const bool geometric = ChecksGeometry(context);
     if (geometric) {
         const ValidityReport report = Detail::ValidateGeometry(source);

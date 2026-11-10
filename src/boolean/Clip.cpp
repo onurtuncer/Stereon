@@ -159,9 +159,11 @@ void AddEndCrossings(const Shape& shape, const Surface& surface, const Intersect
             }
             const double s = NearestOn(edge, p);
             const Point2 onEdge = Eval(edge.PCurve, s);
-            const double tolerance = std::max(ToleranceOf(shape, EdgeOf(shape, edge.Coedge)),
-                                              branch.IsCertified() ? branch.Bound : 0.0);
-            if (Distance(point, Eval(surface, onEdge)) <= tolerance) {
+            // A pair test (ADR-0050): the edge's tolerance and the
+            // branch's certified bound, its tolerance, summed.
+            if (Coincident(Distance(point, Eval(surface, onEdge)),
+                           ToleranceOf(shape, EdgeOf(shape, edge.Coedge)),
+                           branch.IsCertified() ? branch.Bound : 0.0)) {
                 LoopCrossing crossing{edge.Coedge,           VertexId{}, s, t, onEdge,
                                       ContactType::Crossing, false};
                 SnapToVertex(shape, branch, edge, crossing);

@@ -62,7 +62,9 @@ serving several purposes. Stereon keeps three apart (ADR-0001):
 
 **Healing budget**
    How large a local tolerance may become during one operation before the
-   operation fails: the tolerance ceiling.
+   operation fails: the tolerance ceiling, a thousandth of the model's
+   bounding diagonal and never above the ``Context``'s absolute ceiling
+   (ADR-0050).
 
 A construction's error bound must not exceed the modelling tolerance of the
 entity it produces. If it would, the entity's tolerance grows, through the
@@ -186,28 +188,49 @@ inequality. The validity checker evaluates it at the Geometric level
 spread parameters, ends included. Being sampled, it is a regression check
 rather than a proof: a deviation between samples can pass. Certified bounds
 replace the samples where interval evaluation exists. Where two entities
-meet, their **pair tolerance** is the larger of the two,
-:math:`\tau_{AB} = \max(\tau_A, \tau_B)`.
+meet, their **pair tolerance** is the sum of the two,
+:math:`\tau_{AB} = \tau_A + \tau_B` (ADR-0050, which replaced ADR-0001's
+larger of the two): each entity may lie anywhere within its own tolerance,
+so two of them coincide when their distance is at most the sum.
+``Stereon::Coincident(distance, a, b)`` and ``Stereon::PairTolerance(a, b)``
+in ``Stereon.Core`` are the test and the value, the sum rounded up.
 
 Growing a tolerance
 -------------------
 
-A local tolerance changes only through a named operation that states why:
+A local tolerance changes only through a named operation that states why,
+with a cause from ADR-0050's closed set and free text as detail:
 
 .. code-block:: cpp
 
-   STEREON_TRY_VOID(builder.SetTolerance(edge, 2e-3, "import: face gap of 1.6 um"));
+   STEREON_TRY_VOID(builder.SetTolerance(edge, 2e-3, Stereon::ToleranceCause::Import,
+                                         "face gap of 1.6 um"));
+
+The causes are ``AbsorbGap`` (an intersection curve not meeting an existing
+edge or vertex), ``MergeVertices`` (the merge policy below),
+``PromoteEdge``, ``TolerantCoincidence``, ``CertificateWidening``,
+``HealingBudget`` and ``Import``, and ``Tighten`` for a tolerance lowered to
+the error achieved, which is refused if it would raise one. No other code
+writes a tolerance: ``tools/check_tolerance_writes.py`` rejects any write in
+``src/topo/`` outside ``SetTolerance`` and the creation of an entity.
 
 Publishing the builder with ``Commit(builder, ctx)`` then enforces the
 policy:
 
 - Every change appears in the ``OperationResult`` as a ``ToleranceChange``
-  (entity, old value, new value, reason). A growth also adds a
-  ``ToleranceGrown`` diagnostic, so a caller sees it even with logging off.
-- A tolerance above ``Context::GetToleranceCeiling()`` (0.01 mm by default)
-  fails the operation with ``ToleranceExceeded``. This is the healing
-  budget: a model that needs looser tolerances must say so by raising the
-  ceiling.
+  (entity, old value, new value, its causes, the detail). A growth also
+  adds a ``ToleranceGrown`` diagnostic naming the causes, so a caller sees
+  it even with logging off.
+- A tolerance above the model's ceiling fails the operation with
+  ``ToleranceExceeded``. The ceiling is
+  ``Context::GetToleranceCeiling(diagonal)``: a thousandth of the bounding
+  diagonal of the result (its vertices, points along its edges' curves and
+  its bounded surfaces), capped by ``Context::GetToleranceCeiling()``, 0.01
+  mm by default, and never below the resolution. This is the healing
+  budget: a large model never accepts millimetre gaps, and a small one gets
+  a tighter bound. A model with no measurable extent, a single point, has
+  the absolute ceiling alone. A model that needs looser tolerances raises
+  the absolute ceiling; it cannot loosen the relative one.
 - A tolerance below the resolution fails with ``InvalidInput``.
 - Under ``Context::WithToleranceGrowthPolicy(ToleranceGrowth::Fail)`` any
   growth fails the operation. Callers that must not heal use this.
@@ -302,14 +325,17 @@ Implementation
    * - Code
      - Role
    * - ``src/core/Context.cppm``
-     - Resolution, angular resolution, ceiling, growth policy, size box.
+     - Resolution, angular resolution, the absolute and the model's ceiling,
+       growth policy, size box; ``PairTolerance`` and ``Coincident``.
    * - ``src/topo/Builder.cppm`` (``SetTolerance``)
      - The one way a local tolerance changes.
    * - ``src/topo/Builder.cpp`` (``Commit``)
      - Reports changes; enforces the ceiling, the resolution floor and the
        growth policy.
    * - ``src/topo/ValidateGeometry.cpp``
-     - Rules G01, G02 and G04.
+     - Rules G01, G02 and G04; ``ModelDiagonal``.
+   * - ``tools/check_tolerance_writes.py``
+     - The CI check that nothing else writes a tolerance.
    * - ``src/boolean/Assemble.cpp``
      - Vertex identification at the pair tolerance.
    * - ``tools/check_epsilon.py``

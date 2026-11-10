@@ -148,7 +148,8 @@ TEST_CASE("G02: a face surface moved away from its edges", "[topo][validity]")
     // local tolerances of ADR-0001.
     ShapeBuilder loosened = BoxWithFaceMoved(box, body, 1e-3);
     for (const auto e : body.Edges) {
-        Must(loosened.SetTolerance(loosened.Handle(box.Resolve(e)), 2e-3, "a moved face"));
+        Must(loosened.SetTolerance(loosened.Handle(box.Resolve(e)), 2e-3,
+                                   Stereon::ToleranceCause::AbsorbGap, "a moved face"));
     }
     const auto accepted = Stereon::Commit(std::move(loosened), Context::Default());
     REQUIRE(accepted);

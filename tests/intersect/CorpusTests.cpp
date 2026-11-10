@@ -12,7 +12,9 @@
 // doubles, except that exactly parallel supports within the pair tolerance
 // are declared coincident (ADR-0029 section 6, decision D1 of the plan):
 // the corpus's one tolerant claim that nominal geometry honours. The pair
-// tolerance is the larger of the two (ADR-0001, decision D2). Cylinder
+// tolerance is the case's tau, written on both surfaces, read as the larger
+// of the two and not summed: surfaces carry no tolerance of their own
+// (ADR-0050; corpus/analytic-ssi/README.md, rule 1). Cylinder
 // pairs with skew axes, Tier B, are decided as the configuration the
 // corpus names for them (M3b), read off the result's branches: how many
 // closed curves they form and at how many nodes they meet.

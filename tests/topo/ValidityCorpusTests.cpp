@@ -354,7 +354,7 @@ TEST_CASE("G03: a loop jumps a period across a seam", "[topo][validity]")
     REQUIRE_FALSE(report.Has(TopologyRule::EdgeContainment));
 }
 
-TEST_CASE("G04: tolerances outside the Context's resolution and ceiling", "[topo][validity]")
+TEST_CASE("G04: tolerances outside the resolution and the model's ceiling", "[topo][validity]")
 {
     for (const double tolerance : {2e-2, 1e-7}) {
         INFO(tolerance);
@@ -366,11 +366,16 @@ TEST_CASE("G04: tolerances outside the Context's resolution and ceiling", "[topo
         // Without the Context the bounds are not known, and not checked.
         REQUIRE(Stereon::ValidateTopology(shape, ValidityLevel::Geometric).IsValid());
     }
-    // A Context whose ceiling holds the tolerance accepts it.
+    // The wire is 1 mm long, so its ceiling is 1e-3 (ADR-0050): a raised
+    // absolute ceiling does not admit 2e-2, and the default admits 9e-4.
     const Shape loose = Must(Stereon::Freeze(WireWithVertexTolerance(2e-2)));
-    REQUIRE(
+    REQUIRE_FALSE(
         Stereon::ValidateTopology(loose, ValidityLevel::Geometric, ctx.WithToleranceCeiling(5e-2))
             .IsValid());
+    const Shape within = Must(Stereon::Freeze(WireWithVertexTolerance(9e-4)));
+    REQUIRE(Stereon::ValidateTopology(within, ValidityLevel::Geometric, ctx).IsValid());
+    const Shape over = Must(Stereon::Freeze(WireWithVertexTolerance(2e-3)));
+    REQUIRE_FALSE(Stereon::ValidateTopology(over, ValidityLevel::Geometric, ctx).IsValid());
 }
 
 TEST_CASE("G05: Trim and Intersection edges and their surfaces", "[topo][validity]")
