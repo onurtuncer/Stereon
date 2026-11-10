@@ -390,4 +390,22 @@ IntersectVjp(const Curve2d& a, std::span<const PlaneCurveBinding> bindingsA, con
              std::span<const PlaneCurveBinding> bindingsB, const PlanarIntersection& intersection,
              const SensitivityContext& sensitivity);
 
+/// The products of Intersect(a, b) for two space curves (ADR-0052). Two space curves meet only
+/// where their closest approach is within the resolution, and a generic change of either curve
+/// undoes the meeting: a meeting is itself an event, of codimension one,
+/// with no derivative. A result with a point or an overlap is therefore
+/// Nondifferentiable, with that reason; a proved separation is Valid and
+/// carries no values (the forward product) or zeros (the reverse one), since
+/// it stays a separation under a small enough change. Tracking the closest
+/// approach smoothly is a separate product, ClosestApproach, still to come;
+/// no binding type is needed until then. InvalidInput for an empty curve,
+/// for a seed that was never set (forward), or for an adjoint that is not
+/// empty (reverse).
+[[nodiscard]] Result<SensitivityResult> IntersectJvp(const Curve& a, const Curve& b,
+                                                     const CurveCurveIntersection& intersection,
+                                                     const SensitivityContext& sensitivity);
+[[nodiscard]] Result<SensitivityResult> IntersectVjp(const Curve& a, const Curve& b,
+                                                     const CurveCurveIntersection& intersection,
+                                                     const SensitivityContext& sensitivity);
+
 } // namespace Stereon

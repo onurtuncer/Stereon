@@ -67,3 +67,4 @@ Open questions that have to be researched before they can be decided live in [`d
 | [0049](0049-machining-collision-and-clearance-queries.md) | Machining collision and clearance queries with bounded motion | M7 (staged) | Proposed |
 | [0050](0050-tolerant-topology.md) | Tolerant topology: named, bounded tolerance growth; supersedes ADR-0001's pair rule and ceiling | 2–3 | Accepted |
 | [0051](0051-face-adjacency-and-canonical-surfaces.md) | Face adjacency graph and canonical surface classification as kernel queries | 3 | Proposed |
+| [0052](0052-space-curve-meeting-derivatives.md) | Derivatives of meetings of space curves: none from Intersect; ClosestApproach later | 2 | Accepted |

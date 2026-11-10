@@ -471,3 +471,57 @@ TEST_CASE("plane curve bindings are refused where the curve has no such value",
     CHECK(Stereon::IntersectJvp(grown, {}, XAxis, {}, *at, sensitivity).error().GetCode() ==
           ErrorCode::InvalidInput);
 }
+
+TEST_CASE("a meeting of two space curves is an event, a separation keeps",
+          "[intersect][linearization][curve-curve]")
+{
+    // The owner's decision of 2026-11-10: a generic change of either curve
+    // undoes a meeting of space curves, so it has no derivative; a proved
+    // separation stays one under a small enough change, with nothing to move.
+    ParameterSet set;
+    static_cast<void>(*set.Add("p", ParameterQuantity::Length, 1.0));
+    SensitivityContext sensitivity(std::move(set));
+    REQUIRE(sensitivity.SetSeed(std::vector<double>{1.0}).has_value());
+    using Stereon::Curve;
+    using Stereon::Line;
+    using Stereon::Point3;
+    using Stereon::Vec3;
+    const Curve alongX{Line{Point3{0.0, 0.0, 0.0}, Vec3{1.0, 0.0, 0.0}}};
+    const Curve alongY{Line{Point3{0.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}}};
+    const Curve above{Line{Point3{0.0, 0.0, 1.0}, Vec3{0.0, 1.0, 0.0}}};
+
+    const auto meet = Stereon::Intersect(alongX, alongY, ctx);
+    REQUIRE(meet.has_value());
+    REQUIRE(meet->Points.size() == 1u);
+    const auto meeting = Stereon::IntersectJvp(alongX, alongY, *meet, sensitivity);
+    REQUIRE(meeting.has_value());
+    CHECK(meeting->GetStatus() == DerivativeStatus::Nondifferentiable);
+    CHECK_FALSE(meeting->GetValues().has_value());
+
+    const auto apart = Stereon::Intersect(alongX, above, ctx);
+    REQUIRE(apart.has_value());
+    REQUIRE(apart->IsEmpty());
+    const auto forward = Stereon::IntersectJvp(alongX, above, *apart, sensitivity);
+    REQUIRE(forward.has_value());
+    CHECK(forward->GetStatus() == DerivativeStatus::Valid);
+    CHECK(forward->GetValues()->empty());
+    const auto reverse = Stereon::IntersectVjp(alongX, above, *apart, sensitivity);
+    REQUIRE(reverse.has_value());
+    CHECK(reverse->GetStatus() == DerivativeStatus::Valid);
+    REQUIRE(reverse->GetValues()->size() == 1u);
+    CHECK((*reverse->GetValues())[0] == 0.0);
+    REQUIRE(sensitivity.SetAdjoint(std::vector<double>{1.0}).has_value());
+    CHECK(Stereon::IntersectVjp(alongX, above, *apart, sensitivity).error().GetCode() ==
+          ErrorCode::InvalidInput);
+
+    // A B-spline against itself overlaps.
+    const auto spline = Stereon::MakeBSplineCurve(1, {0.0, 0.0, 1.0, 1.0},
+                                                  {Point3{0.0, 0.0, 0.0}, Point3{1.0, 1.0, 0.0}});
+    REQUIRE(spline.has_value());
+    const auto same = Stereon::Intersect(Curve{*spline}, Curve{*spline}, ctx);
+    REQUIRE(same.has_value());
+    REQUIRE_FALSE(same->Overlaps.empty());
+    const auto overlap = Stereon::IntersectJvp(Curve{*spline}, Curve{*spline}, *same, sensitivity);
+    REQUIRE(overlap.has_value());
+    CHECK(overlap->GetStatus() == DerivativeStatus::Nondifferentiable);
+}

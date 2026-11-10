@@ -40,7 +40,8 @@ inline constexpr OperationCapability IntersectCatalogue[] = {
             "tolerance stay fixed; branch points of two such surfaces under the normal-plane "
             "tracking constraint (BranchSample), certified crossing branches only; "
             "points where two plane curves (lines, circles, ellipses, B-splines) cross, in "
-            "their defining values (PlaneCurveBinding); "
+            "their defining values (PlaneCurveBinding); a meeting of two space curves is an "
+            "event of codimension one, nondifferentiable, a separation valid with no values; "
             "other pairs answer NotSupported",
             {DerivativeProduct::Jvp, DerivativeProduct::Vjp}),
 };
