@@ -302,6 +302,37 @@ TEST_CASE("the derivative with respect to a pole is its basis product",
     });
 }
 
+TEST_CASE("PoleVelocity is the dual-number derivative of Eval in every component",
+          "[surface][bspline][property]")
+{
+    rc::prop("for a pole and a component picked at random", [] {
+        const BSplineSurface s = RandomSurface(*rc::gen::arbitrary<bool>());
+        const Point2 uv = RandomParameter(s);
+        const Box2 d = Domain(s);
+        RC_PRE(uv.X < d.X.GetUpper() && uv.Y < d.Y.GetUpper());
+        const std::size_t picked = *rc::gen::inRange<std::size_t>(0, s.Poles.size());
+        const auto component = static_cast<Stereon::PoleComponent>(*rc::gen::inRange(0, 4));
+        // The pole's component seeded, a polynomial surface lifted with
+        // weights of 1 so that a weight can move.
+        Stereon::BasicBSplineSurface<Dual> lifted{s.DegreeU, s.DegreeV, s.KnotsU, s.KnotsV, {}, {}};
+        for (std::size_t k = 0; k < s.Poles.size(); ++k) {
+            const auto seeded = [&](const Stereon::PoleComponent c, const double value) {
+                return Dual{value, k == picked && component == c ? 1.0 : 0.0};
+            };
+            lifted.Poles.push_back({seeded(Stereon::PoleComponent::X, s.Poles[k].X),
+                                    seeded(Stereon::PoleComponent::Y, s.Poles[k].Y),
+                                    seeded(Stereon::PoleComponent::Z, s.Poles[k].Z)});
+            lifted.Weights.push_back(
+                seeded(Stereon::PoleComponent::Weight, s.Weights.empty() ? 1.0 : s.Weights[k]));
+        }
+        const auto exact = Eval(lifted, uv);
+        const Vec3 velocity = Stereon::PoleVelocity(s, picked, component, uv);
+        RC_ASSERT(std::abs(velocity.X - exact.X.Deriv) <= 1e-12);
+        RC_ASSERT(std::abs(velocity.Y - exact.Y.Deriv) <= 1e-12);
+        RC_ASSERT(std::abs(velocity.Z - exact.Z.Deriv) <= 1e-12);
+    });
+}
+
 TEST_CASE("knot insertion, Bezier extraction and iso-curves keep the surface",
           "[surface][bspline][property]")
 {
