@@ -333,7 +333,7 @@ TEST_CASE("every pair case over bounded boxes carries its tolerance evidence",
             }
             for (const Stereon::IntersectionBranch& branch : result->Branches) {
                 CHECK(branch.Range.IsBounded());
-                lines += CurveOf(branch) == "line" ? 1 : 0;
+                lines += CurveOf(branch) == "line" ? std::size_t{1} : std::size_t{0};
             }
             IntersectTest::CheckToleranceEvidence(*result, tolerance);
             ++checked;
