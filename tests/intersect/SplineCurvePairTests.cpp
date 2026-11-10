@@ -183,7 +183,13 @@ TEST_CASE("random cubics crossed by a straight spline through one of their point
                 const double sa = swapped ? p.ParameterB : p.ParameterA;
                 const double sb = swapped ? p.ParameterA : p.ParameterB;
                 RC_ASSERT(Distance(Eval(a, sa), Eval(b, sb)) <= 1e-5);
-                found = found || (std::abs(sa - s0) <= 1e-9 && std::abs(sb - 0.5) <= 1e-9);
+                // The meeting at the point, on b's middle. A cubic that
+                // runs back over itself passes the point at another
+                // parameter too, and meetings that close in space on both
+                // curves are one (ADR-0001), so the point, not s0, is
+                // what is found: seed 14087310745407902981, P1 = P2 on
+                // the line through P0 = P3.
+                found = found || (Distance(Eval(a, sa), on) <= 1e-9 && std::abs(sb - 0.5) <= 1e-9);
             }
             RC_ASSERT(found);
         }

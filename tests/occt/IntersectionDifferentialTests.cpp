@@ -862,7 +862,9 @@ TEST_CASE("3D curve pairs agree with Extrema_LocateExtCC on the corpus",
 // Curves against B-spline surfaces against GeomAPI_IntCS: lines through
 // known points of a bicubic patch and of a rational cylinder, transverse by
 // construction. The two kernels must find the same number of points, each
-// of Stereon's within 1e-7 of one of OCCT's.
+// of Stereon's within 1e-7 of one of OCCT's. OCCT reports a crossing on a
+// closed surface's seam at both ends of the period, Stereon once (#249), so
+// OCCT's points are counted once each in space.
 namespace {
 
 Stereon::BSplineSurface WavyPatch()
@@ -886,7 +888,14 @@ void RequireAgreesWithIntCS(const Line& line, const Stereon::BSplineSurface& sur
     REQUIRE(result.has_value());
     GeomAPI_IntCS occt(new Geom_Line(ToOcct(line)), ToOcct(surface));
     REQUIRE(occt.IsDone());
-    REQUIRE(static_cast<int>(result->Points.size()) == occt.NbPoints());
+    std::vector<gp_Pnt> distinct;
+    for (int i = 1; i <= occt.NbPoints(); ++i) {
+        if (std::ranges::none_of(
+                distinct, [&](const gp_Pnt& q) { return q.Distance(occt.Point(i)) <= 1e-7; })) {
+            distinct.push_back(occt.Point(i));
+        }
+    }
+    REQUIRE(result->Points.size() == distinct.size());
     for (const Stereon::CurveSurfacePoint& p : result->Points) {
         double nearest = std::numeric_limits<double>::infinity();
         for (int i = 1; i <= occt.NbPoints(); ++i) {
