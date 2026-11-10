@@ -292,6 +292,38 @@ the time, with three poles bound. Other surfaces (extrusions, revolutions)
 answer ``NotSupported``; each new curve–surface handler binds its
 geometry's parameters to the same system.
 
+Points of two plane curves
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Two plane curves meet where :math:`F(s, t) = A(s) - B(t) = 0`: two
+equations in two unknowns, with :math:`F_z = [A'(s), -B'(t)]`, singular
+exactly where the curves are tangent. Its conditioning is the sine of the
+angle between them, :math:`|A' \times B'| / (|A'| |B'|)`. A design change
+moves the parameters by :math:`F_z z' = B_p p' - A_p p'` and the point by
+:math:`x' = A_p p' + A' s'`; the reverse product solves the transposed
+system once per point. ``Linearize(a, b, point)``, ``IntersectJvp`` and
+``IntersectVjp`` take the two ``Curve2d`` and a ``PlaneCurveBinding`` per
+parameter: a line's origin and direction, a circle's centre and radius, an
+ellipse's centre and radii, or a B-spline's poles and weights, whose
+velocity is the curve library's ``PoleVelocity`` on the curve lifted into
+the plane :math:`z = 0`. The statuses are a curve and a surface's: a decided
+crossing ``Valid``, or ``NearEvent`` below ``NearEventSine``; a tangential
+contact or an overlap ``Nondifferentiable``; an undecided one
+``Indeterminate``. A hyperbola or a parabola binds nothing yet and answers
+``NotSupported``.
+
+The tests check the x-axis against a circle, an ellipse and a segment
+against their closed forms, and the Taylor and transpose properties on
+random pairs of lines, circles, ellipses and cubic B-splines, rational half
+the time, pairing points by position across a circle's seam and discarding
+a step that changes their number.
+
+Two 3D curves have no such products yet: they meet only where their
+closest approach is within the resolution, which a generic change of
+either curve undoes, so a meeting is itself an event. Its derivative needs
+a convention (the meeting kept, or the closest approach tracked) that is
+still to be chosen.
+
 Branch points of two surfaces
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

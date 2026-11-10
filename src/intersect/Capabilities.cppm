@@ -18,8 +18,8 @@ import Stereon.Surface;
 /// library's. Intersect implements the forward and reverse products for a
 /// line, a circle, an ellipse or a B-spline curve against a plane, a cylinder, a cone, a sphere,
 /// a torus, an ellipsoid or a B-spline surface, and for branch points of
-/// two of them (IntersectJvp, IntersectVjp, through Linearize); every other
-/// pair answers NotSupported.
+/// two of them, and for points where two plane curves meet (IntersectJvp,
+/// IntersectVjp, through Linearize); every other pair answers NotSupported.
 
 export namespace Stereon {
 
@@ -39,6 +39,8 @@ inline constexpr OperationCapability IntersectCatalogue[] = {
             "and poles of the surface's parameters indeterminate; the point count and the "
             "tolerance stay fixed; branch points of two such surfaces under the normal-plane "
             "tracking constraint (BranchSample), certified crossing branches only; "
+            "points where two plane curves (lines, circles, ellipses, B-splines) cross, in "
+            "their defining values (PlaneCurveBinding); "
             "other pairs answer NotSupported",
             {DerivativeProduct::Jvp, DerivativeProduct::Vjp}),
 };
