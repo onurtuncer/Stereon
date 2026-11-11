@@ -70,3 +70,4 @@ Open questions that have to be researched before they can be decided live in [`d
 | [0052](0052-space-curve-meeting-derivatives.md) | Derivatives of meetings of space curves: none from Intersect; ClosestApproach later | 2 | Accepted |
 | [0053](0053-metamorphic-testing.md) | Contract-driven metamorphic testing and intersection-bug promotion | 2 | Proposed |
 | [0054](0054-topological-event-detection.md) | Topological event detection and classification | 2–4 (staged); later parameter tracking | Proposed |
+| [0055](0055-geometric-assurance-profiles.md) | Geometric assurance profiles and representation-independent query contracts | 2–6 (staged) | Proposed |
