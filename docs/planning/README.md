@@ -6,6 +6,8 @@
 **Next review:** after the topology prototype lands, or before the next phase gate.
 
 - [Roadmap, modelling milestones and versioning](roadmap-and-versioning.md)
+- [Computational geometry convergence roadmap](geometric-computing-roadmap.md): workstreams, dependency order, staged release evidence and research scope
+- [Geometric assurance inventory](geometric-assurance-inventory.md): operation-family assurance profiles and revision-bound audit worklist
 - [Capability matrix and repository audit](stereon-capability-matrix.md)
 - [v0.1 acceptance ledger](v0.1-acceptance-ledger.md): gates, evidence and the OCCT operations still to add
 - [v0.1 release report](v0.1-release-report.md): the release-wide record the roadmap requires (commit, corpus, comparator, limits, structured failures, invalid successes), final since the `v0.1.0` tag of 2026-11-03
@@ -16,6 +18,8 @@
 - [Architecture decision records](../adr/README.md)
 
 The capability matrix is a **proposed planning baseline**, not an ADR or a delivery commitment. Its audit is pinned to commit `cf1dbaa925fb9c60fc642ca6962f329af7d52047`; maturity grades apply only to the subsets supported by that evidence.
+
+The computational-geometry overlay and proposed ADR-0055 do not alter release numbering, automatically accept other proposed ADRs, or establish previously unverified numerical guarantees.
 
 The R0–R5 stages describe the long-term objective of comprehensive OCCT competition. They do not rename the repository's existing release phases or silently accept proposed ADRs.
 
