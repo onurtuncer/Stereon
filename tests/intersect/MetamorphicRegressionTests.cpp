@@ -11,6 +11,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <numbers>
 #include <string>
 #include <vector>
@@ -218,6 +219,173 @@ TEST_CASE("MR PR-244 near-axis sphere cone is not isolated points",
         }
         for (const auto& branch : b->Branches) {
             CHECK(IntersectTest::PcurveDeviation(branch, cone, sphere) <= policy.GetResolution());
+        }
+    }
+}
+
+namespace {
+
+void EllipsoidPoint(const Surface& plane, const Box2& planeBox, const Surface& ellipsoid,
+                    const Box2& ellipsoidBox, const Point3& expected, const Context& policy)
+{
+    for (const bool swapped : {false, true}) {
+        CAPTURE(swapped);
+        const auto result = swapped ? Intersect(ellipsoid, ellipsoidBox, plane, planeBox, policy)
+                                    : Intersect(plane, planeBox, ellipsoid, ellipsoidBox, policy);
+        REQUIRE(result.has_value());
+        REQUIRE(result->Branches.empty());
+        REQUIRE(result->Points.size() == 1);
+        const auto& point = result->Points.front();
+        const auto uvPlane = swapped ? point.OnB : point.OnA;
+        const auto uvEllipsoid = swapped ? point.OnA : point.OnB;
+        CHECK(Contains(planeBox.X, uvPlane.X));
+        CHECK(Contains(planeBox.Y, uvPlane.Y));
+        CHECK(Contains(ellipsoidBox.X, uvEllipsoid.X));
+        CHECK(Contains(ellipsoidBox.Y, uvEllipsoid.Y));
+        CHECK(Distance(point.Position, expected) <= policy.GetResolution());
+        CHECK(Distance(Eval(plane, uvPlane), expected) <= policy.GetResolution());
+        CHECK(Distance(Eval(ellipsoid, uvEllipsoid), expected) <= policy.GetResolution());
+    }
+}
+
+void RoundedTangency(const Placement& p, const bool handed, const double side)
+{
+    const double a = std::sqrt(0.5);
+    const Ellipsoid ellipsoid{Point3{},        3 * p.Scale,      2 * p.Scale, p.Scale,
+                              a * (p.X + p.Y), a * (-p.X + p.Y), handed};
+    const Point3 pole = Point3{} + side * ellipsoid.C * Axis(ellipsoid);
+    const Surface surface{ellipsoid};
+    const Surface plane{Plane{pole, p.X, p.Y}};
+    EllipsoidPoint(plane, Domain(plane), surface, Domain(surface), pole, p.Policy());
+    // One representable step outside the evaluator's pole must be separate.
+    // The axis permutation is exact; no translation perturbs a tangent input.
+    const Vec3 normal = Cross(p.X, p.Y);
+    const double height = Dot(pole - Point3{}, normal);
+    const double outside =
+        std::nextafter(height, std::copysign(std::numeric_limits<double>::infinity(), height));
+    const Surface apart{Plane{Point3{} + outside * normal, p.X, p.Y}};
+    for (const bool swapped : {false, true}) {
+        CAPTURE(swapped);
+        const auto result =
+            swapped ? Intersect(surface, apart, p.Policy()) : Intersect(apart, surface, p.Policy());
+        REQUIRE(result.has_value());
+        CHECK(result->IsEmpty());
+    }
+}
+
+BSplineCurve EndSegment(const Placement& p, const bool second, const double gap,
+                        const bool reversed, const bool remapped)
+{
+    const double low = remapped ? 2.0 : 0.0;
+    const double high = remapped ? 6.0 : 1.0;
+    BSplineCurve curve{
+        1,
+        {low, low, high, high},
+        second ? std::vector<Point3>{p.Point(1 + gap, gap, 0), p.Point(2 + gap, gap + 0x1p-23, 0)}
+               : std::vector<Point3>{p.Point(0, 0, 0), p.Point(1, 0, 0)},
+        {}};
+    return reversed ? Reversed(curve) : curve;
+}
+
+void SplineEndMeeting(const Placement& p, const bool reversed, const bool remapped,
+                      const bool apart)
+{
+    const double gap = apart ? 0x1p-15 : 0x1p-20;
+    const BSplineCurve a = EndSegment(p, false, gap, reversed, remapped);
+    const BSplineCurve b = EndSegment(p, true, gap, reversed, remapped);
+    const double low = remapped ? 2.0 : 0.0;
+    const double high = remapped ? 6.0 : 1.0;
+    const double ta = reversed ? low : high;
+    const double tb = reversed ? high : low;
+    // The two segments extend away from these endpoints, so this is the
+    // constrained closest pair, regardless of their unbounded supports.
+    const Point3 pa = p.Point(1, 0, 0);
+    const Point3 pb = p.Point(1 + gap, gap, 0);
+    REQUIRE((Distance(pa, pb) > p.Policy().GetResolution()) == apart);
+    for (const bool swapped : {false, true}) {
+        CAPTURE(swapped);
+        const Curve first{swapped ? b : a};
+        const Curve second{swapped ? a : b};
+        const auto result = Intersect(first, second, p.Policy());
+        REQUIRE(result.has_value());
+        REQUIRE(result->Overlaps.empty());
+        if (apart) {
+            REQUIRE(result->IsEmpty());
+            continue;
+        }
+        REQUIRE(result->Points.size() == 1);
+        const auto& point = result->Points.front();
+        CHECK(point.ParameterA == (swapped ? tb : ta));
+        CHECK(point.ParameterB == (swapped ? ta : tb));
+        CHECK(Distance(Eval(first, point.ParameterA), swapped ? pb : pa) <=
+              p.Policy().GetResolution());
+        CHECK(Distance(Eval(second, point.ParameterB), swapped ? pa : pb) <=
+              p.Policy().GetResolution());
+        // Space-curve results place the representative on operand A, so
+        // exchanging operands does not promise bitwise-identical positions.
+        CHECK(Distance(point.Position, swapped ? pb : pa) <= p.Policy().GetResolution());
+    }
+}
+
+} // namespace
+
+TEST_CASE("MR PR-230 ellipsoid rounded axis tangency", "[intersect][metamorphic][backfill][PR-230]")
+{
+    for (const auto& p : Placements()) {
+        if (p.Offset.X != 0 || p.Offset.Y != 0 || p.Offset.Z != 0) {
+            continue; // A rounded translation need not preserve exact tangency.
+        }
+        CAPTURE(p.Scale, p.X.X, p.X.Y, p.X.Z);
+        Replay("PR-230", p);
+        for (const bool handed : {false, true}) {
+            for (const double side : {-1.0, 1.0}) {
+                CAPTURE(handed, side);
+                RoundedTangency(p, handed, side);
+            }
+        }
+    }
+}
+
+TEST_CASE("MR PR-230-pole ellipsoid longitude boxes",
+          "[intersect][metamorphic][backfill][PR-230-pole]")
+{
+    for (const auto& p : Placements()) {
+        CAPTURE(p.Scale, p.X.X, p.X.Y, p.X.Z, p.Offset.X, p.Offset.Y, p.Offset.Z);
+        Replay("PR-230-pole", p);
+        const Surface surface{
+            Ellipsoid{p.Point(0, 0, 0), 3 * p.Scale, 2 * p.Scale, p.Scale, p.X, p.Y}};
+        const Box2 planeBox{Interval{-4 * p.Scale, 4 * p.Scale},
+                            Interval{-4 * p.Scale, 4 * p.Scale}};
+        for (const double side : {-1.0, 1.0}) {
+            CAPTURE(side);
+            const Point3 pole = p.Point(0, 0, side);
+            const Surface plane{Plane{pole, p.X, p.Y}};
+            for (const double turn : {0.0, 2 * pi}) {
+                CAPTURE(turn);
+                const Box2 box{Interval{1 + turn, 2 + turn}, Interval{-pi / 2, pi / 2}};
+                EllipsoidPoint(plane, planeBox, surface, box, pole, p.Policy());
+                // Latitude exclusion must remain an independently proved miss.
+                const Box2 excluded{box.X, Interval{-pi / 4, pi / 4}};
+                const auto result = Intersect(plane, planeBox, surface, excluded, p.Policy());
+                REQUIRE(result.has_value());
+                CHECK(result->IsEmpty());
+            }
+        }
+    }
+}
+
+TEST_CASE("MR PR-241 spline boundary minimum", "[intersect][metamorphic][backfill][PR-240][PR-241]")
+{
+    for (const auto& p : Placements()) {
+        CAPTURE(p.Scale, p.X.X, p.X.Y, p.X.Z, p.Offset.X, p.Offset.Y, p.Offset.Z);
+        Replay("PR-241", p);
+        for (const bool reversed : {false, true}) {
+            for (const bool remapped : {false, true}) {
+                for (const bool apart : {false, true}) {
+                    CAPTURE(reversed, remapped, apart);
+                    SplineEndMeeting(p, reversed, remapped, apart);
+                }
+            }
         }
     }
 }

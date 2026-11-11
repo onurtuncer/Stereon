@@ -30,7 +30,7 @@ env:
   CMAKE_BUILD_PARALLEL_LEVEL: '4'
 jobs:
   backfill:
-    name: Five historical faults (GCC 16)
+    name: Eight historical faults (GCC 16)
     runs-on: ubuntu-24.04
     container: gcc:16.2
     timeout-minutes: 120

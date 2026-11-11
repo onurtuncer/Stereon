@@ -108,10 +108,10 @@ may be set only after the historical audit, not merely after tests pass.
 
 ## Priority backfill campaign
 
-The five-defect [replay specification](metamorphic-priority-replay.md) and
+The eight-fault [replay specification](metamorphic-priority-replay.md) and
 `tools/mutation/intersection-backfill.json` provide deterministic fixtures,
 independent oracles and source-level reintroductions for PR-205, PR-206,
-PR-218, PR-244 and PR-247. The **Intersection metamorphic evidence** workflow
+PR-218, PR-244, PR-247, both PR-230 defects and the shared PR-240/241 repair. The **Intersection metamorphic evidence** workflow
 runs a repaired baseline and requires repeated named failure for each fault.
 It archives baseline and fault logs, revision and toolchain metadata.
 These obligations and their applicable matrix cells are `MR implemented`,
