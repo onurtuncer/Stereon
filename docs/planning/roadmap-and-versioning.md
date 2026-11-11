@@ -1,12 +1,14 @@
 # Stereon roadmap and versioning
 
-**Planning revision:** 0.5 • 10 November 2026 (tolerant topology, ADR-0050, as interim steps of v0.2 and v0.3; face adjacency and canonical surface queries, ADR-0051, in v0.3 before the planar Booleans)  
-**Previous revision:** 0.4 • 3 November 2026 (intersection linearisation for sensitivities moved to v0.2, ADR-0021 §9)
+**Planning revision:** 0.6 • 11 November 2026 (computational-geometry convergence overlay, ADR-0055 assurance profiles and staged evidence gates)  
+**Previous revision:** 0.5 • 10 November 2026 (tolerant topology and face adjacency staged into v0.2–v0.3)
 
 **Owner:** Onur Tuncer  
 **Status:** Proposed release plan; acceptance evidence is required before tagging a release.
 
 This plan embeds six modelling milestones derived from Ian Stroud's *Boundary Representation Modelling Techniques* into the existing release sequence, and a seventh, M7 machining services, that is Stereon's own requirement. It retains Phase 0 and the existing release anchors, adding explicit v0.2/v0.4/v0.5/v0.7/v0.9 gates between them. Milestone IDs M1–M7 below describe dependencies; they are not phase numbers, package versions, or the capability matrix's Mxx row IDs. R0–R5 remain long-term capability stages, and v1.0 does not imply comprehensive OCCT parity.
+
+**Computational-geometry convergence:** [The geometric computing overlay](geometric-computing-roadmap.md) connects existing intersection, topology, Boolean, machining and differentiation work to shared assurance evidence under [ADR-0055](../adr/0055-geometric-assurance-profiles.md). The [assurance inventory](geometric-assurance-inventory.md) starts as an audit queue, not evidence that the stated guarantees have been verified. New interim steps below refine existing releases; they do not introduce new versions, universal certified-geometry claims, or OCCT/CGAL parity. ADR-0053 and ADR-0054 remain proposed until reviewed under the ADR process.
 
 ## Release mapping
 
@@ -38,6 +40,24 @@ Interim steps break a release gate into reviewable stages with their own evidenc
 | 0.3-T3 | v0.3 | ADR-0050: pcurves on every face coedge; `tighten` and `heal`; certified G01/G02 bounds; the tolerant regression suite (gaps at 1e-6, 1e-4 and 1e-2 of the bounding diagonal) | 0.2-T2; ADR-0009 | The suite validates in CI; tightening lowers tolerances to the certified error without moving authoritative geometry |
 | 0.3-F1 | v0.3 | ADR-0051: the `ShapeQueries` workspace keyed by snapshot and numerical context; tolerance-widened convexity; the face adjacency graph; loops and vertex convexity | 0.2-T1; ADR-0036, ADR-0037 | Synthetic-corpus edges classified as constructed, or `indeterminate` where an injected gap makes them so; no stale result in the edit fuzz test |
 | 0.3-F2 | v0.3 | ADR-0051: canonical classification (analytic type check; freeform plane/sphere/cylinder/cone/torus fits with boundary verification); face roles; UV sampling; a reference recogniser in a separate library | 0.3-F1 | An in-kernel NURBS cylinder reports `Cylinder` within `res_abs`; the reference recogniser uses only the public API |
+
+### Computational-geometry assurance interim steps
+
+These are evidence-bearing overlays on the existing stage gates. Their identifiers use `CG` so they do not collide with tolerance-rule G04 or existing T/F substeps. Specific experimental methods and broad topology-event certification are not mandatory release scope unless a supported operation depends on them.
+
+| Step | Release | Content | Depends on | Exit evidence |
+| --- | --- | --- | --- | --- |
+| 0.2-CG1 | v0.2 | Audit the current 2D/3D curve, curve–surface and SSI intersection families against ADR-0055's separate decision, construction, completeness, regularity and provenance assurances | ADR-0029/0047/0055; existing v0.2 handlers | Inventory at an exact implementation revision, with supported-domain limits, direct oracles, CI and explicit gaps per family; no unverified certification claim |
+| 0.2-CG2 | v0.2 | Promote confirmed intersection defects to metamorphic tests (ADR-0053); stage analytic tangency/contact event witnesses (ADR-0054) within implemented domains | 0.2-CG1; ADR-0010/0053/0054 | Defect/backfill evidence with red-on-defect/green-on-repair or reviewed exception; analytic event fixtures separate candidate, certified and unresolved |
+| 0.3-CG3 | v0.3 | Add operation-scoped topological event consequences and assurance profiles for adjacency, solid validation, lineage and analytic ray/face queries | 0.2-CG2, 0.3-F1, ADR-0030/0051/0054 | Independent incidence/geometry checks, lineage fixtures, no assumption that a count change alone certifies a topology event |
+| 0.4-CG4 | v0.4 | Record planar Boolean pipeline evidence for intersection, splitting, classification, and reconstruction separately | 0.3-CG3; ADR-0013/0029/0030 | Validated supported-region identities, independent topology checks, complete failure-on-unresolved and lineage evidence |
+| 0.5-CG5 | v0.5 | Audit curved Boolean and trimmed query assurance over explicitly bounded analytic/spline domains | 0.4-CG4; M4 intersection/trim prerequisites | Seam/tangency/overlap fixtures, declared error/completeness bounds and unresolved exclusions |
+| 0.6-CG6 | v0.6 | Aggregate reproducible Boolean assurance and comparator data for declared engineering-part domains | 0.5-CG5; ADR-0050 and Phase 4 gates | Pinned comparative environment, measured invalid successes, verified tolerance growth and B-rep validity; no unsupported parity claim |
+| 0.7-CG7 | v0.7 | Extend assurance profiles to error-bounded tessellation, tri-dexel and machining clearance queries | ADR-0044/0049/0055; M7 | Conversion bounds and representation provenance, B5.7 equal-policy time/memory/failure measurements |
+| 0.8-CG8 | v0.8 | Preserve or explicitly downgrade assurances through import, healing and geometric conversion | 0.7-CG7; ADR-0012/0050 | STEP round trips, tolerance-change evidence, provenance and invalidated-guarantee records |
+| 0.9-CG9 | v0.9 | Associate finishing/offset and sensitivity operations with event-aware assurance, not derivatives across unknown topology changes | ADR-0021/0052/0054/0055; M5 | Regular-branch derivative oracles and explicit near-event/nondifferentiable responses; valid outputs in documented domain |
+
+The v1.0 gate includes a revision-bound assurance inventory for every advertised operation family but does not require a universal geometry engine. [Cross-family details](geometric-computing-roadmap.md) are research/planning scope, not proof of implementation.
 
 The v0.4 planar Boolean gate requires 0.3-F1; the v0.6 tolerance-growth gate and the v0.8 STEP gate close ADR-0050's verification (accepted 2026-11-10) and complete ADR-0051's acceptance.
 
@@ -106,6 +126,8 @@ The book motivates these acceptance requirements, not an automatic change of ADR
 | Native schema and migrations | ADR-0012; prototype early, public shape persistence by v0.3. |
 | Derived tessellation and tags | ADR-0014; mesh generation must not alter authoritative B-rep geometry/topology. |
 | Machining queries and tri-dexel fields | [ADR-0044](../adr/0044-brep-to-tri-dexel-conversion.md) with ADR-0021/0028/0029: certified endpoints, explicit unresolved rays, deterministic tiles; analytic subset by v0.3, trimmed splines by v0.5, B5.7 gate by v0.7. |
+| Geometric assurance and reusable geometric queries | [ADR-0055](../adr/0055-geometric-assurance-profiles.md) with ADR-0029/0047: independently describe predicate decisions, geometric bounds, completeness, topology, regularity and provenance; audit v0.2 families and expand through v1.0 without a universal result wrapper. |
+| Metamorphic verification and critical events | [ADR-0053](../adr/0053-metamorphic-testing.md) and [ADR-0054](../adr/0054-topological-event-detection.md): permanent defect promotion and analytic intersection-event evidence in v0.2; B-rep event consequences in v0.3–v0.6; parameter tracking later. |
 | Reproducible failures | ADR-0006/0023; journals, dumps, numerical context and stage diagnostics accompany corpus failures. |
 | Controlled edits and operation contracts | ADR-0025/0026/0027 alongside ADR-0004/0005/0018 define association, operation and controlled-edit contracts; review before phase acceptance. |
 
@@ -119,7 +141,7 @@ The book motivates these acceptance requirements, not an automatic change of ADR
 6. **C ABI version.** Version/capability queries and ABI-major compatibility follow ADR-0020 independently of product versions. Do not advertise a stable C ABI until its ownership, error and old-consumer compatibility gates pass. C ABI implementation is not a prerequisite for early geometry releases.
 7. **Planning versions.** This document's revision and the capability matrix's document version identify planning edits, not delivered software. Phase numbers, M1–M7 milestone IDs and R0–R5 capability stages must never be presented as package versions or completion percentages.
 
-Use an acceptance ledger per release: milestone/subgate, supported domain, owner, required ADR decision, fixture IDs, implementation commit, result/report link and unresolved limitations. All gates above are planned requirements; no new capability completion or audit grade is asserted by this document.
+Use an acceptance ledger per release: milestone/subgate, supported domain, owner, required ADR decision, fixture IDs, implementation commit, result/report link and unresolved limitations. The [geometric assurance inventory](geometric-assurance-inventory.md) additionally records what is intended, implemented and independently verified for each supported geometric operation family, including exact comparator/CI revisions; it is not a substitute for a release acceptance ledger. All gates above are planned requirements; no new capability completion or audit grade is asserted by this document.
 
 ## Source and related plans
 
@@ -129,3 +151,5 @@ Stroud (2006), *Boundary Representation Modelling Techniques*: chapters 3–7 fo
 - [Phase 0 implementation checklist](../../TODO.md)
 - [Benchmark specifications and existing phase gates](../benchmarks.md)
 - [Architecture decision records](../adr/README.md)
+- [Computational-geometry convergence overlay](geometric-computing-roadmap.md)
+- [Geometric assurance inventory](geometric-assurance-inventory.md)
