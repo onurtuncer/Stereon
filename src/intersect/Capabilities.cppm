@@ -16,7 +16,7 @@ import Stereon.Surface;
 /// The derivative capabilities of the intersection library's operations
 /// (ADR-0021, section 5), as Stereon.Curve:Capabilities declares the curve
 /// library's. Intersect implements the forward and reverse products for a
-/// line or a B-spline curve against a plane, a cylinder, a cone, a sphere,
+/// line, a circle, an ellipse or a B-spline curve against a plane, a cylinder, a cone, a sphere,
 /// a torus, an ellipsoid or a B-spline surface, and for branch points of
 /// two of them (IntersectJvp, IntersectVjp, through Linearize); every other
 /// pair answers NotSupported.
@@ -26,9 +26,11 @@ export namespace Stereon {
 inline constexpr OperationCapability IntersectCatalogue[] = {
     Declare("Intersect", {Dependency::InputGeometry, Dependency::Tolerances},
             {TrackingConvention::MovingTrimCoordinates, TrackingConvention::UniqueProjection},
-            "a line or a B-spline curve against a plane, a cylinder, a cone, a sphere, a torus, "
+            "a line, a circle, an ellipse or a B-spline curve against a plane, a cylinder, a "
+            "cone, a sphere, a torus, "
             "an ellipsoid or a B-spline surface, "
-            "through IntersectJvp and IntersectVjp, in the line's origin and direction, the "
+            "through IntersectJvp and IntersectVjp, in the line's origin and direction, a "
+            "conic's centre and radii at a fixed frame, the "
             "curve's poles and weights at fixed knots, and the surface's origin, its radii, a "
             "cone's semi-angle, an ellipsoid's semi-axes and a B-spline surface's poles and "
             "weights at fixed knots: decided transversal "

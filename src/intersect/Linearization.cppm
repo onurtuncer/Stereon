@@ -36,10 +36,12 @@ import :Dispatch;
 /// the solver left undecided is Indeterminate. A result with any point that
 /// carries no derivative carries none as a whole (ADR-0021, section 5).
 ///
-/// The pairs so far are a line or a B-spline curve against a plane, a
+/// The pairs so far are a line, a circle, an ellipse or a B-spline curve
+/// against a plane, a
 /// cylinder, a cone, a sphere, a torus, an ellipsoid or a B-spline surface,
 /// the parameters bound to coordinates of the line's origin and direction,
-/// to the curve's poles and weights (PoleBinding, as EvalJvp takes them),
+/// to a conic's centre and radii (ConicBinding), to the curve's poles and
+/// weights (PoleBinding, as EvalJvp takes them),
 /// and to the surface's origin, its radii, a cone's semi-angle, an
 /// ellipsoid's semi-axes and a B-spline surface's poles and weights. The
 /// surface's partials come from its
@@ -70,6 +72,26 @@ enum class LineComponent : std::uint8_t {
 struct LineBinding {
     ParameterId Parameter;
     LineComponent Component = LineComponent::OriginX;
+};
+
+/// What a design parameter moves on a circle or an ellipse: a coordinate of
+/// its centre; a circle's Radius; an ellipse's MajorRadius, along its XAxis,
+/// and MinorRadius, along its YAxis; each a Length. The frame is fixed, as
+/// a surface's is.
+enum class ConicComponent : std::uint8_t {
+    CenterX,
+    CenterY,
+    CenterZ,
+    Radius,
+    MajorRadius,
+    MinorRadius,
+};
+
+/// A design parameter bound to one defining value of a circle or an
+/// ellipse. Several bindings of one parameter add.
+struct ConicBinding {
+    ParameterId Parameter;
+    ConicComponent Component = ConicComponent::CenterX;
 };
 
 /// What a design parameter moves on a surface: a coordinate of its origin
@@ -145,6 +167,12 @@ struct CurveSurfaceLinearization {
 /// a point outside the curve's domain.
 [[nodiscard]] Result<CurveSurfaceLinearization>
 Linearize(const BSplineCurve& curve, const Surface& surface, const CurveSurfacePoint& point);
+/// The same for a point of Intersect(circle, surface) or Intersect(ellipse,
+/// surface), the point's parameter the conic's angle.
+[[nodiscard]] Result<CurveSurfaceLinearization>
+Linearize(const Circle& circle, const Surface& surface, const CurveSurfacePoint& point);
+[[nodiscard]] Result<CurveSurfaceLinearization>
+Linearize(const Ellipse& ellipse, const Surface& surface, const CurveSurfacePoint& point);
 
 /// The forward product of Intersect(line, surface) for the seed of
 /// `sensitivity`: for each point of `intersection`, in its order,
@@ -180,6 +208,30 @@ IntersectVjp(const Line& line, std::span<const LineBinding> lineBindings, const 
              const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
 [[nodiscard]] Result<SensitivityResult>
 IntersectVjp(const BSplineCurve& curve, std::span<const PoleBinding> poleBindings,
+             const Surface& surface, std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
+
+/// The products for a circle or an ellipse, its centre and radii moved by
+/// `conicBindings`: C(t) = O + r (cos t X + sin t Y) moves by a unit along
+/// a centre coordinate and by cos t X + sin t Y with r; an ellipse's
+/// O + a cos t X + b sin t Y by cos t X with a and sin t Y with b.
+/// InvalidInput as for a line, and also for a radius the conic does not
+/// have (MajorRadius on a circle, Radius on an ellipse) or a point whose
+/// angle is not finite.
+[[nodiscard]] Result<SensitivityResult>
+IntersectJvp(const Circle& circle, std::span<const ConicBinding> conicBindings,
+             const Surface& surface, std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
+[[nodiscard]] Result<SensitivityResult>
+IntersectJvp(const Ellipse& ellipse, std::span<const ConicBinding> conicBindings,
+             const Surface& surface, std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
+[[nodiscard]] Result<SensitivityResult>
+IntersectVjp(const Circle& circle, std::span<const ConicBinding> conicBindings,
+             const Surface& surface, std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
+[[nodiscard]] Result<SensitivityResult>
+IntersectVjp(const Ellipse& ellipse, std::span<const ConicBinding> conicBindings,
              const Surface& surface, std::span<const SurfaceBinding> surfaceBindings,
              const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
 
