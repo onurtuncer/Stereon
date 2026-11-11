@@ -47,6 +47,7 @@ python tools/check_literals.py
 ## What a pull request needs
 
 - [ ] A test that fails without the change and passes with it.
+- [ ] Every confirmed intersection bug has a minimal direct regression **and** a documented, reproducible metamorphic regression (ADR-0053), or a reviewed mathematical inapplicability exception with an independent oracle.
 - [ ] Property-based tests for new algorithms in `robust/`, `topo/`, `build/`, `mesh/`, `intersect/`, `boolean/` and `blend/`.
 - [ ] All blocking CI jobs green (Linux, Windows and macOS on GCC 16, plus the sanitizer jobs).
 - [ ] No new contract violations in the observe-mode corpus run.
