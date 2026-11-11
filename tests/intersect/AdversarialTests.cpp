@@ -569,3 +569,50 @@ TEST_CASE("a line 2^-k either side of a tangency gets the count its distance dec
         RC_ASSERT(result->Points.size() == expected(4, 2));
     });
 }
+
+TEST_CASE("MR-01 and MR-04: far line retains two sphere crossings under translation and origin shift",
+          "[intersect][adversarial][metamorphic][regression]")
+{
+    // PR #205: cancellation at a distant line origin collapsed two quadric
+    // crossings into one. This fixed fixture complements the seeded property
+    // campaign above and must detect the original bug deterministically.
+    const Curve near{Line{Point3{-2.0, 0.0, 0.0}, ex}};
+    const Surface sphere{Sphere{Point3{}, 1.0, ex, ey}};
+    const double run = 0x1p27;
+    const Curve far{Line{Point3{-2.0 - run, 0.0, 0.0}, ex}};
+
+    const auto reference = Meet(near, sphere);
+    const auto distant = Meet(far, sphere);
+    REQUIRE(reference.has_value());
+    REQUIRE(distant.has_value());
+    REQUIRE(reference->Points.size() == 2);
+    REQUIRE(distant->Points.size() == 2);
+    for (std::size_t i = 0; i < 2; ++i) {
+        const auto& p = reference->Points[i];
+        const auto& q = distant->Points[i];
+        const Point3 expected{i == 0 ? -1.0 : 1.0, 0.0, 0.0};
+        CHECK(Distance(p.Position, expected) <= ctx.GetResolution());
+        CHECK(Distance(q.Position, expected) <= ctx.GetResolution());
+        CHECK(Distance(p.Position, q.Position) <= ctx.GetResolution());
+        CHECK(std::abs((p.Parameter + run) - q.Parameter) <= ctx.GetResolution());
+        CHECK(p.Contact == q.Contact);
+        CHECK(p.Decided == q.Decided);
+    }
+
+    // MR-01: transform both operands, not just the answer. The original
+    // contact count, parameters and the translated geometric points agree.
+    const Vec3 offset{8.0, -4.0, 2.0};
+    const Stereon::Transform transform = Stereon::MakeTranslation(offset);
+    const Curve movedLine = Transformed(far, transform);
+    const Surface movedSphere = Transformed(sphere, transform);
+    const auto moved = Meet(movedLine, movedSphere);
+    REQUIRE(moved.has_value());
+    REQUIRE(moved->Points.size() == distant->Points.size());
+    for (std::size_t i = 0; i < distant->Points.size(); ++i) {
+        CHECK(Distance(moved->Points[i].Position, distant->Points[i].Position + offset) <=
+              ctx.GetResolution());
+        CHECK(std::abs(moved->Points[i].Parameter - distant->Points[i].Parameter) <=
+              ctx.GetResolution());
+        CHECK(moved->Points[i].Contact == distant->Points[i].Contact);
+    }
+}
