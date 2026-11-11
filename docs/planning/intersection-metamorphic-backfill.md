@@ -69,3 +69,39 @@ counting or closing obligations:
 Tests added alongside this ledger have **not** been built or run by this
 documentation update. Their CI outcome and red-on-defect proof are still
 needed before changing them to `verified`.
+
+## Executable inventory and release gate
+
+[`intersection-metamorphic.json`](intersection-metamorphic.json) is the
+machine-readable obligation and handler/MR inventory. The table above explains
+the historical leads; the JSON owns their checked states. A candidate that
+proves not to be a defect stays in the JSON as `not a defect`, with `rationale`
+and `review` evidence. Do not delete it. PR #240 and #241 remain separate leads
+until reviewed; shared tests may discharge both without losing either ID.
+
+Development CI and CTest run `python tools/check_metamorphic.py`; PR CI also
+uses `--base` to refuse deleted obligations. This validates records, not release
+readiness. All 163 ordered built-in operand pairs are inventoried automatically
+against the curve and surface catalogues, with MR-01/02/03/04 cells. Initial
+`untriaged` cells are deliberately not claims of coverage or applicability.
+
+Before qualifying v0.2, run `python tools/check_metamorphic.py --release`.
+The **Intersection release evidence** workflow runs this on v0.2 tags and on
+manual dispatch. Its failure blocks qualification; it does not roll back a tag
+or replace the other release gates. Do not publish a qualified release without
+this check passing. Existing open obligations intentionally make it fail.
+
+Each `verified` defect must supply `fixture`, `direct`, `metamorphic`, `oracle`,
+`replay`, `red`, `green`, `review`, and applicable `relations`. An
+`exception reviewed` defect instead supplies `rationale` (considered relations
+and why none apply); its direct regression, independent oracle, replay and
+red/green evidence remain mandatory. Handler cells require `domain` and
+`review`; verified cells also require `test`, `oracle`, `replay`, and `green`;
+reviewed exceptions require `rationale`, including unsupported domains.
+
+Evidence is an existing repository path, optionally followed by `#` and an
+exact test name/text anchor, or an HTTPS permalink to a review/CI artifact.
+Use immutable revisions/run IDs for external evidence. The checker validates
+references and mandatory evidence presence; a reviewer must still inspect the
+scientific claims and CI outcomes. `inventory_complete` and `inventory_review`
+may be set only after the historical audit, not merely after tests pass.

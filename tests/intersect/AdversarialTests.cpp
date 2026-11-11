@@ -570,8 +570,9 @@ TEST_CASE("a line 2^-k either side of a tangency gets the count its distance dec
     });
 }
 
-TEST_CASE("MR-01 and MR-04: far line retains two sphere crossings under translation and origin shift",
-          "[intersect][adversarial][metamorphic][regression]")
+TEST_CASE(
+    "MR-01 and MR-04: far line retains two sphere crossings under translation and origin shift",
+    "[intersect][adversarial][metamorphic][regression]")
 {
     // PR #205: cancellation at a distant line origin collapsed two quadric
     // crossings into one. This fixed fixture complements the seeded property

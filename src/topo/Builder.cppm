@@ -788,8 +788,11 @@ export namespace Stereon::Detail {
 [[nodiscard]] ValidityReport ValidateGeometry(const TopologyTables& tables);
 
 /// The model's bounding diagonal for ADR-0050's relative ceiling: of the
-/// box of its live vertices, of points along its edges' 3D curves and of its
+/// box of its live vertices, of bounds of its trimmed 3D edge curves and of its
 /// faces' surfaces where these are bounded (a sphere, a torus, a B-spline).
+/// Built-in edge bounds use the positive-weight NURBS control hull of the
+/// requested range; external curves fall back to their whole-support bound.
+/// This is a conservative enclosure, not a minimum bounding box.
 /// Infinite when that box is empty or a point: the model has no measurable
 /// extent, and only the absolute ceiling applies.
 [[nodiscard]] double ModelDiagonal(const TopologyTables& tables);
