@@ -68,3 +68,4 @@ Open questions that have to be researched before they can be decided live in [`d
 | [0050](0050-tolerant-topology.md) | Tolerant topology: named, bounded tolerance growth; supersedes ADR-0001's pair rule and ceiling | 2–3 | Accepted |
 | [0051](0051-face-adjacency-and-canonical-surfaces.md) | Face adjacency graph and canonical surface classification as kernel queries | 3 | Proposed |
 | [0052](0052-space-curve-meeting-derivatives.md) | Derivatives of meetings of space curves: none from Intersect; ClosestApproach later | 2 | Accepted |
+| [0053](0053-metamorphic-testing.md) | Contract-driven metamorphic testing and intersection-bug promotion | 2 | Proposed |

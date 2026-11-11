@@ -16,6 +16,7 @@ Fixes #<!-- issue number, if any -->
 
 - [ ] This PR adds a test that **fails without the change and passes with it**: <!-- name the test(s) -->
 - [ ] Property-based tests are included (required for Tier B and Tier C)
+- [ ] For an intersection bug: link its defect-ledger entry, minimal direct reproducer, MR ID and metamorphic regression (or reviewed mathematical exception with independent oracle, ADR-0053)
 - [ ] Correctness is checked by an independent referee, not only by tests written in this PR: differential tests (OpenCASCADE/Manifold), analytic values or the corpus <!-- required for AI-assisted Tier B/C changes -->
 - [ ] Any failure I could not fix is added to `corpus/` as a regression case with a replay journal, not skipped
 
