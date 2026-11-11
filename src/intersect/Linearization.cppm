@@ -311,4 +311,101 @@ IntersectVjp(const Surface& a, std::span<const SurfaceBinding> bindingsA, const 
              const SurfaceSurfaceIntersection& intersection, std::span<const BranchSample> samples,
              const SensitivityContext& sensitivity);
 
+/// What a design parameter moves on a plane curve: a line's origin and
+/// direction coordinates; a circle's or an ellipse's centre coordinates, a
+/// circle's Radius, an ellipse's MajorRadius and MinorRadius; a B-spline's
+/// pole coordinates (PoleX, PoleY) and weight (PoleWeight) of the binding's
+/// Pole. Each a Length but a weight, Dimensionless; frames fixed.
+enum class PlaneCurveComponent : std::uint8_t {
+    OriginX,
+    OriginY,
+    DirectionX,
+    DirectionY,
+    CenterX,
+    CenterY,
+    Radius,
+    MajorRadius,
+    MinorRadius,
+    PoleX,
+    PoleY,
+    PoleWeight,
+};
+
+/// A design parameter bound to one defining value of a plane curve. Pole
+/// is the index into a B-spline's Poles for the pole components, and unused
+/// otherwise.
+struct PlaneCurveBinding {
+    ParameterId Parameter;
+    PlaneCurveComponent Component = PlaneCurveComponent::OriginX;
+    std::size_t Pole = 0;
+};
+
+/// The values a product gives per point where two plane curves meet, in this
+/// order: the position's velocity x' (two), then s' and t', the velocities
+/// of the parameters on A and on B.
+inline constexpr std::size_t PlanarPointValues = 4;
+
+/// The linearisation of one point where two plane curves meet. The point
+/// solves F(s, t) = A(s) - B(t) = 0, two equations in two unknowns, with
+/// F_z = [A'(s), -B'(t)], singular exactly where the curves are tangent: the
+/// sine of the angle between them, |A' x B'| / (|A'| |B'|), is the
+/// conditioning. A design change p' moves the parameters by F_z z' =
+/// B_p p' - A_p p' and the point by x' = A_p p' + A' s'.
+struct PlanarLinearization {
+    /// A(s) - B(t) at the point's parameters: zero to rounding.
+    Vec2 Residual;
+    Vec2 TangentA;
+    Vec2 TangentB;
+    double Conditioning;
+    DerivativeStatus Status;
+};
+
+/// The linearisation of a point of Intersect(a, b) for plane curves:
+/// Valid or NearEvent for a decided crossing, Nondifferentiable for a
+/// tangential one, Indeterminate for one the solver left undecided or whose
+/// system is singular. InvalidInput for an empty curve or a point whose
+/// parameters are not finite or lie off a curve's domain.
+[[nodiscard]] Result<PlanarLinearization> Linearize(const Curve2d& a, const Curve2d& b,
+                                                    const PlanarPoint& point);
+
+/// The forward product of Intersect(a, b) for plane curves, each moved by
+/// its bindings: for each point of `intersection`, in its order,
+/// PlanarPointValues values. An overlap makes the result Nondifferentiable.
+/// NotSupported (a status) when either curve is a hyperbola or a parabola,
+/// which bind nothing yet. InvalidInput for a binding whose parameter is not
+/// of the context's set or of the wrong quantity, or that moves a value the
+/// curve does not have (a pole past the last included); for a point off a
+/// curve or off the current geometry; or for a seed that was never set.
+[[nodiscard]] Result<SensitivityResult>
+IntersectJvp(const Curve2d& a, std::span<const PlaneCurveBinding> bindingsA, const Curve2d& b,
+             std::span<const PlaneCurveBinding> bindingsB, const PlanarIntersection& intersection,
+             const SensitivityContext& sensitivity);
+
+/// The reverse product: for an adjoint of PlanarPointValues components per
+/// point, one value per parameter of the set, accumulated over the points in
+/// their order. InvalidInput as IntersectJvp, and for an adjoint of another
+/// length.
+[[nodiscard]] Result<SensitivityResult>
+IntersectVjp(const Curve2d& a, std::span<const PlaneCurveBinding> bindingsA, const Curve2d& b,
+             std::span<const PlaneCurveBinding> bindingsB, const PlanarIntersection& intersection,
+             const SensitivityContext& sensitivity);
+
+/// The products of Intersect(a, b) for two space curves (ADR-0052). Two space curves meet only
+/// where their closest approach is within the resolution, and a generic change of either curve
+/// undoes the meeting: a meeting is itself an event, of codimension one,
+/// with no derivative. A result with a point or an overlap is therefore
+/// Nondifferentiable, with that reason; a proved separation is Valid and
+/// carries no values (the forward product) or zeros (the reverse one), since
+/// it stays a separation under a small enough change. Tracking the closest
+/// approach smoothly is a separate product, ClosestApproach, still to come;
+/// no binding type is needed until then. InvalidInput for an empty curve,
+/// for a seed that was never set (forward), or for an adjoint that is not
+/// empty (reverse).
+[[nodiscard]] Result<SensitivityResult> IntersectJvp(const Curve& a, const Curve& b,
+                                                     const CurveCurveIntersection& intersection,
+                                                     const SensitivityContext& sensitivity);
+[[nodiscard]] Result<SensitivityResult> IntersectVjp(const Curve& a, const Curve& b,
+                                                     const CurveCurveIntersection& intersection,
+                                                     const SensitivityContext& sensitivity);
+
 } // namespace Stereon
