@@ -259,6 +259,23 @@ time with weight bindings, through spheres, cylinders and planes; and a
 B-spline touching a plane, the undecided touch the B-spline handler
 reports, is ``Nondifferentiable``.
 
+A ``Circle`` and an ``Ellipse`` have the same products, the point's
+parameter their angle, their defining values moved by ``ConicBinding``: a
+coordinate of the centre, a circle's ``Radius``, an ellipse's
+``MajorRadius`` and ``MinorRadius``, each a ``Length``, the frame fixed as a
+surface's is. At the angle :math:`t`, :math:`C = O + r(\cos t X + \sin t
+Y)` moves by a unit with a centre coordinate and by :math:`\cos t X + \sin
+t Y` with its radius; an ellipse :math:`O + a \cos t X + b \sin t Y` by
+:math:`\cos t X` with :math:`a` and :math:`\sin t Y` with :math:`b`. The
+tests check a circle of radius 2 and an ellipse of semi-axes 3 and 2, both
+cut by the plane :math:`z = 1`, against their closed forms, and the Taylor
+and transpose properties on random circles and ellipses through spheres,
+cylinders and planes. A conic meets a quadric up to four times, so those
+properties discard a step that changes the number of crossings (a near
+miss elsewhere becoming two crossings), pair crossings by position (one
+near :math:`t = 0` may pass the seam), and keep away from a sphere's poles,
+where :math:`u` moves too fast for the steps.
+
 A ``BSplineSurface`` binds its poles and weights the same way: a
 ``SurfaceBinding`` with ``SurfaceComponent::PoleX``, ``PoleY`` or ``PoleZ``
 (a ``Length``) or ``PoleWeight`` (``Dimensionless``) and the ``Pole`` it
