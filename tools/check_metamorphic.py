@@ -81,9 +81,11 @@ def check(root, data, release=False, base=None, expected=None):
             continue
         evidence(root, row, ["source"], errors, label)
         state = row["state"]
+        if state in {"MR implemented", "verified", "exception reviewed"}:
+            evidence(root, row, ["fixture", "direct", "oracle", "replay"], errors, label)
         if state in {"verified", "exception reviewed"}:
-            evidence(root, row, ["fixture", "direct", "oracle", "replay", "red", "green", "review"], errors, label)
-        if state == "verified":
+            evidence(root, row, ["red", "green", "review"], errors, label)
+        if state in {"MR implemented", "verified"}:
             evidence(root, row, ["metamorphic"], errors, label)
             if not row.get("relations") or not set(row["relations"]) <= {f"MR-{n:02}" for n in range(1, 10)}:
                 errors.append(f"{label}: missing/invalid relations")
@@ -105,23 +107,76 @@ def check(root, data, release=False, base=None, expected=None):
         for relation, cell in cells.items():
             label = f"{name}/{relation}"
             state = cell.get("state")
-            if state not in {"untriaged", "verified", "exception reviewed"}:
+            if state not in {"untriaged", "MR implemented", "verified", "exception reviewed"}:
                 errors.append(f"{label}: invalid state (unresolved is not a pass)")
             if state in {"verified", "exception reviewed"}:
                 evidence(root, cell, ["domain", "review"], errors, label)
+            if state in {"MR implemented", "verified"}:
+                evidence(root, cell, ["domain", "test", "oracle", "replay"], errors, label)
             if state == "verified":
-                evidence(root, cell, ["test", "oracle", "replay", "green"], errors, label)
+                evidence(root, cell, ["green"], errors, label)
             if state == "exception reviewed":
                 evidence(root, cell, ["rationale"], errors, label)
-            if release and state == "untriaged":
-                errors.append(f"{label}: untriaged relation")
+            if release and state in {"untriaged", "MR implemented"}:
+                errors.append(f"{label}: unqualified relation ({state})")
     return errors
+
+
+def check_campaign(root, data):
+    """Static replay preconditions: never silently run a stale fault catalogue."""
+    path = root / "tools/mutation/intersection-backfill.json"
+    catalogue = json.loads(path.read_text())
+    records = {row["id"]: row for row in data["defects"]}
+    errors = []
+    ids = [row["id"] for row in catalogue["mutants"]]
+    if not ids or len(set(ids)) != len(ids):
+        errors.append("fault catalogue is empty or has duplicate IDs")
+    for fault in catalogue["mutants"]:
+        name = fault["id"]
+        record = records.get(name, {})
+        source = root / fault["file"]
+        if not source.resolve().is_relative_to((root / "src").resolve()):
+            errors.append(f"{name}: fault must target production source")
+            continue
+        if source.read_text().count(fault["find"]) != 1 or fault["find"] == fault["replace"]:
+            errors.append(f"{name}: fault site is stale, ambiguous or unchanged")
+        if record.get("state") not in {"MR implemented", "verified"}:
+            errors.append(f"{name}: missing implemented defect obligation")
+        if not reference(root, record.get("campaign")):
+            errors.append(f"{name}: missing campaign provenance")
+        if fault.get("repair_commit") != record.get("repair_commit") or not re.fullmatch(r"[0-9a-f]{40}", fault.get("repair_commit", "")):
+            errors.append(f"{name}: invalid repair revision")
+        diagnostic = fault.get("diagnostic", "")
+        if not isinstance(diagnostic, str) or not diagnostic.startswith("intersect: MR " + name + " "):
+            errors.append(f"{name}: missing named diagnostic")
+        elif fault.get("tests") != "^" + re.escape(diagnostic) + "$":
+            errors.append(f"{name}: test selection must select the exact declared diagnostic")
+        elif not reference(root, "tests/intersect/MetamorphicRegressionTests.cpp#" + diagnostic.removeprefix("intersect: ")):
+            errors.append(f"{name}: named regression does not exist")
+        if fault.get("critical") is not True:
+            errors.append(f"{name}: historical fault must be critical")
+    return errors
+
+
+def summary(data):
+    def counts(rows):
+        result = {}
+        for row in rows:
+            state = row["state"]
+            result[state] = result.get(state, 0) + 1
+        return result
+    cells = [cell for row in data["handlers"].values() for cell in row.values()]
+    return {"inventory_complete": data["inventory_complete"],
+            "defects": counts(data["defects"]), "handler_relations": counts(cells),
+            "evidence_kinds": {kind: sum(c.get("evidence_kind") == kind for c in cells)
+                               for kind in ("resolved_geometry", "fail_closed_contract")}}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--release", action="store_true")
+    parser.add_argument("--summary", action="store_true", help="also print state/exposure counts")
     parser.add_argument("--base", help="git revision whose defect IDs must be retained")
     args = parser.parse_args()
     root = args.root.resolve()
@@ -134,7 +189,9 @@ def main():
             tree = subprocess.check_output(["git", "ls-tree", args.base, "--", LEDGER], cwd=root, text=True)
             if tree.strip():
                 base = json.loads(subprocess.check_output(["git", "show", f"{args.base}:{LEDGER}"], cwd=root, text=True))
-        errors = check(root, data, args.release, base)
+        errors = check(root, data, args.release, base) + check_campaign(root, data)
+        if args.summary:
+            print(json.dumps(summary(data), indent=2))
     except (OSError, ValueError, KeyError, TypeError, AttributeError, subprocess.CalledProcessError) as exc:
         print(f"check_metamorphic: invalid inventory: {exc}", file=sys.stderr)
         return 1

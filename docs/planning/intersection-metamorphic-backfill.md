@@ -25,17 +25,17 @@ verification evidence is linked; do not silently change status to complete.
 | PR / defect | Failure mode | Candidate MR | Current evidence | Backfill state |
 | --- | --- | --- | --- | --- |
 | [#200](https://github.com/onurtuncer/Stereon/pull/200) | Quadric root placement from far line origin | MR-01, MR-04 | Direct tests exist in original PR; compare with #205 failure | untriaged |
-| [#205](https://github.com/onurtuncer/Stereon/pull/205) | Far-origin line collapses two crossings | MR-01, MR-04 | Deterministic direct + transformed checks in `tests/intersect/AdversarialTests.cpp`; randomized origin-shift suite already present | MR implemented (verify faulty revision and CI) |
-| [#206](https://github.com/onurtuncer/Stereon/pull/206) | Singleton-domain coplanar curve lost | MR-04, MR-07 | Direct regression in `tests/intersect/ConicSurfaceTests.cpp` or corresponding conic test; link exact location after inspection | fixture captured |
+| [#205](https://github.com/onurtuncer/Stereon/pull/205) | Far-origin line collapses two crossings | MR-01, MR-04 | Priority campaign in `MetamorphicRegressionTests.cpp`; replay and fault catalogue linked in JSON | MR implemented (native fault replay and review pending) |
+| [#206](https://github.com/onurtuncer/Stereon/pull/206) | Singleton-domain coplanar curve lost | MR-04, MR-07 | Priority campaign in `MetamorphicRegressionTests.cpp`; replay and fault catalogue linked in JSON | MR implemented (native fault replay and review pending) |
 | [#207](https://github.com/onurtuncer/Stereon/pull/207) | Tiny traced branch/sliver discarded | MR-01, MR-03 | Direct fixture from repair PR needs audit | untriaged |
-| [#218](https://github.com/onurtuncer/Stereon/pull/218) | Line–cone result depends on line origin | MR-04, MR-01 | Inspect repair regression and add transform-specific test | untriaged |
+| [#218](https://github.com/onurtuncer/Stereon/pull/218) | Line–cone result depends on line origin | MR-04, MR-01 | Priority campaign in `MetamorphicRegressionTests.cpp`; replay and fault catalogue linked in JSON | MR implemented (native fault replay and review pending) |
 | [#230](https://github.com/onurtuncer/Stereon/pull/230) | Plane–ellipsoid tangent and longitude-box errors | MR-02, MR-04 | Original PR's tangent/pole tests already swap operands; test stability and link replay evidence | MR implemented (verify faulty revision and CI) |
 | [#236](https://github.com/onurtuncer/Stereon/pull/236) | Two corpus-declared SSI configurations incorrect | MR-01, MR-02, MR-03 | Inspect corpus case identities and direct fixtures | untriaged |
 | [#238](https://github.com/onurtuncer/Stereon/pull/238) | Property counterexamples from CI seeds | Relation depends on exact counterexample | Recover seeds and fixes from PR | untriaged |
 | [#239](https://github.com/onurtuncer/Stereon/pull/239) | 3D line resolution semantics differed from spline | MR-02, MR-03 | Inspect direct test and relation applicability | untriaged |
 | [#240](https://github.com/onurtuncer/Stereon/pull/240), [#241](https://github.com/onurtuncer/Stereon/pull/241) | B-spline curve meeting on domain boundary | MR-04, MR-02 | Re-landed repair; check one root-cause entry vs two attempts | untriaged |
-| [#244](https://github.com/onurtuncer/Stereon/pull/244) | Near-axis sphere–cone contact misclassified as points | MR-02, MR-01 | Direct regression in `tests/intersect/ElementaryPairsTests.cpp` | fixture captured |
-| [#247](https://github.com/onurtuncer/Stereon/pull/247) | Unequal near-parallel cones falsely coincident | MR-02 | Existing direct regression extended to swap operands in `tests/intersect/ElementaryPairsTests.cpp` | MR implemented (verify faulty revision and CI) |
+| [#244](https://github.com/onurtuncer/Stereon/pull/244) | Near-axis sphere–cone contact misclassified as points | MR-02, MR-01 | Priority campaign in `MetamorphicRegressionTests.cpp`; replay and fault catalogue linked in JSON | MR implemented (native fault replay and review pending) |
+| [#247](https://github.com/onurtuncer/Stereon/pull/247) | Unequal near-parallel cones falsely coincident | MR-02 | Priority campaign in `MetamorphicRegressionTests.cpp`; replay and fault catalogue linked in JSON | MR implemented (native fault replay and review pending) |
 
 ## Candidate repairs needing defect classification
 
@@ -105,3 +105,22 @@ Use immutable revisions/run IDs for external evidence. The checker validates
 references and mandatory evidence presence; a reviewer must still inspect the
 scientific claims and CI outcomes. `inventory_complete` and `inventory_review`
 may be set only after the historical audit, not merely after tests pass.
+
+## Priority backfill campaign
+
+The five-defect [replay specification](metamorphic-priority-replay.md) and
+`tools/mutation/intersection-backfill.json` provide deterministic fixtures,
+independent oracles and source-level reintroductions for PR-205, PR-206,
+PR-218, PR-244 and PR-247. The **Intersection metamorphic evidence** workflow
+runs a repaired baseline and requires repeated named failure for each fault.
+It archives baseline and fault logs, revision and toolchain metadata.
+These obligations and their applicable matrix cells are `MR implemented`,
+not `verified`: native green/red artifacts and owner review are still required.
+PR-244/247 test fail-closed contracts; unresolved geometry never counts as a
+resolved geometric result. `python tools/check_metamorphic.py --summary`
+reports those exposure kinds separately, alongside all remaining open cells.
+
+For each newly implemented cell, domain, test, oracle and replay references
+are mandatory immediately. The checker also verifies the campaign's source
+sites are unique, its named tests exist, and its repair IDs match the ledger.
+A moved source site requires a reviewed catalogue update, not a silent skip.

@@ -1,0 +1,76 @@
+{
+  "description": "Five ADR-0053 historical faults. The PR-218 mutant disables recentering while retaining current surrounding APIs; others reverse the relevant repair. Green baseline and repeated named failures are mandatory.",
+  "preset": "gcc16-debug",
+  "mutants": [
+    {
+      "id": "PR-205",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: far-origin sphere crossings",
+      "file": "src/intersect/LineSurface.cpp",
+      "find": "    const auto [q, discriminant] =\n        QuadraticOf([&](auto f) { return coefficientsFrom(f, line.Origin); });",
+      "replace": "    const auto [a, b, c] = coefficientsFrom(Plain{}, line.Origin);\n    const LineQuadratic q{a, b, c};\n    const double discriminant = std::max(0.0, q.B * q.B - q.A * q.C);",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ PR\\-205\\ far\\-origin\\ sphere\\ crossings$",
+      "diagnostic": "intersect: MR PR-205 far-origin sphere crossings",
+      "repair_commit": "3a147886ddc7ad652dacc98d2272cf6f98a0a3a5"
+    },
+    {
+      "id": "PR-206",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: singleton circle plane domain",
+      "file": "src/intersect/SplineSurface.cpp",
+      "find": "    if (range.GetLower() == range.GetUpper()) {\n        if (InBox(Eval(pcurve, range.GetLower()), box) == Strict::Negative) {\n            return std::vector<Interval>{};\n        }\n        return std::vector<Interval>{range};\n    }",
+      "replace": "",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ PR\\-206\\ singleton\\ circle\\ plane\\ domain$",
+      "diagnostic": "intersect: MR PR-206 singleton circle plane domain",
+      "repair_commit": "806217bae3c15b93b5fcdb2255534a5fec11b727"
+    },
+    {
+      "id": "PR-218",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: far-origin cone crossings",
+      "file": "src/intersect/SplineSurface.cpp",
+      "find": "const double middle = -Middle(far.B) / Middle(far.A);",
+      "replace": "const double middle = 0.0;",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ PR\\-218\\ far\\-origin\\ cone\\ crossings$",
+      "diagnostic": "intersect: MR PR-218 far-origin cone crossings",
+      "repair_commit": "b265d641e61cc6b8a43fe8127e46394d1cbec108"
+    },
+    {
+      "id": "PR-244",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: near-axis sphere cone is not isolated points",
+      "file": "src/intersect/ElementaryPairs.cpp",
+      "find": "if (!(rho > tol)) {",
+      "replace": "if (!(rho > 0.0)) {",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ PR\\-244\\ near\\-axis\\ sphere\\ cone\\ is\\ not\\ isolated\\ points$",
+      "diagnostic": "intersect: MR PR-244 near-axis sphere cone is not isolated points",
+      "repair_commit": "aae5992bfa7d14150624bfd3e8a3189ee7ab267f"
+    },
+    {
+      "id": "PR-247",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: unequal cone angles remain unresolved",
+      "file": "src/intersect/ElementaryPairs.cpp",
+      "find": "    if (UnresolvedConeAngles(p)) {\n        return Fail(ErrorCode::IntersectionFailed,\n                    \"Nearly parallel unequal cone profiles require refinement\");\n    }",
+      "replace": "    static_cast<void>(UnresolvedConeAngles(p));",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ PR\\-247\\ unequal\\ cone\\ angles\\ remain\\ unresolved$",
+      "diagnostic": "intersect: MR PR-247 unequal cone angles remain unresolved",
+      "repair_commit": "9514e8d7fbe0517b193a319b61bf962b266e56ee"
+    }
+  ]
+}

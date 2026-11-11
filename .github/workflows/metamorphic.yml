@@ -1,0 +1,58 @@
+# SPDX-FileCopyrightText: 2026 Onur Tuncer and Stereon contributors
+# SPDX-License-Identifier: MPL-2.0
+name: Intersection metamorphic evidence
+on:
+  pull_request:
+    paths:
+      - 'src/intersect/**'
+      - 'src/core/**'
+      - 'src/robust/**'
+      - 'src/curve/**'
+      - 'src/surface/**'
+      - 'tests/**'
+      - 'tools/mutate.py'
+      - 'tools/mutation/intersection-backfill.json'
+      - 'tools/check_metamorphic.py'
+      - 'tools/test_mutation_evidence.py'
+      - '.github/workflows/metamorphic.yml'
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
+      - 'cmake/**'
+  schedule:
+    - cron: '27 3 * * 2'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+env:
+  CMAKE_BUILD_PARALLEL_LEVEL: '4'
+jobs:
+  backfill:
+    name: Five historical faults (GCC 16)
+    runs-on: ubuntu-24.04
+    container: gcc:16.2
+    timeout-minutes: 120
+    steps:
+      - name: Install build tools
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends cmake ninja-build python3 git
+      - uses: actions/checkout@v7
+      - name: Validate evidence infrastructure
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          python3 tools/test_mutation_evidence.py
+          python3 tools/check_metamorphic.py
+      - name: Green baseline and red historical faults
+        run: python3 tools/mutate.py --catalogue tools/mutation/intersection-backfill.json --work build/metamorphic
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: metamorphic-evidence-${{ github.sha }}
+          path: |
+            build/metamorphic/report.json
+            build/metamorphic/report.md
+            build/metamorphic/logs/
+          retention-days: 90

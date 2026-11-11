@@ -107,6 +107,7 @@ jobs:
       - name: Metamorphic inventory and gate regressions (ADR-0053)
         run: |
           python tools/test_metamorphic.py
+          python tools/test_mutation_evidence.py
           python tools/check_metamorphic.py
       - name: Retain base-branch metamorphic obligations
         if: github.event_name == 'pull_request'

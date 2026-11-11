@@ -3,11 +3,13 @@
 # SPDX-License-Identifier: MPL-2.0
 """Negative and positive release-gate regressions, no C++ build required."""
 import copy
+import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
 
-from check_metamorphic import check, reference, RELATIONS
+from check_metamorphic import check, check_campaign, reference, RELATIONS
 
 
 class GateTests(unittest.TestCase):
@@ -104,9 +106,88 @@ class GateTests(unittest.TestCase):
         self.data["defects"][0]["state"] = "done"
         self.assertTrue(self.errors())
 
+    def test_implemented_relation_requires_test_but_is_not_qualified(self):
+        cell = self.data["handlers"]["pair"]["MR-01"]
+        cell["state"] = "MR implemented"
+        self.assertEqual([], self.errors())
+        self.assertTrue(self.errors(release=True))
+        del cell["test"]
+        self.assertTrue(self.errors())
+
+    def test_implemented_defect_needs_replay_and_relation(self):
+        row = self.data["defects"][0]
+        row["state"] = "MR implemented"
+        self.assertEqual([], self.errors())
+        self.assertTrue(self.errors(release=True))
+        del row["replay"]
+        self.assertTrue(self.errors())
+
     def test_refs_and_anchors_must_exist(self):
         for ref in ("missing.md", "proof.md#absent", "../outside", "", "https://", "http://a/b"):
             self.assertFalse(reference(self.root, ref), ref)
+
+
+class CampaignTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        repo = Path(__file__).resolve().parents[1]
+        self.data = json.loads((repo / "docs/planning/intersection-metamorphic.json").read_text())
+        self.path = self.root / "tools/mutation/intersection-backfill.json"
+        catalogue = json.loads((repo / "tools/mutation/intersection-backfill.json").read_text())
+        paths = {m["file"] for m in catalogue["mutants"]}
+        paths.update(["tools/mutation/intersection-backfill.json", "tests/intersect/MetamorphicRegressionTests.cpp"])
+        for relative in paths:
+            target = self.root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(repo / relative, target)
+        self.catalogue = catalogue
+
+    def errors(self):
+        self.path.write_text(json.dumps(self.catalogue))
+        return check_campaign(self.root, self.data)
+
+    def test_current_campaign_is_consistent(self):
+        self.assertEqual([], self.errors())
+
+    def test_stale_and_ambiguous_sites_are_rejected(self):
+        row = self.catalogue["mutants"][0]
+        path = self.root / row["file"]
+        original = path.read_text()
+        path.write_text(original.replace(row["find"], ""))
+        self.assertTrue(self.errors())
+        path.write_text(original + row["find"])
+        self.assertTrue(self.errors())
+
+    def test_fault_must_change_production_source(self):
+        row = self.catalogue["mutants"][0]
+        row["replace"] = row["find"]
+        self.assertTrue(self.errors())
+        row["file"] = "tests/intersect/MetamorphicRegressionTests.cpp"
+        self.assertTrue(self.errors())
+
+    def test_selection_and_diagnostic_must_match_existing_test(self):
+        row = self.catalogue["mutants"][0]
+        row["tests"] = ".*"
+        self.assertTrue(self.errors())
+        row["diagnostic"] = "nonexistent"
+        self.assertTrue(self.errors())
+
+    def test_catalogue_cannot_be_empty_or_duplicate(self):
+        row = self.catalogue["mutants"][0]
+        self.catalogue["mutants"].append(row)
+        self.assertTrue(self.errors())
+        self.catalogue["mutants"] = []
+        self.assertTrue(self.errors())
+
+    def test_fault_cannot_lose_critical_or_repair_identity(self):
+        row = self.catalogue["mutants"][0]
+        row["critical"] = False
+        self.assertTrue(self.errors())
+        row["critical"] = True
+        row["repair_commit"] = "0" * 40
+        self.assertTrue(self.errors())
 
 
 if __name__ == "__main__":
