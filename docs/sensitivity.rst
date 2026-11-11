@@ -318,11 +318,18 @@ random pairs of lines, circles, ellipses and cubic B-splines, rational half
 the time, pairing points by position across a circle's seam and discarding
 a step that changes their number.
 
-Two 3D curves have no such products yet: they meet only where their
-closest approach is within the resolution, which a generic change of
-either curve undoes, so a meeting is itself an event. Its derivative needs
-a convention (the meeting kept, or the closest approach tracked) that is
-still to be chosen.
+Two space curves meet only where their closest approach is within the
+resolution, which a generic change of either curve undoes: a meeting is
+itself an event, of codimension one. ``IntersectJvp(a, b, intersection,
+context)`` and ``IntersectVjp`` for two ``Curve`` therefore answer
+``Nondifferentiable`` for a result with a point or an overlap, saying why,
+and ``Valid`` with no values (zeros, in reverse) for a proved separation,
+which a small enough change keeps (ADR-0052, the owner's decision of
+2026-11-10).
+Tracking the closest approach smoothly, :math:`(A - B) \cdot A' = 0` and
+:math:`(A - B) \cdot B' = 0` in :math:`(s, t)`, is a separate product,
+``ClosestApproach``, still to come, with its own tracking convention; it is
+not hidden inside ``Intersect``'s derivatives.
 
 Branch points of two surfaces
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

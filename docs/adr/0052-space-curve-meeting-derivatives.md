@@ -1,0 +1,40 @@
+# ADR-0052: Derivatives of meetings of space curves
+
+- **Status:** Accepted
+- **Date:** 2026-11-10
+- **Accepted:** 2026-11-10 by Onur Tuncer: option 3 now, option 1 later as a separately named product.
+- **Owner:** Onur Tuncer
+- **Phase:** 2 (v0.2 "Intersections", intersection linearisation, ADR-0021 §9 stage 4)
+- **Related:** ADR-0001, ADR-0010, ADR-0021, ADR-0029
+
+## Context
+
+ADR-0021 §9 asks every intersection handler to expose the linearisation of its results and a regularity classification. For a curve against a surface, a branch of two surfaces and a point where two plane curves meet, the result is a point that solves a square system and moves smoothly with the geometry wherever that system is regular.
+
+Two space curves are different. Since #240 and #242 they meet where their closest approach is within the Context's resolution (ADR-0001): a meeting is the critical point of the distance between the curves, with the distance below 1e-5 mm by default. A generic change of either curve, of any size above the resolution, moves the curves apart and the meeting disappears; the primal `Intersect` then reports nothing. A meeting of space curves is therefore an event of codimension one, as a tangency is, not a point that moves. Differentiating it needs a convention, and the convention changes what the derivative means, so it is a design decision rather than an implementation detail.
+
+## Options
+
+1. **Track the closest approach.** Differentiate (s, t) at the critical point of the distance, (A(s) − B(t)) · A′(s) = 0 and (A(s) − B(t)) · B′(t) = 0, two equations in two unknowns, regular wherever the curves are not parallel. Always defined, consistent with how the kernel finds meetings, and gives the gap's derivative for free. But the derivative then describes the closest approach, not a meeting: past the resolution the primal result has no point to compare it with, and the reported position (on A, on B, or between) needs its own convention.
+2. **Keep the meeting.** Treat the meeting as a constraint and differentiate only along design changes that keep the curves touching, projected onto that subspace; answer `Nondifferentiable` otherwise. Faithful to the primal result, but almost every change from a real design leaves the subspace, and the projection needs a further convention for which parameters give way.
+3. **Answer that there is no derivative.** `Intersect`'s products for two space curves answer `Nondifferentiable` for a result with a meeting or an overlap, saying why, and `Valid` with no values for a proved separation, which a small enough change keeps. Honest and cheap; it gives nothing to a caller whose edges come from space curves meeting.
+
+## Decision
+
+Option 3 for `Intersect`, now; option 1 later, as its own product.
+
+- `IntersectJvp(a, b, intersection, context)` and `IntersectVjp` for two `Curve` answer `Nondifferentiable` for a result with any point or overlap, with the reason, and carry no values. A proved separation is `Valid`, with no values forward and zeros in reverse. No binding type exists for space curves until a product needs one.
+- The smooth tracking of option 1 becomes a separately named product, `ClosestApproach(a, b)`, with its own forward and reverse products and its own tracking convention in ADR-0021's terms. It is not hidden inside `Intersect`'s derivatives, so `Intersect`'s products always describe what `Intersect` returns.
+- Points of two plane curves are not affected: in the plane a crossing persists under any small change and has the products of #257.
+
+## Consequences
+
+- `Intersect`'s derivatives stay tied to its primal result, as for every other handler: no product describes a point the primal call would not report.
+- A design whose edges come from space curves meeting gets no sensitivity until `ClosestApproach` exists; the status says so rather than giving a number.
+- `ClosestApproach` must choose how it reports the position (on A, on B, or the midpoint) and must be verified against a closest-approach solver, not against `Intersect`, whose result vanishes once the gap exceeds the resolution.
+- The v0.2 ledger's linearisation row lists `ClosestApproach` as remaining work.
+
+## Verification
+
+- `tests/intersect/PlanarLinearizationTests.cpp`, *a meeting of two space curves is an event, a separation keeps*: two crossing lines answer `Nondifferentiable` with no values; two lines apart answer `Valid`, no values forward and a zero in reverse, and refuse a non-empty adjoint; a B-spline against itself, an overlap, answers `Nondifferentiable`.
+- For `ClosestApproach`, when it is built: closed forms for two lines, second-order Taylor decay and the adjoint identity on random curves against an independent closest-approach solver, and `Nondifferentiable` for parallel curves.

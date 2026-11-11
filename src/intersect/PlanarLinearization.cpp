@@ -34,7 +34,8 @@ import :Linearization;
 /// and transposed for the reverse product. Each curve's side gives its point,
 /// its tangent and the velocity of its point at fixed parameter for each
 /// binding; the B-spline's is the curve library's PoleVelocity on the curve
-/// lifted into the plane z = 0, where it is the same curve.
+/// lifted into the plane z = 0, where it is the same curve. Two space curves
+/// have no products: their meetings are events (below).
 
 namespace Stereon {
 
@@ -467,6 +468,73 @@ IntersectVjp(const Curve2d& a, const std::span<const PlaneCurveBinding> bindings
         }
     }
     return Published(analysis, std::move(values), Signature(intersection), "IntersectVjp");
+}
+
+// --- Two space curves ------------------------------------------------------
+
+namespace {
+
+/// Nondifferentiable for a meeting or an overlap of space curves, which a
+/// generic change undoes; nothing for a separation.
+[[nodiscard]] std::optional<Result<SensitivityResult>>
+WithoutDerivative(const CurveCurveIntersection& intersection, const std::string_view where)
+{
+    if (!intersection.Overlaps.empty()) {
+        return SensitivityResult::Without(
+            DerivativeStatus::Nondifferentiable,
+            std::string(where) + ": the space curves overlap: their points are not isolated");
+    }
+    if (!intersection.Points.empty()) {
+        return SensitivityResult::Without(
+            DerivativeStatus::Nondifferentiable,
+            std::string(where) +
+                ": space curves meet only within the resolution of their closest approach, "
+                "which a generic change undoes: a meeting is an event of codimension one; "
+                "ClosestApproach, still to come, tracks the approach");
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] std::uint64_t SeparationSignature()
+{
+    return 14695981039346656037ull; // FNV-1a of nothing: no point, no overlap
+}
+
+} // namespace
+
+Result<SensitivityResult> IntersectJvp(const Curve& a, const Curve& b,
+                                       const CurveCurveIntersection& intersection,
+                                       const SensitivityContext& sensitivity)
+{
+    if (a.IsEmpty() || b.IsEmpty()) {
+        return Fail(ErrorCode::InvalidInput, "IntersectJvp: an empty curve");
+    }
+    if (auto none = WithoutDerivative(intersection, "IntersectJvp")) {
+        return *std::move(none);
+    }
+    if (sensitivity.GetSeed().size() != sensitivity.GetParameters().GetSize()) {
+        return Fail(ErrorCode::InvalidInput, "IntersectJvp: the context has no seed");
+    }
+    return SensitivityResult::Computed(DerivativeStatus::Valid, {}, SeparationSignature());
+}
+
+Result<SensitivityResult> IntersectVjp(const Curve& a, const Curve& b,
+                                       const CurveCurveIntersection& intersection,
+                                       const SensitivityContext& sensitivity)
+{
+    if (a.IsEmpty() || b.IsEmpty()) {
+        return Fail(ErrorCode::InvalidInput, "IntersectVjp: an empty curve");
+    }
+    if (auto none = WithoutDerivative(intersection, "IntersectVjp")) {
+        return *std::move(none);
+    }
+    if (!sensitivity.GetAdjoint().empty()) {
+        return Fail(ErrorCode::InvalidInput,
+                    "IntersectVjp: a separation has no values, so its adjoint is empty");
+    }
+    return SensitivityResult::Computed(
+        DerivativeStatus::Valid, std::vector<double>(sensitivity.GetParameters().GetSize(), 0.0),
+        SeparationSignature());
 }
 
 } // namespace Stereon
