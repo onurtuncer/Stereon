@@ -428,7 +428,11 @@ TEST_CASE("unequal near-parallel cones cannot be declared coincident", "[interse
 {
     const Surface a{Cone{Point3{}, 0.0, pi / 4.0, X, Y, true}};
     const Surface b{Cone{Point3{}, 0.0, pi / 4.0 + 0x1p-42, X, Y, true}};
-    const auto result = Intersect(a, b, ctx);
-    REQUIRE_FALSE(result.has_value());
-    REQUIRE(result.error().GetCode() == Stereon::ErrorCode::IntersectionFailed);
+    // PR #247, MR-02: operand permutation must not turn an unresolved
+    // near-parallel unequal-cone pair into a false coincidence.
+    for (const bool swapped : {false, true}) {
+        const auto result = swapped ? Intersect(b, a, ctx) : Intersect(a, b, ctx);
+        REQUIRE_FALSE(result.has_value());
+        REQUIRE(result.error().GetCode() == Stereon::ErrorCode::IntersectionFailed);
+    }
 }
