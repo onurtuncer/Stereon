@@ -368,65 +368,89 @@ double BackSpline(const double t, const double sum)
     return sum - t;
 }
 
-Reparam ReparamOf(const JsonValue& c)
+/// The requested domain's ends, when the case bounds it.
+struct Bounds {
+    bool Bounded = false;
+    double Lo = 0.0;
+    double Hi = 0.0;
+};
+
+Bounds BoundsOf(const JsonValue& c)
+{
+    if (!c.Has("domain")) {
+        return {};
+    }
+    return {true, c["domain"][0].AsNumber(), c["domain"][1].AsNumber()};
+}
+
+Reparam ReparamLine(const JsonValue& c, const Bounds& d)
+{
+    const Point2 o = PointOf(c["origin"]);
+    const Vec2 v = VectorOf(c["direction"]);
+    Reparam r;
+    r.Curve = Curve2d{*Stereon::MakeLine(o + 2.0 * v, 2.0 * v)};
+    r.Back = &BackLine;
+    r.Domain =
+        d.Bounded ? Interval{(d.Lo - 2.0) / 2.0, (d.Hi - 2.0) / 2.0} : Interval::Everything();
+    return r;
+}
+
+Reparam ReparamSpline(const JsonValue& c, const Bounds& d)
+{
+    const std::vector<double> knots = NumbersOf(c["knots"]);
+    const double sum = knots.front() + knots.back();
+    std::vector<double> reflected;
+    for (auto it = knots.rbegin(); it != knots.rend(); ++it) {
+        reflected.push_back(sum - *it);
+    }
+    std::vector<Point2> poles;
+    for (const JsonValue& p : c["poles"].AsArray()) {
+        poles.insert(poles.begin(), PointOf(p));
+    }
+    std::vector<double> weights =
+        c.Has("weights") ? NumbersOf(c["weights"]) : std::vector<double>{};
+    std::ranges::reverse(weights);
+    auto made =
+        Stereon::MakeBSplineCurve(static_cast<int>(c["degree"].AsNumber()), std::move(reflected),
+                                  std::move(poles), std::move(weights));
+    REQUIRE(made.has_value());
+    Reparam r;
+    r.Curve = Curve2d{*std::move(made)};
+    r.Back = &BackSpline;
+    r.Sum = sum;
+    r.Domain = d.Bounded ? Interval{sum - d.Hi, sum - d.Lo} : Domain(r.Curve);
+    return r;
+}
+
+/// A closed conic turned by `turn` (a quarter for a circle, half for an
+/// ellipse): its chart shifted by that angle.
+Reparam ReparamTurned(Curve2d curve, double (*back)(double, double), const double turn,
+                      const Bounds& d)
+{
+    Reparam r;
+    r.Curve = std::move(curve);
+    r.Back = back;
+    r.Domain = d.Bounded ? Interval{d.Lo - turn, d.Hi - turn} : Domain(r.Curve);
+    return r;
+}
+
+Reparam ReparamConic(const JsonValue& c, const Bounds& d)
 {
     const std::string& type = c["type"].AsString();
-    const bool bounded = c.Has("domain");
-    const double lo = bounded ? c["domain"][0].AsNumber() : 0.0;
-    const double hi = bounded ? c["domain"][1].AsNumber() : 0.0;
-    Reparam r;
-    if (type == "line") {
-        const Point2 o = PointOf(c["origin"]);
-        const Vec2 d = VectorOf(c["direction"]);
-        r.Curve = Curve2d{*Stereon::MakeLine(o + 2.0 * d, 2.0 * d)};
-        r.Back = &BackLine;
-        r.Domain = bounded ? Interval{(lo - 2.0) / 2.0, (hi - 2.0) / 2.0} : Interval::Everything();
-        return r;
-    }
-    if (type == "bspline") {
-        const std::vector<double> knots = NumbersOf(c["knots"]);
-        const double sum = knots.front() + knots.back();
-        std::vector<double> reflected;
-        for (auto it = knots.rbegin(); it != knots.rend(); ++it) {
-            reflected.push_back(sum - *it);
-        }
-        std::vector<Point2> poles;
-        for (const JsonValue& p : c["poles"].AsArray()) {
-            poles.insert(poles.begin(), PointOf(p));
-        }
-        std::vector<double> weights;
-        if (c.Has("weights")) {
-            weights = NumbersOf(c["weights"]);
-            std::ranges::reverse(weights);
-        }
-        auto made =
-            Stereon::MakeBSplineCurve(static_cast<int>(c["degree"].AsNumber()),
-                                      std::move(reflected), std::move(poles), std::move(weights));
-        REQUIRE(made.has_value());
-        r.Curve = Curve2d{*std::move(made)};
-        r.Back = &BackSpline;
-        r.Sum = sum;
-        r.Domain = bounded ? Interval{sum - hi, sum - lo} : Domain(r.Curve);
-        return r;
-    }
     const Vec2 x = VectorOf(c["x_axis"]);
     const Vec2 y = VectorOf(c["y_axis"]);
     if (type == "circle") {
-        r.Curve =
-            Curve2d{*Stereon::MakeCircle(PointOf(c["center"]), c["radius"].AsNumber(), y, -x)};
-        r.Back = &BackCircle;
-        r.Domain = bounded ? Interval{lo - std::numbers::pi / 2.0, hi - std::numbers::pi / 2.0}
-                           : Domain(r.Curve);
-        return r;
+        return ReparamTurned(
+            Curve2d{*Stereon::MakeCircle(PointOf(c["center"]), c["radius"].AsNumber(), y, -x)},
+            &BackCircle, std::numbers::pi / 2.0, d);
     }
     if (type == "ellipse") {
-        r.Curve = Curve2d{*Stereon::MakeEllipse(PointOf(c["center"]), c["major"].AsNumber(),
-                                                c["minor"].AsNumber(), -x, -y)};
-        r.Back = &BackEllipse;
-        r.Domain =
-            bounded ? Interval{lo - std::numbers::pi, hi - std::numbers::pi} : Domain(r.Curve);
-        return r;
+        return ReparamTurned(
+            Curve2d{*Stereon::MakeEllipse(PointOf(c["center"]), c["major"].AsNumber(),
+                                          c["minor"].AsNumber(), -x, -y)},
+            &BackEllipse, std::numbers::pi, d);
     }
+    Reparam r;
     if (type == "hyperbola") {
         r.Curve = Curve2d{*Stereon::MakeHyperbola(PointOf(c["center"]), c["major"].AsNumber(),
                                                   c["minor"].AsNumber(), x, -y)};
@@ -435,8 +459,21 @@ Reparam ReparamOf(const JsonValue& c)
             Curve2d{*Stereon::MakeParabola(PointOf(c["vertex"]), c["focal"].AsNumber(), x, -y)};
     }
     r.Back = &BackNegated;
-    r.Domain = bounded ? Interval{-hi, -lo} : Interval::Everything();
+    r.Domain = d.Bounded ? Interval{-d.Hi, -d.Lo} : Interval::Everything();
     return r;
+}
+
+Reparam ReparamOf(const JsonValue& c)
+{
+    const std::string& type = c["type"].AsString();
+    const Bounds d = BoundsOf(c);
+    if (type == "line") {
+        return ReparamLine(c, d);
+    }
+    if (type == "bspline") {
+        return ReparamSpline(c, d);
+    }
+    return ReparamConic(c, d);
 }
 
 /// The largest reach of the case's expected points and overlaps.
@@ -450,6 +487,24 @@ double ReachOf(const JsonValue& expected)
         reach = std::max(reach, o["within"].AsNumber());
     }
     return reach;
+}
+
+/// Every parameter on the moved operand maps back, by the closed-form
+/// change of parameter, to the original curve at the same place.
+void CheckMappedBack(const PlanarIntersection& result, const Reparam& moved,
+                     const Curve2d& original, const bool moveFirst, const double reach)
+{
+    for (const PlanarPoint& p : result.Points) {
+        const double t = moveFirst ? p.ParameterA : p.ParameterB;
+        CHECK(Distance(Eval(original, moved.Back(t, moved.Sum)), p.Position) <= reach);
+    }
+    for (const Stereon::PlanarOverlap& o : result.Overlaps) {
+        const Interval& range = moveFirst ? o.OnA : o.OnB;
+        for (const double t : {range.GetLower(), range.GetUpper()}) {
+            CHECK(Distance(Eval(original, moved.Back(t, moved.Sum)), Eval(moved.Curve, t)) <=
+                  reach);
+        }
+    }
 }
 
 /// MR-04 for one case, one order, one operand moved to its equivalent
@@ -485,19 +540,8 @@ void CheckReparam(const JsonValue& c, const bool swapped, const bool moveFirst, 
     } else {
         CheckPoints(*result, expected, a, b);
     }
-    const double reach = ReachOf(expected);
-    const Curve2d& original = moveFirst ? originalA : originalB;
-    for (const PlanarPoint& p : result->Points) {
-        const double t = moveFirst ? p.ParameterA : p.ParameterB;
-        CHECK(Distance(Eval(original, moved.Back(t, moved.Sum)), p.Position) <= reach);
-    }
-    for (const Stereon::PlanarOverlap& o : result->Overlaps) {
-        const Interval& range = moveFirst ? o.OnA : o.OnB;
-        for (const double t : {range.GetLower(), range.GetUpper()}) {
-            CHECK(Distance(Eval(original, moved.Back(t, moved.Sum)), Eval(moved.Curve, t)) <=
-                  reach);
-        }
-    }
+    CheckMappedBack(*result, moved, moveFirst ? originalA : originalB, moveFirst,
+                    ReachOf(expected));
 }
 
 void RunReparam(const std::vector<std::filesystem::path>& files, const bool bothWays)
