@@ -7,18 +7,20 @@
       "id": "PR-263-translated-boundary",
       "source": "https://github.com/onurtuncer/Stereon/actions/runs/43052745077",
       "state": "MR implemented",
-      "fixture": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-241 spline boundary minimum",
-      "direct": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-241 spline boundary minimum",
-      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-241 spline boundary minimum",
-      "oracle": "docs/planning/metamorphic-priority-replay.md#PR-263 translated boundary regression",
-      "replay": "docs/planning/metamorphic-priority-replay.md",
+      "fixture": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-263-translated-boundary spline end meeting away from the origin",
+      "direct": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-263-translated-boundary spline end meeting away from the origin",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-263-translated-boundary spline end meeting away from the origin",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-263-translated-boundary",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 2 fault replay",
       "relations": [
         "MR-01",
         "MR-02",
         "MR-03",
         "MR-04"
       ],
-      "evidence_kind": "resolved_geometry"
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#PR-263-translated-boundary",
+      "repair_commit": "cbeddfb8c0dffa25e5086bab19cc46fc6e7f5f53"
     },
     {
       "id": "PR-75",
@@ -44,16 +46,38 @@
     {
       "id": "PR-112",
       "source": "https://github.com/onurtuncer/Stereon/pull/112",
-      "state": "fixture captured",
+      "state": "MR implemented",
       "direct": "tests/intersect/CylinderCylinderTests.cpp#coincident cylinders intersect their requested height domains",
-      "fixture": "tests/intersect/CylinderCylinderTests.cpp#coincident cylinders intersect their requested height domains"
+      "fixture": "tests/intersect/CylinderCylinderTests.cpp#coincident cylinders intersect their requested height domains",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-112 coincident cylinders clipped to the requested domains",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-112",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 2 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03"
+      ],
+      "campaign": "tools/mutation/intersection-backfill.json#PR-112",
+      "repair_commit": "93fd35313fd0047a2fc1d6536bd32137a27f120f",
+      "evidence_kind": "resolved_geometry"
     },
     {
       "id": "PR-120",
       "source": "https://github.com/onurtuncer/Stereon/pull/120",
-      "state": "fixture captured",
+      "state": "MR implemented",
       "direct": "tests/intersect/CylinderCylinderSkewTests.cpp#skew cylinders exclude a wide angular sector containing no intersection",
-      "fixture": "tests/intersect/CylinderCylinderSkewTests.cpp#skew cylinders exclude a wide angular sector containing no intersection"
+      "fixture": "tests/intersect/CylinderCylinderSkewTests.cpp#skew cylinders exclude a wide angular sector containing no intersection",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-120 skew cylinder angular sectors of B",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-120",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 2 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03"
+      ],
+      "campaign": "tools/mutation/intersection-backfill.json#PR-120",
+      "repair_commit": "3a2ba895be415efe0198af878a2630738fd1a097",
+      "evidence_kind": "resolved_geometry"
     },
     {
       "id": "PR-126",
@@ -72,9 +96,20 @@
     {
       "id": "PR-159",
       "source": "https://github.com/onurtuncer/Stereon/pull/159",
-      "state": "fixture captured",
+      "state": "MR implemented",
       "direct": "tests/intersect/CylinderCylinderSkewTests.cpp#internally tangent cylinders touching on both seams meet at a node",
-      "fixture": "tests/intersect/CylinderCylinderSkewTests.cpp#internally tangent cylinders touching on both seams meet at a node"
+      "fixture": "tests/intersect/CylinderCylinderSkewTests.cpp#internally tangent cylinders touching on both seams meet at a node",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-159 skew cylinders tangent on both seams meet at a node",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-159",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 2 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03"
+      ],
+      "campaign": "tools/mutation/intersection-backfill.json#PR-159",
+      "repair_commit": "35f3d2370958b445985c2bb55c24cb9ab5d074d9",
+      "evidence_kind": "resolved_geometry"
     },
     {
       "id": "PR-194",
@@ -197,9 +232,20 @@
     {
       "id": "PR-236",
       "source": "https://github.com/onurtuncer/Stereon/pull/236",
-      "state": "fixture captured",
+      "state": "MR implemented",
       "direct": "tests/intersect/ElementaryPairsTests.cpp#coaxial surfaces of revolution within the tolerance are declared, not exact",
-      "fixture": "tests/intersect/ElementaryPairsTests.cpp#coaxial surfaces of revolution within the tolerance are declared, not exact"
+      "fixture": "tests/intersect/ElementaryPairsTests.cpp#coaxial surfaces of revolution within the tolerance are declared, not exact",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-236 concentric spheres within the tolerance are declared",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-236",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 2 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03"
+      ],
+      "campaign": "tools/mutation/intersection-backfill.json#PR-236",
+      "repair_commit": "252c1350cfd13429e7f406c70850dd8e288ee205",
+      "evidence_kind": "resolved_geometry"
     },
     {
       "id": "PR-238",
@@ -317,6 +363,42 @@
       ],
       "campaign": "tools/mutation/intersection-backfill.json#PR-230-pole",
       "repair_commit": "124b5211cad558f837ebf378df13bcd2de6f659c",
+      "evidence_kind": "resolved_geometry"
+    },
+    {
+      "id": "PR-112-budget",
+      "source": "https://github.com/onurtuncer/Stereon/pull/112",
+      "state": "MR implemented",
+      "fixture": "tests/intersect/PlaneCylinderTests.cpp#ellipse pcurve work is bounded before converting or allocating its samples",
+      "direct": "tests/intersect/PlaneCylinderTests.cpp#ellipse pcurve work is bounded before converting or allocating its samples",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-112-budget plane cylinder pcurve work is bounded",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-112-budget",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 2 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03"
+      ],
+      "campaign": "tools/mutation/intersection-backfill.json#PR-112-budget",
+      "repair_commit": "93fd35313fd0047a2fc1d6536bd32137a27f120f",
+      "evidence_kind": "fail_closed_contract"
+    },
+    {
+      "id": "PR-236-tangent",
+      "source": "https://github.com/onurtuncer/Stereon/pull/236",
+      "state": "MR implemented",
+      "fixture": "tests/intersect/ElementaryPairsTests.cpp#a tangent circle declared within the tolerance is certified within it",
+      "direct": "tests/intersect/ElementaryPairsTests.cpp#a tangent circle declared within the tolerance is certified within it",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-236-tangent sphere on a cylinder's axis within the tolerance",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-236-tangent",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 2 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03"
+      ],
+      "campaign": "tools/mutation/intersection-backfill.json#PR-236-tangent",
+      "repair_commit": "252c1350cfd13429e7f406c70850dd8e288ee205",
       "evidence_kind": "resolved_geometry"
     }
   ],
