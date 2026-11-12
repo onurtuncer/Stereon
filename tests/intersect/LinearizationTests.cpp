@@ -1524,7 +1524,16 @@ std::vector<double> ConicJvp(ConicModel& model, const C& conic, const S& surface
 template <typename C, typename S>
 bool ConicWellConditioned(const C& conic, const S& surface)
 {
-    const CurveSurfaceIntersection at = Meet(conic, surface);
+    const auto result = Stereon::Intersect(Stereon::Curve{conic}, Surface{surface}, ctx);
+    if (!result) {
+        // Conditioning is a precondition on an answered primal problem.
+        // A domain-end root or unresolved tangency has no derivative to
+        // test. Preserve those refusals in deterministic tests below;
+        // unexpected error classes still fail the property.
+        RC_ASSERT(result.error().GetCode() == ErrorCode::IntersectionFailed);
+        return false;
+    }
+    const CurveSurfaceIntersection& at = *result;
     if (at.Points.empty() || !at.Overlaps.empty()) {
         return false;
     }
@@ -1782,4 +1791,36 @@ TEST_CASE("a conic's bindings are refused where it has no such radius",
     const std::vector<ConicBinding> turned{{angle, ConicComponent::CenterX}};
     REQUIRE(code(Stereon::IntersectJvp(UpCircle, turned, Surface{Shelf}, {}, *circleAt,
                                        sensitivity)) == ErrorCode::InvalidInput);
+}
+
+TEST_CASE("conic derivative fixtures retain unresolved domain ends and tangencies",
+          "[intersect][linearization][conic][regression]")
+{
+    // Shrunk CI seeds 17041817369036985825 and 16155406228833616885.
+    // The first crosses at its domain's own end. The second lies within
+    // rounding of the cylinder's tangent plane. Neither supplies the
+    // resolved, well-conditioned primal required by the Taylor property.
+    const Vec3 x{1.0, 0.0, 0.0};
+    const Vec3 y{0.0, std::cos(-tau / 4.0), std::sin(-tau / 4.0)};
+    const Ellipse endpoint{Point3{-1.25, -1.25, -13.0 / 32.0}, 1.5, 0.6, x, y};
+    const Plane plane{endpoint.Center, x, Vec3{0.0, 1.0, 0.0}};
+    const Ellipse tangent{Point3{-37.0 / 32.0, 0.125, -1.25}, 1.8, 0.72, x, y};
+    const Cylinder cylinder{Point3{-2.5, -1.875, 0.0}, 2.0, x, Vec3{0.0, 1.0, 0.0}};
+    for (const auto& result :
+         {Stereon::Intersect(Stereon::Curve{endpoint}, Surface{plane}, ctx),
+          Stereon::Intersect(Stereon::Curve{tangent}, Surface{cylinder}, ctx)}) {
+        REQUIRE_FALSE(result.has_value());
+        CHECK(result.error().GetCode() == ErrorCode::IntersectionFailed);
+    }
+    // A regular chart is still required to answer: removing the derivative
+    // precondition must not turn a known supported crossing into a skip.
+    const auto regular = Stereon::Intersect(Stereon::Curve{endpoint}, Stereon::Interval{-0.3, tau - 0.3},
+                                            Surface{plane}, Domain(plane), ctx);
+    INFO(IntersectTest::ErrorText(regular));
+    REQUIRE(regular.has_value());
+    REQUIRE(regular->Points.size() == 2);
+    for (const auto& point : regular->Points) {
+        CHECK(point.Decided);
+        CHECK(point.Contact == Stereon::ContactType::Crossing);
+    }
 }
