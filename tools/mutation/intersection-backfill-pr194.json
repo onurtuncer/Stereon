@@ -1,0 +1,90 @@
+{
+  "description": "PR-194's root causes, one fault each, all under the single PR-194 ledger obligation (owner decision 2026-11-12: not split). The campaign checker requires catalogue IDs in intersection-backfill.json to be unique ledger records, so that catalogue holds one of them as PR-194 and this one holds all six. Replay: tools/mutate.py --catalogue on this file.",
+  "preset": "gcc16-debug",
+  "mutants": [
+    {
+      "id": "PR-194-plane-plane-aabb",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: PR-194 PlanePlane: rotated bounded coincidence is not an AABB overlap",
+      "file": "src/intersect/PlanePlane.cpp",
+      "find": "    if (!BoxPreserving(overlap.AToB) && !(Entire(boxA) && Entire(boxB))) {",
+      "replace": "    if (false && !BoxPreserving(overlap.AToB) && !(Entire(boxA) && Entire(boxB))) {",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ PR\\-194\\ rotated\\ bounded\\ plane\\ coincidence$",
+      "diagnostic": "intersect: MR PR-194 rotated bounded plane coincidence",
+      "repair_commit": "b74d6e23ff00b2994222bdc611ab09161e256282"
+    },
+    {
+      "id": "PR-194-plane-plane-underflow",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: PR-194 PlanePlane: the direction of near-parallel planes survives underflow",
+      "file": "src/intersect/PlanePlane.cpp",
+      "find": "    const Vec3 direction = cross / magnitude;",
+      "replace": "    const Vec3 direction = Normalized(cross);",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ PR\\-194\\ near\\-parallel\\ planes\\ underflowed\\ cross\\ norm$",
+      "diagnostic": "intersect: MR PR-194 near-parallel planes underflowed cross norm",
+      "repair_commit": "b74d6e23ff00b2994222bdc611ab09161e256282"
+    },
+    {
+      "id": "PR-194-plane-cylinder-uncut",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: PR-194 PlaneCylinder: no uncut conic branch in a bounded plane box",
+      "file": "src/intersect/PlaneCylinder.cpp",
+      "find": "    if (!Contains(boxA, planeBox)) {\n        return Fail(ErrorCode::NotImplemented,\n                    \"PlaneCylinder: partial ellipse needs certified clipping against plane box\");",
+      "replace": "    if (false && !Contains(boxA, planeBox)) {\n        return Fail(ErrorCode::NotImplemented,\n                    \"PlaneCylinder: partial ellipse needs certified clipping against plane box\");",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ PR\\-194\\ bounded\\ plane\\ box\\ gets\\ no\\ uncut\\ conic\\ branch$",
+      "diagnostic": "intersect: MR PR-194 bounded plane box gets no uncut conic branch",
+      "repair_commit": "b74d6e23ff00b2994222bdc611ab09161e256282"
+    },
+    {
+      "id": "PR-194-spline-undecided",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: PR-194 SplineSurface: an undecided root is not a contact",
+      "file": "src/intersect/SplineSurface.cpp",
+      "find": "            if (!placed->Decided) {",
+      "replace": "            if (false && !placed->Decided) {",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ PR\\-194\\ undecided\\ spline\\ root\\ fails\\ closed$",
+      "diagnostic": "intersect: MR PR-194 undecided spline root fails closed",
+      "repair_commit": "b74d6e23ff00b2994222bdc611ab09161e256282"
+    },
+    {
+      "id": "PR-194-stale-linearization",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: PR-194 Linearization: stale results are refused",
+      "file": "src/intersect/Linearization.cpp",
+      "find": "        if (!ConsistentContact(p.Position, curve.At(p.Parameter), Eval(surface, p.OnSurface))) {",
+      "replace": "        if (false &&\n            !ConsistentContact(p.Position, curve.At(p.Parameter), Eval(surface, p.OnSurface))) {",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ PR\\-194\\ stale\\ geometry\\ is\\ refused\\ by\\ JVP\\ and\\ VJP$",
+      "diagnostic": "intersect: MR PR-194 stale geometry is refused by JVP and VJP",
+      "repair_commit": "b74d6e23ff00b2994222bdc611ab09161e256282"
+    },
+    {
+      "id": "PR-194-nurbs-hull-bounds",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: PR-194 GenericSSI: the hull test applies the factory bounds",
+      "file": "src/intersect/GenericSSI.cpp",
+      "find": "    return CheckKnotVector(s.DegreeU, s.KnotsU, nu, where).has_value() &&\n           CheckKnotVector(s.DegreeV, s.KnotsV, nv, where).has_value() &&\n           CheckWeights(s.Weights, s.Poles.size(), where).has_value();",
+      "replace": "    static_cast<void>(nu);\n    static_cast<void>(nv);\n    static_cast<void>(where);\n    return true;",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ PR\\-194\\ NURBS\\ hull\\ applies\\ the\\ factory\\ bounds$",
+      "diagnostic": "intersect: MR PR-194 NURBS hull applies the factory bounds",
+      "repair_commit": "b74d6e23ff00b2994222bdc611ab09161e256282"
+    }
+  ]
+}

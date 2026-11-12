@@ -239,6 +239,20 @@
       "tests": "^intersect:\\ MR\\ PR\\-263\\-translated\\-boundary\\ spline\\ end\\ meeting\\ away\\ from\\ the\\ origin$",
       "diagnostic": "intersect: MR PR-263-translated-boundary spline end meeting away from the origin",
       "repair_commit": "cbeddfb8c0dffa25e5086bab19cc46fc6e7f5f53"
+    },
+    {
+      "id": "PR-194",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: PR-194 PlanePlane: rotated bounded coincidence is not an AABB overlap",
+      "file": "src/intersect/PlanePlane.cpp",
+      "find": "    if (!BoxPreserving(overlap.AToB) && !(Entire(boxA) && Entire(boxB))) {",
+      "replace": "    if (false && !BoxPreserving(overlap.AToB) && !(Entire(boxA) && Entire(boxB))) {",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ PR\\-194\\ rotated\\ bounded\\ plane\\ coincidence$",
+      "diagnostic": "intersect: MR PR-194 rotated bounded plane coincidence",
+      "repair_commit": "b74d6e23ff00b2994222bdc611ab09161e256282"
     }
   ]
 }
