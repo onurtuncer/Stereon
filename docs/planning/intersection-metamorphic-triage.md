@@ -179,4 +179,12 @@ This batch closes the earlier campaign's records (PR-205, 206, 218, 230, 230-pol
 
 ### Batch 2 fault replay
 
-Filled in from the replay of the seven batch 2 faults.
+- **Command:** `PYTHONUTF8=1 python tools/mutate.py --catalogue tools/mutation/intersection-backfill.json --only PR-112,PR-112-budget,PR-120,PR-159,PR-236,PR-236-tangent,PR-263-translated-boundary --work build/metamorphic-batch2`, run on committed HEAD `ec0acc3f4b2313d2b8b788e5888c51ff648b583c`.
+- **Toolchain:** g++ (Rev4, Built by MSYS2 project) 16.2.0; cmake 4.2.3-msvc3; Windows-11-10.0.26200-SP0; preset `gcc16-debug`; wall time 277.2 s.
+- **Baseline:** built unmodified, every selected test passed.
+- **Result:** score 7 / 7, every critical fault detected with its declared diagnostic. Each named MR test failed in both runs with its fault in: PR-112, PR-112-budget, PR-120, PR-159 (the merge-gap fault), PR-236, PR-236-tangent, PR-263-translated-boundary.
+- **Pre-check:** before the catalogue entries were written, each fault was applied in the working tree and the original direct tests were run twice. All failed, except the PR-159 `BisectSeam` candidate, which passed and was therefore not used.
+
+### Green on main, batch 2
+
+On this branch (main 227d79a plus test-only changes), built with `gcc16-debug`, `stereon_intersect_tests "MR PR-*"`: all tests passed, 18 test cases, 10713 assertions. That covers every MR regression of the ledger, batch 1, batch 2 and the earlier campaign. The two `mutate.py` baselines (b78bb2d, ec0acc3) are green runs of the same tests in a clean checkout.
