@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <limits>
 #include <string>
@@ -202,7 +203,9 @@ bool FailsClosed(const ErrorCode code)
            code == ErrorCode::NotSupported || code == ErrorCode::NotImplemented;
 }
 
-void CheckCase(const JsonValue& c, const bool swapped)
+enum class Gate : std::uint8_t { Safety, Completeness, Both };
+
+void CheckCase(const JsonValue& c, const bool swapped, const Gate gate = Gate::Both)
 {
     INFO(c["id"].AsString() << (swapped ? " swapped" : ""));
     const JsonValue& surfaces = c["inputs"]["surfaces"];
@@ -215,7 +218,13 @@ void CheckCase(const JsonValue& c, const bool swapped)
     const JsonValue& expected = c["expected"];
     if (!result) {
         INFO(IntersectTest::ErrorText(result));
-        CHECK((expected.Has("may_fail_closed") && FailsClosed(result.error().GetCode())));
+        CHECK(FailsClosed(result.error().GetCode()));
+        if (gate != Gate::Safety) {
+            CHECK(expected.Has("may_fail_closed"));
+        }
+        return;
+    }
+    if (gate == Gate::Completeness) {
         return;
     }
     IntersectTest::CheckToleranceEvidence(*result, tolerance);
@@ -251,6 +260,21 @@ TEST_CASE("each curved-ssi configuration, tilted, is answered as its closed form
     REQUIRE(count >= 100);
 }
 
+// A refusal is a completeness issue; an incorrect success is always a failure.
+// Keep this gate outside [!mayfail], including while completeness is unfinished.
+TEST_CASE("no nurbs-ssi configuration is answered wrongly",
+          "[intersect][surface-surface][corpus][nurbs][safety]")
+{
+    std::size_t count = 0;
+    for (const std::filesystem::path& file : CaseFiles("nurbs-ssi")) {
+        if (file.stem().string().ends_with("-tilted-x1")) {
+            CheckCase(StereonTest::ReadJsonFile(file), false, Gate::Safety);
+            ++count;
+        }
+    }
+    REQUIRE(count >= 15);
+}
+
 // [!mayfail] until the generic SSI answers what the corpus asks (2026-11-10):
 // six tilted cases are refused, never answered wrongly. The small loop
 // (bump-plane/loop-1e-3) as a possible tangency; simple circles on the
@@ -259,13 +283,13 @@ TEST_CASE("each curved-ssi configuration, tilted, is answered as its closed form
 // by CertifyDeviation, a deviation of at least 1, likely at the seam; and
 // planes ten tolerances apart (plane-plane/apart-10tol) by the search
 // budget. Remove the tag once they pass.
-TEST_CASE("each nurbs-ssi configuration, tilted, is answered as its closed form says",
+TEST_CASE("only documented nurbs-ssi configurations are refused",
           "[intersect][surface-surface][corpus][nurbs][!mayfail]")
 {
     std::size_t count = 0;
     for (const std::filesystem::path& file : CaseFiles("nurbs-ssi")) {
         if (file.stem().string().ends_with("-tilted-x1")) {
-            CheckCase(StereonTest::ReadJsonFile(file), false);
+            CheckCase(StereonTest::ReadJsonFile(file), false, Gate::Completeness);
             ++count;
         }
     }
@@ -293,5 +317,17 @@ TEST_CASE("every nurbs-ssi corpus case is answered as its closed form says",
         const JsonValue c = StereonTest::ReadJsonFile(file);
         CheckCase(c, false);
         CheckCase(c, true);
+    }
+}
+
+TEST_CASE("no nurbs-ssi corpus case is answered wrongly, both ways",
+          "[.][exhaustive][surface-surface][corpus][nurbs][safety]")
+{
+    const std::vector<std::filesystem::path> files = CaseFiles("nurbs-ssi");
+    REQUIRE(files.size() >= 90);
+    for (const std::filesystem::path& file : files) {
+        const JsonValue c = StereonTest::ReadJsonFile(file);
+        CheckCase(c, false, Gate::Safety);
+        CheckCase(c, true, Gate::Safety);
     }
 }
