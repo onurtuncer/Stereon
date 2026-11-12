@@ -70,14 +70,18 @@ import Stereon.Robust;
 /// Two brackets that meet on both curves are one root only when one lies
 /// in the box the other was proved unique in, where the function proved is
 /// the curves' own; otherwise their hull is reported undecided. Equal
-/// parameters are never an argument. A pair that is none of
-/// these when the pieces can no longer be halved, or a search past
-/// PairBudget, fails with IntersectionFailed: a tangency of two
-/// B-splines, an overlap, or a crossing too nearly tangential to separate,
-/// is never dropped and never reported unproved (ADR-0029). Two identical
-/// splines coincide: their overlap is the requested domains' common
-/// stretch on the identity map (the spline's crossings with itself are not
-/// reported then).
+/// parameters are never an argument. A pair that is neither is tried as
+/// two graphs over one direction before it is halved (Touches): a
+/// tangency, where J is singular, is followed by the signs of the
+/// derivatives of the graphs' height difference and reported bracketed,
+/// Tangential and undecided. A pair that is none of these when the pieces
+/// can no longer be halved, or a search past PairBudget, fails with
+/// IntersectionFailed: an overlap, a touch no derivative of order up to
+/// four settles, or a crossing too nearly tangential to separate, is never
+/// dropped and never reported unproved (ADR-0029). Two identical splines,
+/// or one curve in two knot vectors refined exactly (SameCurve), coincide:
+/// their overlap is the requested domains' common stretch on the identity
+/// map (the spline's crossings with itself are not reported then).
 
 namespace Stereon::Detail {
 
@@ -221,13 +225,15 @@ constexpr int RefineSteps = 64;
 /// A crossing found: its brackets in both curves' parameters, where it is
 /// placed, and whether it is decided. A decided one carries a box, in both
 /// curves' parameters and within both splines, in which it is proved the
-/// only root of the curves' own F (empty when undecided).
+/// only root of the curves' own F (empty when undecided), and its contact:
+/// a crossing, or a touch bracketed to rounding (Tangential, undecided).
 struct Meeting {
     Interval OnA;
     Interval OnB;
     bool Decided;
     Interval ProofA = Interval::Empty();
     Interval ProofB = Interval::Empty();
+    ContactType Contact = ContactType::Crossing;
 };
 
 /// Both splines' segments (those reaching the requested domains, and all of
@@ -446,6 +452,439 @@ void Record(PairSearch& search, const Arc& a, const Arc& b, const ParameterBox& 
         .error();
 }
 
+// --- Touches: both pieces graphs over one direction ------------------------
+
+/// The highest derivative a contact's order is looked for with.
+constexpr std::size_t JetOrder = 4;
+
+/// A function's derivatives of order 0 to JetOrder, each enclosed over one
+/// parameter interval (all of it, so every pointwise identity between them
+/// holds for the enclosures).
+using Jet = std::array<Interval, JetOrder + 1>;
+
+/// n / d as jets to the given order, by Leibniz's rule; nothing when d may
+/// vanish.
+[[nodiscard]] std::optional<Jet> Quotient(const Jet& n, const Jet& d, const std::size_t order)
+{
+    if (StrictSign(d[0]) == Strict::Unknown) {
+        return std::nullopt;
+    }
+    Jet q;
+    q.fill(Interval{0.0});
+    for (std::size_t m = 0; m <= order; ++m) {
+        Interval sum = n[m];
+        for (std::size_t i = 1; i <= m; ++i) {
+            sum = sum - Interval{Binomial(m, i)} * d[i] * q[m - i];
+        }
+        q[m] = sum / d[0];
+    }
+    return q;
+}
+
+/// The jet one order down: f' from f.
+[[nodiscard]] Jet Shifted(const Jet& f)
+{
+    Jet d;
+    d.fill(Interval{0.0});
+    for (std::size_t i = 0; i < JetOrder; ++i) {
+        d[i] = f[i + 1];
+    }
+    return d;
+}
+
+/// Coordinates along U and N from Origin: the frame both pieces are graphs
+/// in, x along U and y along N.
+struct Frame {
+    Point2 Origin;
+    Vec2 U;
+    Vec2 N;
+};
+
+/// The piece's x and y as jets in its parameter over s; nothing when W is
+/// not proved positive there.
+[[nodiscard]] std::optional<std::pair<Jet, Jet>> CoordinatesOver(const Arc& arc, const Frame& f,
+                                                                 const Interval& s)
+{
+    std::vector<HPoint> poles = arc.Poles;
+    Jet x;
+    Jet y;
+    Jet w;
+    for (std::size_t j = 0; j <= JetOrder; ++j) {
+        // Derivatives of the homogeneous point, and of linear forms of it.
+        const HPoint h = EvalH(poles, s);
+        const Interval dx = h.X - h.W * Interval{f.Origin.X};
+        const Interval dy = h.Y - h.W * Interval{f.Origin.Y};
+        x[j] = dx * Interval{f.U.X} + dy * Interval{f.U.Y};
+        y[j] = dx * Interval{f.N.X} + dy * Interval{f.N.Y};
+        w[j] = h.W;
+        poles = Hodograph(poles);
+    }
+    const std::optional<Jet> qx = Quotient(x, w, JetOrder);
+    const std::optional<Jet> qy = Quotient(y, w, JetOrder);
+    if (!qx || !qy) {
+        return std::nullopt;
+    }
+    return std::pair{*qx, *qy};
+}
+
+/// The graph's d^j y / dx^j for j = 0 to JetOrder, enclosed over s, by
+/// d/dx = (1 / x') d/ds; nothing when x' may vanish there.
+[[nodiscard]] std::optional<Jet> GraphOver(const Arc& arc, const Frame& f, const Interval& s)
+{
+    const std::optional<std::pair<Jet, Jet>> c = CoordinatesOver(arc, f, s);
+    if (!c) {
+        return std::nullopt;
+    }
+    const Jet slope = Shifted(c->first);
+    Jet graph;
+    graph[0] = c->second[0];
+    Jet g = c->second;
+    for (std::size_t k = 1; k <= JetOrder; ++k) {
+        const std::optional<Jet> next = Quotient(Shifted(g), slope, JetOrder - k);
+        if (!next) {
+            return std::nullopt;
+        }
+        g = *next;
+        graph[k] = g[0];
+    }
+    return graph;
+}
+
+/// The piece's x at s, enclosed.
+[[nodiscard]] Interval XAt(const Arc& arc, const Frame& f, const double s)
+{
+    const std::optional<std::array<Interval, 2>> p = PointOf(EvalH(arc.Poles, Interval{s}));
+    if (!p) {
+        return Interval::Everything();
+    }
+    return ((*p)[0] - Interval{f.Origin.X}) * Interval{f.U.X} +
+           ((*p)[1] - Interval{f.Origin.Y}) * Interval{f.U.Y};
+}
+
+/// A piece whose x is strictly monotone, with that sense, +1 or -1.
+struct Graph {
+    const Arc* Of;
+    double Sense;
+};
+
+/// x along the graph's sense, so that it increases with s.
+[[nodiscard]] Interval Oriented(const Graph& g, const Interval& x)
+{
+    return g.Sense > 0.0 ? x : -x;
+}
+
+/// The piece's oriented x at s, enclosed.
+[[nodiscard]] Interval RisingAt(const Graph& g, const Frame& f, const double s)
+{
+    return Oriented(g, XAt(*g.Of, f, s));
+}
+
+/// Bisection on [0, 1] for where `left` turns false, given it holds at 0
+/// and not at 1: the last s found holding and the first found not.
+template <typename Left>
+[[nodiscard]] std::pair<double, double> Edge(const Left& left)
+{
+    double l = 0.0;
+    double r = 1.0;
+    for (double m = 0.5 * l + 0.5 * r; l < m && m < r; m = 0.5 * l + 0.5 * r) {
+        (left(m) ? l : r) = m;
+    }
+    return {l, r};
+}
+
+/// The piece's parameters whose x may lie in `x`, rounded outward (every s
+/// outside it has x proved outside `x`), by bisection on the monotone x;
+/// empty when none.
+[[nodiscard]] Interval Preimage(const Graph& g, const Frame& f, const Interval& x)
+{
+    const Interval target = Oriented(g, x);
+    const auto below = [&](const double s) {
+        return RisingAt(g, f, s).GetUpper() < target.GetLower();
+    };
+    const auto notAbove = [&](const double s) {
+        return !(RisingAt(g, f, s).GetLower() > target.GetUpper());
+    };
+    if (below(1.0) || !notAbove(0.0)) {
+        return Interval::Empty();
+    }
+    // The last s proved below, and the first proved above.
+    const double lo = below(0.0) ? Edge(below).first : 0.0;
+    const double hi = notAbove(1.0) ? 1.0 : Edge(notAbove).second;
+    return lo <= hi ? Interval{lo, hi} : Interval::Empty();
+}
+
+/// The piece's parameters whose x is proved to lie in `x`, rounded inward;
+/// empty when rounding leaves none.
+[[nodiscard]] Interval InnerPreimage(const Graph& g, const Frame& f, const Interval& x)
+{
+    const Interval target = Oriented(g, x);
+    const auto before = [&](const double s) {
+        return RisingAt(g, f, s).GetLower() < target.GetLower();
+    };
+    const auto within = [&](const double s) {
+        return RisingAt(g, f, s).GetUpper() <= target.GetUpper();
+    };
+    if (before(1.0) || !within(0.0)) {
+        return Interval::Empty();
+    }
+    // The first s proved at or past the lower end (x being monotone, every
+    // later one is), and the last proved at or before the upper end.
+    const double lo = before(0.0) ? Edge(before).second : 0.0;
+    const double hi = within(1.0) ? 1.0 : Edge(within).first;
+    const Interval ends = Hull(RisingAt(g, f, lo), RisingAt(g, f, hi));
+    return lo <= hi && Contains(target, ends) ? Interval{lo, hi} : Interval::Empty();
+}
+
+/// A pair of pieces, both graphs over the frame's x, whose meetings are the
+/// roots of h(x) = y_a(x) - y_b(x) over the x both reach.
+struct Touching {
+    PairSearch& Search;
+    const Arc& A;
+    const Arc& B;
+    Frame F;
+    Graph GA;
+    Graph GB;
+    std::vector<Meeting> Found;
+};
+
+/// h's derivatives over the x-range x: each graph's over the parameters
+/// that reach it, subtracted; nothing when x is beyond either piece or a
+/// graph cannot be enclosed.
+[[nodiscard]] std::optional<Jet> Difference(const Touching& t, const Interval& x)
+{
+    const Interval sa = Preimage(t.GA, t.F, x);
+    const Interval sb = Preimage(t.GB, t.F, x);
+    if (sa.IsEmpty() || sb.IsEmpty()) {
+        return std::nullopt;
+    }
+    const std::optional<Jet> ga = GraphOver(t.A, t.F, sa);
+    const std::optional<Jet> gb = GraphOver(t.B, t.F, sb);
+    if (!ga || !gb) {
+        return std::nullopt;
+    }
+    Jet h;
+    for (std::size_t j = 0; j <= JetOrder; ++j) {
+        h[j] = (*ga)[j] - (*gb)[j];
+    }
+    return h;
+}
+
+/// The sign of h^(j) at the point x, Unknown when it is not proved.
+[[nodiscard]] Strict SignAt(const Touching& t, const double x, const std::size_t j)
+{
+    const std::optional<Jet> h = Difference(t, Interval{x});
+    return h ? StrictSign((*h)[j]) : Strict::Unknown;
+}
+
+/// The meeting the x-range [x0, x1] stands for, in both curves'
+/// parameters.
+[[nodiscard]] Meeting MeetingOver(const Touching& t, const double x0, const double x1,
+                                  const ContactType contact)
+{
+    const Interval x{x0, x1};
+    const Interval sa = Preimage(t.GA, t.F, x);
+    const Interval sb = Preimage(t.GB, t.F, x);
+    return {OnCurve(t.Search.A[t.A.Index], InSegment(t.A, sa)),
+            OnCurve(t.Search.B[t.B.Index], InSegment(t.B, sb)),
+            false,
+            Interval::Empty(),
+            Interval::Empty(),
+            contact};
+}
+
+/// h strictly monotone over [x0, x1] (h' of one sign): no root, one
+/// crossing proved by opposite signs at the ends and bisected (decided, the
+/// only meeting of the pair over the range), or a crossing within rounding
+/// of an end (undecided).
+[[nodiscard]] Result<void> Monotonic(Touching& t, const double x0, const double x1)
+{
+    const Strict start = SignAt(t, x0, 0);
+    const Strict end = SignAt(t, x1, 0);
+    if (start != Strict::Unknown && start == end) {
+        return {};
+    }
+    if (start == Strict::Unknown || end == Strict::Unknown) {
+        t.Found.push_back(MeetingOver(t, x0, x1, ContactType::Crossing));
+        return {};
+    }
+    double l = x0;
+    double r = x1;
+    for (double m = 0.5 * l + 0.5 * r; l < m && m < r; m = 0.5 * l + 0.5 * r) {
+        const Strict s = SignAt(t, m, 0);
+        if (s == Strict::Unknown) {
+            break;
+        }
+        (s == start ? l : r) = m;
+    }
+    Meeting root = MeetingOver(t, l, r, ContactType::Crossing);
+    const Interval range{x0, x1};
+    const Interval proofA = InnerPreimage(t.GA, t.F, range);
+    if (!proofA.IsEmpty()) {
+        const Segment& segmentA = t.Search.A[t.A.Index];
+        const Segment& segmentB = t.Search.B[t.B.Index];
+        root.Decided = true;
+        root.ProofA =
+            Intersection(InwardOnCurve(segmentA, t.A, proofA), Interval{segmentA.T0, segmentA.T1});
+        root.ProofB = Intersection(InwardOnCurve(segmentB, t.B, Interval{0.0, 1.0}),
+                                   Interval{segmentB.T0, segmentB.T1});
+    }
+    t.Found.push_back(root);
+    return {};
+}
+
+[[nodiscard]] Result<void> Follow(Touching& t, double x0, double x1, std::size_t k, int depth);
+
+/// The x-range [x0, x1] with h^(k), k >= 1, of one strict sign over it (on
+/// it or on an enclosing range): Bernstein.hpp's Convex and the plane
+/// handler's OfOrder in the graphs' common x. h proved of one sign: no
+/// meeting. A lower derivative of one sign settles it at that order; h'
+/// of one sign makes h monotone.
+[[nodiscard]] Result<void> Chain(Touching& t, const double x0, const double x1, const std::size_t k,
+                                 const int depth)
+{
+    if (++t.Search.Pairs > PairBudget) {
+        return std::unexpected(Unresolved(t.Search, t.A, t.B, "the subdivision budget is spent"));
+    }
+    const std::optional<Jet> h = Difference(t, Interval{x0, x1});
+    if (!h) {
+        return {}; // Beyond either piece: no meeting of this pair.
+    }
+    if (StrictSign((*h)[0]) != Strict::Unknown) {
+        return {};
+    }
+    for (std::size_t j = 1; j < k; ++j) {
+        if (StrictSign((*h)[j]) != Strict::Unknown) {
+            return j == 1 ? Monotonic(t, x0, x1) : Chain(t, x0, x1, j, depth);
+        }
+    }
+    return k == 1 ? Monotonic(t, x0, x1) : Follow(t, x0, x1, k, depth);
+}
+
+/// h^(k-1), strictly monotone, at the range's ends: one strict sign there
+/// is that sign throughout; else the range holding its single zero is
+/// halved. Both ends within rounding of zero, and no lower derivative of
+/// one sign, or MaxDepth: a contact of order up to k to rounding, h having
+/// at most k roots there (Rolle), kept as one undecided tangential meeting
+/// bracketed by the range, never dropped.
+[[nodiscard]] Result<void> Follow(Touching& t, const double x0, const double x1,
+                                  const std::size_t k, const int depth)
+{
+    const Strict start = SignAt(t, x0, k - 1);
+    const Strict end = SignAt(t, x1, k - 1);
+    if (start != Strict::Unknown && start == end) {
+        return Chain(t, x0, x1, k - 1, depth);
+    }
+    const double m = 0.5 * x0 + 0.5 * x1;
+    const bool flat = start == Strict::Unknown && end == Strict::Unknown;
+    if (flat || depth == MaxDepth || !(x0 < m && m < x1)) {
+        t.Found.push_back(MeetingOver(t, x0, x1, ContactType::Tangential));
+        return {};
+    }
+    STEREON_TRY_VOID(Chain(t, x0, m, k, depth + 1));
+    return Chain(t, m, x1, k, depth + 1);
+}
+
+/// The piece as a graph over the frame's x, if x' is proved of one sign
+/// over it.
+[[nodiscard]] std::optional<Graph> AsGraph(const Arc& arc, const Frame& f)
+{
+    const std::optional<std::pair<Jet, Jet>> c = CoordinatesOver(arc, f, Interval{0.0, 1.0});
+    if (!c) {
+        return std::nullopt;
+    }
+    const Strict sense = StrictSign(c->first[1]);
+    if (sense == Strict::Unknown) {
+        return std::nullopt;
+    }
+    return Graph{&arc, sense == Strict::Positive ? 1.0 : -1.0};
+}
+
+/// Marks every meeting whose brackets meet, on both curves, those of an
+/// undecided one already joined to a touch; whether any was.
+[[nodiscard]] bool JoinOnce(const std::vector<Meeting>& found, std::vector<bool>& joined)
+{
+    bool grown = false;
+    for (std::size_t i = 0; i < found.size(); ++i) {
+        for (std::size_t j = 0; j < found.size() && !joined[i]; ++j) {
+            if (joined[j] && !found[j].Decided && Intersects(found[i].OnA, found[j].OnA) &&
+                Intersects(found[i].OnB, found[j].OnB)) {
+                joined[i] = true;
+                grown = true;
+            }
+        }
+    }
+    return grown;
+}
+
+/// Whether the graphs' meetings stand: every undecided crossing (one within
+/// rounding of a range's end, where the halving in x put it) is joined to a
+/// touch by brackets that meet on both curves, so that Distinct merges it
+/// into the touch's rounding. Otherwise the pair is halved as usual and
+/// Krawczyk's test settles that crossing.
+[[nodiscard]] bool Settled(const std::vector<Meeting>& found)
+{
+    std::vector<bool> joined(found.size());
+    for (std::size_t i = 0; i < found.size(); ++i) {
+        joined[i] = found[i].Decided || found[i].Contact == ContactType::Tangential;
+    }
+    while (JoinOnce(found, joined)) {
+    }
+    return std::ranges::all_of(joined, [](const bool b) { return b; });
+}
+
+/// Touches' pair, both pieces graphs: settled over the x both reach when h'
+/// is not of one sign and some h^(k), k >= 2, is; nothing otherwise, or
+/// when the graphs leave a crossing to Krawczyk's test.
+[[nodiscard]] std::optional<Result<void>> AsGraphs(Touching t)
+{
+    const Interval xa = Hull(XAt(t.A, t.F, 0.0), XAt(t.A, t.F, 1.0));
+    const Interval xb = Hull(XAt(t.B, t.F, 0.0), XAt(t.B, t.F, 1.0));
+    const double x0 = std::max(xa.GetLower(), xb.GetLower());
+    const double x1 = std::min(xa.GetUpper(), xb.GetUpper());
+    if (!(x0 < x1)) {
+        return std::nullopt;
+    }
+    const std::optional<Jet> h = Difference(t, Interval{x0, x1});
+    // h' of one sign: no touch here, at most one transverse crossing, which
+    // Krawczyk's test settles as the pieces are halved.
+    if (!h || StrictSign((*h)[1]) != Strict::Unknown) {
+        return std::nullopt;
+    }
+    for (std::size_t k = 2; k <= JetOrder; ++k) {
+        if (StrictSign((*h)[k]) != Strict::Unknown) {
+            STEREON_TRY_VOID(Chain(t, x0, x1, k, 0));
+            if (!Settled(t.Found)) {
+                return std::nullopt;
+            }
+            t.Search.Roots.insert(t.Search.Roots.end(), t.Found.begin(), t.Found.end());
+            return Result<void>{};
+        }
+    }
+    return std::nullopt;
+}
+
+/// A pair neither apart nor a single crossing, settled as graphs when both
+/// pieces are graphs over the chord of the first and some derivative of h
+/// of order two or more has one sign over their common x: a tangency of two
+/// B-splines, of even order or odd, is then followed down one chain of
+/// ranges and reported bracketed, Tangential and undecided, never dropped.
+/// Nothing when it does not apply.
+[[nodiscard]] std::optional<Result<void>> Touches(PairSearch& search, const Arc& a, const Arc& b)
+{
+    const Point2 origin = Nominal(a.Poles.front());
+    const Vec2 u = Nominal(a.Poles.back()) - origin;
+    if (!(Dot(u, u) > 0.0) || !std::isfinite(Dot(u, u))) {
+        return std::nullopt;
+    }
+    const Frame f{origin, u, Perpendicular(u)};
+    const std::optional<Graph> ga = AsGraph(a, f);
+    const std::optional<Graph> gb = AsGraph(b, f);
+    if (!ga || !gb) {
+        return std::nullopt;
+    }
+    return AsGraphs(Touching{search, a, b, f, *ga, *gb, {}});
+}
+
 /// One pair of pieces, apart, settled by Krawczyk's test, or halved.
 [[nodiscard]] Result<void> VisitPair(PairSearch& search, const Arc& a, const Arc& b,
                                      const int depth)
@@ -465,6 +904,9 @@ void Record(PairSearch& search, const Arc& a, const Arc& b, const ParameterBox& 
     if (test == Test::OneRoot) {
         Record(search, a, b, x);
         return {};
+    }
+    if (std::optional<Result<void>> touch = Touches(search, a, b)) {
+        return std::move(*touch);
     }
     if (depth == MaxDepth) {
         return std::unexpected(
@@ -515,7 +957,14 @@ void Record(PairSearch& search, const Arc& a, const Arc& b, const ParameterBox& 
             *same = r;
             continue;
         }
-        *same = {Hull(same->OnA, r.OnA), Hull(same->OnB, r.OnB), false};
+        const bool touch =
+            same->Contact == ContactType::Tangential || r.Contact == ContactType::Tangential;
+        *same = {Hull(same->OnA, r.OnA),
+                 Hull(same->OnB, r.OnB),
+                 false,
+                 Interval::Empty(),
+                 Interval::Empty(),
+                 touch ? ContactType::Tangential : ContactType::Crossing};
     }
     return distinct;
 }
@@ -531,6 +980,150 @@ void Record(PairSearch& search, const Arc& a, const Arc& b, const ParameterBox& 
         }
     }
     return {};
+}
+
+// --- One curve in two knot vectors ---------------------------------------
+
+/// a + b, when it is exact in doubles (TwoSum's error term zero).
+[[nodiscard]] std::optional<double> ExactSum(const double a, const double b)
+{
+    const double s = a + b;
+    const double bb = s - a;
+    if (!std::isfinite(s) || (a - (s - bb)) + (b - bb) != 0.0) {
+        return std::nullopt;
+    }
+    return s;
+}
+
+/// a b, when it is exact in doubles (the fused residual zero).
+[[nodiscard]] std::optional<double> ExactProduct(const double a, const double b)
+{
+    const double p = a * b;
+    if (!std::isfinite(p) || (p != 0.0 && !std::isnormal(p)) || std::fma(a, b, -p) != 0.0) {
+        return std::nullopt;
+    }
+    return p;
+}
+
+/// a / b, when it is exact in doubles.
+[[nodiscard]] std::optional<double> ExactQuotient(const double a, const double b)
+{
+    if (b == 0.0) {
+        return std::nullopt;
+    }
+    const double q = a / b;
+    if (!std::isfinite(q) || (q != 0.0 && !std::isnormal(q)) || std::fma(q, b, -a) != 0.0) {
+        return std::nullopt;
+    }
+    return q;
+}
+
+/// A homogeneous pole (w P, w) in doubles, held exactly.
+using Exact3 = std::array<double, 3>;
+
+/// (wa a + wb b) / w, when every step is exact: Boehm's blend with its ratio
+/// never formed, so a pole that is exact is found even where the ratio
+/// (2/3, say) is not a double.
+[[nodiscard]] std::optional<Exact3> ExactBlend(const Exact3& a, const Exact3& b, const double wa,
+                                               const double wb, const double w)
+{
+    Exact3 c{};
+    for (std::size_t i = 0; i < 3; ++i) {
+        const std::optional<double> l = ExactProduct(wa, a[i]);
+        const std::optional<double> r = ExactProduct(wb, b[i]);
+        const std::optional<double> s = l && r ? ExactSum(*l, *r) : std::nullopt;
+        const std::optional<double> q = s ? ExactQuotient(*s, w) : std::nullopt;
+        if (!q) {
+            return std::nullopt;
+        }
+        c[i] = *q;
+    }
+    return c;
+}
+
+/// Boehm's insertion of u, once, when it is exact in doubles (Bernstein.hpp's
+/// InsertKnot, without rounding).
+[[nodiscard]] bool InsertExactly(std::vector<double>& knots, std::vector<Exact3>& poles,
+                                 const std::size_t p, const double u)
+{
+    const std::size_t n = poles.size() - 1;
+    const auto above = static_cast<std::size_t>(std::ranges::upper_bound(knots, u) - knots.begin());
+    const std::size_t k = std::min(above - 1, n);
+    std::vector<Exact3> refined(poles.begin(),
+                                poles.begin() + static_cast<std::ptrdiff_t>(k - p + 1));
+    for (std::size_t i = k - p + 1; i <= k; ++i) {
+        // (t_i+p - u) P_i-1 + (u - t_i) P_i over t_i+p - t_i.
+        const std::optional<double> right = ExactSum(u, -knots[i]);
+        const std::optional<double> left = ExactSum(knots[i + p], -u);
+        const std::optional<double> width = ExactSum(knots[i + p], -knots[i]);
+        const std::optional<Exact3> pole =
+            right && left && width ? ExactBlend(poles[i - 1], poles[i], *left, *right, *width)
+                                   : std::nullopt;
+        if (!pole) {
+            return false;
+        }
+        refined.push_back(*pole);
+    }
+    refined.insert(refined.end(), poles.begin() + static_cast<std::ptrdiff_t>(k), poles.end());
+    knots.insert(knots.begin() + static_cast<std::ptrdiff_t>(k + 1), u);
+    poles = std::move(refined);
+    return true;
+}
+
+/// The spline's homogeneous poles, when w P is exact for every pole.
+[[nodiscard]] std::optional<std::vector<Exact3>> ExactPoles(const BSplineCurve2d& spline)
+{
+    std::vector<Exact3> poles;
+    for (std::size_t i = 0; i < spline.Poles.size(); ++i) {
+        const double w = spline.Weights.empty() ? 1.0 : spline.Weights[i];
+        const std::optional<double> x = ExactProduct(w, spline.Poles[i].X);
+        const std::optional<double> y = ExactProduct(w, spline.Poles[i].Y);
+        if (!x || !y) {
+            return std::nullopt;
+        }
+        poles.push_back({*x, *y, w});
+    }
+    return poles;
+}
+
+/// Raises every knot of `knots` to its multiplicity in `other`, exactly;
+/// false when a knot lies outside the domain or an insertion would round.
+[[nodiscard]] bool RaisedTo(std::vector<double>& knots, std::vector<Exact3>& poles,
+                            const std::size_t p, const std::vector<double>& other,
+                            const Interval& domain)
+{
+    for (const double u : other) {
+        while (std::ranges::count(knots, u) < std::ranges::count(other, u)) {
+            if (!Contains(domain, u) || !InsertExactly(knots, poles, p, u)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/// Whether the splines are one curve on one parameter: of one degree and
+/// domain, and, each refined to the other's knots by Boehm's insertion
+/// carried out exactly in doubles (every sum, product and ratio checked
+/// error-free), with equal knot vectors and equal homogeneous poles. Knot
+/// insertion keeps the curve and its parameter, so the refined splines are
+/// the inputs, and their overlap is the identity over the common stretch.
+/// When any step would round it is not proved: false, and the pair is
+/// searched (and, running along itself, fails closed).
+[[nodiscard]] bool SameCurve(const BSplineCurve2d& a, const BSplineCurve2d& b)
+{
+    const Interval domain = Domain(a);
+    if (a.Degree != b.Degree || domain.GetLower() != Domain(b).GetLower() ||
+        domain.GetUpper() != Domain(b).GetUpper()) {
+        return false;
+    }
+    const auto p = static_cast<std::size_t>(a.Degree);
+    std::vector<double> ka = a.Knots;
+    std::vector<double> kb = b.Knots;
+    std::optional<std::vector<Exact3>> pa = ExactPoles(a);
+    std::optional<std::vector<Exact3>> pb = ExactPoles(b);
+    return pa && pb && RaisedTo(ka, *pa, p, b.Knots, domain) &&
+           RaisedTo(kb, *pb, p, a.Knots, domain) && ka == kb && *pa == *pb;
 }
 
 /// Identical splines coincide over their common requested stretch.
@@ -641,7 +1234,7 @@ Result<PlanarIntersection> SplineSpline2d(const Curve2d& a, const Interval& doma
     PairSearch search;
     search.Handler = "BSplineCurve2d x BSplineCurve2d";
     STEREON_TRY_VOID(CheckBoth(*sa, domainA, *sb, domainB, search.Handler));
-    if (*sa == *sb) {
+    if (*sa == *sb || SameCurve(*sa, *sb)) {
         return Identical(*sa, domainA, domainB);
     }
     STEREON_TRY_VOID(SearchPair(search, *sa, domainA, *sb, domainB));
@@ -657,7 +1250,7 @@ Result<PlanarIntersection> SplineSpline2d(const Curve2d& a, const Interval& doma
         const std::optional<double> ta = Placed(root.OnA, onA, decided);
         const std::optional<double> tb = Placed(root.OnB, onB, decided);
         if (ta && tb) {
-            result.Points.push_back({*ta, *tb, Eval(*sa, *ta), ContactType::Crossing, decided});
+            result.Points.push_back({*ta, *tb, Eval(*sa, *ta), root.Contact, decided});
         }
     }
     Order(result);
