@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: 2026 Onur Tuncer and Stereon contributors
+# SPDX-License-Identifier: MPL-2.0
+name: Intersection release evidence
+on:
+  push:
+    tags: ['v0.2*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  evidence:
+    name: ADR-0053 release qualification
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Test the gate
+        run: python tools/test_metamorphic.py
+      - name: Require completed inventory, defect evidence and handler relations
+        run: python tools/check_metamorphic.py --release

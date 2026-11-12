@@ -103,3 +103,11 @@ jobs:
           python tools/check_adrs.py
           python tools/check_capabilities.py --self-test
           python tools/check_capabilities.py
+
+      - name: Metamorphic inventory and gate regressions (ADR-0053)
+        run: |
+          python tools/test_metamorphic.py
+          python tools/check_metamorphic.py
+      - name: Retain base-branch metamorphic obligations
+        if: github.event_name == 'pull_request'
+        run: python tools/check_metamorphic.py --base "origin/${{ github.base_ref }}"

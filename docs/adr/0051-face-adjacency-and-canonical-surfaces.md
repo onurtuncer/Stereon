@@ -43,8 +43,8 @@ Stereon today has the edge-to-face lookup (`FacesOf`) and traversal ranges (ADR-
 
 Stereon v0.3 ships two kernel-level queries, consumed by Booleans, recognisers and the machining services alike:
 
-1. **Face adjacency graph (FAG).** For any shell, a graph whose nodes are faces and whose edges are the B-rep edges between them, each labelled with a convexity class drawn from `{convex, concave, tangent, knife, indeterminate}`. Convexity is computed from the dihedral angle along the edge and widened by the edge tolerance. An edge whose angular band straddles a class boundary is `indeterminate`, never silently rounded.
-2. **Canonical surface classification.** For any face, the kernel reports whether its surface is, within a stated tolerance, a plane, cylinder, cone, sphere, torus or none of these. It also reports the canonical parameters (origin, axis, radius, half-angle). This is a property of the geometry, not of how the surface is stored: a NURBS imported from STEP that fits a cylinder within tol reports as a cylinder.
+1. **Face adjacency graph (FAG).** For any shell, a graph whose nodes are faces and whose edges are the B-rep edges between them, each labelled with an assurance level and a convexity class drawn from `{convex, concave, tangent, knife, indeterminate}`. Convexity is computed from the dihedral angle along the edge and widened by the edge tolerance. An edge whose angular band straddles a class boundary is `indeterminate`, never silently rounded.
+2. **Canonical surface classification.** For any face, the kernel reports whether its surface is, within a stated tolerance, a plane, cylinder, cone, sphere, torus or none of these. It distinguishes a sampled candidate from a whole-domain bounded classification. It also reports the canonical parameters (origin, axis, radius, half-angle). This is a property of the geometry, not of how the surface is stored: a NURBS imported from STEP that fits a cylinder within tol reports as a cylinder.
 
 Both are kernel responsibilities, because both depend on tolerance semantics only the kernel owns, and because Booleans need them before any recogniser exists. Feature recognition itself (pocket, hole, slot, boss) stays out of the kernel, in a separate library above it.
 
@@ -67,8 +67,8 @@ Supporting queries ship alongside, because every known recogniser needs them:
 
 | Query | Signature (sketch) | Returns |
 | --- | --- | --- |
-| Adjacency graph | `Fag(const ShapeQueries&, ShellId) -> const FaceGraph&` | Nodes are face handles; edges are B-rep edge handles with a `Convexity` label and the angular band `[theta_min, theta_max]` |
-| Canonical surface | `Canonical(const ShapeQueries&, FaceId, double tol) -> CanonicalSurface` | A variant of `Plane / Cylinder / Cone / Sphere / Torus / Freeform`, each with its parameters and the achieved fit residual |
+| Adjacency graph | `Fag(const ShapeQueries&, ShellId) -> const FaceGraph&` | Nodes are face handles; edges are B-rep edge handles with a `Convexity` label, assurance and the angular band `[theta_min, theta_max]` |
+| Canonical surface | `Canonical(const ShapeQueries&, FaceId, double tol) -> CanonicalSurface` | A variant of `Plane / Cylinder / Cone / Sphere / Torus / Freeform`, each with its parameters, assurance (`SampledCandidate`, `Bounded`, `Unresolved`), covered trim domain and sampled residual or certified whole-domain deviation bound |
 | Loop classes | `Loops(const ShapeQueries&, FaceId) -> span<const LoopInfo>` | The outer/inner flag, area sign and bounding box in UV |
 | Face role | `Role(const ShapeQueries&, FaceId) -> FaceRole` | `floor / wall / blend / other`, with the convexity evidence used |
 | Vertex convexity | `VertexConvexity(const ShapeQueries&, VertexId) -> VertexClass` | The sign pattern of the incident edges' convexities |
@@ -82,7 +82,7 @@ Take edge $e$, shared by faces $A$ and $B$, at parameter $t$ along it. Let $n_A$
 
 $$\theta(t) = \operatorname{atan2}\big( (n_A \times n_B)\cdot d,\; n_A \cdot n_B \big)$$
 
-Sampled at $N$ points along the edge, this gives $[\theta_{\min}, \theta_{\max}]$. The band is then widened by the angular uncertainty the edge tolerance induces. Let $\mathrm{tol}(e)$ be the edge tolerance (ADR-0050) and $\kappa$ the larger of the two faces' principal curvatures normal to the edge. Each face's normal direction is then uncertain by roughly $\kappa \cdot \mathrm{tol}(e)$ radians, so the band grows by $2\kappa\,\mathrm{tol}(e)$ on each side. An edge whose widened band is wider than a class makes the edge `indeterminate`.
+Sampled at $N$ points along the edge, this gives only a sampled candidate interval $[\theta_{\min}, \theta_{\max}]$. The band is then widened by the angular uncertainty the edge tolerance induces. Let $\mathrm{tol}(e)$ be the edge tolerance (ADR-0050) and $\kappa$ the larger of the two faces' principal curvatures normal to the edge. Each face's normal direction is then uncertain by roughly $\kappa \cdot \mathrm{tol}(e)$ radians, so the band grows by $2\kappa\,\mathrm{tol}(e)$ on each side. An edge whose widened band is wider than a class makes the edge `indeterminate`.
 
 | Class | Condition on the widened band |
 | --- | --- |
@@ -92,7 +92,15 @@ Sampled at $N$ points along the edge, this gives $[\theta_{\min}, \theta_{\max}]
 | `knife` | within $\varepsilon_{\text{knife}}$ of $\pm\pi$ |
 | `indeterminate` | the band crosses a boundary |
 
-Both $\varepsilon_{\tan}$ and $\varepsilon_{\text{knife}}$ default to 1 degree. They are named, purpose-specific angular allowances in the `Context`, under ADR-0028, and are persisted with it. A consumer that needs a decision anyway (a Boolean) asks for `ConvexityOr(e, fallback)`. A recogniser treats `indeterminate` as a signal to look at neighbouring edges.
+Both $\varepsilon_{\tan}$ and $\varepsilon_{\text{knife}}$ default to 1 degree. They are named, purpose-specific angular allowances in the `Context`, under ADR-0028, and are persisted with it. A Boolean requiring a definite decision must obtain independent side-transition evidence or return an explicit unresolved/failure outcome. There is no `ConvexityOr` escape hatch that upgrades a heuristic to evidence. A recogniser treats `indeterminate` as a signal to look at neighbouring edges.
+
+Sampling and the first-order estimate above are candidate generators only.
+A bounded class requires an enclosure of the dihedral angle over the entire
+edge interval, including normal/tangent regularity and angular branch cuts.
+Curvature bounds must cover the relevant neighborhood; a sampled curvature
+or the approximate `2*kappa*tol` formula is not a certificate. If this cannot
+be established, report `SampledCandidate` or `Unresolved`, never a bounded
+whole-edge class. Side-transition evidence remains separately required.
 
 ### Canonical surface recognition
 
@@ -105,10 +113,21 @@ For a face whose stored surface is already analytic, classification is a type ch
    - a cylinder: the axis from PCA of the normal field, the radius by least squares;
    - a cone: the apex and half-angle from the normals;
    - a torus: two radii about the fitted axis.
-3. Accept the first fit whose maximum residual over the samples is at most `tol`; otherwise report `Freeform`.
+3. Report the first fit whose maximum sampled residual is at most `tol` as `SampledCandidate`. Failure to find a fit is not proof of non-canonicity; report the search limitations.
 4. Verify the accepted fit against the face's boundary curves, not only interior samples, so that a cylinder patch that bulges at its edge is not accepted.
 
-The achieved residual is returned, so a consumer can tighten or loosen its own acceptance without refitting. The default `tol` is the model's `res_abs`; recognisers typically pass something larger. A recognised surface lets the intersection services use ADR-0010's analytic table for that face pair. Doing so is an explicit request, never a silent substitution.
+Return sampled residuals separately from certified bounds. Boundary checks
+alone do not exclude an interior bulge. Promotion to `Bounded` requires a
+whole-trim-domain deviation bound, with method, domain, numerical policy and
+limitations recorded. The default `tol` is the model's `res_abs`.
+
+Analytic dispatch on a fitted candidate, even when explicitly requested, is
+only a candidate-generation optimization. A correctness-critical result must
+be verified against the original geometry, including completeness, trimming,
+contact classification and accuracy; a small position-deviation bound alone
+does not preserve intersection topology near contact. Without that evidence,
+use the original-geometry solver or return an explicit unresolved outcome.
+Recognition never silently changes the stored surface.
 
 ### Caching and invalidation
 
@@ -159,3 +178,12 @@ Accepted when:
 - [ ] No stale result is observable after any Boolean or healing operation, verified by a fuzz test that edits shapes, publishes new snapshots and queries both the old and the new workspace.
 - [ ] The reference recogniser finds every hole and pocket in the MFCAD subset used for testing, through the public query API only.
 - [ ] On a 10 000-face shell, the first query takes under 1 s and repeated queries under 1 ms, measured as ADR-0043 specifies.
+
+### Assurance regressions required before acceptance
+
+- A NURBS patch with an interior bulge between grid samples and an unchanged
+  boundary must not receive a bounded plane/cylinder classification.
+- An edge whose dihedral changes class between samples must not receive a
+  bounded single class; include angle wrapping and singular normals.
+- Candidate analytic intersections must be checked against the original
+  surface, including a near-tangent case with different component counts.

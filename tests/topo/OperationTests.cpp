@@ -846,6 +846,66 @@ TEST_CASE("every published tolerance is within the Context's bounds, logged or n
     }
 }
 
+TEST_CASE("model tolerance bounds include spline bulges between quarter samples",
+          "[topo][operation][tolerance][regression][metamorphic]")
+{
+    // C(t) = (t, 1000*t*(t-1/4)*(t-1/2)*(t-3/4)*(t-1), 0).
+    // All five old extent samples have y=0; at t=1/8, |y| > 2.
+    // Its exact degree-five Bernstein poles give an independent fixture.
+    for (const double parameterScale : {1.0, 2.0, 8.0}) {
+        for (const double offset : {0.0, 16.0}) {
+            Stereon::BSplineCurve spline{5,
+                                         {0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1},
+                                         {{0, 0, 0},
+                                          {0.2, 75.0 / 4.0, 0},
+                                          {0.4, -325.0 / 8.0, 0},
+                                          {0.6, 325.0 / 8.0, 0},
+                                          {0.8, -75.0 / 4.0, 0},
+                                          {1, 0, 0}},
+                                         {}};
+            for (double& knot : spline.Knots) {
+                knot *= parameterScale;
+            }
+            for (Point3& pole : spline.Poles) {
+                pole.X += offset;
+            }
+            CHECK(std::abs(Eval(spline, parameterScale / 8.0).Y) > 2.0);
+            ShapeBuilder b;
+            const auto v = Must(b.AddVertex({offset, 0, 0}, Tight));
+            const auto w = Must(b.AddVertex({offset + 1, 0, 0}, Tight));
+            const auto curve = Must(b.AddCurve(Stereon::Curve(spline)));
+            static_cast<void>(Must(b.AddEdge({.Kind = EdgeCurveKind::Spatial,
+                                              .Start = v,
+                                              .End = w,
+                                              .Curve = curve,
+                                              .Range = Interval(0, parameterScale),
+                                              .Tolerance = 2e-3})));
+            // Previously rejected: the sampled diagonal was only 1 mm.
+            REQUIRE(Stereon::Commit(std::move(b), Context::Default()));
+        }
+    }
+}
+
+TEST_CASE("model extent bounds restrict a spline to the edge range",
+          "[topo][operation][tolerance][regression]")
+{
+    // The remote part of the support must not admit excessive tolerance
+    // on an edge that uses only its first, one-millimetre segment.
+    const Stereon::BSplineCurve support{
+        1, {0, 0, 1, 2, 2}, {{0, 0, 0}, {1, 0, 0}, {1000, 0, 0}}, {}};
+    ShapeBuilder b;
+    const auto v = Must(b.AddVertex({0, 0, 0}, Tight));
+    const auto w = Must(b.AddVertex({1, 0, 0}, Tight));
+    const auto curve = Must(b.AddCurve(Stereon::Curve(support)));
+    static_cast<void>(Must(b.AddEdge({.Kind = EdgeCurveKind::Spatial,
+                                      .Start = v,
+                                      .End = w,
+                                      .Curve = curve,
+                                      .Range = Interval(0, 1),
+                                      .Tolerance = 2e-3})));
+    CommitError(std::move(b), Context::Default(), ErrorCode::ToleranceExceeded);
+}
+
 TEST_CASE("CompactShape publishes under the Context's validity policy",
           "[topo][operation][compact]")
 {

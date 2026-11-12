@@ -410,7 +410,7 @@ Result<EdgeVertex> ShapeBuilder::GrowStrut(const std::uint32_t loop, const std::
     spec.End = outward ? made.Vertex : existing;
     spec.Curve = geometry.Curve;
     spec.Range = geometry.Range;
-    spec.Tolerance = geometry.Tolerance;
+    spec.Tolerance = geometry.Tolerance; // STEREON-LINT-ALLOW(tolerance-write): EdgeSpec request
     STEREON_TRY(made.Edge, AddEdge(spec));
     const EdgeUseSense out = outward ? EdgeUseSense::Same : EdgeUseSense::Opposite;
     const EdgeUseSense back = outward ? EdgeUseSense::Opposite : EdgeUseSense::Same;
@@ -535,7 +535,7 @@ Result<EdgeFace> ShapeBuilder::MakeEdgeFace(const BuilderCoedgeId a, const Build
         BuilderVertexId::Make(to, m_Tables.Vertices[to].Slot.GetGeneration(), m_Token.GetValue());
     spec.Curve = geometry.Curve;
     spec.Range = geometry.Range;
-    spec.Tolerance = geometry.Tolerance;
+    spec.Tolerance = geometry.Tolerance; // STEREON-LINT-ALLOW(tolerance-write): EdgeSpec request
     STEREON_TRY(made.Edge, AddEdge(spec));
     STEREON_TRY(made.Face, AddFace(face.Surface, face.Reversed));
     if (face.Shell.IsValid()) {

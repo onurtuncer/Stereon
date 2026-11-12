@@ -134,7 +134,7 @@ Result<EdgeRing> ShapeBuilder::MakeEdgeKillRing(const BuilderCoedgeId a, const B
     spec.Kind = geometry.Kind;
     spec.Curve = geometry.Curve;
     spec.Range = geometry.Range;
-    spec.Tolerance = geometry.Tolerance;
+    spec.Tolerance = geometry.Tolerance; // STEREON-LINT-ALLOW(tolerance-write): EdgeSpec request
     spec.Start = BuilderVertexId::Make(from, m_Tables.Vertices[from].Slot.GetGeneration(),
                                        m_Token.GetValue());
     spec.End =
