@@ -91,11 +91,50 @@ Point3& OriginOf(Ellipsoid& s)
     return s.Center;
 }
 
+/// The frame's third axis: a plane's X x Y, any other surface's Axis.
+template <typename S>
+Vec3 ThirdAxis(const S& s)
+{
+    if constexpr (std::is_same_v<S, Plane>) {
+        return Cross(s.XAxis, s.YAxis);
+    } else {
+        return Axis(s);
+    }
+}
+
+/// v turned by the rotation vector w (Rodrigues).
+Vec3 Rotated(const Vec3& v, const Vec3& w)
+{
+    const double angle = Length(w);
+    if (angle == 0.0) {
+        return v;
+    }
+    const Vec3 k = w / angle;
+    return std::cos(angle) * v + std::sin(angle) * Cross(k, v) +
+           ((1.0 - std::cos(angle)) * Dot(k, v)) * k;
+}
+
+/// A frame (x, y) turned by w0 x + w1 y + w2 z: an exact rotation, so the
+/// frame stays orthonormal and the first-order motion is w x (P - origin).
+void Turn(Vec3& x, Vec3& y, const Vec3& z, const double w0, const double w1, const double w2)
+{
+    const Vec3 w = w0 * x + w1 * y + w2 * z;
+    x = Rotated(x, w);
+    y = Rotated(y, w);
+}
+
+bool IsTurn(const SurfaceComponent c)
+{
+    return c == SurfaceComponent::RotationX || c == SurfaceComponent::RotationY ||
+           c == SurfaceComponent::RotationZ;
+}
+
 /// What each surface's bindings move, in the order of their parameters:
 /// the origin, then its radius, then a torus's minor radius or a cone's
-/// semi-angle; an ellipsoid's three semi-axes in place of a radius.
+/// semi-angle; an ellipsoid's three semi-axes in place of a radius; and,
+/// when `turning`, the frame's turn about its three axes.
 template <typename S>
-std::vector<SurfaceComponent> ComponentsOf()
+std::vector<SurfaceComponent> ComponentsOf(const bool turning = false)
 {
     std::vector<SurfaceComponent> components{SurfaceComponent::OriginX, SurfaceComponent::OriginY,
                                              SurfaceComponent::OriginZ};
@@ -112,26 +151,37 @@ std::vector<SurfaceComponent> ComponentsOf()
     if constexpr (std::is_same_v<S, Cone>) {
         components.push_back(SurfaceComponent::SemiAngle);
     }
+    if (turning) {
+        components.insert(components.end(),
+                          {SurfaceComponent::RotationX, SurfaceComponent::RotationY,
+                           SurfaceComponent::RotationZ});
+    }
     return components;
 }
 
 template <typename S>
-std::size_t SurfaceParameters()
+std::size_t SurfaceParameters(const bool turning = false)
 {
-    return ComponentsOf<S>().size();
+    return ComponentsOf<S>(turning).size();
 }
 
 /// The quantity of the parameter moving a surface component.
 ParameterQuantity QuantityOf(const SurfaceComponent component)
 {
-    return component == SurfaceComponent::SemiAngle ? ParameterQuantity::Angle
-                                                    : ParameterQuantity::Length;
+    return component == SurfaceComponent::SemiAngle || IsTurn(component)
+               ? ParameterQuantity::Angle
+               : ParameterQuantity::Length;
 }
 
-/// The surface moved by d(first + k) along its k-th component.
+/// The surface moved by d(first + k) along its k-th component; when
+/// `turning`, its frame turned last.
 template <typename S, typename Step>
-void MoveSurface(S& surface, const Step& d, const std::size_t first)
+void MoveSurface(S& surface, const Step& d, const std::size_t first, const bool turning = false)
 {
+    if (turning) {
+        const std::size_t k = first + ComponentsOf<S>().size();
+        Turn(surface.XAxis, surface.YAxis, ThirdAxis(surface), d(k), d(k + 1), d(k + 2));
+    }
     OriginOf(surface) = OriginOf(surface) + Vec3{d(first), d(first + 1), d(first + 2)};
     if constexpr (std::is_same_v<S, Sphere> || std::is_same_v<S, Cylinder>) {
         surface.Radius += d(first + 3);
@@ -186,21 +236,22 @@ Model FullModel(const std::vector<double>& references)
 }
 
 template <typename S>
-Model ModelFor(const std::vector<double>& references)
+Model ModelFor(const std::vector<double>& references, const bool turning = false)
 {
-    return ModelOf(references, ComponentsOf<S>());
+    return ModelOf(references, ComponentsOf<S>(turning));
 }
 
 /// The geometry moved by `step` times the seed, each parameter by its
 /// reference per unit.
 template <typename S>
 std::pair<Line, S> Moved(Line line, S surface, const std::vector<double>& seed,
-                         const std::vector<double>& references, const double step)
+                         const std::vector<double>& references, const double step,
+                         const bool turning = false)
 {
     const auto d = [&](const std::size_t k) { return step * seed[k] * references[k]; };
     line.Origin = line.Origin + Vec3{d(0), d(1), d(2)};
     line.Direction = line.Direction + Vec3{d(3), d(4), d(5)};
-    MoveSurface(surface, d, 6);
+    MoveSurface(surface, d, 6, turning);
     return {line, surface};
 }
 
@@ -281,14 +332,14 @@ bool WellConditioned(const Line& line, const S& surface, const std::size_t point
 /// The Taylor residual at steps 1e-2 and 1e-3 falls by second order. The
 /// angle u is compared modulo its period: a step may carry it over a seam.
 template <typename S>
-void RequireTaylor(const Line& line, const S& surface)
+void RequireTaylor(const Line& line, const S& surface, const bool turning = false)
 {
-    const auto [references, seed] = RandomSeed(6 + SurfaceParameters<S>());
-    Model model = ModelFor<S>(references);
+    const auto [references, seed] = RandomSeed(6 + SurfaceParameters<S>(turning));
+    Model model = ModelFor<S>(references, turning);
     const std::vector<double> jv = Jvp(model, line, surface, seed);
     const std::vector<double> base = Points(line, surface);
     const auto residual = [&](const double h) {
-        const auto [l, s] = Moved(line, surface, seed, references, h);
+        const auto [l, s] = Moved(line, surface, seed, references, h, turning);
         const std::vector<double> moved = Points(l, s);
         RC_ASSERT(moved.size() == base.size());
         std::vector<double> r(base.size());
@@ -310,10 +361,10 @@ void RequireTaylor(const Line& line, const S& surface)
 
 /// <J v, w> = <v, J^T w> over every point.
 template <typename S>
-void RequireTranspose(const Line& line, const S& surface)
+void RequireTranspose(const Line& line, const S& surface, const bool turning = false)
 {
-    const auto [references, v] = RandomSeed(6 + SurfaceParameters<S>());
-    Model model = ModelFor<S>(references);
+    const auto [references, v] = RandomSeed(6 + SurfaceParameters<S>(turning));
+    Model model = ModelFor<S>(references, turning);
     const std::vector<double> jv = Jvp(model, line, surface, v);
     std::vector<double> w;
     for (std::size_t i = 0; i < jv.size(); ++i) {
@@ -1075,7 +1126,8 @@ SplineModel MakeSplineModel(const std::vector<PoleBinding>& poles,
 template <typename S>
 std::pair<BSplineCurve, S> MovedSpline(BSplineCurve curve, S surface, const SplineModel& model,
                                        const std::vector<double>& seed,
-                                       const std::vector<double>& references, const double step)
+                                       const std::vector<double>& references, const double step,
+                                       const bool turning = false)
 {
     const auto d = [&](const std::size_t k) { return step * seed[k] * references[k]; };
     for (std::size_t k = 0; k < model.PoleBindings.size(); ++k) {
@@ -1096,7 +1148,7 @@ std::pair<BSplineCurve, S> MovedSpline(BSplineCurve curve, S surface, const Spli
             break;
         }
     }
-    MoveSurface(surface, d, model.PoleBindings.size());
+    MoveSurface(surface, d, model.PoleBindings.size(), turning);
     return {curve, surface};
 }
 
@@ -1178,16 +1230,16 @@ bool SplineWellConditioned(const BSplineCurve& curve, const S& surface)
 /// Taylor decay and the transpose identity for a B-spline against a surface.
 template <typename S>
 void RequireSplineProducts(const BSplineCurve& curve, const std::vector<PoleBinding>& poles,
-                           const S& surface)
+                           const S& surface, const bool turning = false)
 {
     RC_PRE(SplineWellConditioned(curve, surface));
-    const std::size_t count = poles.size() + SurfaceParameters<S>();
+    const std::size_t count = poles.size() + SurfaceParameters<S>(turning);
     const auto [references, seed] = RandomSeed(count);
-    SplineModel model = MakeSplineModel(poles, ComponentsOf<S>(), references);
+    SplineModel model = MakeSplineModel(poles, ComponentsOf<S>(turning), references);
     const std::vector<double> jv = SplineJvp(model, curve, surface, seed);
     const std::vector<double> base = Points(curve, surface);
     const auto residual = [&](const double h) {
-        const auto [c, s] = MovedSpline(curve, surface, model, seed, references, h);
+        const auto [c, s] = MovedSpline(curve, surface, model, seed, references, h, turning);
         // A step that turns a near miss into crossings, or into a touch the
         // primal cannot resolve, crosses an event of the intersection: no
         // sample for its derivative. A cone, unbounded, offers near misses
@@ -1439,9 +1491,10 @@ using Stereon::ConicBinding;
 using Stereon::ConicComponent;
 using Stereon::Ellipse;
 
-/// The conic's bindings, its centre then its radii, in order.
+/// The conic's bindings, its centre then its radii, in order; when
+/// `turning`, then its frame's turn about X, Y and X x Y.
 template <typename C>
-std::vector<ConicComponent> ConicComponentsOf()
+std::vector<ConicComponent> ConicComponentsOf(const bool turning = false)
 {
     std::vector<ConicComponent> components{ConicComponent::CenterX, ConicComponent::CenterY,
                                            ConicComponent::CenterZ};
@@ -1450,6 +1503,10 @@ std::vector<ConicComponent> ConicComponentsOf()
     } else {
         components.insert(components.end(),
                           {ConicComponent::MajorRadius, ConicComponent::MinorRadius});
+    }
+    if (turning) {
+        components.insert(components.end(), {ConicComponent::RotationX, ConicComponent::RotationY,
+                                             ConicComponent::RotationZ});
     }
     return components;
 }
@@ -1462,15 +1519,17 @@ struct ConicModel {
 
 /// The conic's bindings, then the surface's, one parameter each.
 template <typename C, typename S>
-ConicModel ConicModelFor(const std::vector<double>& references)
+ConicModel ConicModelFor(const std::vector<double>& references, const bool turning = false)
 {
-    const std::vector<ConicComponent> conic = ConicComponentsOf<C>();
-    const std::vector<SurfaceComponent> surface = ComponentsOf<S>();
+    const std::vector<ConicComponent> conic = ConicComponentsOf<C>(turning);
+    const std::vector<SurfaceComponent> surface = ComponentsOf<S>(turning);
     ParameterSet set;
     std::vector<ParameterId> ids;
     for (std::size_t k = 0; k < references.size(); ++k) {
-        const ParameterQuantity quantity =
-            k < conic.size() ? ParameterQuantity::Length : QuantityOf(surface[k - conic.size()]);
+        const bool turn = k < conic.size() && conic[k] >= ConicComponent::RotationX;
+        const ParameterQuantity quantity = k >= conic.size() ? QuantityOf(surface[k - conic.size()])
+                                           : turn            ? ParameterQuantity::Angle
+                                                             : ParameterQuantity::Length;
         ids.push_back(*set.Add("p" + std::to_string(k), quantity, references[k]));
     }
     ConicModel model{SensitivityContext(std::move(set)), {}, {}};
@@ -1486,18 +1545,25 @@ ConicModel ConicModelFor(const std::vector<double>& references)
 /// The conic and the surface moved by `step` times the seed.
 template <typename C, typename S>
 std::pair<C, S> MovedConic(C conic, S surface, const std::vector<double>& seed,
-                           const std::vector<double>& references, const double step)
+                           const std::vector<double>& references, const double step,
+                           const bool turning = false)
 {
     const auto d = [&](const std::size_t k) { return step * seed[k] * references[k]; };
     conic.Center = conic.Center + Vec3{d(0), d(1), d(2)};
+    std::size_t next = 4;
     if constexpr (std::is_same_v<C, Circle>) {
         conic.Radius += d(3);
-        MoveSurface(surface, d, 4);
     } else {
         conic.MajorRadius += d(3);
         conic.MinorRadius += d(4);
-        MoveSurface(surface, d, 5);
+        next = 5;
     }
+    if (turning) {
+        Turn(conic.XAxis, conic.YAxis, Cross(conic.XAxis, conic.YAxis), d(next), d(next + 1),
+             d(next + 2));
+        next += 3;
+    }
+    MoveSurface(surface, d, next, turning);
     return {conic, surface};
 }
 
@@ -1539,11 +1605,11 @@ bool ConicWellConditioned(const C& conic, const S& surface)
 /// Angles (the conic's t, the surface's u and v) are compared modulo a
 /// turn: a step may carry one over a seam.
 template <typename C, typename S>
-void RequireConicProducts(const C& conic, const S& surface)
+void RequireConicProducts(const C& conic, const S& surface, const bool turning = false)
 {
     const auto [references, seed] =
-        RandomSeed(ConicComponentsOf<C>().size() + SurfaceParameters<S>());
-    ConicModel model = ConicModelFor<C, S>(references);
+        RandomSeed(ConicComponentsOf<C>(turning).size() + SurfaceParameters<S>(turning));
+    ConicModel model = ConicModelFor<C, S>(references, turning);
     const std::vector<double> jv = ConicJvp(model, conic, surface, seed);
     const std::vector<double> base = Points(conic, surface);
     // A conic meets a quadric up to four times, a line twice: a conic that
@@ -1551,14 +1617,14 @@ void RequireConicProducts(const C& conic, const S& surface)
     // step, a new regime, not an error of the derivative. Such steps are
     // discarded; the crossings that exist were checked transverse.
     for (const double h : {1e-2, 1e-3}) {
-        const auto [c, s] = MovedConic(conic, surface, seed, references, h);
+        const auto [c, s] = MovedConic(conic, surface, seed, references, h, turning);
         RC_PRE(Points(c, s).size() == base.size());
     }
     // Points come in order of the conic's angle, so a crossing near t = 0
     // that a step carries past the seam comes last: each base point is
     // paired with the moved point nearest it in space.
     const auto residual = [&](const double h) {
-        const auto [c, s] = MovedConic(conic, surface, seed, references, h);
+        const auto [c, s] = MovedConic(conic, surface, seed, references, h, turning);
         const std::vector<double> moved = Points(c, s);
         const std::size_t count = base.size() / Values;
         std::vector<double> r(base.size());
@@ -1655,26 +1721,26 @@ Plane RandomPlane()
 }
 
 template <typename C>
-void RequireConicProperties()
+void RequireConicProperties(const bool turning = false)
 {
     const C conic = RandomConic<C>();
     switch (*rc::gen::inRange(0, 3)) {
     case 0: {
         const Sphere sphere = RandomSphere();
         RC_PRE(ConicWellConditioned(conic, sphere));
-        RequireConicProducts(conic, sphere);
+        RequireConicProducts(conic, sphere, turning);
         break;
     }
     case 1: {
         const Cylinder cylinder = RandomCylinder();
         RC_PRE(ConicWellConditioned(conic, cylinder));
-        RequireConicProducts(conic, cylinder);
+        RequireConicProducts(conic, cylinder, turning);
         break;
     }
     default: {
         const Plane plane = RandomPlane();
         RC_PRE(ConicWellConditioned(conic, plane));
-        RequireConicProducts(conic, plane);
+        RequireConicProducts(conic, plane, turning);
         break;
     }
     }
@@ -1691,7 +1757,11 @@ template <typename C>
 std::vector<double> RateOf(const C& conic, const ConicComponent component)
 {
     ParameterSet set;
-    const ParameterId p = *set.Add("p", ParameterQuantity::Length, 1.0);
+    const ParameterId p =
+        *set.Add("p",
+                 component >= ConicComponent::RotationX ? ParameterQuantity::Angle
+                                                        : ParameterQuantity::Length,
+                 1.0);
     SensitivityContext sensitivity(std::move(set));
     REQUIRE(sensitivity.SetSeed(std::vector<double>{1.0}).has_value());
     const std::vector<ConicBinding> bindings{{p, component}};
@@ -1782,4 +1852,218 @@ TEST_CASE("a conic's bindings are refused where it has no such radius",
     const std::vector<ConicBinding> turned{{angle, ConicComponent::CenterX}};
     REQUIRE(code(Stereon::IntersectJvp(UpCircle, turned, Surface{Shelf}, {}, *circleAt,
                                        sensitivity)) == ErrorCode::InvalidInput);
+}
+
+// --- Turning a frame ----------------------------------------------------------
+
+namespace {
+
+/// The forward product of one binding of the surface turned at unit rate.
+template <typename S>
+std::vector<double> TurnRate(const Line& line, const S& surface, const SurfaceComponent turn)
+{
+    ParameterSet set;
+    const ParameterId w = *set.Add("w", ParameterQuantity::Angle, 1.0);
+    SensitivityContext sensitivity(std::move(set));
+    REQUIRE(sensitivity.SetSeed(std::vector<double>{1.0}).has_value());
+    const std::vector<SurfaceBinding> bindings{{w, turn}};
+    const auto at = Stereon::Intersect(Stereon::Curve{line}, Surface{surface}, ctx);
+    REQUIRE(at.has_value());
+    const auto jvp = Stereon::IntersectJvp(line, {}, Surface{surface}, bindings, *at, sensitivity);
+    INFO(IntersectTest::ErrorText(jvp));
+    REQUIRE(jvp.has_value());
+    REQUIRE(jvp->GetStatus() == DerivativeStatus::Valid);
+    return {jvp->GetValues()->begin(), jvp->GetValues()->end()};
+}
+
+/// The point's values at offset k against (x', t', u', v').
+void RequireTurned(const std::vector<double>& v, const std::size_t k, const Vec3& x, const double t,
+                   const double u, const double w)
+{
+    INFO("point at offset " << k);
+    CHECK(std::abs(v[k] - x.X) <= 1e-14);
+    CHECK(std::abs(v[k + 1] - x.Y) <= 1e-14);
+    CHECK(std::abs(v[k + 2] - x.Z) <= 1e-14);
+    CHECK(std::abs(v[k + 3] - t) <= 1e-14);
+    CHECK(std::abs(v[k + 4] - u) <= 1e-14);
+    CHECK(std::abs(v[k + 5] - w) <= 1e-14);
+}
+
+} // namespace
+
+TEST_CASE("a turning frame moves crossings as their closed forms say",
+          "[intersect][linearization][turn]")
+{
+    SECTION("the line y = 0, z = 2 across the cylinder of radius 1.5 about z")
+    {
+        // The points (-+1.5, 0, 2), t = x, u = pi then 0, v = 2. Turning the
+        // axis about Y by w tilts it to (sin w, 0, cos w): the distance from
+        // (x, 0, h) to it is R when x^2 + h^2 - (x sin w + h cos w)^2 = R^2,
+        // so 2 x x' = 2 h x, x' = h, and v = (P - O) . axis moves by x.
+        // About X, the line meets the tilted tube at second order only:
+        // x' = 0, and u moves by h / x; about the axis, only u, by -1.
+        const Line line{Point3{0.0, 0.0, 2.0}, Vec3{1.0, 0.0, 0.0}};
+        const Cylinder tube{Point3{}, 1.5, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+        const auto y = TurnRate(line, tube, SurfaceComponent::RotationY);
+        REQUIRE(y.size() == 2 * Values);
+        RequireTurned(y, 0, Vec3{2.0, 0.0, 0.0}, 2.0, 0.0, -1.5);
+        RequireTurned(y, Values, Vec3{2.0, 0.0, 0.0}, 2.0, 0.0, 1.5);
+        const auto x = TurnRate(line, tube, SurfaceComponent::RotationX);
+        RequireTurned(x, 0, Vec3{}, 0.0, -2.0 / 1.5, 0.0);
+        RequireTurned(x, Values, Vec3{}, 0.0, 2.0 / 1.5, 0.0);
+        const auto z = TurnRate(line, tube, SurfaceComponent::RotationZ);
+        RequireTurned(z, 0, Vec3{}, 0.0, -1.0, 0.0);
+        RequireTurned(z, Values, Vec3{}, 0.0, -1.0, 0.0);
+    }
+    SECTION("the vertical line through (1, 0, 0) across the plane z = 0")
+    {
+        // About Y the plane's XAxis tips to (cos w, 0, -sin w): the line meets
+        // it at z = -tan w, x' = (0, 0, -1), t' = -1. About X the point lies
+        // on the axis and stays. About the normal the plane turns in itself:
+        // no point moves, (u, v) = (x, y) moves by (y, -x).
+        const Line line{Point3{1.0, 0.0, 0.0}, Vec3{0.0, 0.0, 1.0}};
+        const Plane floor{Point3{}, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+        RequireTurned(TurnRate(line, floor, SurfaceComponent::RotationY), 0, Vec3{0.0, 0.0, -1.0},
+                      -1.0, 0.0, 0.0);
+        RequireTurned(TurnRate(line, floor, SurfaceComponent::RotationX), 0, Vec3{}, 0.0, 0.0, 0.0);
+        RequireTurned(TurnRate(line, floor, SurfaceComponent::RotationZ), 0, Vec3{}, 0.0, 0.0,
+                      -1.0);
+    }
+    SECTION("a sphere turned about its centre moves no point")
+    {
+        // The x-axis meets the sphere of radius 2 at (-+2, 0, 0) on its
+        // equator. A turn about z moves u by -1; about y, v by -+1; about x,
+        // nothing.
+        const Sphere ball{Point3{}, 2.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+        const Line line{Point3{}, Vec3{1.0, 0.0, 0.0}};
+        RequireTurned(TurnRate(line, ball, SurfaceComponent::RotationZ), 0, Vec3{}, 0.0, -1.0, 0.0);
+        const auto y = TurnRate(line, ball, SurfaceComponent::RotationY);
+        RequireTurned(y, 0, Vec3{}, 0.0, 0.0, -1.0);
+        RequireTurned(y, Values, Vec3{}, 0.0, 0.0, 1.0);
+        RequireTurned(TurnRate(line, ball, SurfaceComponent::RotationX), Values, Vec3{}, 0.0, 0.0,
+                      0.0);
+    }
+    SECTION("the circle of radius 2 in the xz-plane turning, cut by z = 1")
+    {
+        // The points (+-sqrt 3, 0, 1) at t = pi / 6 and 5 pi / 6; the plane's
+        // (u, v) are their x and y. About X the circle tips out of y = 0:
+        // x' = X x (C - O) = (0, -1, 0), v' = -1. About Y = z, x' =
+        // (0, +-sqrt 3, 0). About its normal X x Y = -y it turns in itself:
+        // no point moves and t' = -1.
+        const double root3 = std::sqrt(3.0);
+        const auto x = RateOf(UpCircle, ConicComponent::RotationX);
+        const auto y = RateOf(UpCircle, ConicComponent::RotationY);
+        const auto z = RateOf(UpCircle, ConicComponent::RotationZ);
+        REQUIRE(x.size() == 2 * Values);
+        for (const auto& [k, sign] : {std::pair{std::size_t{0}, 1.0}, std::pair{Values, -1.0}}) {
+            RequireTurned(x, k, Vec3{0.0, -1.0, 0.0}, 0.0, 0.0, -1.0);
+            RequireTurned(y, k, Vec3{0.0, sign * root3, 0.0}, 0.0, 0.0, sign * root3);
+            RequireTurned(z, k, Vec3{}, -1.0, 0.0, 0.0);
+        }
+    }
+}
+
+TEST_CASE("turning frames: second-order Taylor decay and the transpose",
+          "[intersect][linearization][turn][property]")
+{
+    rc::prop("for random lines and planes", [] {
+        const auto [line, plane] = RandomPlaneCrossing();
+        RequireTaylor(line, plane, true);
+        RequireTranspose(line, plane, true);
+    });
+    rc::prop("for random lines through spheres and cylinders", [] {
+        const auto [line, surfaces] = RandomQuadricCrossing();
+        RequireTaylor(line, surfaces.first, true);
+        RequireTaylor(line, surfaces.second, true);
+        RequireTranspose(line, surfaces.first, true);
+        RequireTranspose(line, surfaces.second, true);
+    });
+    rc::prop("for random lines through ellipsoids", [] {
+        const auto [line, egg] = RandomEllipsoidCrossing();
+        RequireTaylor(line, egg, true);
+        RequireTranspose(line, egg, true);
+    });
+    const auto frameAbout = [](const Point3& center) {
+        const Vec3 axis{Coordinate(), Coordinate(), Coordinate()};
+        RC_PRE(Length(axis) >= 0.5);
+        return IntersectTest::CylinderAbout(center, axis, 1.0);
+    };
+    rc::prop("for random cubic B-splines through cones", [&] {
+        const Point3 center{Coordinate(), Coordinate(), Coordinate()};
+        const Cylinder frame = frameAbout(center);
+        const double radius = *rc::gen::inRange(8, 25) / 8.0;
+        const double sign = *rc::gen::arbitrary<bool>() ? 1.0 : -1.0;
+        const double angle = sign * *rc::gen::inRange(2, 11) / 10.0;
+        const Cone cone{center, radius, angle, frame.XAxis, frame.YAxis};
+        const Vec3 direction{Coordinate(), Coordinate(), Coordinate()};
+        RC_PRE(Length(direction) >= radius);
+        const auto [curve, poles] = RandomSplineThrough(center, direction, radius);
+        RequireSplineProducts(curve, poles, cone, true);
+    });
+    rc::prop("for random cubic B-splines through tori", [&] {
+        const Point3 center{Coordinate(), Coordinate(), Coordinate()};
+        const Cylinder frame = frameAbout(center);
+        const double minor = *rc::gen::inRange(4, 9) / 8.0;
+        const double major = minor + *rc::gen::inRange(4, 13) / 8.0;
+        const Torus torus{center, major, minor, frame.XAxis, frame.YAxis};
+        const double u = *rc::gen::inRange(0, 16) / 16.0 * tau;
+        const Point3 tube =
+            center + major * (std::cos(u) * frame.XAxis + std::sin(u) * frame.YAxis);
+        const Vec3 direction{Coordinate(), Coordinate(), Coordinate()};
+        RC_PRE(Length(direction) >= major + minor);
+        const auto [curve, poles] = RandomSplineThrough(tube, direction, minor);
+        RequireSplineProducts(curve, poles, torus, true);
+    });
+    rc::prop("circles turning through turning spheres, cylinders and planes",
+             [] { RequireConicProperties<Circle>(true); });
+    rc::prop("ellipses turning through turning spheres, cylinders and planes",
+             [] { RequireConicProperties<Ellipse>(true); });
+}
+
+TEST_CASE("a turn is refused where there is no frame or as a length",
+          "[intersect][linearization][turn]")
+{
+    ParameterSet set;
+    const ParameterId length = *set.Add("p", ParameterQuantity::Length, 1.0);
+    const ParameterId angle = *set.Add("a", ParameterQuantity::Angle, 1.0);
+    SensitivityContext sensitivity(std::move(set));
+    REQUIRE(sensitivity.SetSeed(std::vector<double>{1.0, 1.0}).has_value());
+    const auto code = [](const auto& result) {
+        REQUIRE_FALSE(result.has_value());
+        return result.error().GetCode();
+    };
+    // A turn is an angle.
+    const Line line{Point3{1.0, 0.0, -1.0}, Vec3{0.0, 0.0, 1.0}};
+    const Plane floor{Point3{}, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+    const auto onFloor = Stereon::Intersect(Stereon::Curve{line}, Surface{floor}, ctx);
+    REQUIRE(onFloor.has_value());
+    const std::vector<SurfaceBinding> asLength{{length, SurfaceComponent::RotationY}};
+    CHECK(code(Stereon::IntersectJvp(line, {}, Surface{floor}, asLength, *onFloor, sensitivity)) ==
+          ErrorCode::InvalidInput);
+    const std::vector<ConicBinding> conicAsLength{{length, ConicComponent::RotationZ}};
+    const auto circleAt = Stereon::Intersect(Stereon::Curve{UpCircle}, Surface{Shelf}, ctx);
+    REQUIRE(circleAt.has_value());
+    CHECK(code(Stereon::IntersectJvp(UpCircle, conicAsLength, Surface{Shelf}, {}, *circleAt,
+                                     sensitivity)) == ErrorCode::InvalidInput);
+    // A B-spline surface has poles, no frame.
+    const BSplineSurface patch = FlatPatch(false);
+    const auto onPatch = Stereon::Intersect(
+        Stereon::Curve{Line{Point3{0.5, 0.5, -1.0}, Vec3{0.0, 0.0, 1.0}}}, Surface{patch}, ctx);
+    REQUIRE(onPatch.has_value());
+    const std::vector<SurfaceBinding> turned{{angle, SurfaceComponent::RotationX}};
+    CHECK(code(Stereon::IntersectJvp(Line{Point3{0.5, 0.5, -1.0}, Vec3{0.0, 0.0, 1.0}}, {},
+                                     Surface{patch}, turned, *onPatch, sensitivity)) ==
+          ErrorCode::InvalidInput);
+    // A turn of a tangency is still no derivative: the sphere of radius 1
+    // about (0, 0, 1) touches the floor at the origin.
+    const Sphere resting{Point3{0.0, 0.0, 1.0}, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}};
+    const Line along{Point3{-2.0, 0.0, 0.0}, Vec3{1.0, 0.0, 0.0}};
+    const auto touch = Stereon::Intersect(Stereon::Curve{along}, Surface{resting}, ctx);
+    REQUIRE(touch.has_value());
+    REQUIRE(touch->Points.size() == 1u);
+    const std::vector<SurfaceBinding> spin{{angle, SurfaceComponent::RotationY}};
+    const auto tangent =
+        Stereon::IntersectJvp(along, {}, Surface{resting}, spin, *touch, sensitivity);
+    REQUIRE(tangent.has_value());
+    CHECK(tangent->GetStatus() == DerivativeStatus::Nondifferentiable);
 }

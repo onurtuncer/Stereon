@@ -11,9 +11,12 @@
 // forward product agrees with the closed form of a plane's circle on a
 // sphere; on random planes, spheres and cylinders, exact and traced, its
 // Taylor residual against the moved point in the same tracking plane
-// decays with the second power of the step; the reverse product is its transpose; and a
-// sample without a derivative says so: a tangential branch or an overlap
-// is Nondifferentiable, an uncertified branch Indeterminate.
+// decays with the second power of the step, the surfaces' frames turning
+// too; the reverse product is its transpose; and a sample without a
+// derivative says so: a tangential branch or an overlap is
+// Nondifferentiable, an uncertified branch Indeterminate. A plane turning
+// about its axes moves the circle it cuts from a sphere as its closed form
+// says; a sphere turning about its centre moves no point.
 
 #include "RapidCheck.hpp"
 
@@ -80,8 +83,31 @@ Point3& OriginOf(Ellipsoid& s)
     return s.Center;
 }
 
+/// The frame's third axis: a plane's X x Y, any other surface's Axis.
+template <typename S>
+Vec3 ThirdAxis(const S& s)
+{
+    if constexpr (std::is_same_v<S, Plane>) {
+        return Cross(s.XAxis, s.YAxis);
+    } else {
+        return Axis(s);
+    }
+}
+
+/// v turned by the rotation vector w (Rodrigues).
+Vec3 Rotated(const Vec3& v, const Vec3& w)
+{
+    const double angle = Length(w);
+    if (angle == 0.0) {
+        return v;
+    }
+    const Vec3 k = w / angle;
+    return std::cos(angle) * v + std::sin(angle) * Cross(k, v) +
+           ((1.0 - std::cos(angle)) * Dot(k, v)) * k;
+}
+
 /// The origin, then the radius where the surface has one, or an
-/// ellipsoid's three semi-axes.
+/// ellipsoid's three semi-axes; then the frame's turn about its axes.
 template <typename S>
 std::vector<SurfaceComponent> ComponentsOf()
 {
@@ -94,6 +120,8 @@ std::vector<SurfaceComponent> ComponentsOf()
     } else if constexpr (!std::is_same_v<S, Plane>) {
         components.push_back(SurfaceComponent::Radius);
     }
+    components.insert(components.end(), {SurfaceComponent::RotationX, SurfaceComponent::RotationY,
+                                         SurfaceComponent::RotationZ});
     return components;
 }
 
@@ -109,9 +137,16 @@ void MoveSurface(S& surface, const Step& d, const std::size_t first)
     } else if constexpr (!std::is_same_v<S, Plane>) {
         surface.Radius += d(first + 3);
     }
+    // The turn about the origin, along the frame's own axes.
+    const std::size_t turn = first + ComponentsOf<S>().size() - 3;
+    const Vec3 w =
+        d(turn) * surface.XAxis + d(turn + 1) * surface.YAxis + d(turn + 2) * ThirdAxis(surface);
+    surface.XAxis = Rotated(surface.XAxis, w);
+    surface.YAxis = Rotated(surface.YAxis, w);
 }
 
-/// One Length parameter per component of A, then of B.
+/// One parameter per component of A, then of B: an Angle for a turn, a
+/// Length otherwise.
 struct Model {
     SensitivityContext Sensitivity{ParameterSet{}};
     std::vector<SurfaceBinding> BindingsA;
@@ -126,7 +161,12 @@ Model ModelFor(const std::vector<double>& references)
     ParameterSet set;
     std::vector<ParameterId> ids;
     for (std::size_t k = 0; k < references.size(); ++k) {
-        ids.push_back(*set.Add("p" + std::to_string(k), ParameterQuantity::Length, references[k]));
+        const SurfaceComponent c = k < a.size() ? a[k] : b[k - a.size()];
+        const bool turn = c == SurfaceComponent::RotationX || c == SurfaceComponent::RotationY ||
+                          c == SurfaceComponent::RotationZ;
+        ids.push_back(*set.Add("p" + std::to_string(k),
+                               turn ? ParameterQuantity::Angle : ParameterQuantity::Length,
+                               references[k]));
     }
     Model model{SensitivityContext(std::move(set)), {}, {}};
     for (std::size_t k = 0; k < a.size(); ++k) {
@@ -502,6 +542,69 @@ TEST_CASE("a plane's circle on a sphere moves as its closed form says",
             // On the plane, (u, v) are the point's x and y.
             CHECK_THAT(values[Values * k + 3], WithinAbs(expected.X, 1e-12));
             CHECK_THAT(values[Values * k + 4], WithinAbs(expected.Y, 1e-12));
+        }
+    }
+}
+
+TEST_CASE("a plane turning across a sphere moves its circle as its closed form says",
+          "[intersect][linearization][branch]")
+{
+    // The plane z = h through (0, 0, h) cuts the sphere in the circle of
+    // radius rho. Turning it about its XAxis by w gives z - h = w y; about
+    // its YAxis, z - h = -w x. A sample (x, y, h) moves in its tracking
+    // plane, spanned by the radial r = (x, y, 0) / rho and z, by a r + b z:
+    // b = w y (or -w x) from the plane and rho a + h b = 0 from the sphere.
+    // About its normal the plane only turns in itself: no point moves, and
+    // its (u, v) = (x, y) moves by (y, -x). A sphere turned about its
+    // centre is the same sphere: no point moves.
+    const CircleCase c;
+    const auto at = Stereon::Intersect(Surface{c.Cut}, Surface{c.Ball}, ctx);
+    REQUIRE(at.has_value());
+    REQUIRE(at->Branches.size() == 1u);
+    const std::vector<BranchSample> samples = SamplesOf(*at);
+    ParameterSet set;
+    const ParameterId w = *set.Add("w", ParameterQuantity::Angle, 1.0);
+    SensitivityContext sensitivity(std::move(set));
+    REQUIRE(sensitivity.SetSeed(std::vector<double>{1.0}).has_value());
+    const double rho = std::sqrt(c.Radius * c.Radius - c.Height * c.Height);
+    const auto rate = [&](const std::vector<SurfaceBinding>& onPlane,
+                          const std::vector<SurfaceBinding>& onSphere) {
+        const auto jvp = Stereon::IntersectJvp(Surface{c.Cut}, onPlane, Surface{c.Ball}, onSphere,
+                                               *at, samples, sensitivity);
+        REQUIRE(jvp.has_value());
+        REQUIRE(jvp->GetStatus() == DerivativeStatus::Valid);
+        const auto values = jvp->GetValues();
+        return std::vector<double>(values->begin(), values->end());
+    };
+    const std::vector<double> aboutX = rate({{w, SurfaceComponent::RotationX}}, {});
+    const std::vector<double> aboutY = rate({{w, SurfaceComponent::RotationY}}, {});
+    const std::vector<double> aboutZ = rate({{w, SurfaceComponent::RotationZ}}, {});
+    for (std::size_t k = 0; k < samples.size(); ++k) {
+        const auto lin = Stereon::Linearize(Surface{c.Cut}, Surface{c.Ball}, at->Branches[0],
+                                            samples[k].Parameter);
+        REQUIRE(lin.has_value());
+        const double x = lin->Position.X;
+        const double y = lin->Position.Y;
+        const Vec3 out{x / rho, y / rho, 0.0};
+        for (const auto& [values, b] : {std::pair{&aboutX, y}, std::pair{&aboutY, -x}}) {
+            const Vec3 expected = (-c.Height * b / rho) * out + Vec3{0.0, 0.0, b};
+            CHECK_THAT((*values)[Values * k], WithinAbs(expected.X, 1e-12));
+            CHECK_THAT((*values)[Values * k + 1], WithinAbs(expected.Y, 1e-12));
+            CHECK_THAT((*values)[Values * k + 2], WithinAbs(expected.Z, 1e-12));
+        }
+        for (std::size_t i = 0; i < 3; ++i) {
+            CHECK_THAT(aboutZ[Values * k + i], WithinAbs(0.0, 1e-12));
+        }
+        CHECK_THAT(aboutZ[Values * k + 3], WithinAbs(y, 1e-12));
+        CHECK_THAT(aboutZ[Values * k + 4], WithinAbs(-x, 1e-12));
+    }
+    for (const SurfaceComponent turn :
+         {SurfaceComponent::RotationX, SurfaceComponent::RotationY, SurfaceComponent::RotationZ}) {
+        const std::vector<double> still = rate({}, {{w, turn}});
+        for (std::size_t k = 0; k < samples.size(); ++k) {
+            for (std::size_t i = 0; i < 3; ++i) {
+                CHECK_THAT(still[Values * k + i], WithinAbs(0.0, 1e-12));
+            }
         }
     }
 }
