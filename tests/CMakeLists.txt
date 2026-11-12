@@ -312,6 +312,8 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME "tools: tolerance-write lint"
         COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/check_tolerance_writes.py"
                 --root "${PROJECT_SOURCE_DIR}")
+    add_test(NAME "tools: mutation evidence regressions"
+        COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/test_mutation_evidence.py")
     add_test(NAME "tools: metamorphic gate regressions"
         COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/test_metamorphic.py")
     add_test(NAME "tools: metamorphic inventory"

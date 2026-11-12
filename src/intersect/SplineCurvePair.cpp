@@ -370,6 +370,22 @@ struct PairSearch {
     return {};
 }
 
+/// A stationary distance requires both gradient components to contain zero.
+/// Test the actual piece domains before inverting the near-singular Gram
+/// matrix. Boundary minima are still handled independently by SearchEnds.
+[[nodiscard]] bool NoStationaryPoint(const Hodographs& a, const Hodographs& b)
+{
+    const Interval domain{0.0, 1.0};
+    const auto ja = JetOver(a, domain);
+    const auto jb = JetOver(b, domain);
+    if (!ja || !jb) {
+        return false;
+    }
+    const Vec3I difference = Minus(ja->Point, jb->Point);
+    return !Contains(DotI(difference, ja->First), 0.0) ||
+           !Contains(DotI(difference, jb->First), 0.0);
+}
+
 /// One pair of pieces, apart, settled by Krawczyk's test, or halved.
 [[nodiscard]] Result<void> VisitPair(PairSearch& search, const Arc& a, const Arc& b,
                                      const int depth)
@@ -382,6 +398,9 @@ struct PairSearch {
     }
     const Hodographs ha = HodographsOf(a);
     const Hodographs hb = HodographsOf(b);
+    if (NoStationaryPoint(ha, hb)) {
+        return {};
+    }
     const ParameterBox x{Interval{-Inflation, 1.0 + Inflation},
                          Interval{-Inflation, 1.0 + Inflation}};
     const Test test = Classify(Krawczyk(ha, hb, x), x);
