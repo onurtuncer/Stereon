@@ -203,8 +203,12 @@ TEST_CASE("MR PR-244 near-axis sphere cone is not isolated points",
             Intersect(cone, box, sphere, Box2::Everything(), policy.GetResolution(), policy);
         REQUIRE(a.has_value() == b.has_value());
         if (!a) {
-            CHECK(a.error().GetCode() == ErrorCode::IntersectionFailed);
-            CHECK(b.error().GetCode() == a.error().GetCode());
+            // An unresolved intersection or an uncertified pcurve must fail
+            // closed; neither is a successful geometric answer.
+            const auto code = a.error().GetCode();
+            CHECK(
+                (code == ErrorCode::IntersectionFailed || code == ErrorCode::CertificationFailed));
+            CHECK(b.error().GetCode() == code);
             continue;
         }
         // Tolerant near-axis contact is a curve or unresolved, never two

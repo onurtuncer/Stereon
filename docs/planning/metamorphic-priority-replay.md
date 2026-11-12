@@ -85,6 +85,8 @@ Sphere radius 2 at (offset,0,4), offsets {1e-15,1e-7,5e-6}, against the cone
 at the origin of half-angle pi/6, restricted to [0,2pi] x [-8,8]. With pair
 tolerance 1e-5 the contract permits curves or an explicit unresolved failure,
 never isolated meridian points masquerading as the near-axis contact.
+Both `IntersectionFailed` and `CertificationFailed` are permitted fail-closed
+outcomes; the latter means the pcurve deviation could not be certified.
 Operand permutation must preserve success/failure; on success independently
 check pcurve consistency on both supports in both orders. MR-02.
 
@@ -170,3 +172,18 @@ reintroduces the relevant omission addressed by
 Every campaign record stays `MR implemented`, not `verified`, until native
 GCC 16 baseline/fault logs and review are linked. Other historical leads,
 unreviewed relations and the complete-inventory audit remain open.
+
+## PR-263 translated boundary regression
+
+The first native baseline exposed a further spline failure at scale 1/4 and
+translation (8,-4,2), without reversal or parameter remapping. The same
+PR-241 fixture resolves at the origin. All placements and strict endpoint
+expectations remain enabled. The pair search now excludes stationary points
+when an interval gradient component excludes zero over the actual parameter
+box, before the ill-conditioned Krawczyk inversion. This does not discard
+boundary minima: SearchEnds still searches the ends and corners separately.
+The existing test covers translation, scale, operand exchange and knot maps;
+the negative control remains separated. Native validation of this fix is pending.
+
+The original failing baseline is preserved in Actions run 43052745077,
+job 130633998895 (PR head f651783d755800088392275908136074acb92f9c).

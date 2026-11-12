@@ -209,7 +209,9 @@ Curve2d Moved(const RandomSide& side, const Step& d, const std::size_t first)
         moved.MinorRadius += delta(C::MinorRadius);
         return Curve2d{moved};
     }
-    BSplineCurve2d moved = *side.Curve.Target<BSplineCurve2d>();
+    const auto* spline = side.Curve.Target<BSplineCurve2d>();
+    REQUIRE(spline != nullptr);
+    BSplineCurve2d moved = *spline;
     for (std::size_t i = 0; i < moved.Poles.size(); ++i) {
         moved.Poles[i] = moved.Poles[i] + Vec2{delta(C::PoleX, i), delta(C::PoleY, i)};
         if (!moved.Weights.empty()) {
