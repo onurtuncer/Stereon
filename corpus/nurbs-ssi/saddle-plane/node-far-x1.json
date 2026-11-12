@@ -125,6 +125,6 @@
         210000.0
       ]
     ],
-    "may_fail_closed": "two branches cross at a node; the generic path fails closed at a branch point"
+    "may_fail_closed": "far from the origin the transverse search can refuse near a branch's end on the domain's boundary (open defect SSI-translated-boundary)"
   }
 }
