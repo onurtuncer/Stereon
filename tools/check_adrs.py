@@ -59,7 +59,7 @@ def self_test():
         second = directory / "0002-second.md"
         second.write_text("# ADR-0002\n", encoding="utf-8")
         assert any("index entry" in error for error in check(root))
-        index.write_text(index.read_text() + "[0002](0002-second.md)\n", encoding="utf-8")
+        index.write_text(index.read_text(encoding="utf-8") + "[0002](0002-second.md)\n", encoding="utf-8")
         assert not check(root)
         second.write_text("[broken](missing.md)\n", encoding="utf-8")
         assert any("broken local link" in error for error in check(root))

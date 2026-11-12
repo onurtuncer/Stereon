@@ -208,9 +208,8 @@ void CheckPoints(const PlanarIntersection& r, const JsonValue& expected, const C
         std::size_t best = r.Points.size();
         for (std::size_t k = 0; k < r.Points.size(); ++k) {
             if (!used[k] && Distance(r.Points[k].Position, position) <= within &&
-                (best == r.Points.size() ||
-                 Distance(r.Points[k].Position, position) <
-                     Distance(r.Points[best].Position, position))) {
+                (best == r.Points.size() || Distance(r.Points[k].Position, position) <
+                                                Distance(r.Points[best].Position, position))) {
                 best = k;
             }
         }
@@ -255,7 +254,8 @@ void CheckCase(const JsonValue& c, const bool swapped, const Gate gate, Tally& t
     const JsonValue& second = curves[swapped ? 0 : 1];
     const Curve2d a = CurveOf(first);
     const Curve2d b = CurveOf(second);
-    const auto result = Intersect(a, DomainOf(first, a), b, DomainOf(second, b), IntersectTest::ctx);
+    const auto result =
+        Intersect(a, DomainOf(first, a), b, DomainOf(second, b), IntersectTest::ctx);
     const JsonValue& expected = c["expected"];
     if (!result) {
         INFO(IntersectTest::ErrorText(result));
