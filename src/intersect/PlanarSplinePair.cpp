@@ -38,7 +38,10 @@ import Stereon.Robust;
 /// Two B-splines in the plane, polynomial or rational: the system
 /// F(s, t) = a(s) - b(t) = 0 over pairs of pieces of their Bezier
 /// segments, which Bernstein.hpp encloses (Boehm's insertion in
-/// intervals). A pair of pieces is subdivided, both halved, until it is
+/// intervals), both splines first moved by the middle of their poles when
+/// every pole's move is exact (Centred), so the enclosures' rounding is
+/// relative to the curves' size, not their distance from the origin. A
+/// pair of pieces is subdivided, both halved, until it is
 ///
 /// - apart: the boxes of the pieces' poles are disjoint, or the hulls of
 ///   the poles' distances from either piece's chord are (with positive
@@ -542,6 +545,60 @@ void Record(PairSearch& search, const Arc& a, const Arc& b, const ParameterBox& 
     return result;
 }
 
+/// Whether a - b is exact in doubles: Knuth's TwoSum of a and -b, whose
+/// rounding error is itself exact, has none.
+[[nodiscard]] bool ExactDifference(const double a, const double b)
+{
+    const double s = a - b;
+    const double bb = s - a;
+    const double error = (a - (s - bb)) + (-b - bb);
+    return std::isfinite(s) && error == 0.0;
+}
+
+/// The spline with every pole moved by -c, if every coordinate's difference
+/// is exact: then it is the same curve, translated, on the same parameter.
+[[nodiscard]] std::optional<BSplineCurve2d> MovedExactly(const BSplineCurve2d& spline,
+                                                         const Point2& c)
+{
+    BSplineCurve2d moved = spline;
+    for (Point2& pole : moved.Poles) {
+        if (!ExactDifference(pole.X, c.X) || !ExactDifference(pole.Y, c.Y)) {
+            return std::nullopt;
+        }
+        pole = Point2{pole.X - c.X, pole.Y - c.Y};
+    }
+    return moved;
+}
+
+/// Both splines moved exactly by the middle of their poles' box, or nothing
+/// when a move would round. Translating both by one vector keeps F and both
+/// parameters, and the enclosures' rounding, relative to the coordinates'
+/// size, then measures against the curves' size: a pair far from the
+/// origin is searched as it is near it.
+[[nodiscard]] std::optional<std::pair<BSplineCurve2d, BSplineCurve2d>>
+Centred(const BSplineCurve2d& a, const BSplineCurve2d& b)
+{
+    double lowX = std::numeric_limits<double>::infinity();
+    double lowY = lowX;
+    double highX = -lowX;
+    double highY = -lowX;
+    for (const BSplineCurve2d* spline : {&a, &b}) {
+        for (const Point2& pole : spline->Poles) {
+            lowX = std::min(lowX, pole.X);
+            lowY = std::min(lowY, pole.Y);
+            highX = std::max(highX, pole.X);
+            highY = std::max(highY, pole.Y);
+        }
+    }
+    const Point2 c{0.5 * lowX + 0.5 * highX, 0.5 * lowY + 0.5 * highY};
+    std::optional<BSplineCurve2d> movedA = MovedExactly(a, c);
+    std::optional<BSplineCurve2d> movedB = MovedExactly(b, c);
+    if (!movedA || !movedB) {
+        return std::nullopt;
+    }
+    return std::pair{std::move(*movedA), std::move(*movedB)};
+}
+
 [[nodiscard]] Result<void> CheckBoth(const BSplineCurve2d& a, const Interval& domainA,
                                      const BSplineCurve2d& b, const Interval& domainB,
                                      const std::string_view handler)
@@ -550,6 +607,24 @@ void Record(PairSearch& search, const Arc& a, const Arc& b, const ParameterBox& 
     STEREON_TRY_VOID(CheckPlaneSpline(b, handler));
     STEREON_TRY_VOID(CheckPeriodicDomain(a, domainA, handler));
     return CheckPeriodicDomain(b, domainB, handler);
+}
+
+/// The splines' segments, and every pair of them searched. The search runs
+/// on the pair moved to the middle of its poles when that move is exact:
+/// the same F, enclosed at the size of the curves rather than of their
+/// coordinates.
+[[nodiscard]] Result<void> SearchPair(PairSearch& search, const BSplineCurve2d& a,
+                                      const Interval& domainA, const BSplineCurve2d& b,
+                                      const Interval& domainB)
+{
+    const std::optional<std::pair<BSplineCurve2d, BSplineCurve2d>> centred = Centred(a, b);
+    STEREON_TRY(std::vector<Segment> segmentsA, SegmentsOf(centred ? centred->first : a));
+    STEREON_TRY(std::vector<Segment> segmentsB, SegmentsOf(centred ? centred->second : b));
+    search.AllA = segmentsA;
+    search.AllB = segmentsB;
+    search.A = Reaching(std::move(segmentsA), domainA);
+    search.B = Reaching(std::move(segmentsB), domainB);
+    return SearchAll(search);
 }
 
 } // namespace
@@ -569,13 +644,7 @@ Result<PlanarIntersection> SplineSpline2d(const Curve2d& a, const Interval& doma
     if (*sa == *sb) {
         return Identical(*sa, domainA, domainB);
     }
-    STEREON_TRY(std::vector<Segment> segmentsA, SegmentsOf(*sa));
-    STEREON_TRY(std::vector<Segment> segmentsB, SegmentsOf(*sb));
-    search.AllA = segmentsA;
-    search.AllB = segmentsB;
-    search.A = Reaching(std::move(segmentsA), domainA);
-    search.B = Reaching(std::move(segmentsB), domainB);
-    STEREON_TRY_VOID(SearchAll(search));
+    STEREON_TRY_VOID(SearchPair(search, *sa, domainA, *sb, domainB));
     // A bracket across a spline's end is placed on the spline, in the domain.
     const Interval onA = Intersection(domainA, Domain(*sa));
     const Interval onB = Intersection(domainB, Domain(*sb));

@@ -265,3 +265,61 @@ TEST_CASE("a crossing at a corner of a B-spline is reported, never dropped",
     RequireAt(result->Points.front(), 3.0, 0.5, Point2{3.0, 0.0});
     REQUIRE(result->Points.front().Decided);
 }
+
+TEST_CASE("two B-splines far from the origin are searched as they are near it",
+          "[intersect][planar][spline][far]")
+{
+    // y = x^2 and y = 1/2 - x^2 over x in [-1, 1] as quadratic Beziers,
+    // x = 2s - 1 on both: crossings at (+-1/2, 1/4), s = 1/4 and 3/4 on
+    // both. The second also as a rational with equal weights (the same
+    // curve), and moved to y = -g - x^2, g = 3 2^-34, a gap of g below
+    // the first, vertex to vertex: no meeting. Then all of it moved to
+    // (393216, -262144), where 2^-34 is a rounding of the coordinates and
+    // every pole is still exact.
+    const double g = 3.0 * 0x1p-34;
+    const auto cup = [](const Point2& at) {
+        return Spline(2, {0.0, 0.0, 0.0, 1.0, 1.0, 1.0},
+                      {{at.X - 1.0, at.Y + 1.0}, {at.X, at.Y - 1.0}, {at.X + 1.0, at.Y + 1.0}});
+    };
+    const auto cap = [](const Point2& at, const double top, const std::vector<double>& weights) {
+        return Spline(2, {0.0, 0.0, 0.0, 1.0, 1.0, 1.0},
+                      {{at.X - 1.0, at.Y + top - 1.0},
+                       {at.X, at.Y + top + 1.0},
+                       {at.X + 1.0, at.Y + top - 1.0}},
+                      weights);
+    };
+    for (const Point2 at : {Point2{0.0, 0.0}, Point2{393216.0, -262144.0}}) {
+        for (const std::vector<double>& weights : {std::vector<double>{}, {3.0, 3.0, 3.0}}) {
+            DYNAMIC_SECTION("at (" << at.X << ", " << at.Y << "), " << weights.size() << " weights")
+            {
+                const Curve2d a{cup(at)};
+                const Curve2d b{cap(at, 0.5, weights)};
+                const Curve2d below{cap(at, -g, weights)};
+                const Result<PlanarIntersection> apart = Intersect(a, below, ctx);
+                INFO(IntersectTest::ErrorText(apart));
+                REQUIRE(apart.has_value());
+                REQUIRE(apart->IsEmpty());
+                const Result<PlanarIntersection> back = Intersect(below, a, ctx);
+                REQUIRE(back.has_value());
+                REQUIRE(back->IsEmpty());
+                for (const bool swapped : {false, true}) {
+                    const Result<PlanarIntersection> result =
+                        swapped ? Intersect(b, a, ctx) : Intersect(a, b, ctx);
+                    INFO(IntersectTest::ErrorText(result));
+                    REQUIRE(result.has_value());
+                    REQUIRE(result->Points.size() == 2);
+                    for (std::size_t i = 0; i < 2; ++i) {
+                        const PlanarPoint& p = result->Points[i];
+                        const double s = i == 0 ? 0.25 : 0.75;
+                        REQUIRE(p.Decided);
+                        REQUIRE(p.Contact == ContactType::Crossing);
+                        REQUIRE_THAT(p.ParameterA, WithinAbs(s, 1e-12));
+                        REQUIRE_THAT(p.ParameterB, WithinAbs(s, 1e-12));
+                        REQUIRE_THAT(p.Position.X - at.X, WithinAbs(2.0 * s - 1.0, 1e-9));
+                        REQUIRE_THAT(p.Position.Y - at.Y, WithinAbs(0.25, 1e-9));
+                    }
+                }
+            }
+        }
+    }
+}

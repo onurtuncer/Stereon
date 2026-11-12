@@ -1303,7 +1303,17 @@ Algorithm K: two B-splines by subdivision with Krawczyk's test
 
 ``SplineSpline2d`` (``src/intersect/PlanarSplinePair.cpp``) solves
 :math:`F(s, t) = a(s) - b(t) = 0` over pairs of pieces of the two splines'
-enclosed Bézier segments, halving both pieces of a pair until it is
+enclosed Bézier segments, halving both pieces of a pair until it is apart
+or settled, as below. Both splines are first moved by one vector, the middle
+of their poles' box, when every pole's move is exact in doubles (checked by
+Knuth's TwoSum, whose error term is zero exactly then; ``Centred``): the
+translation keeps :math:`F` and both parameters, and the enclosures'
+rounding, relative to the size of the coordinates, then measures against the
+size of the curves. Without it a pair far from the origin, :math:`4\cdot
+10^5` away and a few units across, is enclosed only to about
+:math:`10^{-10}`, and two arcs :math:`3\cdot 2^{-34}` apart, or a crossing,
+could not be settled. When some move would round, the splines are searched
+where they are. Points are placed on the input splines. The two outcomes:
 
 - **apart**: the boxes of the pieces' poles are disjoint, or the hulls of
   both pieces' distances from either piece's chord are, a fat line in the
