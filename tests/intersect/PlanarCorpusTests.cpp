@@ -399,9 +399,9 @@ Reparam ReparamOf(const JsonValue& c)
             weights = NumbersOf(c["weights"]);
             std::ranges::reverse(weights);
         }
-        auto made = Stereon::MakeBSplineCurve(static_cast<int>(c["degree"].AsNumber()),
-                                              std::move(reflected), std::move(poles),
-                                              std::move(weights));
+        auto made =
+            Stereon::MakeBSplineCurve(static_cast<int>(c["degree"].AsNumber()),
+                                      std::move(reflected), std::move(poles), std::move(weights));
         REQUIRE(made.has_value());
         r.Curve = Curve2d{*std::move(made)};
         r.Back = &BackSpline;
@@ -412,7 +412,8 @@ Reparam ReparamOf(const JsonValue& c)
     const Vec2 x = VectorOf(c["x_axis"]);
     const Vec2 y = VectorOf(c["y_axis"]);
     if (type == "circle") {
-        r.Curve = Curve2d{*Stereon::MakeCircle(PointOf(c["center"]), c["radius"].AsNumber(), y, -x)};
+        r.Curve =
+            Curve2d{*Stereon::MakeCircle(PointOf(c["center"]), c["radius"].AsNumber(), y, -x)};
         r.Back = &BackCircle;
         r.Domain = bounded ? Interval{lo - std::numbers::pi / 2.0, hi - std::numbers::pi / 2.0}
                            : Domain(r.Curve);
@@ -422,14 +423,16 @@ Reparam ReparamOf(const JsonValue& c)
         r.Curve = Curve2d{*Stereon::MakeEllipse(PointOf(c["center"]), c["major"].AsNumber(),
                                                 c["minor"].AsNumber(), -x, -y)};
         r.Back = &BackEllipse;
-        r.Domain = bounded ? Interval{lo - std::numbers::pi, hi - std::numbers::pi} : Domain(r.Curve);
+        r.Domain =
+            bounded ? Interval{lo - std::numbers::pi, hi - std::numbers::pi} : Domain(r.Curve);
         return r;
     }
     if (type == "hyperbola") {
         r.Curve = Curve2d{*Stereon::MakeHyperbola(PointOf(c["center"]), c["major"].AsNumber(),
                                                   c["minor"].AsNumber(), x, -y)};
     } else {
-        r.Curve = Curve2d{*Stereon::MakeParabola(PointOf(c["vertex"]), c["focal"].AsNumber(), x, -y)};
+        r.Curve =
+            Curve2d{*Stereon::MakeParabola(PointOf(c["vertex"]), c["focal"].AsNumber(), x, -y)};
     }
     r.Back = &BackNegated;
     r.Domain = bounded ? Interval{-hi, -lo} : Interval::Everything();
@@ -491,7 +494,8 @@ void CheckReparam(const JsonValue& c, const bool swapped, const bool moveFirst, 
     for (const Stereon::PlanarOverlap& o : result->Overlaps) {
         const Interval& range = moveFirst ? o.OnA : o.OnB;
         for (const double t : {range.GetLower(), range.GetUpper()}) {
-            CHECK(Distance(Eval(original, moved.Back(t, moved.Sum)), Eval(moved.Curve, t)) <= reach);
+            CHECK(Distance(Eval(original, moved.Back(t, moved.Sum)), Eval(moved.Curve, t)) <=
+                  reach);
         }
     }
 }
