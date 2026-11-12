@@ -138,6 +138,13 @@ class CampaignTests(unittest.TestCase):
         catalogue = json.loads((repo / "tools/mutation/intersection-backfill.json").read_text(encoding="utf-8"))
         paths = {m["file"] for m in catalogue["mutants"]}
         paths.update(["tools/mutation/intersection-backfill.json", "tests/intersect/MetamorphicRegressionTests.cpp"])
+        # Supplementary catalogues: several faults for one declared ledger defect.
+        self.extra = {}
+        for path in sorted((repo / "tools/mutation").glob("intersection-backfill-*.json")):
+            relative = path.relative_to(repo).as_posix()
+            self.extra[relative] = json.loads(path.read_text(encoding="utf-8"))
+            paths.add(relative)
+            paths.update(m["file"] for m in self.extra[relative]["mutants"])
         for relative in paths:
             target = self.root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -146,7 +153,18 @@ class CampaignTests(unittest.TestCase):
 
     def errors(self):
         self.path.write_text(json.dumps(self.catalogue), encoding="utf-8")
+        for relative, extra in self.extra.items():
+            (self.root / relative).write_text(json.dumps(extra), encoding="utf-8")
         return check_campaign(self.root, self.data)
+
+    def supplementary(self):
+        if not self.extra:
+            self.skipTest("no supplementary campaign catalogue in this tree")
+        return next(iter(self.extra.values()))
+
+    def assertError(self, fragment):
+        errors = self.errors()
+        self.assertTrue(any(fragment in error for error in errors), errors)
 
     def test_current_campaign_is_consistent(self):
         self.assertEqual([], self.errors())
@@ -180,6 +198,43 @@ class CampaignTests(unittest.TestCase):
         self.assertTrue(self.errors())
         self.catalogue["mutants"] = []
         self.assertTrue(self.errors())
+
+    def test_main_catalogue_duplicate_id_is_still_rejected(self):
+        self.catalogue["mutants"].append(dict(self.catalogue["mutants"][0]))
+        self.assertError("intersection-backfill.json: fault catalogue is empty or has duplicate IDs")
+
+    def test_main_catalogue_cannot_claim_one_defect_for_many_faults(self):
+        self.catalogue["defect"] = self.catalogue["mutants"][0]["id"]
+        self.assertError("main catalogue names one ledger record per fault")
+
+    def test_supplementary_faults_share_one_declared_defect(self):
+        extra = self.supplementary()
+        self.assertGreater(len(extra["mutants"]), 1)
+        self.assertEqual([], self.errors())
+
+    def test_supplementary_duplicate_id_is_rejected(self):
+        extra = self.supplementary()
+        extra["mutants"].append(dict(extra["mutants"][0]))
+        self.assertError("fault catalogue is empty or has duplicate IDs")
+
+    def test_supplementary_must_declare_a_ledger_defect(self):
+        extra = self.supplementary()
+        del extra["defect"]
+        self.assertError("supplementary catalogue must declare its ledger defect")
+        extra["defect"] = "PR-0"
+        self.assertError("supplementary catalogue must declare its ledger defect")
+
+    def test_supplementary_fault_ids_name_their_defect_and_never_repeat(self):
+        extra = self.supplementary()
+        extra["mutants"][0]["id"] = "PR-0-elsewhere"
+        self.assertError("must name its catalogue's defect")
+        extra["mutants"][0]["id"] = self.catalogue["mutants"][0]["id"]
+        self.assertError("fault IDs repeat another catalogue")
+
+    def test_supplementary_fault_cannot_lose_its_named_regression(self):
+        extra = self.supplementary()
+        extra["mutants"][0]["diagnostic"] = "intersect: MR PR-0 nothing"
+        self.assertError("missing named diagnostic")
 
     def test_fault_cannot_lose_critical_or_repair_identity(self):
         row = self.catalogue["mutants"][0]
