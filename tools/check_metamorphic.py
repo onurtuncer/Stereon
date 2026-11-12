@@ -122,18 +122,54 @@ def check(root, data, release=False, base=None, expected=None):
     return errors
 
 
+CAMPAIGN = "tools/mutation/intersection-backfill.json"
+
+
+def campaign_catalogues(root):
+    """The main catalogue, then every supplementary intersection-backfill-*.json."""
+    return [root / CAMPAIGN] + sorted((root / "tools/mutation").glob("intersection-backfill-*.json"))
+
+
 def check_campaign(root, data):
-    """Static replay preconditions: never silently run a stale fault catalogue."""
-    path = root / "tools/mutation/intersection-backfill.json"
-    catalogue = json.loads(path.read_text(encoding="utf-8"))
+    """Static replay preconditions: never silently run a stale fault catalogue.
+
+    In the main catalogue every fault ID is its own ledger record. A
+    supplementary catalogue intersection-backfill-<name>.json declares one
+    ledger record as "defect" and holds several faults for it (one per root
+    cause), each named "<defect>-<cause>". Fault IDs are unique within and
+    across catalogues, so tools/mutate.py can replay them together."""
     records = {row["id"]: row for row in data["defects"]}
     errors = []
-    ids = [row["id"] for row in catalogue["mutants"]]
-    if not ids or len(set(ids)) != len(ids):
-        errors.append("fault catalogue is empty or has duplicate IDs")
-    for fault in catalogue["mutants"]:
+    seen = set()
+    for path in campaign_catalogues(root):
+        label = path.relative_to(root).as_posix()
+        catalogue = json.loads(path.read_text(encoding="utf-8"))
+        defect = catalogue.get("defect")
+        if path.name == Path(CAMPAIGN).name:
+            if defect is not None:
+                errors.append(f"{label}: main catalogue names one ledger record per fault, not a defect")
+                continue
+        elif not isinstance(defect, str) or defect not in records:
+            errors.append(f"{label}: supplementary catalogue must declare its ledger defect")
+            continue
+        ids = [row["id"] for row in catalogue["mutants"]]
+        if not ids or len(set(ids)) != len(ids):
+            errors.append(f"{label}: fault catalogue is empty or has duplicate IDs")
+        if seen & set(ids):
+            errors.append(f"{label}: fault IDs repeat another catalogue: " + ", ".join(sorted(seen & set(ids))))
+        seen |= set(ids)
+        errors.extend(check_faults(root, records, catalogue["mutants"], defect))
+    return errors
+
+
+def check_faults(root, records, faults, defect):
+    errors = []
+    for fault in faults:
         name = fault["id"]
-        record = records.get(name, {})
+        if defect is not None and not name.startswith(defect + "-"):
+            errors.append(f"{name}: fault ID must name its catalogue's defect {defect}")
+        ledger = name if defect is None else defect
+        record = records.get(ledger, {})
         source = root / fault["file"]
         if not source.resolve().is_relative_to((root / "src").resolve()):
             errors.append(f"{name}: fault must target production source")
@@ -147,7 +183,7 @@ def check_campaign(root, data):
         if fault.get("repair_commit") != record.get("repair_commit") or not re.fullmatch(r"[0-9a-f]{40}", fault.get("repair_commit", "")):
             errors.append(f"{name}: invalid repair revision")
         diagnostic = fault.get("diagnostic", "")
-        if not isinstance(diagnostic, str) or not diagnostic.startswith("intersect: MR " + name + " "):
+        if not isinstance(diagnostic, str) or not diagnostic.startswith("intersect: MR " + ledger + " "):
             errors.append(f"{name}: missing named diagnostic")
         elif fault.get("tests") != "^" + re.escape(diagnostic) + "$":
             errors.append(f"{name}: test selection must select the exact declared diagnostic")
