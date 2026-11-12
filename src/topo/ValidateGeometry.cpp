@@ -572,10 +572,6 @@ void CheckToleranceBound(ValidityReport& report, const TopologyTables& tables,
                                        tolerance, context.GetResolution(), ceiling)});
 }
 
-/// Points along each edge's 3D curve at which ModelDiagonal() measures it:
-/// the ends and the quarters of its range, enough to span a closed circle.
-constexpr int ExtentIntervals = 4;
-
 [[nodiscard]] Box3 WithFinite(const Box3& box, const Box3& other)
 {
     return !other.IsEmpty() && std::isfinite(Length(Diagonal(other))) ? Hull(box, other) : box;
@@ -596,8 +592,10 @@ constexpr int ExtentIntervals = 4;
     return box;
 }
 
-/// The points along an edge's own 3D curve; none for an edge without one
-/// or with a range that is not finite.
+/// Bound the whole trimmed trace, never a finite sample. Exact NURBS
+/// conversion supplies a positive-weight control hull for built-in curves.
+/// An external curve without a conversion uses its declared whole-support
+/// bound. Unbounded supports remain excluded, as for unbounded faces.
 [[nodiscard]] Box3 WithEdge(Box3 box, const TopologyTables& tables, const EdgeRecord& edge)
 {
     const Interval range = edge.Range;
@@ -609,12 +607,11 @@ constexpr int ExtentIntervals = 4;
     if (curve.IsEmpty()) {
         return box;
     }
-    for (int k = 0; k <= ExtentIntervals; ++k) {
-        const double t = std::clamp(range.GetLower() + Width(range) * k / ExtentIntervals,
-                                    range.GetLower(), range.GetUpper());
-        box = WithFinite(box, Eval(curve, t));
+    if (range.GetLower() == range.GetUpper()) {
+        return WithFinite(box, Eval(curve, range.GetLower()));
     }
-    return box;
+    const auto piece = ToBSpline(curve, range);
+    return WithFinite(box, piece ? BoundingBox(*piece) : BoundingBox(curve));
 }
 
 [[nodiscard]] Box3 WithFaces(Box3 box, const TopologyTables& tables)

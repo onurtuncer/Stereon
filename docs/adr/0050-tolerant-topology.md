@@ -87,6 +87,18 @@ Every vertex and edge carries its own tolerance, and tolerance growth is governe
 
    No algorithm writes the field directly. Growth without a recorded cause is a bug, not a feature, and a CI check rejects any other writer.
 4. **Tolerance has a ceiling relative to the model, capped absolutely.** Every entity tolerance is bounded by `res_max = min(1e-3 × the model's bounding diagonal, the Context's absolute ceiling)`. The absolute ceiling is ADR-0001's, 0.01 mm by default, so a large model never accepts millimetre gaps and a small one gets a tighter bound. An operation that would exceed `res_max` fails with `ToleranceExceeded` instead of producing a model that cannot be reasoned about. This supersedes ADR-0001's absolute-only ceiling.
+   The model diagonal is computed from a conservative enclosure, not samples:
+   live vertices, whole-range bounds of each trimmed 3D edge, and finite
+   face-support bounds. Built-in edge curves use the positive-weight NURBS
+   control hull restricted to the edge range, including the bounding-box
+   arithmetic margin. External curves without that conversion use their
+   declared whole-support bound. This enclosure need not be minimal; bounded
+   face supports can likewise overestimate a trimmed face. Unbounded supports
+   contribute no finite box. An empty or point-only enclosure falls back to
+   the absolute ceiling; otherwise the effective ceiling is floored at
+   `res_abs`, so sub-resolution models still admit the resolution. These
+   conventions are explicit policy limits, not geometric certification of a
+   minimum bounding box. A finite sample of an edge is never its extent bound.
 5. **Pair tests use the sum.** Two entities coincide when their distance is at most `tol(a) + tol(b)`, never a bare epsilon and never `res_abs` alone. This supersedes ADR-0001's "entity pairs use the larger of their tolerances". The merge policy's pair tolerance (ADR-0001 step 3) and ADR-0029's tolerant coincidence follow it. One helper, `coincident(a, b)`, implements it, and code review rejects bare epsilons (ADR-0001's epsilon lint already enforces part of this).
 6. **Tightening is a first-class operation.** `tighten(entity)` and `heal()` (below) lower tolerances to the achieved error, through `SetTolerance` with the cause `Tighten`. A successful Boolean leaves tolerances no worse than its inputs plus the SSI approximation error.
 7. **Invariants are checked.** The existing Geometric rules G01, G02 and G04 are the three invariants below, with G04 reading `res_max`. Certified distance bounds replace their samples where interval evaluation exists (ADR-0001 already anticipates this). `validate()` is ADR-0018's checker at its Geometric level; no second checker is added.

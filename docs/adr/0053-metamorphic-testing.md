@@ -198,6 +198,19 @@ correctness. Report independently established correctness separately from
 metamorphic consistency. Keep correctness campaigns separate from
 uninstrumented timing benchmarks (ADR-0043).
 
+### Executable enforcement
+
+`tools/check_metamorphic.py` validates the machine-readable
+[obligation and handler inventory](../planning/intersection-metamorphic.json).
+Development CI allows explicitly open backfill but checks record integrity and
+retention against the base branch. `--release` requires reviewed historical
+completeness, closed defect obligations with evidence, and qualified or
+reviewed-inapplicable MR-01/02/03/04 cells for all built-in ordered pairs.
+The v0.2 tag/manual release-evidence workflow runs that strict mode. Evidence
+presence is mechanically checked; scientific validity and linked CI results
+remain review responsibilities. An unconfirmed historical lead dismissed as
+`not a defect` remains recorded with its rationale and review.
+
 ## Consequences
 
 - Bug fixes now carry an explicit second-oracle obligation and traceable

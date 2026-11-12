@@ -157,7 +157,7 @@ Result<EdgeSplit> ShapeBuilder::SplitEdgeMakeVertex(const BuilderEdgeId edge, co
     spec.End =
         BuilderVertexId::Make(end, m_Tables.Vertices[end].Slot.GetGeneration(), m_Token.GetValue());
     spec.Range = Interval{t, original.Range.GetUpper()};
-    spec.Tolerance = original.Tolerance;
+    spec.Tolerance = original.Tolerance; // STEREON-LINT-ALLOW(tolerance-write): EdgeSpec request
     STEREON_TRY(made.Upper, AddEdge(spec));
     RepointEdge(edge.GetIndex(), original.Start.GetIndex(), made.Vertex.GetIndex());
     m_Tables.Edges.Modify(edge.GetIndex(), [&](Detail::EdgeRecord& e) {
