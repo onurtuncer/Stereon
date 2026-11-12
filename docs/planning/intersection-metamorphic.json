@@ -44,12 +44,16 @@
     {
       "id": "PR-112",
       "source": "https://github.com/onurtuncer/Stereon/pull/112",
-      "state": "untriaged"
+      "state": "fixture captured",
+      "direct": "tests/intersect/CylinderCylinderTests.cpp#coincident cylinders intersect their requested height domains",
+      "fixture": "tests/intersect/CylinderCylinderTests.cpp#coincident cylinders intersect their requested height domains"
     },
     {
       "id": "PR-120",
       "source": "https://github.com/onurtuncer/Stereon/pull/120",
-      "state": "untriaged"
+      "state": "fixture captured",
+      "direct": "tests/intersect/CylinderCylinderSkewTests.cpp#skew cylinders exclude a wide angular sector containing no intersection",
+      "fixture": "tests/intersect/CylinderCylinderSkewTests.cpp#skew cylinders exclude a wide angular sector containing no intersection"
     },
     {
       "id": "PR-126",
@@ -68,29 +72,35 @@
     {
       "id": "PR-159",
       "source": "https://github.com/onurtuncer/Stereon/pull/159",
-      "state": "untriaged"
+      "state": "fixture captured",
+      "direct": "tests/intersect/CylinderCylinderSkewTests.cpp#internally tangent cylinders touching on both seams meet at a node",
+      "fixture": "tests/intersect/CylinderCylinderSkewTests.cpp#internally tangent cylinders touching on both seams meet at a node"
     },
     {
       "id": "PR-194",
       "source": "https://github.com/onurtuncer/Stereon/pull/194",
-      "state": "untriaged"
+      "state": "fixture captured",
+      "direct": "tests/intersect/PlanePlaneTests.cpp#rotated bounded coincidence cannot be encoded as an AABB overlap",
+      "fixture": "tests/intersect/PlanePlaneTests.cpp#rotated bounded coincidence cannot be encoded as an AABB overlap"
     },
     {
       "id": "PR-200",
       "source": "https://github.com/onurtuncer/Stereon/pull/200",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/LineSurfaceTests.cpp#a crossing from a far line origin lies on the quadric to rounding",
       "direct": "tests/intersect/LineSurfaceTests.cpp#a crossing from a far line origin lies on the quadric to rounding",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-200 far line origin crossings on the quadric",
       "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-200",
-      "replay": "docs/planning/intersection-metamorphic-triage.md#The replay for all three",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Two-site replay of PR-200 (manual)",
       "relations": [
         "MR-01",
         "MR-04"
       ],
-      "campaign": "tools/mutation/intersection-backfill.json#PR-200",
       "repair_commit": "e8db99b53bf4396bf1f48d92b195f7b06452b85c",
-      "evidence_kind": "resolved_geometry"
+      "evidence_kind": "resolved_geometry",
+      "review": "docs/planning/intersection-metamorphic-triage.md#Reviewer:",
+      "green": "docs/planning/intersection-metamorphic-triage.md#### Green on main",
+      "red": "docs/planning/intersection-metamorphic-triage.md#### Two-site replay of PR-200 (manual)"
     },
     {
       "id": "PR-205",
@@ -131,19 +141,22 @@
     {
       "id": "PR-207",
       "source": "https://github.com/onurtuncer/Stereon/pull/207",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/ImplicitTraceTests.cpp#a sliver of a branch at a corner of the box is a point, not a separation",
       "direct": "tests/intersect/ImplicitTraceTests.cpp#a sliver of a branch at a corner of the box is a point, not a separation",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-207 traced sliver at a box corner is a point",
       "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-207",
-      "replay": "docs/planning/intersection-metamorphic-triage.md#The replay for all three",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#For PR-207 and PR-238 the replay is the campaign",
       "relations": [
         "MR-01",
         "MR-02"
       ],
       "campaign": "tools/mutation/intersection-backfill.json#PR-207",
       "repair_commit": "f2138cf159a179e31d8adf56397a04e82e5814f3",
-      "evidence_kind": "resolved_geometry"
+      "evidence_kind": "resolved_geometry",
+      "review": "docs/planning/intersection-metamorphic-triage.md#Reviewer:",
+      "green": "docs/planning/intersection-metamorphic-triage.md#### Green on main",
+      "red": "docs/planning/intersection-metamorphic-triage.md#### Fault replay of PR-207 and PR-238 (tools/mutate.py)"
     },
     {
       "id": "PR-218",
@@ -184,29 +197,35 @@
     {
       "id": "PR-236",
       "source": "https://github.com/onurtuncer/Stereon/pull/236",
-      "state": "untriaged"
+      "state": "fixture captured",
+      "direct": "tests/intersect/ElementaryPairsTests.cpp#coaxial surfaces of revolution within the tolerance are declared, not exact",
+      "fixture": "tests/intersect/ElementaryPairsTests.cpp#coaxial surfaces of revolution within the tolerance are declared, not exact"
     },
     {
       "id": "PR-238",
       "source": "https://github.com/onurtuncer/Stereon/pull/238",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/PlaneEllipsoidTests.cpp#a plane made through a pole and rounded off it fails closed, as on the sphere",
       "direct": "tests/intersect/PlaneEllipsoidTests.cpp#a plane made through a pole and rounded off it fails closed, as on the sphere",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-238 rounded pole plane fails closed on ellipsoid and sphere",
       "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-238",
-      "replay": "docs/planning/intersection-metamorphic-triage.md#The replay for all three",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#For PR-207 and PR-238 the replay is the campaign",
       "relations": [
         "MR-02",
         "MR-04"
       ],
       "campaign": "tools/mutation/intersection-backfill.json#PR-238",
       "repair_commit": "721c41b86ccb1cbf1103e265e568dd8eb77e889b",
-      "evidence_kind": "fail_closed_contract"
+      "evidence_kind": "fail_closed_contract",
+      "review": "docs/planning/intersection-metamorphic-triage.md#Reviewer:",
+      "green": "docs/planning/intersection-metamorphic-triage.md#### Green on main",
+      "red": "docs/planning/intersection-metamorphic-triage.md#### Fault replay of PR-207 and PR-238 (tools/mutate.py)"
     },
     {
       "id": "PR-239",
       "source": "https://github.com/onurtuncer/Stereon/pull/239",
-      "state": "untriaged"
+      "state": "untriaged",
+      "direct": "tests/intersect/LineLineTests.cpp#3D skew lines meet within the resolution, decided exactly"
     },
     {
       "id": "PR-240",
