@@ -1478,7 +1478,7 @@ second form of the two surfaces is definite, is found, but not yet settled: a
 nearby extremum does not rule out a small loop around it, so the pair is cut
 further and fails closed.
 
-*A transverse node*, for polynomial surfaces: a point where the surfaces share
+*A transverse node*, of polynomial or rational surfaces: a point where the surfaces share
 a tangent plane and the relative second form is indefinite and nondegenerate,
 so that two smooth branches cross there. It is settled on a pair of a small
 patch :math:`S` and a covering patch :math:`C`, both cut out of the pair
@@ -1542,6 +1542,22 @@ roots are the four half-branches and nothing else; the node is the shared end
 of the four branches leaving it, each marched and certified as any other.
 Fewer or more, or anything unproved, and the pair is cut further.
 
+For rational patches every enclosure above is of the Cartesian point and
+its partials to second order, formed from the homogeneous nets' enclosures by
+the quotient rule on :math:`P = H / W`:
+
+.. math::
+
+   P_u = \frac{H_u - P W_u}{W}, \qquad
+   P_{uu} = \frac{H_{uu} - 2 P_u W_u - P W_{uu}}{W}, \qquad
+   P_{uv} = \frac{H_{uv} - P_u W_v - P_v W_u - P W_{uv}}{W},
+
+the weight proved positive; the projections' hulls are those of the
+Cartesian poles. For polynomial patches these are the nets' own enclosures.
+A node on a knot line or on a closed surface's seam, where no single Bézier
+cell of each surface holds it inside (as in the corpus's crossing
+cylinders), still fails closed.
+
 The node is proved within the pair tolerance of both surfaces, not on them: a
 gap within the tolerance (ADR-0050) is not told apart from a crossing, so two
 branches passing that close are reported meeting there. The node is a
@@ -1556,7 +1572,7 @@ surface's domain.
 
 Whatever cannot be settled fails: a tangency along a curve, an isolated touch,
 a branch point not proved a transverse node (a degenerate Hessian, as where
-three branches cross; a node of rational surfaces; a node on a line between
+three branches cross; a node on a line between
 Bézier patches, where no centred pair fits; a node whose gap the tolerance does
 not admit), an overlap, any tangency of rational surfaces, and a search past
 its budget of :math:`2^{14}` pairs return ``IntersectionFailed``, naming the

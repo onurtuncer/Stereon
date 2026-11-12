@@ -49,7 +49,8 @@ constexpr std::array<double, 3> Square{0.25, -0.25, 0.25};
 /// A biquadratic graph z = f(x, y) over the square [low, low + width]^2,
 /// its poles at (low + i width / 2, low + j width / 2, z(i, j)).
 BSplineSurface Graph(const std::function<double(std::size_t, std::size_t)>& z,
-                     const double low = 0.0, const double width = 1.0)
+                     const double low = 0.0, const double width = 1.0,
+                     const std::vector<double>& weights = {})
 {
     std::vector<Point3> poles;
     for (std::size_t i = 0; i < 3; ++i) {
@@ -59,7 +60,7 @@ BSplineSurface Graph(const std::function<double(std::size_t, std::size_t)>& z,
         }
     }
     const std::vector<double> knots{0.0, 0.0, 0.0, 1.0, 1.0, 1.0};
-    const auto made = Stereon::MakeBSplineSurface(2, 2, knots, knots, poles, {});
+    const auto made = Stereon::MakeBSplineSurface(2, 2, knots, knots, poles, weights);
     REQUIRE(made.has_value());
     return *made;
 }
@@ -162,6 +163,61 @@ BSplineSurface Transposed(const BSplineSurface& s)
     return *made;
 }
 
+// --- Exact cylinders ---------------------------------------------------------
+
+/// The rational quadratic arc of the unit circle from angle a0 to a1, less
+/// than a half turn apart: (cos, sin) at the ends, the tangents' meeting
+/// point between, its weight the cosine of half the span.
+struct CircleArc {
+    std::array<std::array<double, 2>, 3> Poles;
+    std::array<double, 3> Weights;
+};
+
+CircleArc ArcOf(const double a0, const double a1)
+{
+    const double half = 0.5 * (a1 - a0);
+    const double middle = 0.5 * (a0 + a1);
+    const double c = std::cos(half);
+    return {{{{std::cos(a0), std::sin(a0)},
+              {std::cos(middle) / c, std::sin(middle) / c},
+              {std::cos(a1), std::sin(a1)}}},
+            {1.0, c, 1.0}};
+}
+
+/// The unit cylinder about the z axis over an arc, z in [-1, 1]; or, with
+/// aboutX, about the x axis, the arc in (y, z), x in [-1, 1].
+BSplineSurface Cylinder(const CircleArc& arc, const bool aboutX)
+{
+    std::vector<Point3> poles;
+    std::vector<double> weights;
+    for (std::size_t i = 0; i < 3; ++i) {
+        for (const double along : {-1.0, 1.0}) {
+            const auto [c, s] = arc.Poles.at(i);
+            poles.push_back(aboutX ? Point3{along, c, s} : Point3{c, s, along});
+            weights.push_back(arc.Weights.at(i));
+        }
+    }
+    const std::vector<double> knotsU{0.0, 0.0, 0.0, 1.0, 1.0, 1.0};
+    const std::vector<double> knotsV{0.0, 0.0, 1.0, 1.0};
+    const auto made = Stereon::MakeBSplineSurface(2, 1, knotsU, knotsV, poles, weights);
+    REQUIRE(made.has_value());
+    return *made;
+}
+
+constexpr double Pi = 3.14159265358979323846;
+
+/// About z, from 45 to 135 degrees: (0, 1, 0) mid-arc.
+BSplineSurface Upright()
+{
+    return Cylinder(ArcOf(Pi / 4.0, 3.0 * Pi / 4.0), false);
+}
+
+/// About x, from -60 to 60 degrees from the y axis: (0, 1, 0) mid-arc.
+BSplineSurface Lying()
+{
+    return Cylinder(ArcOf(-Pi / 3.0, Pi / 3.0), true);
+}
+
 // --- The closed-form oracle -------------------------------------------------
 
 /// What a node case must answer: the node, the four ends of its branches,
@@ -181,6 +237,19 @@ Expected SaddleLines()
              Point3{1.0, 0.5, 0.0}},
             [](const Point3& p) {
                 return std::max(std::abs(p.Z), std::min(std::abs(p.X - 0.5), std::abs(p.Y - 0.5)));
+            }};
+}
+
+/// x^2 + y^2 = 1 = y^2 + z^2: the ellipses x = +-z through (0, 1, 0), each
+/// half leaving the upright cylinder's arc where x = +-sqrt(1/2).
+Expected CylinderCrossing()
+{
+    const double s = std::sqrt(0.5);
+    return {{0.0, 1.0, 0.0},
+            {Point3{s, s, s}, Point3{s, s, -s}, Point3{-s, s, s}, Point3{-s, s, -s}},
+            [](const Point3& p) {
+                return std::max(std::abs(p.X * p.X + p.Y * p.Y - 1.0),
+                                std::abs(p.Y * p.Y + p.Z * p.Z - 1.0));
             }};
 }
 
@@ -394,11 +463,16 @@ TEST_CASE("branch points that are not proved transverse nodes fail closed",
             REQUIRE(result.error().GetCode() == ErrorCode::IntersectionFailed);
         }
     }
-    SECTION("the saddle written as a rational surface")
+    SECTION("three lines through a point of a rational surface")
     {
-        const Surface rational{Saddle({2.0, 2.0, 2.0, 2.0})};
+        // The same degenerate saddle, written with equal weights.
+        const Surface monkey{Graph(
+            [](const std::size_t i, const std::size_t j) {
+                return Square.at(i) * Linear.at(j) - Linear.at(i) * Square.at(j);
+            },
+            0.0, 1.0, std::vector<double>(9, 2.0))};
         const auto result =
-            Intersect(rational, Box2::Everything(), flat, Box2::Everything(), tolerance, ctx);
+            Intersect(monkey, Box2::Everything(), flat, Box2::Everything(), tolerance, ctx);
         REQUIRE_FALSE(result.has_value());
         REQUIRE(result.error().GetCode() == ErrorCode::IntersectionFailed);
     }
@@ -408,5 +482,50 @@ TEST_CASE("branch points that are not proved transverse nodes fail closed",
                                       Box2::Everything(), tolerance, ctx);
         REQUIRE_FALSE(result.has_value());
         REQUIRE(result.error().GetCode() == ErrorCode::IntersectionFailed);
+    }
+}
+
+TEST_CASE("rational nodes are split as polynomial ones", "[intersect][generic][node][rational]")
+{
+    SECTION("a weighted saddle: weights 1, 2, 2, 4 keep the lines x = 1/2 and y = 1/2")
+    {
+        // The height's numerator (1 - 3u)(1 - 3v) / 4 and x = (2u + 2uv) /
+        // ((1 + u)(1 + v)) put the node at u = v = 1/3, the point (1/2, 1/2, 0).
+        CheckMoved(Saddle({1.0, 2.0, 2.0, 4.0}), Flat(0.0), SaddleLines(), {});
+        CheckMoved(Saddle({2.0, 2.0, 2.0, 2.0}), Flat(0.0), SaddleLines(), {});
+    }
+    SECTION("two exact cylinders of equal radius, axes crossing")
+    {
+        CheckMoved(Upright(), Lying(), CylinderCrossing(), {});
+    }
+}
+
+TEST_CASE("rational node answers move with the surfaces",
+          "[intersect][generic][node][rational][metamorphic]")
+{
+    const BSplineSurface a = Upright();
+    const BSplineSurface b = Lying();
+    SECTION("MR-01: a translation, exact in binary")
+    {
+        // WEAKENED RELATION, the known open defect SSI-translated-boundary:
+        // on the rational patches' wider enclosures even this offset can make
+        // the transverse search refuse, near the node's branches, a root it
+        // answers at the origin. #279's exact shift about the origin answers
+        // it (checked with #279 applied, the node moved back with the seeds).
+        // Until both are merged it may refuse, never answer wrongly.
+        CheckMoved(a, b, CylinderCrossing(), {1.0, Point3{16.0, -32.0, 8.0}},
+                   Must::AnswerOrFailClosed);
+    }
+    SECTION("MR-03: scaling by powers of two")
+    {
+        for (const int k : {-3, 5}) {
+            CheckMoved(a, b, CylinderCrossing(), {std::ldexp(1.0, k), Point3{0.0, 0.0, 0.0}});
+        }
+    }
+    SECTION("MR-04: reversed and transposed parameters")
+    {
+        CheckMoved(ReversedU(a), b, CylinderCrossing(), {});
+        CheckMoved(a, Transposed(b), CylinderCrossing(), {});
+        CheckMoved(ReversedU(Saddle({1.0, 2.0, 2.0, 4.0})), Flat(0.0), SaddleLines(), {});
     }
 }
