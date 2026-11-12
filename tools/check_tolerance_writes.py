@@ -15,10 +15,8 @@ records read-only and change tolerances through the builder's public API.
 So this check reads src/topo/ and rejects every assignment to a member
 named Tolerance (`x.Tolerance = ...`, `p->Tolerance += ...`), except:
 
-- on an EdgeSpec declared in the same file, which is a request to create
-  an edge, not a write to a record;
 - on a line marked as a reviewed exception: SetTolerance's own write, and
-  the records AddVertex and AddEdge create:
+  the records AddVertex and AddEdge create, and EdgeSpec construction:
       record.Tolerance = tolerance; // STEREON-LINT-ALLOW(tolerance-write): a new vertex
 
 It works on the token level, so it cannot see a write through a reference
@@ -40,8 +38,10 @@ SOURCE_SUFFIXES = {".cppm", ".cpp", ".hpp", ".h", ".ixx"}
 ALLOW_MARKER = "STEREON-LINT-ALLOW(tolerance-write)"
 
 # `name.Tolerance =`, `name->Tolerance +=`, ...; not `==`.
-WRITE = re.compile(r"(?:\b(\w+)\s*(?:\.|->)|(?:\.|->))\s*Tolerance\s*(?:[-+*/]?=)(?!=)")
-EDGE_SPEC = re.compile(r"\bEdgeSpec\s+(\w+)\b")
+WRITE = re.compile(
+    r"(?:\.|->)\s*Tolerance\s*(?:[-+*/%&|^]?=(?!=)|<<=|>>=|\+\+|--)"
+    r"|(?:\+\+|--)\s*[\w.>\[\]()-]+\s*(?:\.|->)\s*Tolerance\b"
+)
 
 
 def blank_comments_and_strings(text: str) -> str:
@@ -61,16 +61,17 @@ def check_text(text: str) -> list[tuple[int, str]]:
     """Return (line number, message) for each violation in a source text."""
     original_lines = text.splitlines()
     code = blank_comments_and_strings(text)
-    specs = set(EDGE_SPEC.findall(code))
     problems = []
-    for number, (line, original) in enumerate(zip(code.splitlines(), original_lines), start=1):
-        if ALLOW_MARKER in original:
+    # Match the complete token stream: a newline is whitespace, not a way
+    # to hide an assignment. Never infer types from a variable name.
+    for match in WRITE.finditer(code):
+        first = code.count("\n", 0, match.start())
+        last = code.count("\n", 0, match.end())
+        if any(ALLOW_MARKER in line for line in original_lines[first:last + 1]):
             continue
-        for match in WRITE.finditer(line):
-            if match.group(1) in specs:
-                continue
-            problems.append((number, "a tolerance written outside ShapeBuilder::SetTolerance(); "
-                                     "change it through SetTolerance() with its cause (ADR-0050)"))
+        problems.append((first + 1, "a tolerance written outside ShapeBuilder::SetTolerance(); "
+                         "change it through SetTolerance() with its cause (ADR-0050)"))
+
     return problems
 
 
@@ -94,6 +95,12 @@ def check_tree(root: Path) -> int:
 
 SELF_TEST_BAD = [
     "record.Tolerance = tolerance;",
+    "void a(){EdgeSpec e; e.Tolerance = 1;}\nvoid b(){EdgeRecord e; e.Tolerance = 2;}",
+    "record.Tolerance\n = 1.0;",
+    "++record.Tolerance;",
+    "record.Tolerance--;",
+    "void a(){EdgeSpec e; {EdgeRecord e; e.Tolerance = 2;}}",
+
     "r.Tolerance = 2.0 * r.Tolerance;",
     "m_Tables.Vertices[v].Tolerance = t;",
     "edge->Tolerance += gap;",
@@ -101,7 +108,7 @@ SELF_TEST_BAD = [
     "Modify(i, [&](EdgeRecord& e) { e.Tolerance = t; });",
 ]
 SELF_TEST_GOOD = [
-    "EdgeSpec spec;\nspec.Tolerance = original.Tolerance;",
+    "EdgeSpec spec;\nspec.Tolerance = original.Tolerance; // STEREON-LINT-ALLOW(tolerance-write): creation request",
     "const double t = record.Tolerance;",
     "if (r.Tolerance == t) {}",
     "if (r.Tolerance <= t) {}",
