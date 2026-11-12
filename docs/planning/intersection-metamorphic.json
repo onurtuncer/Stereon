@@ -6,19 +6,24 @@
     {
       "id": "PR-263-translated-boundary",
       "source": "https://github.com/onurtuncer/Stereon/actions/runs/43052745077",
-      "state": "MR implemented",
-      "fixture": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-241 spline boundary minimum",
-      "direct": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-241 spline boundary minimum",
-      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-241 spline boundary minimum",
-      "oracle": "docs/planning/metamorphic-priority-replay.md#PR-263 translated boundary regression",
-      "replay": "docs/planning/metamorphic-priority-replay.md",
+      "state": "verified",
+      "fixture": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-263-translated-boundary spline end meeting away from the origin",
+      "direct": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-263-translated-boundary spline end meeting away from the origin",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-263-translated-boundary spline end meeting away from the origin",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-263-translated-boundary",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 2 fault replay",
       "relations": [
         "MR-01",
         "MR-02",
         "MR-03",
         "MR-04"
       ],
-      "evidence_kind": "resolved_geometry"
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#PR-263-translated-boundary",
+      "repair_commit": "cbeddfb8c0dffa25e5086bab19cc46fc6e7f5f53",
+      "review": "docs/planning/intersection-metamorphic-triage.md#Reviewer:",
+      "green": "docs/planning/intersection-metamorphic-triage.md#### Green on main, batch 2",
+      "red": "docs/planning/intersection-metamorphic-triage.md#### Batch 2 fault replay"
     },
     {
       "id": "PR-75",
@@ -44,16 +49,44 @@
     {
       "id": "PR-112",
       "source": "https://github.com/onurtuncer/Stereon/pull/112",
-      "state": "fixture captured",
+      "state": "verified",
       "direct": "tests/intersect/CylinderCylinderTests.cpp#coincident cylinders intersect their requested height domains",
-      "fixture": "tests/intersect/CylinderCylinderTests.cpp#coincident cylinders intersect their requested height domains"
+      "fixture": "tests/intersect/CylinderCylinderTests.cpp#coincident cylinders intersect their requested height domains",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-112 coincident cylinders clipped to the requested domains",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-112",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 2 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03"
+      ],
+      "campaign": "tools/mutation/intersection-backfill.json#PR-112",
+      "repair_commit": "93fd35313fd0047a2fc1d6536bd32137a27f120f",
+      "evidence_kind": "resolved_geometry",
+      "review": "docs/planning/intersection-metamorphic-triage.md#Reviewer:",
+      "green": "docs/planning/intersection-metamorphic-triage.md#### Green on main, batch 2",
+      "red": "docs/planning/intersection-metamorphic-triage.md#### Batch 2 fault replay"
     },
     {
       "id": "PR-120",
       "source": "https://github.com/onurtuncer/Stereon/pull/120",
-      "state": "fixture captured",
+      "state": "verified",
       "direct": "tests/intersect/CylinderCylinderSkewTests.cpp#skew cylinders exclude a wide angular sector containing no intersection",
-      "fixture": "tests/intersect/CylinderCylinderSkewTests.cpp#skew cylinders exclude a wide angular sector containing no intersection"
+      "fixture": "tests/intersect/CylinderCylinderSkewTests.cpp#skew cylinders exclude a wide angular sector containing no intersection",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-120 skew cylinder angular sectors of B",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-120",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 2 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03"
+      ],
+      "campaign": "tools/mutation/intersection-backfill.json#PR-120",
+      "repair_commit": "3a2ba895be415efe0198af878a2630738fd1a097",
+      "evidence_kind": "resolved_geometry",
+      "review": "docs/planning/intersection-metamorphic-triage.md#Reviewer:",
+      "green": "docs/planning/intersection-metamorphic-triage.md#### Green on main, batch 2",
+      "red": "docs/planning/intersection-metamorphic-triage.md#### Batch 2 fault replay"
     },
     {
       "id": "PR-126",
@@ -72,9 +105,23 @@
     {
       "id": "PR-159",
       "source": "https://github.com/onurtuncer/Stereon/pull/159",
-      "state": "fixture captured",
+      "state": "verified",
       "direct": "tests/intersect/CylinderCylinderSkewTests.cpp#internally tangent cylinders touching on both seams meet at a node",
-      "fixture": "tests/intersect/CylinderCylinderSkewTests.cpp#internally tangent cylinders touching on both seams meet at a node"
+      "fixture": "tests/intersect/CylinderCylinderSkewTests.cpp#internally tangent cylinders touching on both seams meet at a node",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-159 skew cylinders tangent on both seams meet at a node",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-159",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 2 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03"
+      ],
+      "campaign": "tools/mutation/intersection-backfill.json#PR-159",
+      "repair_commit": "35f3d2370958b445985c2bb55c24cb9ab5d074d9",
+      "evidence_kind": "resolved_geometry",
+      "review": "docs/planning/intersection-metamorphic-triage.md#Reviewer:",
+      "green": "docs/planning/intersection-metamorphic-triage.md#### Green on main, batch 2",
+      "red": "docs/planning/intersection-metamorphic-triage.md#### Batch 2 fault replay"
     },
     {
       "id": "PR-194",
@@ -105,7 +152,7 @@
     {
       "id": "PR-205",
       "source": "https://github.com/onurtuncer/Stereon/pull/205",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-205 far-origin sphere crossings",
       "direct": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-205 far-origin sphere crossings",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-205 far-origin sphere crossings",
@@ -118,12 +165,15 @@
       ],
       "campaign": "tools/mutation/intersection-backfill.json#PR-205",
       "repair_commit": "3a147886ddc7ad652dacc98d2272cf6f98a0a3a5",
-      "evidence_kind": "resolved_geometry"
+      "evidence_kind": "resolved_geometry",
+      "review": "docs/planning/intersection-metamorphic-triage.md#Reviewer:",
+      "green": "docs/planning/intersection-metamorphic-triage.md#### Green on main, batch 2",
+      "red": "docs/planning/intersection-metamorphic-triage.md#### Campaign replay of the eight earlier faults"
     },
     {
       "id": "PR-206",
       "source": "https://github.com/onurtuncer/Stereon/pull/206",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-206 singleton circle plane domain",
       "direct": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-206 singleton circle plane domain",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-206 singleton circle plane domain",
@@ -136,7 +186,10 @@
       ],
       "campaign": "tools/mutation/intersection-backfill.json#PR-206",
       "repair_commit": "806217bae3c15b93b5fcdb2255534a5fec11b727",
-      "evidence_kind": "resolved_geometry"
+      "evidence_kind": "resolved_geometry",
+      "review": "docs/planning/intersection-metamorphic-triage.md#Reviewer:",
+      "green": "docs/planning/intersection-metamorphic-triage.md#### Green on main, batch 2",
+      "red": "docs/planning/intersection-metamorphic-triage.md#### Campaign replay of the eight earlier faults"
     },
     {
       "id": "PR-207",
@@ -161,7 +214,7 @@
     {
       "id": "PR-218",
       "source": "https://github.com/onurtuncer/Stereon/pull/218",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-218 far-origin cone crossings",
       "direct": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-218 far-origin cone crossings",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-218 far-origin cone crossings",
@@ -174,12 +227,15 @@
       ],
       "campaign": "tools/mutation/intersection-backfill.json#PR-218",
       "repair_commit": "b265d641e61cc6b8a43fe8127e46394d1cbec108",
-      "evidence_kind": "resolved_geometry"
+      "evidence_kind": "resolved_geometry",
+      "review": "docs/planning/intersection-metamorphic-triage.md#Reviewer:",
+      "green": "docs/planning/intersection-metamorphic-triage.md#### Green on main, batch 2",
+      "red": "docs/planning/intersection-metamorphic-triage.md#### Campaign replay of the eight earlier faults"
     },
     {
       "id": "PR-230",
       "source": "https://github.com/onurtuncer/Stereon/pull/230",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-230 ellipsoid rounded axis tangency",
       "direct": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-230 ellipsoid rounded axis tangency",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-230 ellipsoid rounded axis tangency",
@@ -192,14 +248,31 @@
       ],
       "campaign": "tools/mutation/intersection-backfill.json#PR-230",
       "repair_commit": "124b5211cad558f837ebf378df13bcd2de6f659c",
-      "evidence_kind": "resolved_geometry"
+      "evidence_kind": "resolved_geometry",
+      "review": "docs/planning/intersection-metamorphic-triage.md#Reviewer:",
+      "green": "docs/planning/intersection-metamorphic-triage.md#### Green on main, batch 2",
+      "red": "docs/planning/intersection-metamorphic-triage.md#### Campaign replay of the eight earlier faults"
     },
     {
       "id": "PR-236",
       "source": "https://github.com/onurtuncer/Stereon/pull/236",
-      "state": "fixture captured",
+      "state": "verified",
       "direct": "tests/intersect/ElementaryPairsTests.cpp#coaxial surfaces of revolution within the tolerance are declared, not exact",
-      "fixture": "tests/intersect/ElementaryPairsTests.cpp#coaxial surfaces of revolution within the tolerance are declared, not exact"
+      "fixture": "tests/intersect/ElementaryPairsTests.cpp#coaxial surfaces of revolution within the tolerance are declared, not exact",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-236 concentric spheres within the tolerance are declared",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-236",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 2 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03"
+      ],
+      "campaign": "tools/mutation/intersection-backfill.json#PR-236",
+      "repair_commit": "252c1350cfd13429e7f406c70850dd8e288ee205",
+      "evidence_kind": "resolved_geometry",
+      "review": "docs/planning/intersection-metamorphic-triage.md#Reviewer:",
+      "green": "docs/planning/intersection-metamorphic-triage.md#### Green on main, batch 2",
+      "red": "docs/planning/intersection-metamorphic-triage.md#### Batch 2 fault replay"
     },
     {
       "id": "PR-238",
@@ -230,7 +303,7 @@
     {
       "id": "PR-240",
       "source": "https://github.com/onurtuncer/Stereon/pull/240",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-241 spline boundary minimum",
       "direct": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-241 spline boundary minimum",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-241 spline boundary minimum",
@@ -245,12 +318,15 @@
       "campaign": "tools/mutation/intersection-backfill.json#PR-241",
       "evidence_kind": "resolved_geometry",
       "repair_commit": "aaef6d921caef47ac961af0159c591c62e7d3599",
-      "shared_root_cause": "PR-241"
+      "shared_root_cause": "PR-241",
+      "review": "docs/planning/intersection-metamorphic-triage.md#Reviewer:",
+      "green": "docs/planning/intersection-metamorphic-triage.md#### Green on main, batch 2",
+      "red": "docs/planning/intersection-metamorphic-triage.md#### Campaign replay of the eight earlier faults"
     },
     {
       "id": "PR-241",
       "source": "https://github.com/onurtuncer/Stereon/pull/241",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-241 spline boundary minimum",
       "direct": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-241 spline boundary minimum",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-241 spline boundary minimum",
@@ -264,12 +340,15 @@
       ],
       "campaign": "tools/mutation/intersection-backfill.json#PR-241",
       "repair_commit": "51a2795f39031179e3bcd586505e14be57e676f5",
-      "evidence_kind": "resolved_geometry"
+      "evidence_kind": "resolved_geometry",
+      "review": "docs/planning/intersection-metamorphic-triage.md#Reviewer:",
+      "green": "docs/planning/intersection-metamorphic-triage.md#### Green on main, batch 2",
+      "red": "docs/planning/intersection-metamorphic-triage.md#### Campaign replay of the eight earlier faults"
     },
     {
       "id": "PR-244",
       "source": "https://github.com/onurtuncer/Stereon/pull/244",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-244 near-axis sphere cone is not isolated points",
       "direct": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-244 near-axis sphere cone is not isolated points",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-244 near-axis sphere cone is not isolated points",
@@ -280,12 +359,15 @@
       ],
       "campaign": "tools/mutation/intersection-backfill.json#PR-244",
       "repair_commit": "aae5992bfa7d14150624bfd3e8a3189ee7ab267f",
-      "evidence_kind": "fail_closed_contract"
+      "evidence_kind": "fail_closed_contract",
+      "review": "docs/planning/intersection-metamorphic-triage.md#Reviewer:",
+      "green": "docs/planning/intersection-metamorphic-triage.md#### Green on main, batch 2",
+      "red": "docs/planning/intersection-metamorphic-triage.md#### Campaign replay of the eight earlier faults"
     },
     {
       "id": "PR-247",
       "source": "https://github.com/onurtuncer/Stereon/pull/247",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-247 unequal cone angles remain unresolved",
       "direct": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-247 unequal cone angles remain unresolved",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-247 unequal cone angles remain unresolved",
@@ -298,12 +380,15 @@
       ],
       "campaign": "tools/mutation/intersection-backfill.json#PR-247",
       "repair_commit": "9514e8d7fbe0517b193a319b61bf962b266e56ee",
-      "evidence_kind": "fail_closed_contract"
+      "evidence_kind": "fail_closed_contract",
+      "review": "docs/planning/intersection-metamorphic-triage.md#Reviewer:",
+      "green": "docs/planning/intersection-metamorphic-triage.md#### Green on main, batch 2",
+      "red": "docs/planning/intersection-metamorphic-triage.md#### Campaign replay of the eight earlier faults"
     },
     {
       "id": "PR-230-pole",
       "source": "https://github.com/onurtuncer/Stereon/pull/230",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-230-pole ellipsoid longitude boxes",
       "direct": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-230-pole ellipsoid longitude boxes",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-230-pole ellipsoid longitude boxes",
@@ -317,7 +402,52 @@
       ],
       "campaign": "tools/mutation/intersection-backfill.json#PR-230-pole",
       "repair_commit": "124b5211cad558f837ebf378df13bcd2de6f659c",
-      "evidence_kind": "resolved_geometry"
+      "evidence_kind": "resolved_geometry",
+      "review": "docs/planning/intersection-metamorphic-triage.md#Reviewer:",
+      "green": "docs/planning/intersection-metamorphic-triage.md#### Green on main, batch 2",
+      "red": "docs/planning/intersection-metamorphic-triage.md#### Campaign replay of the eight earlier faults"
+    },
+    {
+      "id": "PR-112-budget",
+      "source": "https://github.com/onurtuncer/Stereon/pull/112",
+      "state": "verified",
+      "fixture": "tests/intersect/PlaneCylinderTests.cpp#ellipse pcurve work is bounded before converting or allocating its samples",
+      "direct": "tests/intersect/PlaneCylinderTests.cpp#ellipse pcurve work is bounded before converting or allocating its samples",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-112-budget plane cylinder pcurve work is bounded",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-112-budget",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 2 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03"
+      ],
+      "campaign": "tools/mutation/intersection-backfill.json#PR-112-budget",
+      "repair_commit": "93fd35313fd0047a2fc1d6536bd32137a27f120f",
+      "evidence_kind": "fail_closed_contract",
+      "review": "docs/planning/intersection-metamorphic-triage.md#Reviewer:",
+      "green": "docs/planning/intersection-metamorphic-triage.md#### Green on main, batch 2",
+      "red": "docs/planning/intersection-metamorphic-triage.md#### Batch 2 fault replay"
+    },
+    {
+      "id": "PR-236-tangent",
+      "source": "https://github.com/onurtuncer/Stereon/pull/236",
+      "state": "verified",
+      "fixture": "tests/intersect/ElementaryPairsTests.cpp#a tangent circle declared within the tolerance is certified within it",
+      "direct": "tests/intersect/ElementaryPairsTests.cpp#a tangent circle declared within the tolerance is certified within it",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-236-tangent sphere on a cylinder's axis within the tolerance",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-236-tangent",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 2 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03"
+      ],
+      "campaign": "tools/mutation/intersection-backfill.json#PR-236-tangent",
+      "repair_commit": "252c1350cfd13429e7f406c70850dd8e288ee205",
+      "evidence_kind": "resolved_geometry",
+      "review": "docs/planning/intersection-metamorphic-triage.md#Reviewer:",
+      "green": "docs/planning/intersection-metamorphic-triage.md#### Green on main, batch 2",
+      "red": "docs/planning/intersection-metamorphic-triage.md#### Batch 2 fault replay"
     }
   ],
   "handlers": {
