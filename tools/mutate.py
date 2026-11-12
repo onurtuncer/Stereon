@@ -229,8 +229,16 @@ class Harness:
         try:
             result, output = self.build_and_test(mutant)
             if result == "fail":
-                again, _ = self.build_and_test(mutant)
-                result = "fail" if again == "fail" else "flaky"
+                again, repeated = self.build_and_test(mutant)
+                first_names = {name for name, kind in failed_tests(output) if kind == "Failed"}
+                next_names = {name for name, kind in failed_tests(repeated) if kind == "Failed"}
+                # A different failure or a crash on rerun does not establish
+                # reproducible detection of the declared contract violation.
+                stable = first_names & next_names
+                declared = diagnostics_of(mutant)
+                matched = any(d in name for d in declared for name in stable) if declared else bool(stable)
+                result = "fail" if again == "fail" and matched else "flaky"
+                output += "\n--- repeat run ---\n" + repeated
         finally:
             self.tree.restore(mutant["file"])
         self.keep_log(mutant, output)
@@ -248,7 +256,7 @@ class Harness:
         elif result in ("timeout", "flaky", "empty"):
             outcome.outcome = "inconclusive"
             outcome.detail = {"timeout": "a test timed out",
-                              "flaky": "failed once, passed once",
+                              "flaky": "rerun did not reproduce the same declared assertion failure",
                               "empty": "the test selection matches no test"}[result]
         elif result in ("fail", "compile-killed"):
             outcome.failed_tests = compile_time_failures(output) + \
@@ -280,10 +288,14 @@ def baseline(tree, mutants, args):
     """Every target builds and every selection passes, unmodified."""
     targets = sorted({t for m in mutants for t in targets_of(m)})
     status, output = tree.build_targets(targets, args.build_timeout * 4)
+    logs = tree.root.parent / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    (logs / "baseline-build.txt").write_text(output, encoding="utf-8")
     if status != 0:
         sys.exit("baseline: the targets do not build:\n" + output[-4000:])
-    for selection in sorted({m["tests"] for m in mutants}):
+    for index, selection in enumerate(sorted({m["tests"] for m in mutants})):
         status, output = tree.test(selection, args.test_timeout, args.run_timeout * 2)
+        (logs / f"baseline-{index}.txt").write_text(selection + "\n" + output, encoding="utf-8")
         if no_tests(output):
             sys.exit(f"baseline: the selection '{selection}' matches no test")
         if status != 0:
@@ -349,6 +361,16 @@ def markdown(report):
     return "\n".join(lines) + "\n"
 
 
+def select_mutants(mutants, only):
+    ids = [m["id"] for m in mutants]
+    if not ids or len(set(ids)) != len(ids):
+        raise ValueError("mutation catalogue must have unique, non-empty IDs")
+    wanted = set(only.split(",")) if only else set(ids)
+    if not wanted <= set(ids):
+        raise ValueError("unknown mutant IDs: " + ", ".join(sorted(wanted - set(ids))))
+    return [m for m in mutants if m["id"] in wanted]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -365,9 +387,7 @@ def main():
     revision = run(["git", "rev-parse", "HEAD"], repo, 60)[1].strip()
     catalogue = json.loads((repo / args.catalogue).read_text(encoding="utf-8"))
     mutants = catalogue["mutants"]
-    if args.only:
-        wanted = set(args.only.split(","))
-        mutants = [m for m in mutants if m["id"] in wanted]
+    mutants = select_mutants(mutants, args.only)
     work = (repo / args.work).resolve()
     tree = Worktree(repo, work, catalogue.get("preset", "gcc16-debug"))
     start = time.monotonic()
