@@ -23,6 +23,7 @@
 #include <cstddef>
 #include <functional>
 #include <limits>
+#include <numbers>
 #include <string>
 #include <vector>
 
@@ -204,7 +205,7 @@ BSplineSurface Cylinder(const CircleArc& arc, const bool aboutX)
     return *made;
 }
 
-constexpr double Pi = 3.14159265358979323846;
+constexpr double Pi = std::numbers::pi;
 
 /// About z, from 45 to 135 degrees: (0, 1, 0) mid-arc.
 BSplineSurface Upright()
