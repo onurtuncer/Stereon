@@ -186,11 +186,13 @@ TEST_CASE("a B-spline and its copy with knots inserted overlap; inexact copies f
             REQUIRE(part->Overlaps.front().OnA == Interval{0.5, 0.75});
         }
     }
-    // A knot whose insertion rounds proves nothing: the pair runs along
-    // itself and fails closed, never an empty or partial answer.
-    const auto third = InsertKnot(arch, 1.0 / 3.0, 1);
+    // A knot whose insertion rounds (1/3 against a pole at 0.1) proves
+    // nothing: the pair runs along itself and fails closed, never an empty
+    // or partial answer.
+    const BSplineCurve2d skewed = Bezier({{-1.0, 1.0}, {0.1, -1.0}, {1.0, 1.0}});
+    const auto third = InsertKnot(skewed, 1.0 / 3.0, 1);
     REQUIRE(third.has_value());
-    const auto along = Intersect(Curve2d{arch}, Curve2d{*third}, ctx);
+    const auto along = Intersect(Curve2d{skewed}, Curve2d{*third}, ctx);
     REQUIRE_FALSE(along.has_value());
     REQUIRE(along.error().GetCode() == ErrorCode::IntersectionFailed);
 }

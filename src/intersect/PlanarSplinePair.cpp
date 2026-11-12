@@ -1021,22 +1021,22 @@ struct Touching {
 /// A homogeneous pole (w P, w) in doubles, held exactly.
 using Exact3 = std::array<double, 3>;
 
-/// (1 - alpha) a + alpha b, when every step is exact.
-[[nodiscard]] std::optional<Exact3> ExactBlend(const Exact3& a, const Exact3& b, const double alpha)
+/// (wa a + wb b) / w, when every step is exact: Boehm's blend with its ratio
+/// never formed, so a pole that is exact is found even where the ratio
+/// (2/3, say) is not a double.
+[[nodiscard]] std::optional<Exact3> ExactBlend(const Exact3& a, const Exact3& b, const double wa,
+                                               const double wb, const double w)
 {
-    const std::optional<double> beta = ExactSum(1.0, -alpha);
-    if (!beta) {
-        return std::nullopt;
-    }
     Exact3 c{};
     for (std::size_t i = 0; i < 3; ++i) {
-        const std::optional<double> l = ExactProduct(*beta, a[i]);
-        const std::optional<double> r = ExactProduct(alpha, b[i]);
+        const std::optional<double> l = ExactProduct(wa, a[i]);
+        const std::optional<double> r = ExactProduct(wb, b[i]);
         const std::optional<double> s = l && r ? ExactSum(*l, *r) : std::nullopt;
-        if (!s) {
+        const std::optional<double> q = s ? ExactQuotient(*s, w) : std::nullopt;
+        if (!q) {
             return std::nullopt;
         }
-        c[i] = *s;
+        c[i] = *q;
     }
     return c;
 }
@@ -1052,11 +1052,13 @@ using Exact3 = std::array<double, 3>;
     std::vector<Exact3> refined(poles.begin(),
                                 poles.begin() + static_cast<std::ptrdiff_t>(k - p + 1));
     for (std::size_t i = k - p + 1; i <= k; ++i) {
-        const std::optional<double> num = ExactSum(u, -knots[i]);
-        const std::optional<double> den = ExactSum(knots[i + p], -knots[i]);
-        const std::optional<double> alpha = num && den ? ExactQuotient(*num, *den) : std::nullopt;
+        // (t_i+p - u) P_i-1 + (u - t_i) P_i over t_i+p - t_i.
+        const std::optional<double> right = ExactSum(u, -knots[i]);
+        const std::optional<double> left = ExactSum(knots[i + p], -u);
+        const std::optional<double> width = ExactSum(knots[i + p], -knots[i]);
         const std::optional<Exact3> pole =
-            alpha ? ExactBlend(poles[i - 1], poles[i], *alpha) : std::nullopt;
+            right && left && width ? ExactBlend(poles[i - 1], poles[i], *left, *right, *width)
+                                   : std::nullopt;
         if (!pole) {
             return false;
         }
