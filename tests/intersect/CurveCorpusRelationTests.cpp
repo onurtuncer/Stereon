@@ -195,8 +195,9 @@ Moved Rechart(const JsonValue& c)
     const Vec3 x = StereonTest::VectorFrom(c["x_axis"]);
     const Vec3 y = StereonTest::VectorFrom(c["y_axis"]);
     if (type == "circle") {
-        return with(Curve{Circle{StereonTest::PointFrom(c["center"]), c["radius"].AsNumber(), y, -x}},
-                    &QuarterChart);
+        return with(
+            Curve{Circle{StereonTest::PointFrom(c["center"]), c["radius"].AsNumber(), y, -x}},
+            &QuarterChart);
     }
     if (type == "ellipse") {
         return with(Curve{Ellipse{StereonTest::PointFrom(c["center"]), c["major"].AsNumber(),
@@ -204,8 +205,9 @@ Moved Rechart(const JsonValue& c)
                     &HalfChart);
     }
     if (type == "parabola") {
-        return with(Curve{Parabola{StereonTest::PointFrom(c["vertex"]), c["focal"].AsNumber(), x, -y}},
-                    &Negated);
+        return with(
+            Curve{Parabola{StereonTest::PointFrom(c["vertex"]), c["focal"].AsNumber(), x, -y}},
+            &Negated);
     }
     return with(Curve{Hyperbola{StereonTest::PointFrom(c["center"]), c["major"].AsNumber(),
                                 c["minor"].AsNumber(), x, -y}},
