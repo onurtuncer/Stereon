@@ -54,9 +54,20 @@ import Stereon.Robust;
 ///
 /// The inflation lets a root on a piece's end be proved from either side,
 /// and one beyond the end of a segment, a root of the segment's polynomial
-/// continued, is dropped when its bracket is beyond the segment and
-/// reported undecided when the bracket straddles a segment's end. Roots
-/// proved twice, from overlapping boxes, are one. A pair that is none of
+/// continued, is dropped when its bracket is beyond the segment. A bracket
+/// that straddles a segment's end, a crossing at or within rounding of a
+/// knot, is proved again over the same box in the curves' own parameters
+/// with each spline taken whole, piecewise: F at the box's middle from the
+/// segment holding it, J the hull of every segment's slope over its part
+/// of the box (the end segments continued past the spline's ends). The
+/// splines are continuous (an interior knot is repeated at most p times),
+/// so F is continuous and piecewise polynomial, F(x) - F(m) lies in
+/// J(X) (x - m) by the mean value theorem in integral form, and Krawczyk's
+/// test is as sound across a knot, even a corner, as inside a segment.
+/// Two brackets that meet on both curves are one root only when one lies
+/// in the box the other was proved unique in, where the function proved is
+/// the curves' own; otherwise their hull is reported undecided. Equal
+/// parameters are never an argument. A pair that is none of
 /// these when the pieces can no longer be halved, or a search past
 /// PairBudget, fails with IntersectionFailed: a tangency of two
 /// B-splines, an overlap, or a crossing too nearly tangential to separate,
@@ -205,21 +216,186 @@ constexpr int RefineSteps = 64;
 // --- The search ----------------------------------------------------------
 
 /// A crossing found: its brackets in both curves' parameters, where it is
-/// placed, and whether it is decided.
+/// placed, and whether it is decided. A decided one carries a box, in both
+/// curves' parameters and within both splines, in which it is proved the
+/// only root of the curves' own F (empty when undecided).
 struct Meeting {
     Interval OnA;
     Interval OnB;
     bool Decided;
+    Interval ProofA = Interval::Empty();
+    Interval ProofB = Interval::Empty();
 };
 
-/// Both splines' segments, the search's roots and its count of pairs.
+/// Both splines' segments (those reaching the requested domains, and all of
+/// them, in order), the search's roots and its count of pairs.
 struct PairSearch {
     std::vector<Segment> A;
     std::vector<Segment> B;
+    std::vector<Segment> AllA;
+    std::vector<Segment> AllB;
     std::vector<Meeting> Roots;
     std::size_t Pairs = 0;
     std::string Handler;
 };
+
+// --- Across a knot: each spline whole, piecewise -------------------------
+
+/// The local parameter of t in a segment, enclosed.
+[[nodiscard]] Interval LocalOf(const Segment& segment, const Interval& t)
+{
+    return (t - Interval{segment.T0}) / (Interval{segment.T1} - Interval{segment.T0});
+}
+
+/// The spline's point at t, from the segment holding t (the first or the
+/// last continued beyond the spline's ends); at a knot either neighbour
+/// gives the same point, the spline being continuous.
+[[nodiscard]] std::optional<std::array<Interval, 2>> PointAt(const std::vector<Segment>& segments,
+                                                             const double t)
+{
+    std::size_t j = 0;
+    while (j + 1 < segments.size() && segments[j].T1 < t) {
+        ++j;
+    }
+    return PointOf(EvalH(segments[j].Poles, LocalOf(segments[j], Interval{t})));
+}
+
+/// The hull of the spline's slope dC/dt over t: each segment's over its
+/// part of t, the end segments continued beyond the spline's ends.
+[[nodiscard]] std::optional<std::array<Interval, 2>>
+SlopeAcross(const std::vector<Segment>& segments, const Interval& t)
+{
+    constexpr double inf = std::numeric_limits<double>::infinity();
+    std::array<Interval, 2> hull{Interval::Empty(), Interval::Empty()};
+    for (std::size_t j = 0; j < segments.size(); ++j) {
+        const Segment& segment = segments[j];
+        const Interval reach{j == 0 ? -inf : segment.T0,
+                             j + 1 == segments.size() ? inf : segment.T1};
+        const Interval part = Intersection(t, reach);
+        if (part.IsEmpty()) {
+            continue;
+        }
+        const Arc whole{j, 0.0, 1.0, segment.Poles};
+        const std::optional<std::array<Interval, 2>> d = SlopeOver(whole, LocalOf(segment, part));
+        if (!d) {
+            return std::nullopt;
+        }
+        const Interval width = Interval{segment.T1} - Interval{segment.T0};
+        hull[0] = Hull(hull[0], (*d)[0] / width);
+        hull[1] = Hull(hull[1], (*d)[1] / width);
+    }
+    return hull;
+}
+
+/// K(X) for the splines whole, X in both curves' parameters.
+[[nodiscard]] std::optional<ParameterBox> KrawczykAcross(const PairSearch& search,
+                                                         const ParameterBox& x)
+{
+    const auto pa = PointAt(search.AllA, Midpoint(x.S));
+    const auto pb = PointAt(search.AllB, Midpoint(x.T));
+    const auto da = SlopeAcross(search.AllA, x.S);
+    const auto db = SlopeAcross(search.AllB, x.T);
+    if (!pa || !pb || !da || !db) {
+        return std::nullopt;
+    }
+    const std::array<Interval, 2> f{(*pa)[0] - (*pb)[0], (*pa)[1] - (*pb)[1]};
+    return KrawczykStep(x, f, {(*da)[0], -(*db)[0], (*da)[1], -(*db)[1]});
+}
+
+/// The parameters the spline's segments cover, its domain.
+[[nodiscard]] Interval Covered(const std::vector<Segment>& segments)
+{
+    return Interval{segments.front().T0, segments.back().T1};
+}
+
+/// The curve parameters a piece-local interval stands for, rounded inward:
+/// each end's image enclosed and the side of that enclosure toward the
+/// middle taken, so every point of the result is the image of a point of
+/// `local` (empty when rounding leaves nothing).
+[[nodiscard]] Interval InwardOnCurve(const Segment& segment, const Arc& arc, const Interval& local)
+{
+    const Interval lower = OnCurve(segment, InSegment(arc, Interval{local.GetLower()}));
+    const Interval upper = OnCurve(segment, InSegment(arc, Interval{local.GetUpper()}));
+    if (!(lower.GetUpper() <= upper.GetLower())) {
+        return Interval::Empty();
+    }
+    return Interval{lower.GetUpper(), upper.GetLower()};
+}
+
+/// The box about c of half-widths h, in doubles (any box will do for the
+/// test; it is the box the test proves things in).
+[[nodiscard]] Interval About(const double c, const double h)
+{
+    return Interval{c - h, c + h};
+}
+
+/// A box in which Krawczyk's test, the splines whole, proves one root: the
+/// pair's own box in the curves' parameters, else boxes about the
+/// segment's bracket a factor of eight smaller each time, while they are
+/// wider than the bracket; nothing when none is proved.
+[[nodiscard]] std::optional<ParameterBox>
+ProofBox(const PairSearch& search, const ParameterBox& pair, const ParameterBox& bracket)
+{
+    if (Classify(KrawczykAcross(search, pair), pair) == Test::OneRoot) {
+        return pair;
+    }
+    const double cs = Midpoint(bracket.S);
+    const double ct = Midpoint(bracket.T);
+    double hs = Width(pair.S) / 2.0;
+    double ht = Width(pair.T) / 2.0;
+    for (int shrink = 0; shrink < RefineSteps; ++shrink) {
+        hs /= 8.0;
+        ht /= 8.0;
+        if (!(hs > Width(bracket.S) && ht > Width(bracket.T))) {
+            break;
+        }
+        const ParameterBox x{About(cs, hs), About(ct, ht)};
+        if (Classify(KrawczykAcross(search, x), x) == Test::OneRoot) {
+            return x;
+        }
+    }
+    return std::nullopt;
+}
+
+/// A root whose segment-local bracket straddles a segment's end, proved
+/// again with both splines whole; nothing when no box proves it, and the
+/// root stays undecided.
+[[nodiscard]] std::optional<Meeting> AcrossKnots(const PairSearch& search, const Arc& a,
+                                                 const Arc& b, const ParameterBox& local,
+                                                 const ParameterBox& bracket)
+{
+    const std::optional<ParameterBox> found =
+        ProofBox(search,
+                 {OnCurve(search.A[a.Index], InSegment(a, local.S)),
+                  OnCurve(search.B[b.Index], InSegment(b, local.T))},
+                 bracket);
+    if (!found) {
+        return std::nullopt;
+    }
+    const ParameterBox proof = *found;
+    ParameterBox x = proof;
+    for (int step = 0; step < RefineSteps; ++step) {
+        const std::optional<ParameterBox> k = KrawczykAcross(search, x);
+        if (!k) {
+            break;
+        }
+        const ParameterBox next{Intersection(k->S, x.S), Intersection(k->T, x.T)};
+        if (next.S.IsEmpty() || next.T.IsEmpty() ||
+            (Width(next.S) >= Width(x.S) && Width(next.T) >= Width(x.T))) {
+            break;
+        }
+        x = next;
+    }
+    // Past a spline's end its end segment continued was proved, not the
+    // spline: a bracket across the end is undecided (and one beyond it is
+    // dropped by the caller).
+    const Interval onA = Covered(search.AllA);
+    const Interval onB = Covered(search.AllB);
+    if (!Contains(onA, x.S) || !Contains(onB, x.T)) {
+        return Meeting{x.S, x.T, false};
+    }
+    return Meeting{x.S, x.T, true, Intersection(proof.S, onA), Intersection(proof.T, onB)};
+}
 
 /// Records the proved root of the pair's inflated box.
 void Record(PairSearch& search, const Arc& a, const Arc& b, const ParameterBox& x)
@@ -232,8 +408,26 @@ void Record(PairSearch& search, const Arc& a, const Arc& b, const ParameterBox& 
     if (wa == Within::Beyond || wb == Within::Beyond) {
         return;
     }
-    search.Roots.push_back({OnCurve(search.A[a.Index], sa), OnCurve(search.B[b.Index], sb),
-                            wa == Within::Inside && wb == Within::Inside});
+    const Segment& segmentA = search.A[a.Index];
+    const Segment& segmentB = search.B[b.Index];
+    const ParameterBox bracket{OnCurve(segmentA, sa), OnCurve(segmentB, sb)};
+    if (wa == Within::Inside && wb == Within::Inside) {
+        // Unique in x for the segments' polynomials, which are the curves'
+        // own over the segments.
+        search.Roots.push_back(
+            {bracket.S, bracket.T, true,
+             Intersection(InwardOnCurve(segmentA, a, x.S), Interval{segmentA.T0, segmentA.T1}),
+             Intersection(InwardOnCurve(segmentB, b, x.T), Interval{segmentB.T0, segmentB.T1})});
+        return;
+    }
+    if (const std::optional<Meeting> across = AcrossKnots(search, a, b, x, bracket)) {
+        if (Intersects(across->OnA, Covered(search.AllA)) &&
+            Intersects(across->OnB, Covered(search.AllB))) {
+            search.Roots.push_back(*across);
+        }
+        return;
+    }
+    search.Roots.push_back({bracket.S, bracket.T, false});
 }
 
 [[nodiscard]] KernelError Unresolved(const PairSearch& search, const Arc& a, const Arc& b,
@@ -283,8 +477,20 @@ void Record(PairSearch& search, const Arc& a, const Arc& b, const ParameterBox& 
     return {};
 }
 
-/// Roots whose brackets meet on both curves are one, proved from boxes
-/// that overlap; with an undecided one, undecided.
+/// Whether `root`'s bracket lies in the box `proved` was proved the only
+/// root of the curves' F in, so that any root of the curves `root` stands
+/// for is `proved`'s.
+[[nodiscard]] bool ProvedSame(const Meeting& proved, const Meeting& root)
+{
+    return proved.Decided && Contains(proved.ProofA, root.OnA) && Contains(proved.ProofB, root.OnB);
+}
+
+/// Roots whose brackets meet on both curves: one decided root when one's
+/// bracket lies in the other's proof box (one crossing bracketed from
+/// either side of a knot or from overlapping pieces, or a continued
+/// segment's root that, if it is the curves' at all, is the proved one);
+/// otherwise their hull, undecided. Brackets apart on either curve are
+/// distinct roots.
 [[nodiscard]] std::vector<Meeting> Distinct(std::vector<Meeting> roots)
 {
     std::ranges::stable_sort(roots, [](const Meeting& p, const Meeting& q) {
@@ -299,11 +505,14 @@ void Record(PairSearch& search, const Arc& a, const Arc& b, const ParameterBox& 
             distinct.push_back(r);
             continue;
         }
-        if (!(same->Decided && r.Decided)) {
-            same->OnA = Hull(same->OnA, r.OnA);
-            same->OnB = Hull(same->OnB, r.OnB);
-            same->Decided = false;
+        if (ProvedSame(*same, r)) {
+            continue;
         }
+        if (ProvedSame(r, *same)) {
+            *same = r;
+            continue;
+        }
+        *same = {Hull(same->OnA, r.OnA), Hull(same->OnB, r.OnB), false};
     }
     return distinct;
 }
@@ -362,6 +571,8 @@ Result<PlanarIntersection> SplineSpline2d(const Curve2d& a, const Interval& doma
     }
     STEREON_TRY(std::vector<Segment> segmentsA, SegmentsOf(*sa));
     STEREON_TRY(std::vector<Segment> segmentsB, SegmentsOf(*sb));
+    search.AllA = segmentsA;
+    search.AllB = segmentsB;
     search.A = Reaching(std::move(segmentsA), domainA);
     search.B = Reaching(std::move(segmentsB), domainB);
     STEREON_TRY_VOID(SearchAll(search));
