@@ -404,7 +404,9 @@ struct Cyclic {
     [[nodiscard]] Vec3 operator()(const Vec3& v) const
     {
         const std::array<double, 3> c{v.X, v.Y, v.Z};
-        const auto at = [&](const int i) { return c[static_cast<std::size_t>((i + 3 - Shift) % 3)]; };
+        const auto at = [&](const int i) {
+            return c[static_cast<std::size_t>((i + 3 - Shift) % 3)];
+        };
         return Vec3{at(0), at(1), at(2)};
     }
 
@@ -457,9 +459,8 @@ TEST_CASE("MR PR-200 far line origin crossings on the quadric",
                     // it is placed no finer than a unit in the last place of
                     // t, times the direction's length.
                     const double eps = std::numeric_limits<double>::epsilon();
-                    const double ulps =
-                        32.0 * eps * std::max(1.0, Length(p.Position - Point3{})) +
-                        4.0 * eps * std::abs(p.Parameter) * Length(direction);
+                    const double ulps = 32.0 * eps * std::max(1.0, Length(p.Position - Point3{})) +
+                                        4.0 * eps * std::abs(p.Parameter) * Length(direction);
                     CHECK(p.Contact == ContactType::Crossing);
                     CHECK(Distance(Eval(line, p.Parameter), p.Position) <= ulps);
                     const double off = round ? std::abs(Distance(p.Position, center) - radius)
@@ -569,8 +570,8 @@ namespace {
 [[nodiscard]] std::string Where(const Placement& p)
 {
     return "scale=" + std::to_string(p.Scale) + " axis=" + std::to_string(p.X.X) + ',' +
-           std::to_string(p.X.Y) + ',' + std::to_string(p.X.Z) + " offset=" +
-           std::to_string(p.Offset.X) + ',' + std::to_string(p.Offset.Y) + ',' +
+           std::to_string(p.X.Y) + ',' + std::to_string(p.X.Z) +
+           " offset=" + std::to_string(p.Offset.X) + ',' + std::to_string(p.Offset.Y) + ',' +
            std::to_string(p.Offset.Z);
 }
 
@@ -645,8 +646,8 @@ TEST_CASE("MR PR-112-budget plane cylinder pcurve work is bounded",
         const Surface cylinder{Cylinder{p.Point(0, 0, 0), 5 * p.Scale, p.X, p.Y, true}};
         for (const bool swapped : {false, true}) {
             CAPTURE(swapped);
-            const auto result =
-                swapped ? Intersect(cylinder, oblique, policy) : Intersect(oblique, cylinder, policy);
+            const auto result = swapped ? Intersect(cylinder, oblique, policy)
+                                        : Intersect(oblique, cylinder, policy);
             REQUIRE_FALSE(result.has_value());
             CHECK(result.error().GetCode() == ErrorCode::CertificationFailed);
             CHECK(std::string(result.error().GetMessage()).find("sample budget") !=
@@ -678,8 +679,8 @@ TEST_CASE("MR PR-120 skew cylinder angular sectors of B",
         for (const bool swapped : {false, true}) {
             CAPTURE(swapped);
             for (const double shift : {0.0, 2 * pi}) {
-                const auto wide = meet(Box2{Interval{-2 + shift, 2 + shift}, Interval::Everything()},
-                                       swapped);
+                const auto wide =
+                    meet(Box2{Interval{-2 + shift, 2 + shift}, Interval::Everything()}, swapped);
                 INFO(IntersectTest::ErrorText(wide));
                 REQUIRE(wide.has_value());
                 CHECK(wide->IsEmpty());
@@ -719,8 +720,8 @@ TEST_CASE("MR PR-159 skew cylinders tangent on both seams meet at a node",
         const double reach = 1e-7 * p.Scale;
         for (const bool swapped : {false, true}) {
             CAPTURE(swapped);
-            const auto result =
-                swapped ? Intersect(smaller, larger, p.Policy()) : Intersect(larger, smaller, p.Policy());
+            const auto result = swapped ? Intersect(smaller, larger, p.Policy())
+                                        : Intersect(larger, smaller, p.Policy());
             INFO(IntersectTest::ErrorText(result));
             REQUIRE(result.has_value());
             CHECK(IntersectTest::ConnectivityOf(*result, reach).Nodes == 1);
@@ -733,7 +734,8 @@ TEST_CASE("MR PR-159 skew cylinders tangent on both seams meet at a node",
                     const Point3 q = Eval(branch.Curve3d, t);
                     const double slack = branch.Bound + p.Policy().GetResolution();
                     CHECK(OffCylinder(q, p.Point(0, 0, 0), z, 5 * p.Scale) <= slack);
-                    CHECK(OffCylinder(q, p.Point(2, 0, 0), Cross(p.X, tilted), 3 * p.Scale) <= slack);
+                    CHECK(OffCylinder(q, p.Point(2, 0, 0), Cross(p.X, tilted), 3 * p.Scale) <=
+                          slack);
                 }
             }
             CHECK(ends == 4);
@@ -797,11 +799,10 @@ TEST_CASE("MR PR-236-tangent sphere on a cylinder's axis within the tolerance",
             const double tolerance = 1e-3 * p.Scale;
             for (const bool swapped : {false, true}) {
                 CAPTURE(radius, swapped);
-                const auto touch =
-                    swapped ? Intersect(cylinder, Box2::Everything(), sphere, Box2::Everything(),
-                                        tolerance, p.Policy())
-                            : Intersect(sphere, Box2::Everything(), cylinder, Box2::Everything(),
-                                        tolerance, p.Policy());
+                const auto touch = swapped ? Intersect(cylinder, Box2::Everything(), sphere,
+                                                       Box2::Everything(), tolerance, p.Policy())
+                                           : Intersect(sphere, Box2::Everything(), cylinder,
+                                                       Box2::Everything(), tolerance, p.Policy());
                 INFO(IntersectTest::ErrorText(touch));
                 REQUIRE(touch.has_value());
                 CHECK(IntersectTest::ConnectivityOf(*touch, 1e-7 * p.Scale).Curves == 1);
