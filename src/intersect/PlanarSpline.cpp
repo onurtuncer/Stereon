@@ -54,10 +54,13 @@ import Stereon.Robust;
 /// and its roots isolated by the same subdivision as the curve–surface
 /// handlers' (SplineSurface.cpp): a piece is apart, a proved single simple
 /// crossing (Decided), a touch or a crossing within rounding of a piece's
-/// end (Decided false, bracketed), or unresolved. Unlike there, an
-/// undecided root is a result here, reported with Decided false, as the
-/// conic handlers report theirs; an unresolved one, a contact of higher
-/// order or the spline along the other curve, fails with
+/// end (Decided false, bracketed), or unresolved, plus one outcome of its
+/// own: a contact of order three or more, isolated by a derivative of g of
+/// that order proved of one sign (OfOrder) and reported as a bracketed
+/// touch, Decided false. Unlike there, an undecided root is a result here,
+/// reported with Decided false, as the conic handlers report theirs; an
+/// unresolved one, a piece with no derivative of one sign (the spline
+/// along the other curve) or a search past its budget, fails with
 /// IntersectionFailed, never dropped (ADR-0029). A hyperbola's equation
 /// holds both branches: a root on the other branch, 2a away, is dropped by
 /// the sign of its abscissa. A spline whose every pole lies exactly on a
@@ -201,6 +204,140 @@ struct Offsets {
     return {};
 }
 
+// --- Contacts of higher order ---------------------------------------------
+
+/// The k-th differences of g's coefficients: g's k-th derivative over the
+/// piece in Bernstein form, up to a positive factor, so its ends are the
+/// signs of that derivative at the piece's ends.
+[[nodiscard]] Coefficients DifferencesOf(Coefficients g, const std::size_t k)
+{
+    for (std::size_t i = 0; i < k; ++i) {
+        g = Differences(g);
+    }
+    return g;
+}
+
+/// The lowest order j in [from, to] whose derivative of g is proved of one
+/// strict sign over the piece, every coefficient of g's j-th differences
+/// having it; nothing if none is.
+[[nodiscard]] std::optional<std::size_t> LowestSigned(const Piece& piece, const std::size_t from,
+                                                      const std::size_t to)
+{
+    Coefficients d = DifferencesOf(piece.G, from);
+    for (std::size_t j = from; j <= to && !d.empty(); ++j) {
+        if (SignOfAll(d) != Strict::Unknown) {
+            return j;
+        }
+        d = Differences(d);
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] Result<void> AlongZero(const Piece& piece, std::size_t k, int depth, Search& search);
+
+/// A piece on which g's k-th derivative, k >= 2, is proved of one strict
+/// sign (on it, or on an ancestor, where the coefficients were wide;
+/// sub-pieces inherit it). A lower derivative proved of one sign on the
+/// piece itself settles it as a piece of that order: monotone, convex, or
+/// of order j. Otherwise g's (k-1)-th derivative, strictly monotone, is
+/// used: on a piece where its ends have one strict sign it has that sign
+/// throughout, and the piece is one of order k - 1; only the piece
+/// holding its single zero is halved on. When both its ends are within
+/// rounding of zero, or at MaxDepth, and no lower derivative can be signed
+/// either, the piece is a contact of order up to k to rounding: g has at
+/// most k roots there (Rolle), kept as one undecided tangential root
+/// bracketed by the piece, never dropped. This is Convex's argument
+/// carried up: a contact of order four, where g, g' and g'' all vanish, is
+/// isolated by g'''' of one sign without halving every piece that rounding
+/// hides it in.
+[[nodiscard]] Result<void> OfOrder(const Piece& piece, const std::size_t k, const int depth,
+                                   Search& search)
+{
+    if (k == 2) {
+        return Convex(piece, depth, search);
+    }
+    if (++search.Pieces > PieceBudget) {
+        return std::unexpected(Unresolved(search, piece, "the subdivision budget is spent"));
+    }
+    if (SignOfAll(piece.G) != Strict::Unknown) {
+        return {};
+    }
+    if (const std::optional<std::size_t> j = LowestSigned(piece, 1, k - 1)) {
+        if (*j == 1) {
+            Monotone(piece, search);
+            return {};
+        }
+        return OfOrder(piece, *j, depth, search);
+    }
+    return AlongZero(piece, k, depth, search);
+}
+
+/// OfOrder's piece with no lower derivative of one sign: the (k-1)-th
+/// derivative's end signs, and the piece of its single zero halved on.
+[[nodiscard]] Result<void> AlongZero(const Piece& piece, const std::size_t k, const int depth,
+                                     Search& search)
+{
+    const Coefficients lower = DifferencesOf(piece.G, k - 1);
+    const Strict start = StrictSign(lower.front());
+    const Strict end = StrictSign(lower.back());
+    if (start != Strict::Unknown && start == end) {
+        return OfOrder(piece, k - 1, depth, search);
+    }
+    const bool flat = start == Strict::Unknown && end == Strict::Unknown;
+    if (flat || depth == MaxDepth) {
+        search.Roots.push_back({MidOf(piece), piece.S0, piece.S1, ContactType::Tangential, false});
+        return {};
+    }
+    const std::pair<Piece, Piece> halves = Halves(piece);
+    STEREON_TRY_VOID(OfOrder(halves.first, k, depth + 1, search));
+    return OfOrder(halves.second, k, depth + 1, search);
+}
+
+/// Bernstein.hpp's Isolate, and before a piece is halved, whether a
+/// derivative of g of order three or more is of one sign on it (OfOrder).
+[[nodiscard]] Result<void> IsolateContacts(const Piece& piece, const int depth, Search& search)
+{
+    if (++search.Pieces > PieceBudget) {
+        return std::unexpected(Unresolved(search, piece, "the subdivision budget is spent"));
+    }
+    if (SignOfAll(piece.G) != Strict::Unknown) {
+        return {};
+    }
+    const Coefficients slope = Differences(piece.G);
+    if (SignOfAll(slope) != Strict::Unknown) {
+        Monotone(piece, search);
+        return {};
+    }
+    if (SignOfAll(Differences(slope)) != Strict::Unknown) {
+        return Convex(piece, depth, search);
+    }
+    if (const std::optional<std::size_t> k = LowestSigned(piece, 3, piece.G.size() - 1)) {
+        return OfOrder(piece, *k, depth, search);
+    }
+    if (depth == MaxDepth) {
+        search.Roots.push_back(
+            {MidOf(piece), piece.S0, piece.S1, ContactType::Tangential, false, false});
+        return {};
+    }
+    const std::pair<Piece, Piece> halves = Halves(piece);
+    STEREON_TRY_VOID(IsolateContacts(halves.first, depth + 1, search));
+    return IsolateContacts(halves.second, depth + 1, search);
+}
+
+/// Bernstein.hpp's RootsOfSegment with IsolateContacts.
+[[nodiscard]] Result<void> ContactsOfSegment(const Segment& segment, Coefficients g,
+                                             const std::string_view handler,
+                                             std::vector<Found>& found)
+{
+    Search search{handler, segment.T0, segment.T1, {}, 0};
+    STEREON_TRY_VOID(IsolateContacts(Piece{0.0, 1.0, std::move(g)}, 0, search));
+    for (const LocalRoot& root : search.Roots) {
+        found.push_back({ParameterAt(search, root.S), BracketOf(search, root.Lower, root.Upper),
+                         root.Contact, root.Decided, root.Isolated});
+    }
+    return {};
+}
+
 // --- Roots ---------------------------------------------------------------
 
 /// Every root of g over the segments that reach the domain, merged and
@@ -213,7 +350,8 @@ struct Offsets {
     std::vector<Found> found;
     for (const Segment& segment : segments) {
         if (Intersects(Interval{segment.T0, segment.T1}, domain)) {
-            STEREON_TRY_VOID(RootsOfSegment(segment, FormOf(other, segment.Poles), handler, found));
+            STEREON_TRY_VOID(
+                ContactsOfSegment(segment, FormOf(other, segment.Poles), handler, found));
         }
     }
     Merge(found);
