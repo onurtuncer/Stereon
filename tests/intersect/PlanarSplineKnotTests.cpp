@@ -97,6 +97,12 @@ struct Exact {
     long double Y;
 };
 
+/// How far the oracle may be from a coordinate it reproduces exactly in
+/// real arithmetic: a few roundings of long double at the wave's magnitude
+/// (|x| <= 6). long double is the 64-bit double on some targets (macOS on
+/// Arm), where this is about 1e-15; on x86 it is about 5e-18.
+constexpr long double OracleSlack = 16 * 6 * std::numeric_limits<long double>::epsilon();
+
 /// The point of a (rational) B-spline at t by de Boor's algorithm on
 /// homogeneous poles, in long double.
 Exact DeBoor(const BSplineCurve2d& s, const long double t)
@@ -209,8 +215,8 @@ TEST_CASE("two B-splines crossing at both their interior knots are decided",
         // crossing there, and the rational wave's slope is still across it.
         const BSplineCurve2d rational = Wave({1.0, 2.0, 1.0, 2.0, 1.0});
         const Exact at = DeBoor(rational, 3.0L);
-        REQUIRE(std::abs(at.X - 3.0L) <= 1e-18L);
-        REQUIRE(std::abs(at.Y) <= 1e-18L);
+        REQUIRE(std::abs(at.X - 3.0L) <= OracleSlack);
+        REQUIRE(std::abs(at.Y) <= OracleSlack);
         RequireKnotCrossing(rational, Across());
     }
 }
@@ -240,7 +246,7 @@ TEST_CASE("crossings a rounding and 2^-40 either side of a knot are decided wher
             // x = t exactly, so the wave meets x = c at t = c; the post's
             // parameter is (y + 4) / 8 there.
             const Exact at = DeBoor(a, static_cast<long double>(c));
-            REQUIRE(std::abs(at.X - static_cast<long double>(c)) <= 1e-18L);
+            REQUIRE(std::abs(at.X - static_cast<long double>(c)) <= OracleSlack);
             const auto y = static_cast<double>(at.Y);
             const double u = (y + 4.0) / 8.0;
             // A tolerance far below 2^-40: the side of the knot is the oracle's.
