@@ -507,14 +507,9 @@ TEST_CASE("rational node answers move with the surfaces",
     const BSplineSurface b = Lying();
     SECTION("MR-01: a translation, exact in binary")
     {
-        // WEAKENED RELATION, the known open defect SSI-translated-boundary:
-        // on the rational patches' wider enclosures even this offset can make
-        // the transverse search refuse, near the node's branches, a root it
-        // answers at the origin. #279's exact shift about the origin answers
-        // it (checked with #279 applied, the node moved back with the seeds).
-        // Until both are merged it may refuse, never answer wrongly.
-        CheckMoved(a, b, CylinderCrossing(), {1.0, Point3{16.0, -32.0, 8.0}},
-                   Must::AnswerOrFailClosed);
+        // Answered since #279's exact shift about the origin, the node moved
+        // back with the seeds (formerly weakened under SSI-translated-boundary).
+        CheckMoved(a, b, CylinderCrossing(), {1.0, Point3{16.0, -32.0, 8.0}});
     }
     SECTION("MR-03: scaling by powers of two")
     {
