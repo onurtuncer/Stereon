@@ -922,7 +922,29 @@ enclosed from the doubles :math:`t_0` and :math:`t_1`, so what is proved
 holds for the conic as given. A root at Bézier parameter :math:`s` is the
 angle :math:`m + 2 \arctan(\tan(h/2)(2s - 1))`, its bracket mapped through
 that monotone map and widened by its rounding; points are reported on the
-conic's angle, which may run over several turns. A conic whose centre and
+conic's angle, which may run over several turns.
+
+The cuts are the kernel's choice, not features of the conic, which is
+smooth across them. A crossing at or within rounding of a cut is
+bracketed by each neighbouring arc across its end, and is undecided there.
+An arc monotone throughout brackets it with the whole arc, and merged
+brackets can reach several arcs. So the arcs such a bracket reaches,
+joined with any other stuck region they share an arc or a cut with, are
+searched again with every interior cut :math:`c` moved to :math:`c + w/4`,
+:math:`w` the narrowest of them (``AcrossCuts``). The crossing then lies
+inside an arc, about four fifths along it and off the subdivision's dyadic
+points. The new arcs stay under five quarters of a quarter turn, short of
+the half turn where the middle weight :math:`\cos h` vanishes. The new
+search is complete over the region, so its roots replace every root
+bracketed inside the region. If one of them leaves the region, or is
+undecided across a moved cut, the region is left as it was and the
+intersection fails closed. A root at a domain's own end is not moved past
+and stays undecided. ``tests/intersect/ConicArcCutTests.cpp`` has the
+closed forms: a circle crossing a plane, a cylinder and a sphere exactly on
+its cuts, and an ellipse crossing a plane on them. These run under
+reversal, translation and scaling by :math:`2^{\pm 10}`.
+
+A conic whose centre and
 axes lie exactly in a plane is an overlap there, its pcurve the same
 conic in the plane's parameters. A conic on a curved surface, the equator
 of a sphere or the meridian of a torus, fails with ``IntersectionFailed``.
