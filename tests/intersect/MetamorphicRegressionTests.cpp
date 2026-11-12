@@ -404,7 +404,9 @@ struct Cyclic {
     [[nodiscard]] Vec3 operator()(const Vec3& v) const
     {
         const std::array<double, 3> c{v.X, v.Y, v.Z};
-        const auto at = [&](const int i) { return c[static_cast<std::size_t>((i + 3 - Shift) % 3)]; };
+        const auto at = [&](const int i) {
+            return c[static_cast<std::size_t>((i + 3 - Shift) % 3)];
+        };
         return Vec3{at(0), at(1), at(2)};
     }
 
@@ -457,9 +459,8 @@ TEST_CASE("MR PR-200 far line origin crossings on the quadric",
                     // it is placed no finer than a unit in the last place of
                     // t, times the direction's length.
                     const double eps = std::numeric_limits<double>::epsilon();
-                    const double ulps =
-                        32.0 * eps * std::max(1.0, Length(p.Position - Point3{})) +
-                        4.0 * eps * std::abs(p.Parameter) * Length(direction);
+                    const double ulps = 32.0 * eps * std::max(1.0, Length(p.Position - Point3{})) +
+                                        4.0 * eps * std::abs(p.Parameter) * Length(direction);
                     CHECK(p.Contact == ContactType::Crossing);
                     CHECK(Distance(Eval(line, p.Parameter), p.Position) <= ulps);
                     const double off = round ? std::abs(Distance(p.Position, center) - radius)
