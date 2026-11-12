@@ -888,7 +888,8 @@ BSplineCurve Reversed3(BSplineCurve c)
 
 } // namespace
 
-TEST_CASE("MR PR-194 rotated bounded plane coincidence", "[intersect][metamorphic][backfill][PR-194]")
+TEST_CASE("MR PR-194 rotated bounded plane coincidence",
+          "[intersect][metamorphic][backfill][PR-194]")
 {
     // Root cause (PlanePlane): a rotated, bounded coincidence was encoded as
     // the AABB of its image, which invents overlaps. The unit square of the
@@ -907,7 +908,8 @@ TEST_CASE("MR PR-194 rotated bounded plane coincidence", "[intersect][metamorphi
             const Surface xy{Plane{Turned(t, Point3{}) + offset, t[0], t[1]}};
             for (const double centre : {1.4, 0.7}) {
                 const Surface turned{Plane{Turned(t, Point3{centre, centre, 0.0}) + offset,
-                                           Turned(t, Vec3{h, h, 0.0}), Turned(t, Vec3{-h, h, 0.0})}};
+                                           Turned(t, Vec3{h, h, 0.0}),
+                                           Turned(t, Vec3{-h, h, 0.0})}};
                 for (const bool swapped : {false, true}) {
                     INFO("PR-194 plane-plane centre=" << centre << " offset=" << offset.X
                                                       << " swapped=" << swapped);
@@ -980,9 +982,10 @@ TEST_CASE("MR PR-194 bounded plane box gets no uncut conic branch",
                                      : Box2{Interval{-0.1, 0.1}, Interval{-0.1, 0.1}};
             for (const bool swapped : {false, true}) {
                 INFO("PR-194 plane-cylinder partial=" << partial << " swapped=" << swapped);
-                const auto r = swapped
-                                   ? Intersect(cylinder, Box2::Everything(), plane, box, Context::Default())
-                                   : Intersect(plane, box, cylinder, Box2::Everything(), Context::Default());
+                const auto r =
+                    swapped
+                        ? Intersect(cylinder, Box2::Everything(), plane, box, Context::Default())
+                        : Intersect(plane, box, cylinder, Box2::Everything(), Context::Default());
                 if (!partial) {
                     REQUIRE(r.has_value());
                     CHECK(r->IsEmpty());
@@ -1006,7 +1009,8 @@ TEST_CASE("MR PR-194 bounded plane box gets no uncut conic branch",
     }
 }
 
-TEST_CASE("MR PR-194 undecided spline root fails closed", "[intersect][metamorphic][backfill][PR-194]")
+TEST_CASE("MR PR-194 undecided spline root fails closed",
+          "[intersect][metamorphic][backfill][PR-194]")
 {
     // Root cause (SplineSurface): a root enclosure left undecided (a touch
     // or a near miss, or a root on a knot) was reported as a contact. The
@@ -1017,9 +1021,12 @@ TEST_CASE("MR PR-194 undecided spline root fails closed", "[intersect][metamorph
     // MR-04 by reversing the curve (knots reflected, poles reversed).
     for (const auto& t : Turns) {
         const Surface ground{Plane{Point3{}, t[0], t[1]}};
-        const auto at = [&](const double x, const double z) { return Turned(t, Point3{x, 0.0, z}); };
+        const auto at = [&](const double x, const double z) {
+            return Turned(t, Point3{x, 0.0, z});
+        };
         const BSplineCurve touch = Bezier3({at(0, 1), at(1, -1), at(2, 1)});
-        const BSplineCurve knotted{1, {0.0, 0.0, 1.0, 2.0, 2.0}, {at(0, -1), at(1, 0), at(2, 1)}, {}};
+        const BSplineCurve knotted{
+            1, {0.0, 0.0, 1.0, 2.0, 2.0}, {at(0, -1), at(1, 0), at(2, 1)}, {}};
         for (const bool reversed : {false, true}) {
             for (const BSplineCurve& curve : {touch, knotted}) {
                 INFO("PR-194 spline-surface reversed=" << reversed << " degree=" << curve.Degree);
@@ -1093,9 +1100,10 @@ TEST_CASE("MR PR-194 NURBS hull applies the factory bounds",
         REQUIRE(valid.has_value());
         for (const bool swapped : {false, true}) {
             INFO("PR-194 nurbs-hull swapped=" << swapped);
-            const auto r = swapped
-                               ? Intersect(Surface{*valid}, middle, Surface{invalid}, middle, 0.0, Context::Default())
-                               : Intersect(Surface{invalid}, middle, Surface{*valid}, middle, 0.0, Context::Default());
+            const auto r = swapped ? Intersect(Surface{*valid}, middle, Surface{invalid}, middle,
+                                               0.0, Context::Default())
+                                   : Intersect(Surface{invalid}, middle, Surface{*valid}, middle,
+                                               0.0, Context::Default());
             REQUIRE_FALSE(r.has_value());
             CHECK(r.error().GetCode() == ErrorCode::InvalidInput);
         }
