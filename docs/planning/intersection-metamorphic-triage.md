@@ -73,15 +73,7 @@ For PR-207 and PR-238 the replay is the campaign's: `python tools/mutate.py --ca
 
 ## Leads left open
 
-After batch 2 these two remain. Each is a confirmed or likely intersection defect with a direct regression already on `main`. PR-194 is `fixture captured`, pending its split into sub-IDs; PR-239 stays `untriaged`. None is closed. Closing needs a metamorphic test and a fault that is actually killed, and this batch has not produced either for these leads.
-
-### PR-194
-
-At least five root causes in one PR (`b74d6e23ff`), each with its own direct test. PlanePlane reported a rotated bounded coincidence as an axis-aligned overlap, and the squared cross norm of near-parallel planes underflowed. PlaneCylinder gave bounded plane patches uncut conic branches. SplineSurface reported unproved tangencies, near misses and knot roots as contacts. Linearization (JVP/VJP) accepted stale geometry. GenericSSI let direct NURBS construction bypass the factory weight bounds. Open: ADR-0053 asks for one traceable entry per root cause, so splitting this lead into sub-IDs (as PR-230-pole) is a ledger-structure decision for the coordinator.
-
-### PR-239
-
-An owner semantic decision (2026-11-08, `0338cb3e44`): 3D lines now meet within the resolution, as degree-1 B-splines do. The former exact-meeting rule was documented behaviour, not an implementation fault, so whether this lead is a defect or a contract change is the owner's classification. A fault reintroduction would be the whole former `LineLine.cpp`, not one statement. Its property test already compares each line with its degree-1 B-spline (a representation relation, MR-04). Open pending that classification.
+After batch 2, PR-194 and PR-239 remained; both are now resolved below (owner decisions of 2026-11-12). None is closed. Closing needs a metamorphic test and a fault that is actually killed, and this batch has not produced either for these leads.
 
 ## Red and green record
 
@@ -188,3 +180,52 @@ This batch closes the earlier campaign's records (PR-205, 206, 218, 230, 230-pol
 ### Green on main, batch 2
 
 On this branch (main 227d79a plus test-only changes), built with `gcc16-debug`, `stereon_intersect_tests "MR PR-*"`: all tests passed, 18 test cases, 10713 assertions. That covers every MR regression of the ledger, batch 1, batch 2 and the earlier campaign. The two `mutate.py` baselines (b78bb2d, ec0acc3) are green runs of the same tests in a clean checkout.
+
+## PR-194 and PR-239
+
+- **Date:** 2026-11-12
+- **Branch:** `verify/pr-194`, stacked on batch 2 (#272)
+- **Owner decisions (2026-11-12):** PR-194 stays one ledger entry and is not split. PR-239 is a contract change, not a defect.
+
+### PR-194
+
+One obligation covers six root causes in `b74d6e23ff00b2994222bdc611ab09161e256282`. Each has its direct regression from the PR, a metamorphic regression named "MR PR-194 ..." in `tests/intersect/MetamorphicRegressionTests.cpp`, and its own fault reintroduction:
+
+| Root cause | Direct regression | MR test, relations | Fault |
+| --- | --- | --- | --- |
+| PlanePlane: a rotated, bounded coincidence encoded as the AABB of its image | "rotated bounded coincidence cannot be encoded as an AABB overlap" | "MR PR-194 rotated bounded plane coincidence", MR-01, MR-02 | the refusal of a non-box-preserving bounded overlap disabled |
+| PlanePlane: the squared norm of a nonzero cross product underflowed | "near-parallel planes with an underflowed squared cross norm" | "MR PR-194 near-parallel planes underflowed cross norm", MR-01, MR-02 | `Normalized(cross)` restored for `cross / hypot` |
+| PlaneCylinder: an uncut conic kept in a bounded plane box | "bounded plane patches cannot receive uncut conic branches" | "MR PR-194 bounded plane box gets no uncut conic branch", MR-01, MR-02 | the partial-ellipse guard disabled |
+| SplineSurface: an undecided root reported as a contact | "unresolved spline tangency and near miss never become successful contacts", "an undecided spline root at a knot fails closed" | "MR PR-194 undecided spline root fails closed", MR-01, MR-04 | the `Decided` check disabled |
+| Linearization: a result for other geometry differentiated | "JVP and VJP reject intersection results from stale geometry" | "MR PR-194 stale geometry is refused by JVP and VJP", MR-01, MR-03 | the consistent-contact check disabled |
+| GenericSSI: the hull test bypassed the factory's knot and weight bounds | "direct NURBS construction cannot bypass factory weight bounds" | "MR PR-194 NURBS hull applies the factory bounds", MR-01, MR-02 | the factory checks skipped |
+
+The oracles are closed forms, stated in each test's comment:
+- the diamond |x - c| + |y - c| against the unit square;
+- the x axis as the line of z = 0 and the tilted plane;
+- the ellipse of the plane with normal (0, 1, 1) on the cylinder of radius 5;
+- the double root of (1 - 2s)^2 and a root exactly at a knot;
+- a stored point 0.01 off the moved plane;
+- the factory's own verdict on the same data.
+
+The PlaneCylinder, SplineSurface and Linearization rows are fail-closed contracts; the others are resolved geometry.
+
+The campaign checker requires every mutant ID in `tools/mutation/intersection-backfill.json` to be a unique ledger record. So that catalogue holds one fault as `PR-194` (the PlanePlane AABB fault), and `tools/mutation/intersection-backfill-pr194.json` holds all six. The CI evidence workflow replays the first catalogue only; the six are replayed with `mutate.py --catalogue` on the second.
+
+#### PR-194 fault replay
+
+- **Commands:** `PYTHONUTF8=1 python tools/mutate.py --catalogue tools/mutation/intersection-backfill-pr194.json --work build/metamorphic-pr194`, then `... --catalogue tools/mutation/intersection-backfill.json --only PR-194`. Both ran on committed HEAD `97763d769e8bacd644ad63895c87d0c63123ab72`.
+- **Toolchain:** g++ 16.2.0 (MSYS2), cmake 4.2.3-msvc3, Windows-11-10.0.26200, preset `gcc16-debug`; wall times 274.8 s and 172.2 s.
+- **Baseline:** green in both runs before any fault was applied.
+- **Red, all six root causes:** score 6 / 6, each fault killed in both of its runs by its own named MR test with the declared diagnostic found: plane-plane-aabb, plane-plane-underflow, plane-cylinder-uncut, spline-undecided, stale-linearization, nurbs-hull-bounds. The campaign entry `PR-194` (the plane-plane-aabb fault) is killed the same way, 1 / 1.
+- **Green:** on this branch, `stereon_intersect_tests "MR PR-194*"` passes: 6 test cases, 282 assertions.
+
+### PR-239
+
+**Not a defect: a contract change** (owner decision, 2026-11-12). Before #239, `LineLine` decided 3D lines meeting exactly. That was the documented rule then, not a fault. The owner's decision of 2026-11-08 made a `Line` and the same segment as a degree-1 B-spline meet alike: within the Context's resolution. #239 (`0338cb3e44`) implemented that rule. There is no faulty behaviour to reintroduce, so red-on-fault does not apply: restoring the old code would test the old contract, not detect a defect.
+
+The evidence that the new contract holds:
+- **#239's direct tests** in `tests/intersect/LineLineTests.cpp` (`[line3d]`): "3D skew lines meet within the resolution, decided exactly" (the exact boundary, a gap of the resolution meets and the next double does not), "3D parallel lines within the resolution overlap, beyond it are apart", "3D segments a rounding apart meet at their ends", and the property "a 3D line meets as the same segment as a degree-1 B-spline does". All `[line3d]` tests pass on this branch: 15 test cases, 150 assertions.
+- **MR-02 on Line:Line:** the curve-curve corpus runner "every curve-curve corpus case meets exactly when its gap is within the resolution" runs the line-line family in both orders.
+- **MR-01, MR-03 and MR-04 on Line:Line:** the curve-curve relation tests of #275 (`tests/intersect/CurveCorpusRelationTests.cpp`, https://github.com/onurtuncer/Stereon/pull/275). They run the line-line cases under exact rotations and translation, power-of-two scales with the resolution scaled, and a line chart change.
+- **#239's documented residual is closed.** The residual: nearly parallel segments touching end to end, whose supports' closest approach lies past both ends, met as lines but were missed as splines. PR-241 (`51a2795`) closed it with the spline boundary-minimum search. Its tests "nearly parallel segments touching end to end meet as lines and as splines" (`LineLineTests.cpp`) and "nearly parallel splines touching end to end meet at the ends" (`SplineCurvePairTests.cpp`) pass on this branch. With PR-241's campaign fault applied (`SearchEnds` disabled for non-empty searches), both fail in each of two runs. So that repair is what closes the residual, and no open defect remains from it.
