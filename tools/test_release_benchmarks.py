@@ -161,7 +161,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
                     result = subprocess.run(command + (["--enforce"] if enforce else []),
                                             capture_output=True, text=True)
                     self.assertEqual(result.returncode, int(fault is not None and enforce), result.stderr)
-                    self.assertEqual(json.loads(output.read_text())["verdict"],
+                    self.assertEqual(json.loads(output.read_text(encoding="utf-8"))["verdict"],
                                      "FAIL" if fault else "PASS")
 
 
