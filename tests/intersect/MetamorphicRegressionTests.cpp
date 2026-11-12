@@ -728,7 +728,9 @@ TEST_CASE("MR PR-159 skew cylinders tangent on both seams meet at a node",
             std::size_t ends = 0;
             for (const IntersectionBranch& branch : result->Branches) {
                 for (const double t : {branch.Range.GetLower(), branch.Range.GetUpper()}) {
-                    ends += Distance(Eval(branch.Curve3d, t), node) <= reach ? 1 : 0;
+                    if (Distance(Eval(branch.Curve3d, t), node) <= reach) {
+                        ++ends;
+                    }
                 }
                 for (const double t : IntersectTest::SamplesOf(branch.Range, 16)) {
                     const Point3 q = Eval(branch.Curve3d, t);
