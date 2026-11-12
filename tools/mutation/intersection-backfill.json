@@ -1,5 +1,5 @@
 {
-  "description": "Eight historical fault reintroductions for ADR-0053. Includes both PR-230 root causes and the PR-240/241 shared boundary search. Green baseline and repeated named failures are mandatory; adapted mutations preserve current interfaces.",
+  "description": "Historical fault reintroductions for ADR-0053. Includes both PR-230 root causes and the PR-240/241 shared boundary search. Green baseline and repeated named failures are mandatory; adapted mutations preserve current interfaces.",
   "preset": "gcc16-debug",
   "mutants": [
     {
@@ -113,6 +113,48 @@
       "tests": "^intersect:\\ MR\\ PR\\-241\\ spline\\ boundary\\ minimum$",
       "diagnostic": "intersect: MR PR-241 spline boundary minimum",
       "repair_commit": "51a2795f39031179e3bcd586505e14be57e676f5"
+    },
+    {
+      "id": "PR-200",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: far line origin crossings on the quadric",
+      "file": "src/intersect/LineSurface.cpp",
+      "find": "        const double t = Polished(line, coefficientsFrom, rounded, contact, other);",
+      "replace": "        [[maybe_unused]] const double unpolished = other;\n        const double t = rounded;",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ PR\\-200\\ far\\ line\\ origin\\ crossings\\ on\\ the\\ quadric$",
+      "diagnostic": "intersect: MR PR-200 far line origin crossings on the quadric",
+      "repair_commit": "e8db99b53bf4396bf1f48d92b195f7b06452b85c"
+    },
+    {
+      "id": "PR-207",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: traced sliver at a box corner is a point",
+      "file": "src/intersect/ImplicitTrace.cpp",
+      "find": "        result.Points.push_back(point);",
+      "replace": "        static_cast<void>(point);",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ PR\\-207\\ traced\\ sliver\\ at\\ a\\ box\\ corner\\ is\\ a\\ point$",
+      "diagnostic": "intersect: MR PR-207 traced sliver at a box corner is a point",
+      "repair_commit": "f2138cf159a179e31d8adf56397a04e82e5814f3"
+    },
+    {
+      "id": "PR-238",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: rounded pole plane fails closed on ellipsoid and sphere",
+      "file": "src/intersect/PlaneEllipsoid.cpp",
+      "find": "        if (!std::isfinite(s.Rate.X) || !std::isfinite(s.Rate.Y)) {",
+      "replace": "        if (false && (!std::isfinite(s.Rate.X) || !std::isfinite(s.Rate.Y))) {",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ PR\\-238\\ rounded\\ pole\\ plane\\ fails\\ closed\\ on\\ ellipsoid\\ and\\ sphere$",
+      "diagnostic": "intersect: MR PR-238 rounded pole plane fails closed on ellipsoid and sphere",
+      "repair_commit": "721c41b86ccb1cbf1103e265e568dd8eb77e889b"
     }
   ]
 }
