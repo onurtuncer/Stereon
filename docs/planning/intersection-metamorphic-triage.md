@@ -214,7 +214,11 @@ The campaign checker requires every mutant ID in `tools/mutation/intersection-ba
 
 #### PR-194 fault replay
 
-Filled in from the replay.
+- **Commands:** `PYTHONUTF8=1 python tools/mutate.py --catalogue tools/mutation/intersection-backfill-pr194.json --work build/metamorphic-pr194`, then `... --catalogue tools/mutation/intersection-backfill.json --only PR-194`. Both ran on committed HEAD `97763d769e8bacd644ad63895c87d0c63123ab72`.
+- **Toolchain:** g++ 16.2.0 (MSYS2), cmake 4.2.3-msvc3, Windows-11-10.0.26200, preset `gcc16-debug`; wall times 274.8 s and 172.2 s.
+- **Baseline:** green in both runs before any fault was applied.
+- **Red, all six root causes:** score 6 / 6, each fault killed in both of its runs by its own named MR test with the declared diagnostic found: plane-plane-aabb, plane-plane-underflow, plane-cylinder-uncut, spline-undecided, stale-linearization, nurbs-hull-bounds. The campaign entry `PR-194` (the plane-plane-aabb fault) is killed the same way, 1 / 1.
+- **Green:** on this branch, `stereon_intersect_tests "MR PR-194*"` passes: 6 test cases, 282 assertions.
 
 ### PR-239
 

@@ -126,7 +126,7 @@
     {
       "id": "PR-194",
       "source": "https://github.com/onurtuncer/Stereon/pull/194",
-      "state": "MR implemented",
+      "state": "verified",
       "direct": "tests/intersect/PlanePlaneTests.cpp#rotated bounded coincidence cannot be encoded as an AABB overlap",
       "fixture": "tests/intersect/PlanePlaneTests.cpp#rotated bounded coincidence cannot be encoded as an AABB overlap",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-194 rotated bounded plane coincidence",
@@ -140,7 +140,10 @@
       ],
       "campaign": "tools/mutation/intersection-backfill.json#PR-194",
       "repair_commit": "b74d6e23ff00b2994222bdc611ab09161e256282",
-      "evidence_kind": "resolved_geometry"
+      "evidence_kind": "resolved_geometry",
+      "red": "docs/planning/intersection-metamorphic-triage.md#### PR-194 fault replay",
+      "green": "docs/planning/intersection-metamorphic-triage.md#### PR-194 fault replay",
+      "review": "docs/planning/intersection-metamorphic-triage.md#Reviewer:"
     },
     {
       "id": "PR-200",
