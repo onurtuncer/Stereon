@@ -10,7 +10,9 @@
 // segment, a parabola (twice) and a hyperbola (twice); the second-order decay
 // of the Taylor residual and the adjoint identity on random pairs of lines,
 // circles, ellipses, hyperbolas, parabolas and cubic B-splines, rational half
-// the time; every status; and the bindings refused.
+// the time, the conics' frames turning too; a line across an ellipse and a
+// parabola turning about their centre and vertex, and a circle whose turn
+// moves no point; every status; and the bindings refused.
 
 #include "RapidCheck.hpp"
 
@@ -73,7 +75,11 @@ std::vector<double> RateOf(const Curve2d& a, const PlaneCurveComponent component
                            const std::size_t pole = 0, const bool second = false)
 {
     ParameterSet set;
-    const ParameterId p = *set.Add("p", ParameterQuantity::Length, 1.0);
+    const ParameterId p =
+        *set.Add("p",
+                 component == PlaneCurveComponent::Rotation ? ParameterQuantity::Angle
+                                                            : ParameterQuantity::Length,
+                 1.0);
     SensitivityContext sensitivity(std::move(set));
     REQUIRE(sensitivity.SetSeed(std::vector<double>{1.0}).has_value());
     const std::vector<PlaneCurveBinding> bindings{{p, component, pole}};
@@ -149,7 +155,8 @@ RandomSide RandomCircle()
                              *rc::gen::inRange(10, 31) / 10.0, x, Vec2{-x.Y, x.X}}},
             {{{}, PlaneCurveComponent::CenterX},
              {{}, PlaneCurveComponent::CenterY},
-             {{}, PlaneCurveComponent::Radius}}};
+             {{}, PlaneCurveComponent::Radius},
+             {{}, PlaneCurveComponent::Rotation}}};
 }
 
 RandomSide RandomEllipse()
@@ -161,7 +168,8 @@ RandomSide RandomEllipse()
             {{{}, PlaneCurveComponent::CenterX},
              {{}, PlaneCurveComponent::CenterY},
              {{}, PlaneCurveComponent::MajorRadius},
-             {{}, PlaneCurveComponent::MinorRadius}}};
+             {{}, PlaneCurveComponent::MinorRadius},
+             {{}, PlaneCurveComponent::Rotation}}};
 }
 
 RandomSide RandomHyperbola()
@@ -173,7 +181,8 @@ RandomSide RandomHyperbola()
             {{{}, PlaneCurveComponent::CenterX},
              {{}, PlaneCurveComponent::CenterY},
              {{}, PlaneCurveComponent::MajorRadius},
-             {{}, PlaneCurveComponent::MinorRadius}}};
+             {{}, PlaneCurveComponent::MinorRadius},
+             {{}, PlaneCurveComponent::Rotation}}};
 }
 
 /// A parabola, its vertex bound through the centre's components.
@@ -184,7 +193,8 @@ RandomSide RandomParabola()
                                *rc::gen::inRange(1, 7) / 4.0, x, Vec2{-x.Y, x.X}}},
             {{{}, PlaneCurveComponent::CenterX},
              {{}, PlaneCurveComponent::CenterY},
-             {{}, PlaneCurveComponent::FocalLength}}};
+             {{}, PlaneCurveComponent::FocalLength},
+             {{}, PlaneCurveComponent::Rotation}}};
 }
 
 /// A cubic Bezier across the origin, rational half the time, two of its
@@ -232,6 +242,19 @@ RandomSide RandomCurve()
     }
 }
 
+/// A frame turned counter-clockwise by `angle`: an exact rotation.
+template <typename Conic>
+Conic Turned(Conic conic, const double angle)
+{
+    const auto turn = [&](const Vec2& v) {
+        return Vec2{std::cos(angle) * v.X - std::sin(angle) * v.Y,
+                    std::sin(angle) * v.X + std::cos(angle) * v.Y};
+    };
+    conic.XAxis = turn(conic.XAxis);
+    conic.YAxis = turn(conic.YAxis);
+    return conic;
+}
+
 /// The curve with each binding's value moved by d(k), k counting from first.
 template <typename Step>
 Curve2d Moved(const RandomSide& side, const Step& d, const std::size_t first)
@@ -256,27 +279,27 @@ Curve2d Moved(const RandomSide& side, const Step& d, const std::size_t first)
         Circle2d moved = *circle;
         moved.Center = moved.Center + Vec2{delta(C::CenterX), delta(C::CenterY)};
         moved.Radius += delta(C::Radius);
-        return Curve2d{moved};
+        return Curve2d{Turned(moved, delta(C::Rotation))};
     }
     if (const Ellipse2d* ellipse = side.Curve.Target<Ellipse2d>()) {
         Ellipse2d moved = *ellipse;
         moved.Center = moved.Center + Vec2{delta(C::CenterX), delta(C::CenterY)};
         moved.MajorRadius += delta(C::MajorRadius);
         moved.MinorRadius += delta(C::MinorRadius);
-        return Curve2d{moved};
+        return Curve2d{Turned(moved, delta(C::Rotation))};
     }
     if (const Hyperbola2d* hyperbola = side.Curve.Target<Hyperbola2d>()) {
         Hyperbola2d moved = *hyperbola;
         moved.Center = moved.Center + Vec2{delta(C::CenterX), delta(C::CenterY)};
         moved.MajorRadius += delta(C::MajorRadius);
         moved.MinorRadius += delta(C::MinorRadius);
-        return Curve2d{moved};
+        return Curve2d{Turned(moved, delta(C::Rotation))};
     }
     if (const Parabola2d* parabola = side.Curve.Target<Parabola2d>()) {
         Parabola2d moved = *parabola;
         moved.Vertex = moved.Vertex + Vec2{delta(C::CenterX), delta(C::CenterY)};
         moved.FocalLength += delta(C::FocalLength);
-        return Curve2d{moved};
+        return Curve2d{Turned(moved, delta(C::Rotation))};
     }
     const auto* spline = side.Curve.Target<BSplineCurve2d>();
     REQUIRE(spline != nullptr);
@@ -331,6 +354,16 @@ bool WellConditioned(const Curve2d& a, const Curve2d& b)
     });
 }
 
+/// The quantity of a parameter moving a component.
+ParameterQuantity QuantityOf(const PlaneCurveComponent component)
+{
+    if (component == PlaneCurveComponent::PoleWeight) {
+        return ParameterQuantity::Dimensionless;
+    }
+    return component == PlaneCurveComponent::Rotation ? ParameterQuantity::Angle
+                                                      : ParameterQuantity::Length;
+}
+
 /// Second-order Taylor decay and <J v, w> = <v, J^T w> for one pair. A step
 /// that changes the number of points is a new regime and discarded; points
 /// are paired by position, since a circle's angle may pass its seam; and
@@ -345,13 +378,10 @@ void RequireProducts(RandomSide a, RandomSide b)
     for (std::size_t k = 0; k < count; ++k) {
         const PlaneCurveBinding& shape =
             k < a.Shape.size() ? a.Shape[k] : b.Shape[k - a.Shape.size()];
-        const bool weight = shape.Component == PlaneCurveComponent::PoleWeight;
         references.push_back(*rc::gen::inRange(1, 20) / 10.0);
         seed.push_back(*rc::gen::inRange(-10, 11) / 10.0);
         const ParameterId id =
-            *set.Add("p" + std::to_string(k),
-                     weight ? ParameterQuantity::Dimensionless : ParameterQuantity::Length,
-                     references.back());
+            *set.Add("p" + std::to_string(k), QuantityOf(shape.Component), references.back());
         (k < a.Shape.size() ? a.Shape[k] : b.Shape[k - a.Shape.size()]).Parameter = id;
     }
     SensitivityContext sensitivity(std::move(set));
@@ -845,4 +875,86 @@ TEST_CASE("a meeting of two space curves is an event, a separation keeps",
     const auto overlap = Stereon::IntersectJvp(Curve{*spline}, Curve{*spline}, *same, sensitivity);
     REQUIRE(overlap.has_value());
     CHECK(overlap->GetStatus() == DerivativeStatus::Nondifferentiable);
+}
+
+TEST_CASE("plane conics turning about their centres move as their closed forms say",
+          "[intersect][linearization][planar][turn]")
+{
+    SECTION("the ellipse of semi-axes 5 and 4 across the line y = 12/5")
+    {
+        // They meet at (+-4, 12/5), cos t = +-4/5, sin t = 3/5. At fixed t
+        // the turn moves the point by d = C - O turned a quarter, (-12/5,
+        // +-4); with A' = (-5 sin t, 4 cos t) and the line's (1, 0), t' =
+        // -5/4 and s' = 27/20 at both: in the frame the point solves x^2 / 25
+        // + y^2 / 16 = 1 turned back by w, (8/25)(x' + 12/5) = (3/10)(4).
+        const Curve2d ellipse{Ellipse2d{Point2{}, 5.0, 4.0, Vec2{1.0, 0.0}, Vec2{0.0, 1.0}}};
+        const Curve2d line{Line2d{Point2{0.0, 2.4}, Vec2{1.0, 0.0}}};
+        const std::vector<double> turn = RateOf(ellipse, PlaneCurveComponent::Rotation, line);
+        for (const double x : {4.0, -4.0}) {
+            RequireRates(turn, PointAt(turn, ellipse, line, x, 2.4), 1.35, 0.0, -1.25, 1.35);
+        }
+    }
+    SECTION("the parabola y = x^2 across the line y = 4, turning about its vertex")
+    {
+        // In the turned frame the point solves Y = X^2 with X = x + w y and
+        // Y = y - w x: -x = 2 X (x' + 4), x' = -9/2 at both points; t' = 1/2.
+        const Curve2d line{Line2d{Point2{0.0, 4.0}, Vec2{1.0, 0.0}}};
+        const std::vector<double> turn = RateOf(UnitParabola, PlaneCurveComponent::Rotation, line);
+        for (const double x : {2.0, -2.0}) {
+            RequireRates(turn, PointAt(turn, UnitParabola, line, x, 4.0), -4.5, 0.0, 0.5, -4.5);
+        }
+    }
+    SECTION("a circle turned about its centre moves no point, only its angle")
+    {
+        const Curve2d circle{Circle2d{Point2{}, 2.0, Vec2{1.0, 0.0}, Vec2{0.0, 1.0}}};
+        const std::vector<double> turn = RateOf(circle, PlaneCurveComponent::Rotation, XAxis);
+        REQUIRE(turn.size() == 2 * Values);
+        RequireRates(turn, 0, 0.0, 0.0, -1.0, 0.0);
+        RequireRates(turn, Values, 0.0, 0.0, -1.0, 0.0);
+    }
+    SECTION("the rectangular hyperbola turned, bound second, across y = 4")
+    {
+        // At (5, 4) the offset is (5, 4), turned (-4, 5); with B' = (3 sinh
+        // t, 3 cosh t) = (4, 5) and A' = (1, 0): s' - 4 t' = -4, -5 t' = 5,
+        // so t' = -1 and s' = -8. In the frame, X^2 - Y^2 = 9 with X = x + w
+        // y, Y = y - w x: 2 X (x' + 4) = 2 Y (-5), x' = -8.
+        const Curve2d line{Line2d{Point2{0.0, 4.0}, Vec2{1.0, 0.0}}};
+        RequireRates(RateOfSecond(line, Rectangular, PlaneCurveComponent::Rotation), 0, -8.0, 0.0,
+                     -8.0, -1.0);
+    }
+}
+
+TEST_CASE("a plane turn is refused where there is no frame or as a length",
+          "[intersect][linearization][planar][turn]")
+{
+    ParameterSet set;
+    const ParameterId length = *set.Add("p", ParameterQuantity::Length, 1.0);
+    const ParameterId angle = *set.Add("a", ParameterQuantity::Angle, 1.0);
+    SensitivityContext sensitivity(std::move(set));
+    REQUIRE(sensitivity.SetSeed(std::vector<double>{1.0, 1.0}).has_value());
+    const auto refused = [&](const Curve2d& a, const std::vector<PlaneCurveBinding>& bindings,
+                             const Curve2d& b) {
+        const auto at = Stereon::Intersect(a, b, ctx);
+        REQUIRE(at.has_value());
+        const auto jvp = Stereon::IntersectJvp(a, bindings, b, {}, *at, sensitivity);
+        REQUIRE_FALSE(jvp.has_value());
+        return jvp.error().GetCode() == ErrorCode::InvalidInput;
+    };
+    const Curve2d circle{Circle2d{Point2{}, 2.0, Vec2{1.0, 0.0}, Vec2{0.0, 1.0}}};
+    const auto segment =
+        Stereon::MakeBSplineCurve(1, {0.0, 0.0, 1.0, 1.0}, {Point2{0.0, -1.0}, Point2{0.0, 1.0}});
+    REQUIRE(segment.has_value());
+    // A line and a B-spline have no frame; a turn is an angle; an angle
+    // moves no centre.
+    CHECK(refused(XAxis, {{angle, PlaneCurveComponent::Rotation}}, circle));
+    CHECK(refused(Curve2d{*segment}, {{angle, PlaneCurveComponent::Rotation}}, XAxis));
+    CHECK(refused(circle, {{length, PlaneCurveComponent::Rotation}}, XAxis));
+    CHECK(refused(circle, {{angle, PlaneCurveComponent::CenterX}}, XAxis));
+    // A turn does not make a tangency differentiable.
+    const auto touch = Stereon::Intersect(UnitParabola, XAxis, ctx);
+    REQUIRE(touch.has_value());
+    const std::vector<PlaneCurveBinding> turn{{angle, PlaneCurveComponent::Rotation}};
+    const auto tangent = Stereon::IntersectJvp(UnitParabola, turn, XAxis, {}, *touch, sensitivity);
+    REQUIRE(tangent.has_value());
+    CHECK(tangent->GetStatus() == DerivativeStatus::Nondifferentiable);
 }
