@@ -189,6 +189,30 @@ def dsqrt(x: Decimal) -> Decimal:
     return x.sqrt() if x > 0 else Decimal(0)
 
 
+def _series(x: Decimal, odd: bool, alternating: bool) -> Decimal:
+    """sin/cos (alternating) or sinh/cosh of x by their Taylor series, at the
+    80-digit context: platform-independent, unlike the C library's."""
+    term = x if odd else Decimal(1)
+    total, k, x2 = term, 1 if odd else 0, x * x
+    while True:
+        term = term * x2 / ((k + 1) * (k + 2))
+        if alternating:
+            term = -term
+        k += 2
+        if abs(term) < Decimal(10) ** -70 * max(abs(total), Decimal(1)):
+            return total + term
+        total += term
+
+
+def trig(name: str, t: float) -> float:
+    """cos, sin, cosh or sinh of the double t, rounded once to the nearest
+    double. math.cos and friends differ in the last bit between Windows,
+    glibc and macOS, which made the corpus platform-dependent."""
+    x = Decimal(t)
+    odd = name in ("sin", "sinh")
+    return float(_series(x, odd, alternating=name in ("sin", "cos")))
+
+
 # --- Curves in the local frame ----------------------------------------------
 
 
@@ -631,11 +655,11 @@ def placed_eval(c: dict, t: float):
         return [c["origin"][i] + t * c["direction"][i] for i in range(2)]
     x, y = c["x_axis"], c["y_axis"]
     if kind == "circle":
-        o, a, b = c["center"], c["radius"] * math.cos(t), c["radius"] * math.sin(t)
+        o, a, b = c["center"], c["radius"] * trig("cos", t), c["radius"] * trig("sin", t)
     elif kind == "ellipse":
-        o, a, b = c["center"], c["major"] * math.cos(t), c["minor"] * math.sin(t)
+        o, a, b = c["center"], c["major"] * trig("cos", t), c["minor"] * trig("sin", t)
     elif kind == "hyperbola":
-        o, a, b = c["center"], c["major"] * math.cosh(t), c["minor"] * math.sinh(t)
+        o, a, b = c["center"], c["major"] * trig("cosh", t), c["minor"] * trig("sinh", t)
     else:
         o, a, b = c["vertex"], t * t / (4.0 * c["focal"]), t
     return [o[i] + a * x[i] + b * y[i] for i in range(2)]
