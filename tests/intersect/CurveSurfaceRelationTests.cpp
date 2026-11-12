@@ -363,7 +363,6 @@ constexpr double ParameterReach = 1e-7;
 
 struct Tally {
     std::size_t Answered = 0;
-    std::size_t Refused = 0;
     std::size_t Unsupported = 0;
 };
 
@@ -384,19 +383,19 @@ void Claim(const SurfaceFixture& s, const Kind kind, const Motion& m, const bool
     const Context policy = m.Policy();
     const double reach = 4.0 * policy.GetResolution();
     const auto r = Intersect(c.Value, c.Domain, surface, Domain(surface), policy);
-    if (!r) {
-        INFO(IntersectTest::ErrorText(r));
-        const ErrorCode code = r.error().GetCode();
-        if (code == ErrorCode::NotImplemented) {
-            // No handler for the pair yet (a hyperbola or a parabola against
-            // a surface): its cells stay open, nothing is claimed.
-            ++tally.Unsupported;
-            return;
-        }
-        CHECK((code == ErrorCode::IntersectionFailed || code == ErrorCode::CertificationFailed));
-        ++tally.Refused;
+    // These conics lack analytic-surface handlers; the generic B-spline
+    // surface handler supports them. An error code cannot turn
+    // a supported fixture into an unsupported one, or qualify a relation.
+    const bool unsupported = (kind == Kind::Hyperbola || kind == Kind::Parabola) &&
+                             surface.Target<BSplineSurface>() == nullptr;
+    INFO(IntersectTest::ErrorText(r));
+    if (unsupported) {
+        REQUIRE_FALSE(r.has_value());
+        CHECK(r.error().GetCode() == ErrorCode::NotImplemented);
+        ++tally.Unsupported;
         return;
     }
+    REQUIRE(r.has_value());
     ++tally.Answered;
     CHECK(r->Overlaps.empty());
     bool found = false;
@@ -424,8 +423,8 @@ void RunAll(const std::function<void(const SurfaceFixture&, Kind, Tally&)>& run)
             run(s, kind, tally);
         }
     }
-    WARN(tally.Answered << " answered, " << tally.Refused << " refused (fail-closed), "
-                        << tally.Unsupported << " without a handler");
+    CHECK(tally.Answered > 0);
+    WARN(tally.Answered << " answered, " << tally.Unsupported << " without a handler");
 }
 
 } // namespace
