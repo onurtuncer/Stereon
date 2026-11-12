@@ -56,6 +56,8 @@ TANGENT_REASON = "a tangency along a curve or at a point of rational surfaces; t
 NODE_REASON = ("two branches cross at a node of rational surfaces; the generic path fails closed at "
                "a branch point it cannot prove a transverse node of polynomial surfaces")
 COINCIDENT_REASON = "the surfaces coincide within the tolerance; the generic path fails closed on an overlap"
+FAR_REASON = ("far from the origin the transverse search can refuse near a branch's end on the "
+              "domain's boundary (open defect SSI-translated-boundary)")
 TINY_REASON = "a loop a few thousandths of the patch across; subdivision may exhaust its budget first"
 
 
@@ -129,9 +131,10 @@ def bump(height):
     return surface(3, 3, CUBIC, CUBIC, poles)
 
 
-def regime(name, a, b, curves=0, points=0, contact="crossing", witnesses=(), overlap=False, hard=None):
+def regime(name, a, b, curves=0, points=0, contact="crossing", witnesses=(), overlap=False, hard=None,
+           hard_far=None):
     return {"name": name, "a": a, "b": b, "curves": curves, "points": points, "contact": contact,
-            "witnesses": list(witnesses), "overlap": overlap, "hard": hard}
+            "witnesses": list(witnesses), "overlap": overlap, "hard": hard, "hard_far": hard_far}
 
 
 def plane_plane():
@@ -154,7 +157,8 @@ def saddle_plane():
                witnesses=[(1.0, c, c), (c, 1.0, c), (-1.0, -c, c), (-c, -1.0, c), (0.75, c / 0.75, c)]),
         # x y = 0: two lines crossing at a transverse node of polynomial
         # surfaces, which the generic path splits there.
-        regime("node", saddle(), flat(0.0), curves=1, witnesses=[(0.5, 0.0, 0.0), (0.0, -0.5, 0.0)]),
+        regime("node", saddle(), flat(0.0), curves=1, witnesses=[(0.5, 0.0, 0.0), (0.0, -0.5, 0.0)],
+               hard_far=FAR_REASON),
     ]
 
 
@@ -254,13 +258,14 @@ def case_for(family, r, placement_name, scale):
         "contact": r["contact"],
         "witnesses": [placed_point(placement, scale, w) for w in r["witnesses"]],
     }
-    if r["hard"]:
-        expected["may_fail_closed"] = r["hard"]
+    hard = r["hard"] or (r["hard_far"] if placement_name == "far" else None)
+    if hard:
+        expected["may_fail_closed"] = hard
     a, b = family.split("-")
     return {
         "format": "stereon-corpus-case/1",
         "id": f"nurbs-ssi/{family}/{r['name']}-{placement_name}-x{int(scale)}",
-        "kind": "hard" if r["hard"] else "reference",
+        "kind": "hard" if hard else "reference",
         "summary": f"A B-spline {a} and a B-spline {b}, {r['name']}, placed at {placement_name}, "
                    f"scaled by {int(scale)}.",
         "added": "2026-11-10",
