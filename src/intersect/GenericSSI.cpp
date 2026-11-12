@@ -51,19 +51,26 @@ import Stereon.Robust;
 ///   branch ends: none is no branch, two are one arc, more need a smaller pair;
 /// - an isolated touch, polynomial surfaces only: a unique solution of the
 ///   extremal system at which the relative second form is definite, within
-///   the tolerance.
+///   the tolerance (found, not yet settled: it fails closed);
+/// - a transverse node, polynomial surfaces only: a critical point of one
+///   surface's height over the other, isolated by Krawczyk's operator within
+///   the tolerance, around which a Lyapunov function proved on the Hessian's
+///   enclosure rules out every other piece of the intersection, so that the
+///   four roots on the pair's boundary are the ends of the four
+///   half-branches leaving it (see "Branch points" below).
 ///
 /// Arcs join at shared seeds into branches, every free end on a boundary of
-/// the domains. Each arc is marched by Newton's method on S_A = S_B and
-/// L . S_A = advance, halving chords until they hold, and the polylines in
-/// space and on both surfaces are certified by CertifyDeviation, tightened
-/// until they pass. Polylines, because a fitted cubic's pcurve can leave a
-/// surface's domain.
+/// the domains or at a node, where four branches end. Each arc is marched by Newton's method on S_A
+/// = S_B and L . S_A = advance, halving chords until they hold, and the polylines in space and on
+/// both surfaces are certified by CertifyDeviation, tightened until they pass. Polylines, because a
+/// fitted cubic's pcurve can leave a surface's domain.
 ///
 /// What cannot be settled fails, never a partial or an unproved empty result:
-/// a tangency along a curve, a branch point, an overlap, and any tangency of
-/// rational surfaces, at the smallest pair, IntersectionFailed; a search past
-/// its budget, the same.
+/// a tangency along a curve, a branch point that is not a proved transverse
+/// node (a higher-order singularity, a node on a line between Bezier patches,
+/// a node of rational surfaces), an overlap, and any tangency of rational
+/// surfaces, at the smallest pair, IntersectionFailed; a search past its
+/// budget, the same.
 namespace Stereon::Detail {
 namespace {
 
@@ -295,6 +302,55 @@ void AddSeed(std::vector<Seed>& seeds, const Seed& seed, const double join)
             carrierIsA ? onOther : onCarrier};
 }
 
+/// The box of a line of poles, as ExtentOf boxes a net: the convex hull of
+/// the edge it controls.
+[[nodiscard]] Bounds ExtentOfLine(const std::vector<HPoint>& line)
+{
+    return ExtentOf(Net{line.size(), 1, line});
+}
+
+/// An edge's derivative along itself, enclosed from its own pole line as
+/// HullsOf encloses a patch's, met with the patch's: the patch's alone can
+/// hold zero, across a tangency inside it, where the edge's does not.
+[[nodiscard]] Bounds EdgeDerivative(const std::vector<HPoint>& line, const Interval& width,
+                                    const Bounds& patchWide)
+{
+    const Net net{line.size(), 1, line};
+    const HPoint h = HullOf(net);
+    if (!(h.W.GetLower() > 0.0 && width.GetLower() > 0.0)) {
+        return patchWide;
+    }
+    const Bounds own = QuotientOf(HullOf(DerivativeNet(net, true, width)), ExtentOf(net), h.W);
+    Bounds met;
+    for (std::size_t i = 0; i < met.size(); ++i) {
+        met[i] = Intersection(own[i], patchWide[i]);
+        if (met[i].IsEmpty()) {
+            return patchWide; // Both hold the derivative; only rounding parts them.
+        }
+    }
+    return met;
+}
+
+/// The pole line controlling one edge of a patch, the lower or the upper.
+[[nodiscard]] std::vector<HPoint> EdgeLine(const Patch& carrier, const bool alongU,
+                                           const bool upper)
+{
+    return LineOf(carrier.Poles, alongU, upper ? LineCount(carrier.Poles, alongU) - 1 : 0);
+}
+
+/// The edge's root against the other patch: none at once when the edge's
+/// hull misses the other patch's.
+[[nodiscard]] Isolated<3> RootOnEdge(const Edge& edge, const std::vector<HPoint>& line,
+                                     const Hulls& own, const Patch& other, const Hulls& theirs)
+{
+    if (ProvedApart(ExtentOfLine(line), other.Extent, 0.0)) {
+        return {Isolation::None, {}};
+    }
+    const Bounds along = EdgeDerivative(line, WidthOf(StretchOf(edge.Carrier, edge.AlongU)),
+                                        edge.AlongU ? own.Du : own.Dv);
+    return EdgeRoot(edge, along, other, theirs);
+}
+
 [[nodiscard]] bool EdgesOfCarrier(const PairView& v, const bool carrierIsA,
                                   std::vector<Seed>& seeds)
 {
@@ -304,9 +360,10 @@ void AddSeed(std::vector<Seed>& seeds, const Seed& seed, const double join)
     const Hulls& theirs = carrierIsA ? v.OnB : v.OnA;
     for (const bool alongU : {true, false}) {
         const Interval across = StretchOf(carrier, !alongU);
-        for (const double fixed : {across.GetLower(), across.GetUpper()}) {
-            const Edge edge{carrier, alongU, fixed};
-            const Isolated<3> root = EdgeRoot(edge, alongU ? own.Du : own.Dv, other, theirs);
+        for (const bool upper : {false, true}) {
+            const Edge edge{carrier, alongU, upper ? across.GetUpper() : across.GetLower()};
+            const Isolated<3> root =
+                RootOnEdge(edge, EdgeLine(carrier, alongU, upper), own, other, theirs);
             if (root.Outcome == Isolation::Unsettled) {
                 return false;
             }
@@ -482,14 +539,14 @@ struct LocalForm {
 /// common tangent plane, is definite. Evaluated at the solution: Krawczyk's
 /// regularity proves the form nonsingular there, so rounding cannot flip it
 /// unless it is almost singular, which the margin refuses.
-[[nodiscard]] bool RelativelyDefinite(const LocalForm& a, const LocalForm& b)
+[[nodiscard]] std::optional<Form2> RelativeForm(const LocalForm& a, const LocalForm& b)
 {
     const double e = Dot(b.Du, b.Du);
     const double f = Dot(b.Du, b.Dv);
     const double g = Dot(b.Dv, b.Dv);
     const double det = e * g - f * f;
     if (!(det > 0.0)) {
-        return false;
+        return std::nullopt;
     }
     const auto toB = [&](const Vec3& t) {
         const double x = Dot(t, b.Du);
@@ -502,11 +559,31 @@ struct LocalForm {
         return b.Second[0] * s[0] * t[0] + b.Second[1] * (s[0] * t[1] + s[1] * t[0]) +
                b.Second[2] * s[1] * t[1];
     };
-    const double m11 = a.Second[0] - pulled(p, p);
-    const double m12 = a.Second[1] - pulled(p, q);
-    const double m22 = a.Second[2] - pulled(q, q);
+    return Form2{a.Second[0] - pulled(p, p), a.Second[1] - pulled(p, q),
+                 a.Second[2] - pulled(q, q)};
+}
+
+/// The relative form's determinant, against the margin rounding could
+/// move it by: positive for a touch, negative for a crossing of two
+/// branches.
+[[nodiscard]] int FormSign(const LocalForm& a, const LocalForm& b)
+{
+    const std::optional<Form2> m = RelativeForm(a, b);
+    if (!m) {
+        return 0;
+    }
+    const auto [m11, m12, m22] = *m;
     const double scale = m11 * m11 + 2.0 * m12 * m12 + m22 * m22;
-    return m11 * m22 - m12 * m12 > 0x1p-20 * scale;
+    const double det = m11 * m22 - m12 * m12;
+    if (det > 0x1p-20 * scale) {
+        return 1;
+    }
+    return det < -0x1p-20 * scale ? -1 : 0;
+}
+
+[[nodiscard]] bool RelativelyDefinite(const LocalForm& a, const LocalForm& b)
+{
+    return FormSign(a, b) > 0;
 }
 
 // --- The search ------------------------------------------------------------
@@ -524,6 +601,8 @@ struct Arc {
 struct Findings {
     std::vector<Arc> Arcs;
     std::vector<IntersectionPoint> Touches;
+    /// Proved transverse nodes, where four arcs end.
+    std::vector<Point3> Nodes;
 };
 
 struct SearchSettings {
@@ -593,17 +672,678 @@ enum class Settled : std::uint8_t { Done, Cut };
     return {std::nextafter(lower, 0.0), std::nextafter(upper, Infinity)};
 }
 
-/// A pair with no advance direction, polynomial. The one thing settled here
-/// is an isolated touch: a unique point of common tangency, the surfaces
-/// separating on every side of it, within the tolerance of each other. No
-/// solution rules out only tangency, not a crossing, and a saddle has
-/// branches through it; both are cut further, and a saddle ends in failure
-/// at the smallest pair.
-[[nodiscard]] Settled SettleTouch(const PatchPair& pair, const SearchSettings& s,
-                                  [[maybe_unused]] Findings& found)
+/// Whether the parameter lies on a side of its domain, within the join.
+[[nodiscard]] bool OnSide(const double x, const Interval& domain)
+{
+    const double slack = 0x1p-30 * std::max(1.0, Width(domain));
+    return x <= domain.GetLower() + slack || x >= domain.GetUpper() - slack;
+}
+
+// --- Branch points -----------------------------------------------------------
+//
+// A transverse node: the surfaces share a tangent plane at a point P and the
+// relative second form there is indefinite and nondegenerate, so two smooth
+// branches cross at P. It is settled on a pair of patches, a small one S and
+// a covering one C, by four facts proved in interval arithmetic:
+//
+// 1. Coordinates. A frame (e1, e2, n), n near C's normal at P, projects C's
+//    patch one to one onto the plane: the projection's Jacobian is regular
+//    over the whole (convex) parameter box, so by the mean value theorem no
+//    two parameters share a projection. C is then the graph z = g(p) over a
+//    closed disc D, bounded by the projection of C's edges.
+// 2. Containment. The projection of S's hull misses the projection of every
+//    edge of C, and meets D at the critical point below, so it lies inside D.
+//    The height h(s) = n . S(s) - g(e . S(s)) is then defined on S's whole
+//    box, and its zeros are exactly the points of S on C (C's parameter
+//    being determined).
+// 3. The critical point. Krawczyk's operator isolates the unique solution in
+//    the pair of  e . (S - C) = 0, S_u . N_C = S_v . N_C = 0,  a critical
+//    point s* of h; the surfaces there are within the tolerance of each other.
+// 4. No other structure. The Hessian of h is enclosed over S's box: with nu =
+//    n - G1 e1 - G2 e2 for G the gradient of g,
+//        Hess h = [nu . S_jk] - Dp^T Hess g Dp,  Hess g = Dq^-T [nu . C_jk] Dq^-1,
+//    Dp and Dq the projections' Jacobians. Along the zero set, h's level
+//    curve runs along J grad h, J a quarter turn, and grad h(s) = H (s - s*)
+//    for H in that enclosure (mean value on the convex box, grad h(s*) = 0).
+//    With M = sym(J H0), H0 the enclosure's middle, the symmetric part of
+//    M J H is proved positive definite for every H in it, so
+//    Q(s) = (s - s*)^T M (s - s*) strictly increases along every level curve
+//    away from s*. (M J H0 has a positive definite symmetric part for any
+//    indefinite nonsingular H0: J H0 is traceless with (J H0)^2 = -det(H0) I,
+//    so sym(J H0) J H0 + (J H0)^T sym(J H0) = (J H0)^T (J H0) - det(H0) I.)
+//    Hence h has no other critical point, the zero set has no closed loop,
+//    and no arc leaves s* and returns to it; H is indefinite, so four
+//    half-branches leave s* (Morse), each ending on S's boundary.
+//
+// Every arc of the zero set therefore ends on S's edges or at s*, and the
+// edges' roots, each isolated by Krawczyk's operator, count them: four are
+// the four half-branches and nothing else, s* joining them. Fewer or more,
+// or anything unproved, and the node is not settled here.
+//
+// The proof places P within the tolerance of both surfaces, not on them: a
+// gap within it is not told apart from a crossing (ADR-0050), and the node is
+// reported as the shared end of the four branches, a candidate for an
+// arrangement event, never as one by itself (ADR-0054).
+
+/// A 2 x 2 matrix of intervals, by rows.
+using Matrix2 = std::array<std::array<Interval, 2>, 2>;
+
+[[nodiscard]] Matrix2 Times(const Matrix2& a, const Matrix2& b)
+{
+    Matrix2 c{};
+    for (std::size_t r = 0; r < 2; ++r) {
+        for (std::size_t k = 0; k < 2; ++k) {
+            c[r][k] = a[r][0] * b[0][k] + a[r][1] * b[1][k];
+        }
+    }
+    return c;
+}
+
+[[nodiscard]] Matrix2 Transposed(const Matrix2& a)
+{
+    return {{{a[0][0], a[1][0]}, {a[0][1], a[1][1]}}};
+}
+
+[[nodiscard]] bool ExcludesZero(const Interval& x)
+{
+    return x.GetLower() > 0.0 || x.GetUpper() < 0.0;
+}
+
+/// Linear coordinates for a node: across the plane (e1, e2), up it n. They
+/// need not be orthonormal, only a basis, which rounding cannot spoil.
+struct NodeFrame {
+    Bounds E1;
+    Bounds E2;
+    Bounds N;
+};
+
+[[nodiscard]] Bounds Exactly(const Vec3& v)
+{
+    return {Interval{v.X}, Interval{v.Y}, Interval{v.Z}};
+}
+
+[[nodiscard]] std::optional<NodeFrame> FrameAbout(const Vec3& normal)
+{
+    const double length = Length(normal);
+    if (!(length > 0.0) || !std::isfinite(length)) {
+        return std::nullopt;
+    }
+    const Vec3 n = normal / length;
+    const double ax = std::abs(n.X);
+    const double ay = std::abs(n.Y);
+    const double az = std::abs(n.Z);
+    const Vec3 axis = ax <= ay && ax <= az ? Vec3{1.0, 0.0, 0.0}
+                      : ay <= az           ? Vec3{0.0, 1.0, 0.0}
+                                           : Vec3{0.0, 0.0, 1.0};
+    const Vec3 e1 = Normalized(Cross(n, axis));
+    const Vec3 e2 = Cross(n, e1);
+    return NodeFrame{Exactly(e1), Exactly(e2), Exactly(n)};
+}
+
+/// The Jacobian of a patch's projection onto the frame's plane: rows e1
+/// and e2, columns the partials along u and v.
+[[nodiscard]] Matrix2 ProjectedJacobian(const NodeFrame& f, const Bounds& du, const Bounds& dv)
+{
+    return {{{DotOf(f.E1, du), DotOf(f.E1, dv)}, {DotOf(f.E2, du), DotOf(f.E2, dv)}}};
+}
+
+/// A small patch S and a patch C meant to cover it, as a pair (S, C).
+struct NodeSystem {
+    const PatchPair& Pair;
+    const SecondNets& S;
+    const SecondNets& C;
+    const NodeFrame& Frame;
+};
+
+/// The critical point of S's height over C, solved for (u_S, v_S, u_C, v_C):
+///     e1 . (S - C) = 0,  e2 . (S - C) = 0,  S_u . N_C = 0,  S_v . N_C = 0,
+/// N_C = C_u x C_v. Polynomial patches only.
+[[nodiscard]] Isolated<4> CriticalPoint(const NodeSystem& sys)
+{
+    const Patch& small = sys.Pair.A;
+    const Patch& cover = sys.Pair.B;
+    const NormalJet n = NormalHull(sys.C);
+    const Bounds su = XyzHull(sys.S.Du);
+    const Bounds sv = XyzHull(sys.S.Dv);
+    const Bounds cu = XyzHull(sys.C.Du);
+    const Bounds cv = XyzHull(sys.C.Dv);
+    const NodeFrame& f = sys.Frame;
+    IntervalMatrix<4> j{};
+    j[0] = {DotOf(f.E1, su), DotOf(f.E1, sv), -DotOf(f.E1, cu), -DotOf(f.E1, cv)};
+    j[1] = {DotOf(f.E2, su), DotOf(f.E2, sv), -DotOf(f.E2, cu), -DotOf(f.E2, cv)};
+    j[2] = {DotOf(XyzHull(sys.S.Duu), n.N), DotOf(XyzHull(sys.S.Duv), n.N), DotOf(su, n.Nu),
+            DotOf(su, n.Nv)};
+    j[3] = {DotOf(XyzHull(sys.S.Duv), n.N), DotOf(XyzHull(sys.S.Dvv), n.N), DotOf(sv, n.Nu),
+            DotOf(sv, n.Nv)};
+    const IntervalsN<4> box{small.Parameters.X, small.Parameters.Y, cover.Parameters.X,
+                            cover.Parameters.Y};
+    return Krawczyk<4>(box, j, [&](const std::array<double, 4>& m) {
+        const Bounds r = MinusOf(XyzValue(small, m[0], m[1]), XyzValue(cover, m[2], m[3]));
+        const Bounds normal = CrossOf(XyzAt(sys.C.Du, cover.Parameters, m[2], m[3]),
+                                      XyzAt(sys.C.Dv, cover.Parameters, m[2], m[3]));
+        return IntervalsN<4>{DotOf(f.E1, r), DotOf(f.E2, r),
+                             DotOf(XyzAt(sys.S.Du, small.Parameters, m[0], m[1]), normal),
+                             DotOf(XyzAt(sys.S.Dv, small.Parameters, m[0], m[1]), normal)};
+    });
+}
+
+/// The patch's points over enclosed parameters, polynomial.
+[[nodiscard]] Bounds XyzOver(const Patch& p, const Interval& u, const Interval& v)
+{
+    const HPoint h = ValueOf(p.Poles, p.Parameters, u, v);
+    return {h.X, h.Y, h.Z};
+}
+
+/// How far apart the two surfaces can be at the critical point.
+[[nodiscard]] Interval GapAt(const PatchPair& pair, const IntervalsN<4>& x)
+{
+    return DistanceBetween(MinusOf(XyzOver(pair.A, x[0], x[1]), XyzOver(pair.B, x[2], x[3])));
+}
+
+/// e . P over a polynomial pole line or net, by the convex hull of its poles.
+[[nodiscard]] Interval Across(const std::vector<HPoint>& poles, const Bounds& e)
+{
+    Interval range;
+    for (const HPoint& h : poles) {
+        range = Hull(range, DotOf(e, Bounds{h.X, h.Y, h.Z}));
+    }
+    return range;
+}
+
+/// Whether the projection of a pole line, cut in halves to a depth, misses
+/// the box x by y of the plane.
+[[nodiscard]] bool ProjectedApart(const std::vector<HPoint>& line, const NodeFrame& f,
+                                  const Interval& x, const Interval& y, const int depth)
+{
+    if (Intersection(Across(line, f.E1), x).IsEmpty() ||
+        Intersection(Across(line, f.E2), y).IsEmpty()) {
+        return true;
+    }
+    if (depth == 0) {
+        return false;
+    }
+    std::vector<HPoint> lower;
+    std::vector<HPoint> upper;
+    SplitLine(line, Interval{0.5}, lower, upper);
+    return ProjectedApart(lower, f, x, y, depth - 1) && ProjectedApart(upper, f, x, y, depth - 1);
+}
+
+/// Facts 1 and 2: C projects one to one, and S's projection keeps clear of
+/// the projection of C's edges.
+[[nodiscard]] bool Covered(const NodeSystem& sys)
+{
+    const Patch& small = sys.Pair.A;
+    const Patch& cover = sys.Pair.B;
+    const Matrix2 dq = ProjectedJacobian(sys.Frame, XyzHull(sys.C.Du), XyzHull(sys.C.Dv));
+    if (!ExcludesZero(dq[0][0] * dq[1][1] - dq[0][1] * dq[1][0])) {
+        return false;
+    }
+    const Interval x = Across(small.Poles.Poles, sys.Frame.E1);
+    const Interval y = Across(small.Poles.Poles, sys.Frame.E2);
+    constexpr int depth = 6;
+    for (const bool alongU : {true, false}) {
+        const std::size_t last = LineCount(cover.Poles, alongU) - 1;
+        for (const std::size_t line : {std::size_t{0}, last}) {
+            if (!ProjectedApart(LineOf(cover.Poles, alongU, line), sys.Frame, x, y, depth)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/// The inverse of C's projection Jacobian Dq, enclosed over C's box: each
+/// entry an adjugate entry over the determinant, which excludes zero.
+[[nodiscard]] std::optional<Matrix2> InverseProjection(const NodeSystem& sys)
+{
+    const Matrix2 dq = ProjectedJacobian(sys.Frame, XyzHull(sys.C.Du), XyzHull(sys.C.Dv));
+    const Interval det = dq[0][0] * dq[1][1] - dq[0][1] * dq[1][0];
+    if (!ExcludesZero(det)) {
+        return std::nullopt;
+    }
+    return Matrix2{{{dq[1][1] / det, -dq[0][1] / det}, {-dq[1][0] / det, dq[0][0] / det}}};
+}
+
+/// Fact 4's enclosure of the Hessian of S's height over C, on S's box.
+[[nodiscard]] Matrix2 HeightHessian(const NodeSystem& sys, const Matrix2& inverse)
+{
+    const NodeFrame& f = sys.Frame;
+    // G = Dq^-T (n . C_u, n . C_v), the gradient of C's graph.
+    const Interval w1 = DotOf(f.N, XyzHull(sys.C.Du));
+    const Interval w2 = DotOf(f.N, XyzHull(sys.C.Dv));
+    const Interval g1 = inverse[0][0] * w1 + inverse[1][0] * w2;
+    const Interval g2 = inverse[0][1] * w1 + inverse[1][1] * w2;
+    const Bounds nu{f.N[0] - g1 * f.E1[0] - g2 * f.E2[0], f.N[1] - g1 * f.E1[1] - g2 * f.E2[1],
+                    f.N[2] - g1 * f.E1[2] - g2 * f.E2[2]};
+    const auto second = [&](const SecondNets& s) {
+        const Bounds uv = XyzHull(s.Duv);
+        return Matrix2{{{DotOf(nu, XyzHull(s.Duu)), DotOf(nu, uv)},
+                        {DotOf(nu, uv), DotOf(nu, XyzHull(s.Dvv))}}};
+    };
+    const Matrix2 graph = Times(Transposed(inverse), Times(second(sys.C), inverse));
+    const Matrix2 dp = ProjectedJacobian(f, XyzHull(sys.S.Du), XyzHull(sys.S.Dv));
+    const Matrix2 pulled = Times(Transposed(dp), Times(graph, dp));
+    const Matrix2 own = second(sys.S);
+    return Matrix2{{{own[0][0] - pulled[0][0], own[0][1] - pulled[0][1]},
+                    {own[1][0] - pulled[1][0], own[1][1] - pulled[1][1]}}};
+}
+
+/// Fact 4's Lyapunov test: sym(M J H) positive definite over the enclosure.
+[[nodiscard]] bool LevelCurvesLeave(const Matrix2& h)
+{
+    const double h00 = Midpoint(h[0][0]);
+    const double h11 = Midpoint(h[1][1]);
+    const double h01 = 0.5 * (Midpoint(h[0][1]) + Midpoint(h[1][0]));
+    if (!std::isfinite(h00) || !std::isfinite(h11) || !std::isfinite(h01)) {
+        return false;
+    }
+    // J H0 = [[-h01, -h11], [h00, h01]]; M is its symmetric part.
+    const Interval off{0.5 * (h00 - h11)};
+    const Matrix2 m{{{Interval{-h01}, off}, {off, Interval{h01}}}};
+    const Matrix2 jh{{{-h[1][0], -h[1][1]}, {h[0][0], h[0][1]}}};
+    const Matrix2 p = Times(m, jh);
+    const Interval s01 = Interval{0.5} * (p[0][1] + p[1][0]);
+    return p[0][0].GetLower() > 0.0 && (p[0][0] * p[1][1] - s01 * s01).GetLower() > 0.0;
+}
+
+/// Whether the enclosure lies strictly inside the stretch.
+[[nodiscard]] bool Inside(const Interval& x, const Interval& stretch)
+{
+    return stretch.GetLower() < x.GetLower() && x.GetUpper() < stretch.GetUpper();
+}
+
+/// A settled node, in the pair's own order (small, cover): the node and the
+/// four ends of its half-branches on the small patch's edges.
+struct NodeEnds {
+    Seed Node;
+    std::vector<Seed> Ends;
+};
+
+/// What the proof knows of the critical point: its box (s*, c*), the height
+/// h(s*) = n . (S - C) there, h's Hessian over S's box and Dq^-1 over C's.
+struct NodeAt {
+    IntervalsN<4> Box;
+    Interval Height;
+    Matrix2 Hessian;
+    Matrix2 Inverse;
+};
+
+/// The deepest an edge of the small patch is halved while its roots are
+/// counted.
+constexpr int EdgeDepth = 12;
+
+/// One edge of the small patch near a node, and the node's projection.
+struct NodeEdge {
+    const NodeSystem& Sys;
+    const NodeAt& At;
+    bool AlongU;
+    bool Upper;
+    double Fixed;
+    Interval NodeX;
+    Interval NodeY;
+};
+
+/// Whether Taylor's theorem keeps the height off zero on a piece of the
+/// edge: h(s) in h(s*) + (s - s*)^T H (s - s*) / 2, grad h(s*) = 0.
+[[nodiscard]] bool HeightApart(const NodeEdge& e, const Interval& piece)
+{
+    const Interval du = (e.AlongU ? piece : Interval{e.Fixed}) - e.At.Box[0];
+    const Interval dv = (e.AlongU ? Interval{e.Fixed} : piece) - e.At.Box[1];
+    const Matrix2& h = e.At.Hessian;
+    return ExcludesZero(e.At.Height +
+                        Interval{0.5} * (h[0][0] * Squared(du) + (h[0][1] + h[1][0]) * du * dv +
+                                         h[1][1] * Squared(dv)));
+}
+
+/// The part of C that can hold a root on a piece of the edge, by the mean
+/// value theorem: q(c) - q(c*) = M (c - c*) with M in Dq's enclosure, so
+/// c lies in c* + Dq^-1 (p(piece) - p(s*)), as p(s*) = q(c*) exactly.
+[[nodiscard]] std::optional<Patch> CoverReach(const NodeEdge& e, const std::vector<HPoint>& line)
+{
+    const Patch& cover = e.Sys.Pair.B;
+    const Matrix2& inverse = e.At.Inverse;
+    const Interval px = Across(line, e.Sys.Frame.E1) - e.NodeX;
+    const Interval py = Across(line, e.Sys.Frame.E2) - e.NodeY;
+    const Interval u =
+        Intersection(e.At.Box[2] + inverse[0][0] * px + inverse[0][1] * py, cover.Parameters.X);
+    const Interval v =
+        Intersection(e.At.Box[3] + inverse[1][0] * px + inverse[1][1] * py, cover.Parameters.Y);
+    if (u.IsEmpty() || v.IsEmpty()) {
+        return std::nullopt;
+    }
+    std::optional<Patch> part = Clipped(cover, true, u);
+    if (part) {
+        part = Clipped(*part, false, v);
+    }
+    return part;
+}
+
+/// The root on one piece of the edge: none when the height keeps off zero
+/// there or no part of C can hold one, else Krawczyk's operator's verdict.
+[[nodiscard]] Isolation PieceRoot(const NodeEdge& e, const Interval& piece, const double join,
+                                  std::vector<Seed>& seeds)
+{
+    if (HeightApart(e, piece)) {
+        return Isolation::None;
+    }
+    const std::optional<Patch> carrier = Clipped(e.Sys.Pair.A, e.AlongU, piece);
+    if (!carrier) {
+        return Isolation::None;
+    }
+    const std::vector<HPoint> line = EdgeLine(*carrier, e.AlongU, e.Upper);
+    const std::optional<Patch> part = CoverReach(e, line);
+    if (!part) {
+        return Isolation::None;
+    }
+    const Edge edge{*carrier, e.AlongU, e.Fixed};
+    const Isolated<3> root = RootOnEdge(edge, line, HullsOf(*carrier), *part, HullsOf(*part));
+    if (root.Outcome == Isolation::Unique) {
+        AddSeed(seeds, SeedOfRoot(edge, root, *part, true), join);
+    }
+    return root.Outcome;
+}
+
+/// The roots of one edge of the small patch against C, each isolated by
+/// Krawczyk's operator on a piece of the edge against the part of C that
+/// can hold it, a piece halved while it is not settled; false when one is
+/// still not settled at the deepest halving.
+[[nodiscard]] bool NodeEdgeRoots(const NodeSystem& sys, const NodeAt& at, const bool alongU,
+                                 const bool upper, const double join, std::vector<Seed>& seeds)
+{
+    const Interval across = StretchOf(sys.Pair.A, !alongU);
+    const Bounds node = XyzOver(sys.Pair.A, at.Box[0], at.Box[1]);
+    const NodeEdge e{sys,
+                     at,
+                     alongU,
+                     upper,
+                     upper ? across.GetUpper() : across.GetLower(),
+                     DotOf(sys.Frame.E1, node),
+                     DotOf(sys.Frame.E2, node)};
+    std::vector<std::pair<Interval, int>> work{{StretchOf(sys.Pair.A, alongU), 0}};
+    while (!work.empty()) {
+        const auto [piece, depth] = work.back();
+        work.pop_back();
+        if (PieceRoot(e, piece, join, seeds) != Isolation::Unsettled) {
+            continue;
+        }
+        if (depth >= EdgeDepth) {
+            return false;
+        }
+        const double middle = Midpoint(piece);
+        work.emplace_back(Interval{piece.GetLower(), middle}, depth + 1);
+        work.emplace_back(Interval{middle, piece.GetUpper()}, depth + 1);
+    }
+    return true;
+}
+
+/// Fact 3: the critical point isolated, strictly inside both boxes, the
+/// surfaces there within the tolerance.
+[[nodiscard]] std::optional<IntervalsN<4>> ProvedCritical(const NodeSystem& sys,
+                                                          const double tolerance)
+{
+    const Isolated<4> critical = CriticalPoint(sys);
+    const Box2& small = sys.Pair.A.Parameters;
+    const Box2& cover = sys.Pair.B.Parameters;
+    const IntervalsN<4>& x = critical.Box;
+    if (critical.Outcome != Isolation::Unique || !Inside(x[0], small.X) || !Inside(x[1], small.Y) ||
+        !Inside(x[2], cover.X) || !Inside(x[3], cover.Y) ||
+        GapAt(sys.Pair, x).GetUpper() > tolerance) {
+        return std::nullopt;
+    }
+    return x;
+}
+
+/// The four ends on S's edges, or nothing when they are not exactly four or
+/// one is not settled. By fact 2 no root lies on C's edges.
+[[nodiscard]] std::optional<std::vector<Seed>> NodeEndsOf(const NodeSystem& sys, const NodeAt& at,
+                                                          const double join)
+{
+    std::vector<Seed> ends;
+    for (const bool alongU : {true, false}) {
+        for (const bool upper : {false, true}) {
+            if (!NodeEdgeRoots(sys, at, alongU, upper, join, ends)) {
+                return std::nullopt;
+            }
+        }
+    }
+    if (ends.size() != 4) {
+        return std::nullopt;
+    }
+    return ends;
+}
+
+/// Facts 1 to 4 on a pair (small, cover), with the tolerance the surfaces
+/// may be apart at the node and the join of seeds.
+[[nodiscard]] std::optional<NodeEnds> ProvedNode(const PatchPair& pair, const Vec3& normal,
+                                                 const SearchSettings& s)
+{
+    const std::optional<NodeFrame> frame = FrameAbout(normal);
+    if (!frame) {
+        return std::nullopt;
+    }
+    const SecondNets small = SecondNetsOf(pair.A);
+    const SecondNets cover = SecondNetsOf(pair.B);
+    const NodeSystem sys{pair, small, cover, *frame};
+    const std::optional<IntervalsN<4>> x = ProvedCritical(sys, s.Tolerance);
+    const std::optional<Matrix2> inverse =
+        x && Covered(sys) ? InverseProjection(sys) : std::nullopt;
+    if (!inverse) {
+        return std::nullopt;
+    }
+    const Matrix2 hessian = HeightHessian(sys, *inverse);
+    if (!LevelCurvesLeave(hessian)) {
+        return std::nullopt;
+    }
+    const Bounds onS = XyzOver(pair.A, (*x)[0], (*x)[1]);
+    const Bounds gap = MinusOf(onS, XyzOver(pair.B, (*x)[2], (*x)[3]));
+    std::optional<std::vector<Seed>> ends =
+        NodeEndsOf(sys, NodeAt{*x, DotOf(frame->N, gap), hessian, *inverse}, s.Join);
+    if (!ends) {
+        return std::nullopt;
+    }
+    const std::array<double, 4> m = MidpointsOf<4>(*x);
+    const Seed node{Middle(onS), Point2{m[0], m[1]}, Point2{m[2], m[3]}};
+    return NodeEnds{node, std::move(*ends)};
+}
+
+/// A patch cut into a centre over `inner`, strictly inside it, and the four
+/// pieces around it: two strips across u, and two pieces of the middle strip.
+struct Centred {
+    Patch Centre;
+    std::vector<Patch> Rest;
+};
+
+[[nodiscard]] std::optional<Centred> CentredOn(const Patch& p, const Box2& inner)
+{
+    auto low = Split(p, true, inner.X.GetLower());
+    if (!low) {
+        return std::nullopt;
+    }
+    auto high = Split(low->second, true, inner.X.GetUpper());
+    if (!high) {
+        return std::nullopt;
+    }
+    auto below = Split(high->first, false, inner.Y.GetLower());
+    if (!below) {
+        return std::nullopt;
+    }
+    auto above = Split(below->second, false, inner.Y.GetUpper());
+    if (!above) {
+        return std::nullopt;
+    }
+    std::vector<Patch> rest{std::move(low->first), std::move(high->second), std::move(below->first),
+                            std::move(above->second)};
+    return Centred{std::move(above->first), std::move(rest)};
+}
+
+/// The box of half-widths r around a point.
+/// The box reaching r beyond a point and 2 SplitFraction r, some 0.94 r,
+/// short of it: off-centre for the reason the cuts are, as symmetric input
+/// would otherwise end a branch exactly on a cut.
+[[nodiscard]] Box2 Around(const Point2& c, const double ru, const double rv)
+{
+    constexpr double shorter = 2.0 * SplitFraction;
+    return {Interval{c.X - shorter * ru, c.X + ru}, Interval{c.Y - shorter * rv, c.Y + rv}};
+}
+
+/// How far a point lies inside a box, along each direction.
+[[nodiscard]] std::array<double, 2> Margins(const Point2& c, const Box2& box)
+{
+    return {std::min(c.X - box.X.GetLower(), box.X.GetUpper() - c.X),
+            std::min(c.Y - box.Y.GetLower(), box.Y.GetUpper() - c.Y)};
+}
+
+[[nodiscard]] Seed Swapped(const Seed& seed)
+{
+    return {seed.Position, seed.OnB, seed.OnA};
+}
+
+[[nodiscard]] Vec3 NormalAt(const SecondNets& s, const Box2& box, const double u, const double v)
+{
+    return MiddleVec(CrossOf(XyzAt(s.Du, box, u, v), XyzAt(s.Dv, box, u, v)));
+}
+
+/// Where a pair (small, cover) may hold a node: a critical point isolated,
+/// within the tolerance, its relative form indefinite. A touch or anything
+/// unsettled is not one.
+[[nodiscard]] std::optional<std::array<double, 4>> NodeCandidate(const PatchPair& pair,
+                                                                 const SearchSettings& s)
+{
+    const SecondNets small = SecondNetsOf(pair.A);
+    const SecondNets cover = SecondNetsOf(pair.B);
+    const std::optional<NodeFrame> frame = FrameAbout(MiddleVec(NormalHull(cover).N));
+    if (!frame) {
+        return std::nullopt;
+    }
+    const Isolated<4> critical = CriticalPoint({pair, small, cover, *frame});
+    if (critical.Outcome != Isolation::Unique ||
+        GapAt(pair, critical.Box).GetUpper() > s.Tolerance) {
+        return std::nullopt;
+    }
+    const std::array<double, 4> m = MidpointsOf<4>(critical.Box);
+    const Vec3 normal = NormalAt(cover, pair.B.Parameters, m[2], m[3]);
+    if (!(Length(normal) > 0.0)) {
+        return std::nullopt;
+    }
+    const Vec3 n = Normalized(normal);
+    if (FormSign(LocalAt(small, pair.A.Parameters, m[0], m[1], n),
+                 LocalAt(cover, pair.B.Parameters, m[2], m[3], n)) >= 0) {
+        return std::nullopt;
+    }
+    return m;
+}
+
+/// How often the covering and the small patch are narrowed around a node
+/// candidate before it is left to the cutting.
+constexpr int CoverNarrowings = 3;
+constexpr int SmallNarrowings = 8;
+
+/// A node settled on the centred pair: its four arcs, and the rest of the
+/// pair, cut around the centred one, back on the stack.
+void RecordNode(const NodeEnds& ends, const Centred& small, const Centred& cover,
+                const PatchPair& oriented, const bool smallIsA, Findings& found,
+                std::vector<PatchPair>& stack)
+{
+    const auto ordered = [&](const Seed& seed) { return smallIsA ? seed : Swapped(seed); };
+    const Seed node = ordered(ends.Node);
+    const Box2& boxA = smallIsA ? small.Centre.Parameters : cover.Centre.Parameters;
+    const Box2& boxB = smallIsA ? cover.Centre.Parameters : small.Centre.Parameters;
+    for (const Seed& e : ends.Ends) {
+        const Seed end = ordered(e);
+        const Vec3 d = ToVec(end.Position) - ToVec(node.Position);
+        found.Arcs.push_back({node, end, d / Length(d), boxA, boxB});
+    }
+    found.Nodes.push_back(node.Position);
+    for (const Patch& piece : small.Rest) {
+        stack.push_back(smallIsA ? PatchPair{piece, oriented.B} : PatchPair{oriented.B, piece});
+    }
+    for (const Patch& piece : cover.Rest) {
+        stack.push_back(smallIsA ? PatchPair{small.Centre, piece} : PatchPair{piece, small.Centre});
+    }
+}
+
+/// A node candidate's place in an oriented pair (small, cover): its
+/// parameters on each, and how far they lie inside the patches.
+struct Placed {
+    Point2 OnS;
+    Point2 OnC;
+    std::array<double, 2> MarginS;
+    std::array<double, 2> MarginC;
+};
+
+/// The candidate's covering cell narrowed j times, and within it the small
+/// cell narrowed until the node is proved, or nothing.
+[[nodiscard]] bool SettleCentred(const PatchPair& oriented, const Placed& at, const int j,
+                                 const bool smallIsA, const SearchSettings& s, Findings& found,
+                                 std::vector<PatchPair>& stack)
+{
+    const double fc = std::ldexp(0.5, -j);
+    const std::optional<Centred> cover =
+        CentredOn(oriented.B, Around(at.OnC, fc * at.MarginC[0], fc * at.MarginC[1]));
+    if (!cover) {
+        return false;
+    }
+    const Vec3 normal =
+        NormalAt(SecondNetsOf(cover->Centre), cover->Centre.Parameters, at.OnC.X, at.OnC.Y);
+    for (int k = 0; k < SmallNarrowings; ++k) {
+        const double fs = std::ldexp(0.5, -k);
+        const std::optional<Centred> small =
+            CentredOn(oriented.A, Around(at.OnS, fs * at.MarginS[0], fs * at.MarginS[1]));
+        if (!small) {
+            continue;
+        }
+        if (const std::optional<NodeEnds> ends =
+                ProvedNode({small->Centre, cover->Centre}, normal, s)) {
+            RecordNode(*ends, *small, *cover, oriented, smallIsA, found, stack);
+            return true;
+        }
+    }
+    return false;
+}
+
+/// A pair holding a node candidate, either patch taken as the small one:
+/// the small patch's cell around the node narrowed until the covering
+/// cell, also centred on it, is proved to cover it and facts 1 to 4 hold.
+/// The pair is then the centred pair, settled, and the pieces around it.
+[[nodiscard]] bool SettleNode(const PatchPair& pair, const SearchSettings& s, Findings& found,
+                              std::vector<PatchPair>& stack)
+{
+    for (const bool smallIsA : {true, false}) {
+        const PatchPair oriented = smallIsA ? pair : PatchPair{pair.B, pair.A};
+        const std::optional<std::array<double, 4>> m = NodeCandidate(oriented, s);
+        if (!m) {
+            continue;
+        }
+        const Point2 onS{(*m)[0], (*m)[1]};
+        const Point2 onC{(*m)[2], (*m)[3]};
+        const Placed at{onS, onC, Margins(onS, oriented.A.Parameters),
+                        Margins(onC, oriented.B.Parameters)};
+        if (!(std::min(at.MarginS[0], at.MarginS[1]) > 0.0 &&
+              std::min(at.MarginC[0], at.MarginC[1]) > 0.0)) {
+            continue;
+        }
+        for (int j = 0; j < CoverNarrowings; ++j) {
+            if (SettleCentred(oriented, at, j, smallIsA, s, found, stack)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// A pair with no advance direction, polynomial. Settled here: a proved
+/// transverse node (SettleNode). An isolated touch, a unique point of common
+/// tangency with the surfaces separating on every side of it, is found but
+/// not yet settled. No solution rules out only tangency, not a crossing;
+/// everything else is cut further, and fails at the smallest pair.
+[[nodiscard]] Settled SettleTouch(const PatchPair& pair, const SearchSettings& s, Findings& found,
+                                  std::vector<PatchPair>& stack)
 {
     if (!s.Polynomial) {
         return Settled::Cut;
+    }
+    if (SettleNode(pair, s, found, stack)) {
+        return Settled::Done;
     }
     const SecondNets a = SecondNetsOf(pair.A);
     const SecondNets b = SecondNetsOf(pair.B);
@@ -627,14 +1367,15 @@ enum class Settled : std::uint8_t { Done, Cut };
     return Settled::Cut;
 }
 
-[[nodiscard]] Settled Settle(const PatchPair& pair, const SearchSettings& s, Findings& found)
+[[nodiscard]] Settled Settle(const PatchPair& pair, const SearchSettings& s, Findings& found,
+                             std::vector<PatchPair>& stack)
 {
     const Hulls a = HullsOf(pair.A);
     const Hulls b = HullsOf(pair.B);
     if (const std::optional<Vec3> direction = AdvanceDirection(a, b)) {
         return SettleTransverse(pair, a, b, *direction, s, found);
     }
-    return SettleTouch(pair, s, found);
+    return SettleTouch(pair, s, found, stack);
 }
 
 /// The whole search, depth first, so that a pair that cannot be settled is
@@ -654,15 +1395,15 @@ enum class Settled : std::uint8_t { Done, Cut };
                         "BSpline x BSpline: the search ran out of its budget at patches " +
                             Describe(pair));
         }
-        if (Settle(pair, s, found) == Settled::Done) {
+        if (Settle(pair, s, found, stack) == Settled::Done) {
             continue;
         }
         const bool smallest =
             std::max(LargestWidth(pair.A.Extent), LargestWidth(pair.B.Extent)) <= s.Tolerance;
         if (smallest || !PushSplit(stack, pair)) {
             return Fail(ErrorCode::IntersectionFailed,
-                        "BSpline x BSpline: a tangential contact, a branch point or an overlap "
-                        "could not be resolved at patches " +
+                        "BSpline x BSpline: a tangential contact, a branch point not proved a "
+                        "transverse node or an overlap could not be resolved at patches " +
                             Describe(pair));
         }
     }
@@ -798,6 +1539,8 @@ struct ArcGraph {
     std::vector<Point3> Nodes;
     std::vector<std::array<std::size_t, 2>> Ends;
     std::vector<std::vector<std::size_t>> AtNode;
+    /// Whether a node of the graph is a proved branch point: chains end there.
+    std::vector<bool> Branching;
 };
 
 [[nodiscard]] std::size_t NodeOf(ArcGraph& g, const Point3& p, const double join)
@@ -812,15 +1555,21 @@ struct ArcGraph {
     return g.Nodes.size() - 1;
 }
 
-[[nodiscard]] ArcGraph GraphOf(const std::vector<Arc>& arcs, const double join)
+[[nodiscard]] ArcGraph GraphOf(const Findings& found, const double join)
 {
     ArcGraph g;
+    const std::vector<Arc>& arcs = found.Arcs;
     for (std::size_t a = 0; a < arcs.size(); ++a) {
         const std::size_t from = NodeOf(g, arcs[a].From.Position, join);
         const std::size_t to = NodeOf(g, arcs[a].To.Position, join);
         g.Ends.push_back({from, to});
         g.AtNode[from].push_back(a);
         g.AtNode[to].push_back(a);
+    }
+    g.Branching.assign(g.Nodes.size(), false);
+    for (std::size_t n = 0; n < g.Nodes.size(); ++n) {
+        g.Branching[n] = std::ranges::any_of(
+            found.Nodes, [&](const Point3& p) { return Distance(p, g.Nodes[n]) <= join; });
     }
     return g;
 }
@@ -833,7 +1582,8 @@ struct ChainStep {
 
 using Chain = std::vector<ChainStep>;
 
-/// The chain from a node along an unused arc, until it stops or closes.
+/// The chain from a node along an unused arc, until it stops, closes or
+/// reaches a branch point.
 [[nodiscard]] Chain WalkFrom(const ArcGraph& g, std::size_t node, std::vector<bool>& used)
 {
     Chain chain;
@@ -847,17 +1597,30 @@ using Chain = std::vector<ChainStep>;
         const bool reversed = g.Ends[*next][0] != node;
         chain.push_back({*next, reversed});
         node = g.Ends[*next][reversed ? 0 : 1];
+        if (g.Branching[node]) {
+            return chain;
+        }
     }
 }
 
-/// Every chain: those with free ends first, then the closed loops.
+/// Every chain: those with free ends first, then those leaving branch
+/// points, then the closed loops.
 [[nodiscard]] std::vector<Chain> ChainsOf(const ArcGraph& g)
 {
     std::vector<bool> used(g.Ends.size(), false);
     std::vector<Chain> chains;
     for (std::size_t n = 0; n < g.Nodes.size(); ++n) {
-        if (g.AtNode[n].size() == 1 && !used[g.AtNode[n].front()]) {
+        if (!g.Branching[n] && g.AtNode[n].size() == 1 && !used[g.AtNode[n].front()]) {
             chains.push_back(WalkFrom(g, n, used));
+        }
+    }
+    for (std::size_t n = 0; n < g.Nodes.size(); ++n) {
+        while (g.Branching[n]) {
+            Chain chain = WalkFrom(g, n, used);
+            if (chain.empty()) {
+                break;
+            }
+            chains.push_back(std::move(chain));
         }
     }
     for (std::size_t n = 0; n < g.Nodes.size(); ++n) {
@@ -869,13 +1632,6 @@ using Chain = std::vector<ChainStep>;
     return chains;
 }
 
-/// Whether the parameter lies on a side of its domain, within the join.
-[[nodiscard]] bool OnSide(const double x, const Interval& domain)
-{
-    const double slack = 0x1p-30 * std::max(1.0, Width(domain));
-    return x <= domain.GetLower() + slack || x >= domain.GetUpper() - slack;
-}
-
 [[nodiscard]] bool OnBoundary(const Seed& s, const Box2& a, const Box2& b)
 {
     return OnSide(s.OnA.X, a.X) || OnSide(s.OnA.Y, a.Y) || OnSide(s.OnB.X, b.X) ||
@@ -883,7 +1639,8 @@ using Chain = std::vector<ChainStep>;
 }
 
 /// A node must join exactly two arcs, unless it is an end of the branch on
-/// a boundary of the domains; anything else means the arcs do not fit.
+/// a boundary of the domains, or a proved branch point joining its four;
+/// anything else means the arcs do not fit.
 [[nodiscard]] Result<void> CheckGraph(const ArcGraph& g, const std::vector<Arc>& arcs,
                                       const Box2& domainA, const Box2& domainB)
 {
@@ -891,7 +1648,10 @@ using Chain = std::vector<ChainStep>;
         const std::size_t degree = g.AtNode[n].size();
         const Arc& arc = arcs[g.AtNode[n].front()];
         const Seed& seed = g.Ends[g.AtNode[n].front()][0] == n ? arc.From : arc.To;
-        if (degree > 2 || (degree == 1 && !OnBoundary(seed, domainA, domainB))) {
+        const bool fits = g.Branching[n]
+                              ? degree == 4
+                              : degree <= 2 && (degree == 2 || OnBoundary(seed, domainA, domainB));
+        if (!fits) {
             return Fail(ErrorCode::IntersectionFailed,
                         "BSpline x BSpline: arcs do not join into branches at (" +
                             Number(seed.Position.X) + ", " + Number(seed.Position.Y) + ", " +
@@ -1008,7 +1768,7 @@ Assembled(const Findings& found, const Surface& a, const Box2& domainA, const Su
 {
     SurfaceSurfaceIntersection result;
     result.Points = found.Touches;
-    const ArcGraph graph = GraphOf(found.Arcs, s.Join);
+    const ArcGraph graph = GraphOf(found, s.Join);
     STEREON_TRY_VOID(CheckGraph(graph, found.Arcs, domainA, domainB));
     const Marcher marcher{a, b, 0.25 * ctx.GetResolution()};
     for (const Chain& chain : ChainsOf(graph)) {
