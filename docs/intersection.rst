@@ -1535,8 +1535,27 @@ overlap, any tangency of rational surfaces, and a search past its budget of
 :math:`2^{14}` pairs return ``IntersectionFailed``, naming the patches, never
 a partial or an unproved empty result (``src/intersect/GenericSSI.cpp``).
 
-A B-spline surface against a plane, cylinder, cone, sphere or torus reports
-``NotImplemented``.
+A B-spline surface against a plane, cylinder, cone, sphere, torus or
+ellipsoid, in either order, goes to the parametric-implicit trace of
+*Elementary surfaces*. The B-spline is the carrier and the analytic surface
+supplies the implicit equation. The trace's enclosures of :math:`S`,
+:math:`S_u` and :math:`S_v` over a box of parameters come from the
+B-spline's Bézier patches, which are enclosed by Boehm's knot insertion in
+interval arithmetic and cut down to the box by de Casteljau's algorithm.
+Rational patches go through the quotient rule. The enclosure is the hull
+over every patch the box meets, so a box across a knot holds both one-sided
+partials, and the mean-value form stays valid at a knot where the surface
+is only :math:`C^0`. At a point, or along an edge of no width, the patches'
+nets are evaluated at the enclosed parameters.
+
+The search box is the requested box met with the B-spline's domain, and a
+B-spline chart has no seam. Everything else is the trace's: proved
+separation, proved transverse arcs, branches fitted and certified by
+``CertifyDeviation`` against the B-spline and the analytic surface, and
+``IntersectionFailed`` at a box that cannot be resolved (a tangency, a
+singular point) or past its budget. It never returns an unproved empty
+result (``src/intersect/ImplicitTrace.cpp``,
+``tests/intersect/SplineAnalyticTests.cpp``).
 
 .. todo::
 
