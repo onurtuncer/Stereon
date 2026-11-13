@@ -319,6 +319,10 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME "tools: metamorphic inventory"
         COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/check_metamorphic.py"
                 --root "${PROJECT_SOURCE_DIR}")
+    # The planar curve corpus is what its generator writes.
+    add_test(NAME "tools: planar corpus is current"
+        COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/generate_planar_corpus.py"
+                --root "${PROJECT_SOURCE_DIR}" --check)
     add_test(NAME "tools: literal lint self-test"
         COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/check_literals.py" --self-test)
     add_test(NAME "tools: literal lint"
