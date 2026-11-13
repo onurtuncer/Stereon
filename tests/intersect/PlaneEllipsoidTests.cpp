@@ -293,8 +293,27 @@ TEST_CASE("with equal semi-axes a plane's section lies on the sphere",
         }
         const auto onSphere = Intersect(Surface{plane}, Surface{Sphere{center, r, X, Y}}, ctx);
         RC_ASSERT(onSphere.has_value());
-        RC_ASSERT(result->Points.size() == onSphere->Points.size());
-        RC_ASSERT(result->Branches.empty() == onSphere->Branches.empty());
+        if (onSphere->Points.empty()) {
+            RC_ASSERT(result->Points.empty());
+            RC_ASSERT(result->Branches.empty() == onSphere->Branches.empty());
+        } else {
+            // The ellipsoid decides exactly; the sphere may declare contact
+            // within the pair tolerance (ADR-0029). Topology need not agree
+            // inside that band. Prove the band independently, and validate
+            // every declared point instead of ignoring the discrepancy.
+            const Vec3 n = Cross(plane.XAxis, plane.YAxis);
+            const double height = std::abs(Dot(center - plane.Origin, n)) / Length(n);
+            const double rounding = 64.0 * std::numeric_limits<double>::epsilon() *
+                                    (1.0 + r + Length(center - plane.Origin));
+            RC_ASSERT(std::abs(height - r) <= ctx.GetResolution() + rounding);
+            RC_ASSERT(onSphere->Branches.empty());
+            for (const auto& point : onSphere->Points) {
+                RC_ASSERT(std::abs(Distance(point.Position, center) - r) <=
+                          ctx.GetResolution() + rounding);
+                RC_ASSERT(std::abs(Dot(point.Position - plane.Origin, n)) / Length(n) <=
+                          ctx.GetResolution() + rounding);
+            }
+        }
         for (const IntersectionBranch& branch : result->Branches) {
             RC_ASSERT(branch.IsCertified());
             for (const double t : IntersectTest::SamplesOf(branch.Range, 16)) {
@@ -405,4 +424,24 @@ TEST_CASE("plane ellipsoid pole contacts survive restricted longitude boxes",
         REQUIRE(outsidePlane.has_value());
         REQUIRE(outsidePlane->IsEmpty());
     }
+}
+
+TEST_CASE("equal-axis ellipsoid exact separation and sphere tolerant contact are distinct",
+          "[intersect][ellipsoid][plane-ellipsoid][regression]")
+{
+    // CI seed 8908293537530491705, its shrunk dyadic construction. The
+    // mathematical plane is tangent; rounding its frame puts it just
+    // outside the exact ellipsoid while the sphere declares contact.
+    const Point3 center{-2.0, -2.0, -2.0};
+    const Plane plane = IntersectTest::PlaneWithNormal(center + Vec3{-11.0 / 16.0, -0.75, -0.375},
+                                                       Vec3{-0.25, -0.75, -0.375});
+    const auto exact =
+        Intersect(Surface{plane}, Surface{Ellipsoid{center, 1.0, 1.0, 1.0, X, Y}}, ctx);
+    const auto tolerant = Intersect(Surface{plane}, Surface{Sphere{center, 1.0, X, Y}}, ctx);
+    REQUIRE(exact.has_value());
+    REQUIRE(tolerant.has_value());
+    CHECK(exact->IsEmpty());
+    REQUIRE(tolerant->Points.size() == 1);
+    CHECK(std::abs(Distance(tolerant->Points.front().Position, center) - 1.0) <=
+          ctx.GetResolution());
 }
