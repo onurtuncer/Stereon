@@ -262,12 +262,27 @@ Result<CurveSurfaceIntersection> Meet(const Curve& c, const Surface& s)
     return Intersect(c, Domain(c), s, Domain(s), ctx);
 }
 
+/// How far along the curve a crossing moves per unit off the surface: one
+/// over the sine of the angle between the curve's tangent and the surface's
+/// tangent plane. Validated holds each point on both geometries to
+/// rounding; at a grazing crossing two such points of one exact crossing
+/// lie up to this many times farther apart. 1 where it is undefined.
+double Conditioning(const Curve& curve, const double t, const Surface& surface, const Point2& uv)
+{
+    const Vec3 normal = Cross(Deriv(surface, uv, 1, 0), Deriv(surface, uv, 0, 1));
+    const Vec3 tangent = Deriv(curve, t, 1);
+    const double sine = std::abs(Dot(normal, tangent)) / (Length(normal) * Length(tangent));
+    return std::isfinite(sine) && sine > 0.0 ? std::max(1.0, 1.0 / sine) : 1.0;
+}
+
 /// Two results of transformed problems agree: the same points, contacts
 /// and overlaps, each point's position mapped by `map` and its parameter
-/// by `parameter`, within the rounding of both.
+/// by `parameter`, within the rounding of both, times a crossing's
+/// conditioning on `surfaceA`.
 template <typename Map, typename Parameter>
 void RequireSame(const CurveSurfaceIntersection& a, const CurveSurfaceIntersection& b,
-                 const Curve& curveA, const Curve& curveB, Map&& map, Parameter&& parameter)
+                 const Curve& curveA, const Curve& curveB, const Surface& surfaceA, Map&& map,
+                 Parameter&& parameter)
 {
     RC_ASSERT(a.Points.size() == b.Points.size());
     RC_ASSERT(a.Overlaps.size() == b.Overlaps.size());
@@ -277,8 +292,12 @@ void RequireSame(const CurveSurfaceIntersection& a, const CurveSurfaceIntersecti
         RC_ASSERT(p.Contact == q.Contact);
         RC_ASSERT(p.Decided == q.Decided);
         const Point3 mapped = map(p.Position);
-        const double within = Rounding(ScaleAt(curveA, p.Parameter, p.Position)) +
-                              Rounding(ScaleAt(curveB, q.Parameter, q.Position));
+        const double conditioning = p.Contact == Stereon::ContactType::Crossing
+                                        ? Conditioning(curveA, p.Parameter, surfaceA, p.OnSurface)
+                                        : 1.0;
+        const double within = (Rounding(ScaleAt(curveA, p.Parameter, p.Position)) +
+                               Rounding(ScaleAt(curveB, q.Parameter, q.Position))) *
+                              conditioning;
         RC_ASSERT(Distance(mapped, q.Position) <= within);
         RC_ASSERT(std::abs(parameter(p.Parameter) - q.Parameter) <=
                   1e-9 * std::max(1.0, std::abs(q.Parameter)));
@@ -318,7 +337,7 @@ TEST_CASE("translating the pair translates every point", "[intersect][adversaria
         const bool b = Validated(after, c, Domain(c), s, Domain(s));
         if (a && b) {
             RequireSame(
-                *before, *after, p.C, c, [&](const Point3& q) { return q + offset; },
+                *before, *after, p.C, c, p.S, [&](const Point3& q) { return q + offset; },
                 [](const double t) { return t; });
         }
     });
@@ -339,7 +358,7 @@ TEST_CASE("scaling the pair by a power of two scales every point",
         const bool b = Validated(after, c, Domain(c), s, Domain(s));
         if (a && b) {
             RequireSame(
-                *before, *after, p.C, c,
+                *before, *after, p.C, c, p.S,
                 [&](const Point3& q) { return Point3{} + factor * Stereon::ToVec(q); },
                 [](const double t) { return t; });
         }
@@ -393,7 +412,38 @@ TEST_CASE("a line's origin moved far along it shifts its parameters only",
         const bool vb = Validated(b, far, Domain(far), surface, Domain(surface));
         if (va && vb) {
             RequireSame(
-                *a, *b, near, far, [](const Point3& q) { return q; },
+                *a, *b, near, far, surface, [](const Point3& q) { return q; },
+                [&](const double t) { return t + run; });
+        }
+    });
+}
+
+TEST_CASE("a line nearly along a cone's generator, its origin moved far, crosses where it did",
+          "[intersect][adversarial][regression]")
+{
+    // The CI counterexample of 2026-11-13 (seed 17298607298449989786): the
+    // line runs 0.027 degrees off the cone's tangent plane at its far
+    // crossing, so a point on both geometries to rounding may lie
+    // 1 / sin = 2128 times farther along the line. From 2^19 back (and
+    // 2^13 ... 2^28 on other builds) the two placements of that crossing
+    // differed by just over the unconditioned rounding of both, while each
+    // validates and lies within the attainable 1 / sin x 0.5 ulp.
+    rc::prop("the decoded cone and line, from far origins", [] {
+        const Line line{Point3{-2.0 / 8, -2.0 / 8, 21.0 / 8}, Vec3{13.0 / 8, -23.0 / 8, 19.0 / 8}};
+        const Curve near{line};
+        const Surface cone{Cone{Point3{23.0 / 8, -17.0 / 8, 12.0 / 8}, 0.0, pi / 4.0, ez, ex}};
+        const auto a = Meet(near, cone);
+        RC_ASSERT(Validated(a, near, Domain(near), cone, Domain(cone)));
+        RC_ASSERT(a->Points.size() == 2U);
+        RC_ASSERT(Conditioning(near, a->Points[0].Parameter, cone, a->Points[0].OnSurface) >
+                  2000.0);
+        for (const int e : {13, 18, 19, 21, 22, 24, 27, 28}) {
+            const double run = std::ldexp(1.0, e);
+            const Curve far{Line{line.Origin - run * line.Direction, line.Direction}};
+            const auto b = Meet(far, cone);
+            RC_ASSERT(Validated(b, far, Domain(far), cone, Domain(cone)));
+            RequireSame(
+                *a, *b, near, far, cone, [](const Point3& q) { return q; },
                 [&](const double t) { return t + run; });
         }
     });
@@ -420,7 +470,7 @@ TEST_CASE("a periodic surface's box a turn on gives the same points a turn on",
             return;
         }
         RequireSame(
-            *a, *b, curve, curve, [](const Point3& q) { return q; },
+            *a, *b, curve, curve, surface, [](const Point3& q) { return q; },
             [](const double t) { return t; });
     });
 }
