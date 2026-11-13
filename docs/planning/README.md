@@ -13,6 +13,7 @@
 - [v0.1 release report](v0.1-release-report.md): the release-wide record the roadmap requires (commit, corpus, comparator, limits, structured failures, invalid successes), final since the `v0.1.0` tag of 2026-11-03
 - [v0.1 release audit of 2026-10-30](v0.1-audit-2026-10-30.md): the read-only audit of `fb7366a` that held the tag, its two numerical defects and their disposition
 - [Boolean prototype plan](boolean-prototype-plan.md): the last Phase 0 gate (ADR-0001, ADR-0007), its milestones and the decisions of 2026-10-20
+- [Curved Booleans](curved-booleans.md): design of cones, spheres, tori and ellipsoids in Union, Common and Cut, and of coincident curved faces, in slices (v0.2)
 - [Placement and follow-up checklist](capability-matrix-checklist.md)
 - [Existing benchmark specification](../benchmarks.md)
 - [Architecture decision records](../adr/README.md)
