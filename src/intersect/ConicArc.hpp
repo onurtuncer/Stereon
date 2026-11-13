@@ -64,12 +64,14 @@ struct ConicData {
     const IntervalScalar b{Interval{t1}};
     const IntervalScalar half{(Interval{t1} - Interval{t0}) / Interval{2.0}};
     const IntervalScalar middle{Interval{t0} + half.Value};
+    // sin(0) is exactly zero; a libm rounding enclosure would lose an
+    // exact endpoint contact before the polynomial search sees it.
     const Interval one{1.0};
     return {0.0,
             1.0,
-            {ConicPole(conic, one, cos(a).Value, sin(a).Value),
+            {ConicPole(conic, one, cos(a).Value, t0 == 0.0 ? Interval{0.0} : sin(a).Value),
              ConicPole(conic, cos(half).Value, cos(middle).Value, sin(middle).Value),
-             ConicPole(conic, one, cos(b).Value, sin(b).Value)}};
+             ConicPole(conic, one, cos(b).Value, t1 == 0.0 ? Interval{0.0} : sin(b).Value)}};
 }
 
 /// The conic's angle at the arc's Bezier parameter s: stereographically,

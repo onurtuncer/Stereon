@@ -1035,7 +1035,19 @@ template <typename Form>
 {
     const Segment arc = ArcSegment(conic, t0, t1);
     std::vector<Found> local;
-    STEREON_TRY_VOID(RootsOfSegment(arc, form(arc.Poles), handler, local));
+    const Coefficients g = form(arc.Poles);
+    const auto exactZero = [](const Interval& value) {
+        return value.GetLower() == 0.0 && value.GetUpper() == 0.0;
+    };
+    // A strictly monotone polynomial with an exact zero endpoint has
+    // exactly that root. Merely containing zero is not sufficient.
+    if (SignOfAll(Differences(g)) != Strict::Unknown &&
+        (exactZero(g.front()) || exactZero(g.back()))) {
+        const double t = exactZero(g.front()) ? 0.0 : 1.0;
+        local.push_back({t, Interval{t}, ContactType::Crossing, true});
+    } else {
+        STEREON_TRY_VOID(RootsOfSegment(arc, g, handler, local));
+    }
     for (const Found& f : local) {
         found.push_back(OnConic(f, t0, t1));
     }
@@ -1246,6 +1258,31 @@ ConicAgainst(const Conic& conic, const ConicData& data, const Interval& domain, 
                     periodicV);
 }
 
+/// Form the plane equation in the conic's local coordinates. Subtracting
+/// the plane origin from already rounded world-space homogeneous poles
+/// loses exact endpoint roots even when the two origins are identical.
+template <typename Conic>
+[[nodiscard]] Result<CurveSurfaceIntersection>
+ConicAgainstPlane(const Conic& conic, const ConicData& data, const Interval& domain,
+                  const Plane& plane, const Box2& box, const std::string_view handler)
+{
+    const ConicData local{Point3{}, data.A, data.B};
+    const Plane centered{Point3{}, plane.XAxis, plane.YAxis};
+    const IVec3 n = CrossOf(plane.XAxis, plane.YAxis);
+    const IVec3 delta = Offset(conic.Center, plane.Origin);
+    const Interval height = n.X * delta.X + n.Y * delta.Y + n.Z * delta.Z;
+    const auto form = [&](const std::vector<HPoint>& poles) {
+        Coefficients g = PlaneForm(poles, centered);
+        for (std::size_t k = 0; k < g.size(); ++k) {
+            g[k] = g[k] + poles[k].W * height;
+        }
+        return g;
+    };
+    STEREON_TRY(const std::vector<Found> found, ConicRootsOf(local, domain, form, handler));
+    return PointsOf([&](const double t) { return Eval(conic, t); }, Polished(found, conic, plane),
+                    box, [&](const Point3& p) { return Project(plane, p); }, false);
+}
+
 /// The conic in the plane's parameters: the same conic on the same angle,
 /// its centre and axes projected.
 [[nodiscard]] Curve2d InPlaneOf(const Circle& circle, const Plane& plane)
@@ -1286,8 +1323,7 @@ ConicOnSurface(const Conic& conic, const ConicData& data, const Interval& domain
             return ConicAlongPlane(InPlaneOf(conic, *plane), Project(*plane, conic.Center),
                                    Reach(conic), domain, box, ctx, prefix + " x Plane");
         }
-        return ConicAgainst(conic, data, domain, *plane, box, PlaneForm, prefix + " x Plane", false,
-                            false);
+        return ConicAgainstPlane(conic, data, domain, *plane, box, prefix + " x Plane");
     }
     if (const Cylinder* cylinder = b.Target<Cylinder>()) {
         return ConicAgainst(conic, data, domain, *cylinder, box, CylinderForm,
