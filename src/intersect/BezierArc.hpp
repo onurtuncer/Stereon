@@ -17,12 +17,17 @@
 // zero, so the plane handlers see the arithmetic they always had.
 //
 // Included after Bernstein.hpp, in the same purview and with the same
-// standard headers, plus <array>. Everything is in an anonymous namespace.
+// standard headers, plus <array> and <inplace_vector>. Everything is in an
+// anonymous namespace.
 
 #pragma once
 
 namespace Stereon::Detail {
 namespace {
+
+/// The most poles an arc or one of its hodographs has: a Bezier segment of
+/// a B-spline of the highest degree.
+constexpr std::size_t ArcCapacity = static_cast<std::size_t>(BSplineMaxDegree) + 1;
 
 /// A piece [S0, S1] of segment Index's local parameter, dyadic, with its
 /// homogeneous poles over it, enclosed.
@@ -39,21 +44,19 @@ struct Arc {
     return {(a.X + b.X) * half, (a.Y + b.Y) * half, (a.Z + b.Z) * half, (a.W + b.W) * half};
 }
 
-/// de Casteljau at the middle, enclosed.
+/// de Casteljau at the middle, enclosed, reduced in the right half's own
+/// storage as Bernstein.hpp's Halves is.
 [[maybe_unused]] [[nodiscard]] inline std::pair<Arc, Arc> Halves(const Arc& arc)
 {
     const std::size_t m = arc.Poles.size();
-    std::vector<HPoint> work = arc.Poles;
     std::vector<HPoint> left(m);
-    std::vector<HPoint> right(m);
-    left[0] = work[0];
-    right[m - 1] = work[m - 1];
+    std::vector<HPoint> right = arc.Poles;
+    left[0] = right[0];
     for (std::size_t level = 1; level < m; ++level) {
         for (std::size_t i = 0; i + level < m; ++i) {
-            work[i] = Mid(work[i], work[i + 1]);
+            right[i] = Mid(right[i], right[i + 1]);
         }
-        left[level] = work[0];
-        right[m - 1 - level] = work[m - 1 - level];
+        left[level] = right[0];
     }
     const double mid = 0.5 * arc.S0 + 0.5 * arc.S1;
     return {Arc{arc.Index, arc.S0, mid, std::move(left)},
@@ -69,8 +72,14 @@ struct Arc {
 }
 
 /// The homogeneous point of the poles' Bezier polynomial at s, enclosed.
-[[maybe_unused]] [[nodiscard]] inline HPoint EvalH(std::vector<HPoint> work, const Interval& s)
+/// The reduction's work array is on the stack (std::inplace_vector): the
+/// pair searches evaluate an arc and its hodographs at every box they
+/// visit, and none of those evaluations may cost a heap allocation.
+[[maybe_unused]] [[nodiscard]] inline HPoint EvalH(const std::vector<HPoint>& poles,
+                                                   const Interval& s)
 {
+    STEREON_HOT_ASSERT(poles.size() <= ArcCapacity);
+    std::inplace_vector<HPoint, ArcCapacity> work(poles.begin(), poles.end());
     for (std::size_t level = 1; level < work.size(); ++level) {
         for (std::size_t i = 0; i + level < work.size(); ++i) {
             work[i] = {Step(work[i].X, work[i + 1].X, s), Step(work[i].Y, work[i + 1].Y, s),
@@ -87,6 +96,7 @@ Hodograph(const std::vector<HPoint>& poles)
 {
     const Interval p{static_cast<double>(poles.size() - 1)};
     std::vector<HPoint> d;
+    d.reserve(poles.size());
     for (std::size_t i = 0; i + 1 < poles.size(); ++i) {
         d.push_back({p * (poles[i + 1].X - poles[i].X), p * (poles[i + 1].Y - poles[i].Y),
                      p * (poles[i + 1].Z - poles[i].Z), p * (poles[i + 1].W - poles[i].W)});

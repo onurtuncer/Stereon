@@ -226,6 +226,38 @@ void CylinderCylinderSkewTangent(benchmark::State& state)
     Intersection(state, AboutZ, SkewTangent);
 }
 
+// Two cubic Bezier curves in one plane of space that cross transversally,
+// and the same pair lifted apart: the first search isolates crossings, the
+// second only subdivides until the boxes are proved apart. Both run the
+// curve-pair search's arc halving and enclosed evaluation (BezierArc.hpp).
+BSplineCurve CubicBezier(const Point3& p0, const Point3& p1, const Point3& p2, const Point3& p3)
+{
+    return BSplineCurve{3, {0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0}, {p0, p1, p2, p3}, {}};
+}
+
+void SplinePair(benchmark::State& state, const double lift)
+{
+    const Stereon::Context ctx = Stereon::Context::Default();
+    const Stereon::Curve a{CubicBezier(Point3{-1.0, 0.0, 0.0}, Point3{0.0, 2.0, 0.0},
+                                       Point3{1.0, -2.0, 0.0}, Point3{2.0, 0.0, 0.0})};
+    const Stereon::Curve b{CubicBezier(Point3{0.25, -2.0, lift}, Point3{-0.5, -1.0, lift},
+                                       Point3{1.5, 1.0, lift}, Point3{0.75, 2.0, lift})};
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(Stereon::Intersect(a, b, ctx));
+    }
+    Items(state, 1);
+}
+
+void SplinePairCrossing(benchmark::State& state)
+{
+    SplinePair(state, 0.0);
+}
+
+void SplinePairApart(benchmark::State& state)
+{
+    SplinePair(state, 0.25);
+}
+
 void RayMeets(benchmark::State& state, const Stereon::Surface& surface)
 {
     const Stereon::Context ctx = Stereon::Context::Default();
@@ -305,6 +337,8 @@ BENCHMARK(CylinderCylinderParallel)->Name("HotPath/Intersect/CylinderCylinder/pa
 BENCHMARK(PlaneCylinderEllipse)->Name("HotPath/Intersect/PlaneCylinder/ellipse");
 BENCHMARK(CylinderCylinderSkewCrossing)->Name("HotPath/Intersect/CylinderCylinder/skew-crossing");
 BENCHMARK(CylinderCylinderSkewTangent)->Name("HotPath/Intersect/CylinderCylinder/skew-tangent");
+BENCHMARK(SplinePairCrossing)->Name("HotPath/Intersect/SplinePair/crossing");
+BENCHMARK(SplinePairApart)->Name("HotPath/Intersect/SplinePair/apart");
 BENCHMARK(RayMeetsPlane)->Name("HotPath/RayMeets/plane");
 BENCHMARK(RayMeetsCylinder)->Name("HotPath/RayMeets/cylinder");
 BENCHMARK(CurveKnotInsertion)->Name("HotPath/CurveKnotInsertion");

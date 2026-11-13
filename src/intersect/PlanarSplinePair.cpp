@@ -17,6 +17,7 @@ module;
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <inplace_vector>
 #include <limits>
 #include <memory>
 #include <optional>
