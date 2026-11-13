@@ -1011,33 +1011,80 @@ namespace {
 /// 1 024 turns.
 constexpr std::size_t MaxArcs = 4096;
 
-/// The arc's root, from its Bezier parameter to the conic's angle: the
-/// stretch maps through the monotone AngleAt, widened by a few units of
-/// its rounding and kept in the arc.
-[[nodiscard]] Found OnConic(const Found& f, const double t0, const double t1)
+/// The parabola's stretch [t0, t1] of V + t^2 A + t B (A = X / (4 f)), a
+/// polynomial quadratic, as its Bezier segment on s in [0, 1]: the poles
+/// P(t0), V + t0 t1 A + (t0 + t1) / 2 B and P(t1), weight 1, each enclosed
+/// from the doubles t0 and t1, so the segment encloses the parabola as
+/// given.
+[[nodiscard]] Segment ParabolicSegment(const ConicData& parabola, const double t0, const double t1)
+{
+    const Interval a{t0};
+    const Interval b{t1};
+    const Interval one{1.0};
+    return {0.0,
+            1.0,
+            {ConicPole(parabola, one, a * a, a),
+             ConicPole(parabola, one, a * b, (a + b) / Interval{2.0}),
+             ConicPole(parabola, one, b * b, b)}};
+}
+
+/// The parabola's parameter at the stretch's Bezier parameter s: linear,
+/// exact at the stretch's ends.
+[[nodiscard]] double ParabolicAt(const double t0, const double t1, const double s)
+{
+    if (s <= 0.0) {
+        return t0;
+    }
+    if (s >= 1.0) {
+        return t1;
+    }
+    return std::clamp(t0 + (t1 - t0) * s, t0, t1);
+}
+
+/// How a conic's requested domain becomes arcs: the conic as C + c(t) A +
+/// s(t) B, the widest arc, an arc's rational quadratic Bezier segment, and
+/// the conic's parameter at an arc's Bezier parameter (monotone, exact at
+/// the arc's ends). Circles and ellipses take quarter turns (ArcSegment,
+/// AngleAt), hyperbolas stretches of one unit of t (HyperbolicSegment,
+/// HyperbolicAt; cosh h never vanishes), a parabola, a polynomial, one
+/// stretch for the whole domain.
+struct ConicChart {
+    ConicData Data;
+    double Span;
+    Segment (*Arc)(const ConicData&, double, double);
+    double (*At)(double, double, double);
+};
+
+/// The arc's root, from its Bezier parameter to the conic's parameter: the
+/// stretch maps through the chart's monotone map, widened by a few units
+/// of its rounding and kept in the arc.
+[[nodiscard]] Found OnConic(const Found& f, const ConicChart& chart, const double t0,
+                            const double t1)
 {
     const auto widened = [&](const double x, const double toward) {
         const double step = 4.0 * std::numeric_limits<double>::epsilon() * (1.0 + std::abs(x));
         return std::clamp(toward < x ? x - step : x + step, t0, t1);
     };
-    const double lower =
-        f.Bracket.GetLower() <= 0.0 ? t0 : widened(AngleAt(t0, t1, f.Bracket.GetLower()), t0 - 1.0);
-    const double upper =
-        f.Bracket.GetUpper() >= 1.0 ? t1 : widened(AngleAt(t0, t1, f.Bracket.GetUpper()), t1 + 1.0);
-    return {AngleAt(t0, t1, f.T), Interval{lower, upper}, f.Contact, f.Decided, f.Isolated};
+    const double lower = f.Bracket.GetLower() <= 0.0
+                             ? t0
+                             : widened(chart.At(t0, t1, f.Bracket.GetLower()), t0 - 1.0);
+    const double upper = f.Bracket.GetUpper() >= 1.0
+                             ? t1
+                             : widened(chart.At(t0, t1, f.Bracket.GetUpper()), t1 + 1.0);
+    return {chart.At(t0, t1, f.T), Interval{lower, upper}, f.Contact, f.Decided, f.Isolated};
 }
 
 /// The roots of the surface's form on the arc [t0, t1], as angles.
 template <typename Form>
-[[nodiscard]] Result<void> ArcRoots(const ConicData& conic, const double t0, const double t1,
+[[nodiscard]] Result<void> ArcRoots(const ConicChart& chart, const double t0, const double t1,
                                     Form& form, const std::string_view handler,
                                     std::vector<Found>& found)
 {
-    const Segment arc = ArcSegment(conic, t0, t1);
+    const Segment arc = chart.Arc(chart.Data, t0, t1);
     std::vector<Found> local;
     STEREON_TRY_VOID(RootsOfSegment(arc, form(arc.Poles), handler, local));
     for (const Found& f : local) {
-        found.push_back(OnConic(f, t0, t1));
+        found.push_back(OnConic(f, chart, t0, t1));
     }
     return {};
 }
@@ -1052,22 +1099,30 @@ template <typename Form>
             std::ranges::none_of(moved, [&](const double c) { return Contains(f.Bracket, c); }));
 }
 
-/// A root undecided because it lies at or within rounding of a cut between
-/// arcs, where each arc's search brackets it across its end (an arc
-/// monotone throughout brackets it with the whole arc, and Merge joins such
-/// brackets), searched again over every arc its bracket reaches, the
-/// region [cuts.front(), cuts.back()], with each interior cut c moved to
-/// c + w/4, w the narrowest arc: the conic is smooth across c, which is the
-/// kernel's choice and no feature of the curve, and c now lies inside an
-/// arc, about four fifths along it, off the subdivision's dyadic points.
-/// The new arcs are at most five quarters of a quarter turn, short of the
-/// half turn where a rational quadratic's middle weight vanishes. The new
-/// search is complete over the region, so its roots replace every root
-/// whose bracket lies in the region; when one of them leaves the region or
-/// is undecided across a moved cut, the region is left as it was and the
-/// intersection fails closed.
+/// The fraction of a lone arc at which AcrossCuts cuts it: the golden
+/// section, 1 / phi = phi - 1 = (sqrt 5 - 1) / 2 (the subtraction exact in
+/// doubles), far from every dyadic fraction of the arc it splits.
+constexpr double GoldenCut = std::numbers::phi - 1.0;
+
+/// A root undecided because it lies at or within rounding of where the
+/// search cut the conic: a cut between arcs, where each arc brackets it
+/// across its end (an arc monotone throughout brackets it with the whole
+/// arc, and Merge joins such brackets), or a dyadic point of an arc's
+/// subdivision, where each half brackets it across its end. It is searched
+/// again over every arc its bracket reaches, the region [cuts.front(),
+/// cuts.back()], cut elsewhere: each interior cut c moved to c + w/4, w the
+/// narrowest arc, or a lone arc cut at its golden section. The conic is
+/// smooth across every such point, which is the kernel's choice and no
+/// feature of the curve, and in the new arcs the root lies off their
+/// dyadic points. The new arcs are at most five quarters of the old (for a
+/// circle, short of the half turn where a rational quadratic's middle
+/// weight vanishes). The new search is complete over the region, so its
+/// roots replace every root whose bracket lies in the region; when one of
+/// them leaves the region or is undecided across a new cut, the region is
+/// left as it was and the intersection fails closed. A tangency stays
+/// undecided wherever the cuts are, and fails closed.
 template <typename Form>
-[[nodiscard]] Result<void> AcrossCuts(const ConicData& conic, const std::vector<double>& cuts,
+[[nodiscard]] Result<void> AcrossCuts(const ConicChart& chart, const std::vector<double>& cuts,
                                       Form& form, const std::string_view handler,
                                       std::vector<Found>& found)
 {
@@ -1079,12 +1134,15 @@ template <typename Form>
     for (double& c : moved) {
         c += 0.25 * w;
     }
+    if (moved.empty()) {
+        moved.push_back(cuts.front() + GoldenCut * w);
+    }
     std::vector<double> ends{cuts.front()};
     ends.insert(ends.end(), moved.begin(), moved.end());
     ends.push_back(cuts.back());
     std::vector<Found> again;
     for (std::size_t k = 0; k + 1 < ends.size(); ++k) {
-        STEREON_TRY_VOID(ArcRoots(conic, ends[k], ends[k + 1], form, handler, again));
+        STEREON_TRY_VOID(ArcRoots(chart, ends[k], ends[k + 1], form, handler, again));
     }
     Merge(again);
     const Interval region{cuts.front(), cuts.back()};
@@ -1098,13 +1156,12 @@ template <typename Form>
     return {};
 }
 
-/// The first and last cut of the arcs an undecided root's bracket reaches,
-/// when it holds an interior cut; nothing otherwise.
+/// The first and last cut of the arcs an undecided root's bracket reaches;
+/// nothing for a decided root.
 [[nodiscard]] std::optional<std::pair<std::size_t, std::size_t>>
 StuckRegion(const Found& f, const std::vector<double>& cuts)
 {
-    if (f.Decided || !std::ranges::any_of(cuts.begin() + 1, cuts.end() - 1,
-                                          [&](const double c) { return Contains(f.Bracket, c); })) {
+    if (f.Decided) {
         return std::nullopt;
     }
     std::size_t i = 0;
@@ -1148,11 +1205,12 @@ StuckRegion(const Found& f, const std::vector<double>& cuts)
 }
 
 /// Every root of the surface's form on the conic over the domain, cut into
-/// quarter-turn arcs, as angles of the conic, merged and placed as RootsOf
-/// places a B-spline's; a root undecided at a cut between arcs is searched
-/// again across it (AcrossCuts).
+/// the chart's arcs (quarter turns of a circle or an ellipse), as the
+/// conic's parameters, merged and placed as RootsOf places a B-spline's; a
+/// root undecided at a cut between arcs is searched again across it
+/// (AcrossCuts).
 template <typename Form>
-[[nodiscard]] Result<std::vector<Found>> ConicRootsOf(const ConicData& conic,
+[[nodiscard]] Result<std::vector<Found>> ConicRootsOf(const ConicChart& chart,
                                                       const Interval& domain, Form&& form,
                                                       const std::string_view handler)
 {
@@ -1160,12 +1218,11 @@ template <typename Form>
         return Fail(ErrorCode::InvalidInput,
                     std::string(handler) + ": a conic's domain must be bounded");
     }
-    const double quarter = 0.5 * std::numbers::pi;
     const double width = Width(domain);
-    const double count = std::max(1.0, std::ceil(width / quarter));
+    const double count = std::max(1.0, std::ceil(width / chart.Span));
     if (count > static_cast<double>(MaxArcs)) {
         return Fail(ErrorCode::NotSupported,
-                    std::string(handler) + ": a domain of more than 1 024 turns");
+                    std::string(handler) + ": a domain of more than 4 096 arcs");
     }
     const auto arcs = static_cast<std::size_t>(count);
     std::vector<double> cuts{domain.GetLower()};
@@ -1175,11 +1232,11 @@ template <typename Form>
     cuts.push_back(domain.GetUpper());
     std::vector<Found> found;
     for (std::size_t k = 0; k < arcs; ++k) {
-        STEREON_TRY_VOID(ArcRoots(conic, cuts[k], cuts[k + 1], form, handler, found));
+        STEREON_TRY_VOID(ArcRoots(chart, cuts[k], cuts[k + 1], form, handler, found));
     }
     Merge(found);
     for (const std::vector<double>& region : StuckRegions(found, cuts)) {
-        STEREON_TRY_VOID(AcrossCuts(conic, region, form, handler, found));
+        STEREON_TRY_VOID(AcrossCuts(chart, region, form, handler, found));
     }
     for (const Found& f : found) {
         if (!f.Decided) {
@@ -1232,7 +1289,7 @@ ConicAlongPlane(const Curve2d& pcurve, const Point2& center, const double reach,
 /// which of them are periodic.
 template <typename Conic, typename S, typename Form>
 [[nodiscard]] Result<CurveSurfaceIntersection>
-ConicAgainst(const Conic& conic, const ConicData& data, const Interval& domain, const S& surface,
+ConicAgainst(const Conic& conic, const ConicChart& data, const Interval& domain, const S& surface,
              const Box2& box, Form&& form, const std::string_view handler, const bool periodicU,
              const bool periodicV)
 {
@@ -1261,6 +1318,21 @@ ConicAgainst(const Conic& conic, const ConicData& data, const Interval& domain, 
                              InPlane2(plane, ellipse.YAxis)});
 }
 
+[[nodiscard]] Curve2d InPlaneOf(const Hyperbola& hyperbola, const Plane& plane)
+{
+    return Curve2d(Hyperbola2d{Project(plane, hyperbola.Center), hyperbola.MajorRadius,
+                               hyperbola.MinorRadius, InPlane2(plane, hyperbola.XAxis),
+                               InPlane2(plane, hyperbola.YAxis)});
+}
+
+[[nodiscard]] Curve2d InPlaneOf(const Parabola& parabola, const Plane& plane)
+{
+    return Curve2d(Parabola2d{Project(plane, parabola.Vertex), parabola.FocalLength,
+                              InPlane2(plane, parabola.XAxis), InPlane2(plane, parabola.YAxis)});
+}
+
+/// How far the conic reaches from its centre: a hyperbola or a parabola
+/// has no bound, so in a plane it is always clipped to the box.
 [[nodiscard]] double Reach(const Circle& circle)
 {
     return circle.Radius;
@@ -1271,10 +1343,31 @@ ConicAgainst(const Conic& conic, const ConicData& data, const Interval& domain, 
     return ellipse.MajorRadius;
 }
 
+[[nodiscard]] double Reach(const Hyperbola& /*hyperbola*/)
+{
+    return std::numeric_limits<double>::infinity();
+}
+
+[[nodiscard]] double Reach(const Parabola& /*parabola*/)
+{
+    return std::numeric_limits<double>::infinity();
+}
+
+template <typename Conic>
+[[nodiscard]] Point3 CentreOf(const Conic& conic)
+{
+    return conic.Center;
+}
+
+[[nodiscard]] Point3 CentreOf(const Parabola& parabola)
+{
+    return parabola.Vertex;
+}
+
 /// Dispatch on the surface for one conic.
 template <typename Conic>
 [[nodiscard]] Result<CurveSurfaceIntersection>
-ConicOnSurface(const Conic& conic, const ConicData& data, const Interval& domain, const Surface& b,
+ConicOnSurface(const Conic& conic, const ConicChart& data, const Interval& domain, const Surface& b,
                const Box2& box, const Context& ctx, const std::string_view name)
 {
     const std::string prefix(name);
@@ -1282,8 +1375,8 @@ ConicOnSurface(const Conic& conic, const ConicData& data, const Interval& domain
         return Fail(ErrorCode::InvalidInput, prefix + ": a conic's domain must be bounded");
     }
     if (const Plane* plane = b.Target<Plane>()) {
-        if (ConicInPlane(conic.Center, conic.XAxis, conic.YAxis, *plane)) {
-            return ConicAlongPlane(InPlaneOf(conic, *plane), Project(*plane, conic.Center),
+        if (ConicInPlane(CentreOf(conic), conic.XAxis, conic.YAxis, *plane)) {
+            return ConicAlongPlane(InPlaneOf(conic, *plane), Project(*plane, CentreOf(conic)),
                                    Reach(conic), domain, box, ctx, prefix + " x Plane");
         }
         return ConicAgainst(conic, data, domain, *plane, box, PlaneForm, prefix + " x Plane", false,
@@ -1312,22 +1405,88 @@ ConicOnSurface(const Conic& conic, const ConicData& data, const Interval& domain
     return Fail(ErrorCode::InvalidInput, "ConicSurface: dispatched for other types");
 }
 
+/// The elementary surface's type, for messages.
+[[nodiscard]] std::string SurfaceName(const Surface& b)
+{
+    if (b.Target<Plane>() != nullptr) {
+        return "Plane";
+    }
+    if (b.Target<Cylinder>() != nullptr) {
+        return "Cylinder";
+    }
+    if (b.Target<Cone>() != nullptr) {
+        return "Cone";
+    }
+    if (b.Target<Sphere>() != nullptr) {
+        return "Sphere";
+    }
+    if (b.Target<Torus>() != nullptr) {
+        return "Torus";
+    }
+    return b.Target<Ellipsoid>() != nullptr ? "Ellipsoid" : "Surface";
+}
+
+/// A hyperbola's branch C + a cosh t X + b sinh t Y, or a parabola
+/// V + t^2 / (4 f) X + t Y, against a surface: as a circle, on its exact
+/// rational (hyperbola) or polynomial (parabola) form, over a bounded
+/// requested domain. Neither curve is bounded, and an unbounded domain is
+/// NotSupported rather than clipped to some finite stretch.
+[[nodiscard]] Result<CurveSurfaceIntersection> OpenConicSurface(const Curve& a,
+                                                                const Interval& domain,
+                                                                const Surface& b, const Box2& box,
+                                                                const Context& ctx)
+{
+    const Hyperbola* hyperbola = a.Target<Hyperbola>();
+    const Parabola* parabola = a.Target<Parabola>();
+    if (hyperbola == nullptr && parabola == nullptr) {
+        return Fail(ErrorCode::InvalidInput, "ConicSurface: dispatched for other types");
+    }
+    if (!domain.IsBounded()) {
+        return Fail(ErrorCode::NotSupported,
+                    std::string(hyperbola != nullptr ? "Hyperbola" : "Parabola") + " x " +
+                        SurfaceName(b) +
+                        ": the requested domain must be bounded (the curve is not, and is "
+                        "never clipped to a guessed stretch)");
+    }
+    if (hyperbola != nullptr) {
+        const ConicData data{hyperbola->Center, Times(hyperbola->MajorRadius, hyperbola->XAxis),
+                             Times(hyperbola->MinorRadius, hyperbola->YAxis)};
+        return ConicOnSurface(*hyperbola, {data, 1.0, &HyperbolicSegment, &HyperbolicAt}, domain, b,
+                              box, ctx, "Hyperbola");
+    }
+    const double f = parabola->FocalLength;
+    if (!(f > 0.0) || !std::isfinite(4.0 * f)) {
+        return Fail(ErrorCode::InvalidInput, "Parabola: the focal length must be positive");
+    }
+    const Interval four{4.0 * f};
+    const ConicData data{parabola->Vertex,
+                         {Interval{parabola->XAxis.X} / four, Interval{parabola->XAxis.Y} / four,
+                          Interval{parabola->XAxis.Z} / four},
+                         Times(1.0, parabola->YAxis)};
+    return ConicOnSurface(
+        *parabola, {data, std::numeric_limits<double>::infinity(), &ParabolicSegment, &ParabolicAt},
+        domain, b, box, ctx, "Parabola");
+}
+
 } // namespace
 
 Result<CurveSurfaceIntersection> ConicSurface(const Curve& a, const Interval& domain,
                                               const Surface& b, const Box2& box, const Context& ctx)
 {
+    const double quarter = 0.5 * std::numbers::pi;
     if (const Circle* circle = a.Target<Circle>()) {
         const ConicData data{circle->Center, Times(circle->Radius, circle->XAxis),
                              Times(circle->Radius, circle->YAxis)};
-        return ConicOnSurface(*circle, data, domain, b, box, ctx, "Circle");
+        return ConicOnSurface(*circle, {data, quarter, &ArcSegment, &AngleAt}, domain, b, box, ctx,
+                              "Circle");
     }
     if (const Ellipse* ellipse = a.Target<Ellipse>()) {
         const ConicData data{ellipse->Center, Times(ellipse->MajorRadius, ellipse->XAxis),
                              Times(ellipse->MinorRadius, ellipse->YAxis)};
-        return ConicOnSurface(*ellipse, data, domain, b, box, ctx, "Ellipse");
+        return ConicOnSurface(*ellipse, {data, quarter, &ArcSegment, &AngleAt}, domain, b, box, ctx,
+                              "Ellipse");
     }
-    return Fail(ErrorCode::InvalidInput, "ConicSurface: dispatched for other types");
+    return OpenConicSurface(a, domain, b, box, ctx);
 }
 
 } // namespace Stereon::Detail

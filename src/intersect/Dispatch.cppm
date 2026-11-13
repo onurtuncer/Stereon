@@ -716,7 +716,7 @@ consteval CurveSurfaceHandler SplineAgainstSurface()
     }
 }
 
-/// A circle's or an ellipse's handler: ConicSurface for every elementary
+/// A conic's handler (circle, ellipse, hyperbola, parabola): ConicSurface for every elementary
 /// surface and the ellipsoid.
 template <typename A, typename B>
 consteval CurveSurfaceHandler ConicAgainstSurface()
@@ -740,7 +740,8 @@ consteval CurveSurfaceHandler CurveSurfaceHandlerFor()
         return LineAgainstSurface<B>();
     } else if constexpr (std::same_as<A, BSplineCurve>) {
         return SplineAgainstSurface<B>();
-    } else if constexpr (std::same_as<A, Circle> || std::same_as<A, Ellipse>) {
+    } else if constexpr (std::same_as<A, Circle> || std::same_as<A, Ellipse> ||
+                         std::same_as<A, Hyperbola> || std::same_as<A, Parabola>) {
         return ConicAgainstSurface<A, B>();
     } else {
         return &CurveSurfaceStub<A, B>;
