@@ -5,14 +5,14 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-// Branch points of the generic SSI (ADR-0010): two polynomial B-spline
+// Branch points of the generic SSI (ADR-0010): polynomial or rational B-spline
 // surfaces crossing in two branches at a transverse node. Each answer is held
 // to a closed form written here, never derived from the kernel's path: the
 // node, the four ends of its half-branches on the boundary of the domain, and
 // the curve every sample of every branch must lie on. The same answer, moved
 // accordingly, under exchange of the surfaces, reversal and transposition of
 // parameters, a far translation and scaling by powers of two (ADR-0053,
-// MR-01 to MR-04). Higher-order singularities, nodes of rational surfaces and
+// MR-01 to MR-04). Higher-order singularities, nodes on knot lines or seams and
 // a node the tolerance cannot admit fail closed.
 
 #include <catch2/catch_test_macros.hpp>
@@ -331,13 +331,10 @@ Context Scaled(const double scale)
                         : ctx.WithResolution(resolution).WithToleranceCeiling(ceiling);
 }
 
-/// Whether a transformed case must be answered, or may instead fail closed.
-enum class Must : bool { Answer, AnswerOrFailClosed };
-
 /// Intersect the moved surfaces with the tolerance and resolution scaled
 /// alike, in both orders, and check each against the moved closed form.
 void CheckMoved(const BSplineSurface& sa, const BSplineSurface& sb, const Expected& e,
-                const Motion& motion, const Must must = Must::Answer)
+                const Motion& motion)
 {
     const auto move = [&](const Point3& p) { return motion.Forward(p); };
     const Surface a{Mapped(sa, move)};
@@ -351,10 +348,6 @@ void CheckMoved(const BSplineSurface& sa, const BSplineSurface& sb, const Expect
                                     : Intersect(a, Box2::Everything(), b, Box2::Everything(),
                                                 tolerance * motion.Scale, scaled);
         INFO(IntersectTest::ErrorText(result));
-        if (!result && must == Must::AnswerOrFailClosed) {
-            REQUIRE(result.error().GetCode() == ErrorCode::IntersectionFailed);
-            continue;
-        }
         REQUIRE(result.has_value());
         CheckNode(*result, swapped ? b : a, swapped ? a : b, e, motion, scaled.GetResolution());
     }
@@ -383,17 +376,11 @@ TEST_CASE("node answers move with the surfaces", "[intersect][generic][node][met
     {
         CheckMoved(a, b, QuadricCrossing(), {1.0, Point3{16.0, -32.0, 8.0}});
         CheckMoved(Saddle(), Flat(0.0), SaddleLines(), {1.0, Point3{16.0, -32.0, 8.0}});
-        // WEAKENED RELATION, a known open defect: SSI-translated-boundary in
-        // docs/planning/intersection-metamorphic.json and the Generic SSI row
-        // of the v0.2 ledger. At offsets of about 64 and beyond, the
-        // transverse search refuses (IntersectionFailed) near a branch's end
-        // on the domain's boundary, with or without a node, as on the base
-        // revision 227d79a. Until it is repaired these shifts accept that
-        // refusal, never a wrong answer; then they must answer.
+        // #279 repairs SSI-translated-boundary; nodes must move with the arcs.
         for (const Point3 shift :
              {Point3{1024.0, -2048.0, 512.0}, Point3{-4096.0, 256.0, 1024.0}}) {
-            CheckMoved(a, b, QuadricCrossing(), {1.0, shift}, Must::AnswerOrFailClosed);
-            CheckMoved(Saddle(), Flat(0.0), SaddleLines(), {1.0, shift}, Must::AnswerOrFailClosed);
+            CheckMoved(a, b, QuadricCrossing(), {1.0, shift});
+            CheckMoved(Saddle(), Flat(0.0), SaddleLines(), {1.0, shift});
         }
     }
     SECTION("MR-03: scaling by powers of two, with the tolerance and resolution")
@@ -415,26 +402,50 @@ TEST_CASE("node answers move with the surfaces", "[intersect][generic][node][met
 TEST_CASE("a gap within the tolerance is a node; beyond it, two branches that never meet",
           "[intersect][generic][node][near-event]")
 {
-    const Surface saddle{Saddle()};
-    // 2^-30 apart at the centre, the tolerance 1e-6: the branches are
-    // admitted to meet there (ADR-0050), the node a candidate event only.
-    const auto within = Intersect(saddle, Box2::Everything(), Surface{Flat(0x1p-30)},
-                                  Box2::Everything(), tolerance, ctx);
-    INFO(IntersectTest::ErrorText(within));
-    REQUIRE(within.has_value());
-    REQUIRE(within->Branches.size() == 4);
-    REQUIRE(IntersectTest::ConnectivityOf(*within, 1e-9).Curves == 1);
-    // 2^-6 apart: the hyperbola x' y' = 2^-6, two branches, no node.
-    const auto beyond = Intersect(saddle, Box2::Everything(), Surface{Flat(0x1p-6)},
-                                  Box2::Everything(), tolerance, ctx);
-    INFO(IntersectTest::ErrorText(beyond));
-    REQUIRE(beyond.has_value());
-    REQUIRE(beyond->Branches.size() == 2);
-    REQUIRE(IntersectTest::ConnectivityOf(*beyond, 1e-9).Curves == 2);
-    for (const Stereon::IntersectionBranch& branch : beyond->Branches) {
-        for (const double t : IntersectTest::SamplesOf(branch.Range, 64)) {
-            const Point3 p = Eval(branch.Curve3d, t);
-            REQUIRE(std::abs((p.X - 0.5) * (p.Y - 0.5) - 0x1p-6) <= 4.0 * ctx.GetResolution());
+    // Weights 2^(i+j) reparameterize the bilinear surface by
+    // x = 2u/(1+u), y = 2v/(1+v), preserving z = (x-1/2)(y-1/2).
+    // The critical parameters move from (1/2,1/2) to (1/3,1/3), while
+    // the geometric oracle stays the same and W has nonzero partials.
+    for (const bool rational : {false, true}) {
+        const Surface saddle{rational ? Saddle({1.0, 2.0, 2.0, 4.0}) : Saddle()};
+        for (const bool swapped : {false, true}) {
+            INFO("rational " << rational << " swapped " << swapped);
+            for (const double height : {0x1p-30, 0x1p-6}) {
+                INFO("height " << height);
+                const Surface flat{Flat(height)};
+                const auto result = swapped ? Intersect(flat, Box2::Everything(), saddle,
+                                                        Box2::Everything(), tolerance, ctx)
+                                            : Intersect(saddle, Box2::Everything(), flat,
+                                                        Box2::Everything(), tolerance, ctx);
+                INFO(IntersectTest::ErrorText(result));
+                REQUIRE(result.has_value());
+                REQUIRE(result->Points.empty());
+                REQUIRE(result->Overlaps.empty());
+                if (height < tolerance) {
+                    // ADR-0050 admits the near crossing as a candidate node.
+                    // CheckNode checks its location, all four distinct ends,
+                    // connectivity, certificates and both pcurves.
+                    CheckNode(*result, swapped ? flat : saddle, swapped ? saddle : flat,
+                              SaddleLines(), {}, ctx.GetResolution());
+                } else {
+                    // x' y' = 2^-6: two disconnected hyperbola branches.
+                    REQUIRE(result->Branches.size() == 2);
+                    REQUIRE(IntersectTest::ConnectivityOf(*result, 1e-9).Curves == 2);
+                    for (const Stereon::IntersectionBranch& branch : result->Branches) {
+                        REQUIRE(branch.IsCertified());
+                        REQUIRE(branch.Bound <= ctx.GetResolution());
+                        REQUIRE(IntersectTest::PcurveDeviation(branch, swapped ? flat : saddle,
+                                                               swapped ? saddle : flat,
+                                                               64) <= branch.Bound + 1e-12);
+                        for (const double t : IntersectTest::SamplesOf(branch.Range, 64)) {
+                            const Point3 p = Eval(branch.Curve3d, t);
+                            REQUIRE(std::abs((p.X - 0.5) * (p.Y - 0.5) - height) <=
+                                    4.0 * ctx.GetResolution());
+                            REQUIRE(std::abs(p.Z - height) <= 4.0 * ctx.GetResolution());
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -466,16 +477,31 @@ TEST_CASE("branch points that are not proved transverse nodes fail closed",
     }
     SECTION("three lines through a point of a rational surface")
     {
-        // The same degenerate saddle, written with equal weights.
-        const Surface monkey{Graph(
-            [](const std::size_t i, const std::size_t j) {
-                return Square.at(i) * Linear.at(j) - Linear.at(i) * Square.at(j);
-            },
-            0.0, 1.0, std::vector<double>(9, 2.0))};
-        const auto result =
-            Intersect(monkey, Box2::Everything(), flat, Box2::Everything(), tolerance, ctx);
-        REQUIRE_FALSE(result.has_value());
-        REQUIRE(result.error().GetCode() == ErrorCode::IntersectionFailed);
+        // Equal weights exercise the rational representation of a polynomial.
+        // Weights 2^(i+j) also exercise a genuinely varying denominator:
+        // W=(1+u)^2(1+v)^2, x=2u/(1+u), y=2v/(1+v).
+        // Thus z=x'^2 y'-x' y'^2 still has three crossing lines and a
+        // zero Hessian at (x,y)=(1/2,1/2), now at u=v=1/3.
+        for (const std::vector<double>& weights :
+             {std::vector<double>(9, 2.0),
+              std::vector<double>{1.0, 2.0, 4.0, 2.0, 4.0, 8.0, 4.0, 8.0, 16.0}}) {
+            INFO("last weight " << weights.back());
+            const Surface monkey{Graph(
+                [](const std::size_t i, const std::size_t j) {
+                    return Square.at(i) * Linear.at(j) - Linear.at(i) * Square.at(j);
+                },
+                0.0, 1.0, weights)};
+            for (const bool swapped : {false, true}) {
+                INFO("swapped " << swapped);
+                const auto result = swapped ? Intersect(flat, Box2::Everything(), monkey,
+                                                        Box2::Everything(), tolerance, ctx)
+                                            : Intersect(monkey, Box2::Everything(), flat,
+                                                        Box2::Everything(), tolerance, ctx);
+                INFO(IntersectTest::ErrorText(result));
+                REQUIRE_FALSE(result.has_value());
+                REQUIRE(result.error().GetCode() == ErrorCode::IntersectionFailed);
+            }
+        }
     }
     SECTION("a definite touch is not a node")
     {
