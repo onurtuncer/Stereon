@@ -1332,7 +1332,17 @@ Algorithm K: two B-splines by subdivision with Krawczyk's test
 
 ``SplineSpline2d`` (``src/intersect/PlanarSplinePair.cpp``) solves
 :math:`F(s, t) = a(s) - b(t) = 0` over pairs of pieces of the two splines'
-enclosed Bézier segments, halving both pieces of a pair until it is
+enclosed Bézier segments, halving both pieces of a pair until it is apart
+or settled, as below. Both splines are first moved by one vector, the middle
+of their poles' box, when every pole's move is exact in doubles (checked by
+Knuth's TwoSum, whose error term is zero exactly then; ``Centred``): the
+translation keeps :math:`F` and both parameters, and the enclosures'
+rounding, relative to the size of the coordinates, then measures against the
+size of the curves. Without it a pair far from the origin, :math:`4\cdot
+10^5` away and a few units across, is enclosed only to about
+:math:`10^{-10}`, and two arcs :math:`3\cdot 2^{-34}` apart, or a crossing,
+could not be settled. When some move would round, the splines are searched
+where they are. Points are placed on the input splines. The two outcomes:
 
 - **apart**: the boxes of the pieces' poles are disjoint, or the hulls of
   both pieces' distances from either piece's chord are, a fat line in the
@@ -1364,9 +1374,35 @@ every side, so that a root on the end of a piece, where the halving put
 it, is proved from either side. The inflation reaches past a segment's ends
 into the segment's polynomial continued: a root whose bracket lies beyond
 the segment is not the segment's and is dropped (the neighbouring segment
-finds it, or it is no point of the curve); one whose bracket straddles a
-segment's end is reported with ``Decided`` false; roots proved from
-overlapping boxes are one. Every proved crossing is ``Decided``. A pair
+finds it, or it is no point of the curve).
+
+A bracket that straddles a segment's end, a crossing at or within rounding
+of an interior knot of either spline, is proved again with each spline
+taken whole, in the curves' own parameters (``AcrossKnots``): :math:`F` at
+the box's middle from the segment holding it, and :math:`J(X)` the hull of
+every segment's slope over its part of the box, the end segments continued
+past the spline's ends. An interior knot is repeated at most :math:`p`
+times, so the splines are continuous and :math:`F` is continuous and
+piecewise polynomial; then
+:math:`F(x) - F(m) = \int_0^1 J\bigl(m + \tau(x - m)\bigr)\,d\tau\,(x - m)`
+lies in :math:`J(X)(x - m)`, which is all Krawczyk's existence and
+uniqueness argument needs, so the test is as sound across a knot, a corner
+included, as inside a segment. The box tried first is the pair's own; if
+that fails, boxes about the segment's bracket, an eighth as wide each time
+while wider than the bracket. A bracket so proved and inside both splines
+is ``Decided``; one across a spline's own end stays undecided (past it the
+end segment continued was proved, not the spline), and a root no box
+proves is reported with ``Decided`` false, never dropped.
+
+Two brackets that meet on both curves are one root only *by proof*: when
+one lies in the box the other was proved the only root of the curves' own
+:math:`F` in (a segment's box restricted to the segment, rounded inward;
+a whole-spline box restricted to the splines' domains). That merges the
+brackets of one crossing found from either side of a knot, and absorbs an
+unproved bracket of a continued segment, which if it is a root of the
+curves at all is the proved one. Brackets that meet otherwise are reported
+as their hull, undecided; equal parameters are never an argument. Every
+proved crossing is ``Decided``. A pair
 that is neither apart nor settled when its pieces can no longer be halved,
 or a search past :math:`2^{16}` pairs, fails with ``IntersectionFailed``:
 a tangency of two B-splines (where :math:`J` is singular and no box ever
@@ -1394,18 +1430,29 @@ What is decided
      - a root proved a single simple crossing
    * - two B-splines
      - a crossing proved single by Krawczyk's test, its bracket inside both
-       segments
+       segments, or, at or within rounding of an interior knot of either or
+       both splines, proved single with the splines taken whole and its
+       bracket inside both splines; a crossing at a spline's own end, or
+       one no box proves, is reported undecided
 
 A point whose parameter on a conic lies within rounding of a requested
 domain's end may fall on either side of it; a B-spline root whose bracket
 reaches past the requested domain is kept, clamped into it, undecided. The
-tests are ``tests/intersect/PlanarTests.cpp`` and
-``tests/intersect/PlanarPairTests.cpp``: exact configurations and their
-neighbours a rounding or :math:`3\cdot 2^{-40}` either side, tangencies of
-order two and four, coincidences, rational arcs, exchange and reversal of
-the curves, and properties on random geometry (every sign change of a
-conic's equation along a random cubic has a point; random conic pairs
-agree with themselves exchanged).
+tests are ``tests/intersect/PlanarTests.cpp``,
+``tests/intersect/PlanarPairTests.cpp`` and
+``tests/intersect/PlanarSplineKnotTests.cpp``: exact configurations and
+their neighbours a rounding or :math:`3\cdot 2^{-40}` either side,
+tangencies of order two and four, coincidences, rational arcs, exchange and
+reversal of the curves, and properties on random geometry (every sign
+change of a conic's equation along a random cubic has a point; random conic
+pairs agree with themselves exchanged). The knot tests take two cubics
+crossing at both their interior knots, polynomial and rational, a cubic
+across a polyline's vertex at its own knot, a corner (a knot of full
+multiplicity), and crossings a rounding and :math:`2^{-40}` either side of
+a knot, with closed-form answers and an independent de Boor oracle in long
+double, under exchange, reversal, knot insertion (the crossing's knot
+raised to multiplicity three included), translation, a quarter turn and
+scaling by :math:`2^{\pm 20}` (ADR-0053 MR-01 to MR-04).
 
 Certificates
 ------------
