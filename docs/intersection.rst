@@ -152,6 +152,17 @@ below holds, within a budget of 2^14; beyond it the intersection fails with
 size box of ADR-0001, where the rounding of a B-spline's poles alone
 exceeds the resolution.
 
+Which cylinder's angle parametrises the curve does not depend on the
+operands' order (ADR-0053, MR-02). The cylinder with the larger radius is
+tried first; ties are broken by the origin, the frame and the requested box,
+compared lexicographically. If that parametrisation refuses
+(``CertificationFailed`` past the sample budget, or ``IntersectionFailed``),
+the other cylinder's is tried. Each parametrisation's answer stands on its
+own: the configuration is decided exactly and every branch is certified
+against both cylinders. So the second is used only where the first gave no
+answer. It never replaces a proved answer, nor does a refusal stand in for
+one.
+
 A branch is first clipped to the requested angular and height restrictions
 on both cylinders by interval evaluation of the closed form over spans of
 its parameter, bisected until a span is proved outside or inside. Half-infinite
