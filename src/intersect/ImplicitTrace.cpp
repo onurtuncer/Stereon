@@ -35,6 +35,8 @@ module Stereon.Intersect;
 import :Dispatch;
 
 #include "Analytic.hpp"
+#include "Bernstein.hpp"
+#include "BezierPatch.hpp"
 #include "Implicit.hpp"
 
 /// The parametric-implicit tracer (ADR-0010's analytic table, the pairs
@@ -82,7 +84,7 @@ constexpr double Pi = std::numbers::pi;
 /// The boxes evaluated at most, and the deepest split: a work budget, not a
 /// geometric tolerance (ADR-0010).
 constexpr std::size_t BoxBudget = std::size_t{1} << 18;
-constexpr int MaxDepth = 56;
+constexpr int TraceDepth = 56;
 /// A box is split a little off its middle, so that the corners of the
 /// children avoid the symmetric points of symmetric configurations.
 constexpr double SplitRatio = 0.5 + 0x1p-6;
@@ -106,6 +108,183 @@ constexpr int RootSteps = 80;
     return 0.5 * (i.GetLower() + i.GetUpper());
 }
 
+// --- The carrier ------------------------------------------------------------
+
+/// A B-spline carrier (ADR-0010: a B-spline surface against an analytic
+/// one): its Bezier patches, enclosed by Boehm's knot insertion in interval
+/// arithmetic, with their partials' nets, so that every enclosure of S, S_u
+/// and S_v over a box of parameters holds for the surface as given.
+struct SplinePiece {
+    Patch Cell;
+    Net Du;
+    Net Dv;
+};
+
+struct SplineCarrier {
+    const Surface* Erased;
+    Box2 Domain;
+    std::vector<SplinePiece> Pieces;
+};
+
+/// The carrier: an elementary surface, or a B-spline one.
+struct TraceCarrier {
+    std::optional<Elementary> Analytic;
+    std::shared_ptr<const SplineCarrier> Spline;
+};
+
+[[nodiscard]] IPoint3 WideBounds(const Bounds& b)
+{
+    return {I{b[0]}, I{b[1]}, I{b[2]}};
+}
+
+[[nodiscard]] IVec3 WideBoundsVec(const Bounds& b)
+{
+    return {I{b[0]}, I{b[1]}, I{b[2]}};
+}
+
+[[nodiscard]] Bounds Everywhere()
+{
+    return {Interval::Everything(), Interval::Everything(), Interval::Everything()};
+}
+
+/// A net's homogeneous value at enclosed parameters; a net of one pole has
+/// it everywhere.
+[[nodiscard]] HPoint NetAt(const Net& net, const Box2& stretch, const Interval& u,
+                           const Interval& v)
+{
+    return net.Poles.size() == 1 ? net.Poles[0] : ValueOf(net, stretch, u, v);
+}
+
+/// S, S_u and S_v of one piece over parameters within it: by the quotient
+/// rule on the nets' values at enclosed parameters at a point or along an
+/// edge (a box of no width, which a piece cannot be cut down to), by the
+/// hulls of the piece cut down to the box otherwise.
+[[nodiscard]] std::array<Bounds, 3> PieceJet(const SplinePiece& piece, const Interval& u,
+                                             const Interval& v)
+{
+    if (u.GetLower() == u.GetUpper() || v.GetLower() == v.GetUpper()) {
+        const Box2& b = piece.Cell.Parameters;
+        const HPoint h = ValueOf(piece.Cell.Poles, b, u, v);
+        if (!(h.W.GetLower() > 0.0)) {
+            return {Everywhere(), Everywhere(), Everywhere()};
+        }
+        const Bounds point = CartesianOf(h);
+        return {point, QuotientOf(NetAt(piece.Du, b, u, v), point, h.W),
+                QuotientOf(NetAt(piece.Dv, b, u, v), point, h.W)};
+    }
+    std::optional<Patch> cut = Clipped(piece.Cell, true, u);
+    if (cut) {
+        cut = Clipped(*cut, false, v);
+    }
+    if (!cut) {
+        return {Everywhere(), Everywhere(), Everywhere()};
+    }
+    const Hulls hulls = HullsOf(*cut);
+    return {hulls.Point, hulls.Du, hulls.Dv};
+}
+
+[[nodiscard]] Bounds HullOfBounds(const Bounds& a, const Bounds& b)
+{
+    return {Hull(a[0], b[0]), Hull(a[1], b[1]), Hull(a[2], b[2])};
+}
+
+/// S, S_u and S_v of the B-spline carrier over a box: the hull over every
+/// piece the box meets. At a knot both one-sided partials are held, which
+/// keeps the mean-value form valid for a surface only C0 there.
+[[nodiscard]] Jet<I> SplineJetOver(const SplineCarrier& c, const Interval& u, const Interval& v)
+{
+    std::array<Bounds, 3> hull{};
+    bool met = false;
+    for (const SplinePiece& piece : c.Pieces) {
+        const Interval pu = Intersection(u, piece.Cell.Parameters.X);
+        const Interval pv = Intersection(v, piece.Cell.Parameters.Y);
+        if (pu.IsEmpty() || pv.IsEmpty()) {
+            continue;
+        }
+        const std::array<Bounds, 3> jet = PieceJet(piece, pu, pv);
+        for (std::size_t k = 0; k < hull.size(); ++k) {
+            hull[k] = met ? HullOfBounds(hull[k], jet[k]) : jet[k];
+        }
+        met = true;
+    }
+    if (!met) {
+        hull = {Everywhere(), Everywhere(), Everywhere()};
+    }
+    return {WideBounds(hull[0]), WideBoundsVec(hull[1]), WideBoundsVec(hull[2])};
+}
+
+/// The parameters held to the carrier's domain: a B-spline is not
+/// evaluated outside it.
+[[nodiscard]] Point2 Held(const SplineCarrier& c, const Point2& uv)
+{
+    return {std::clamp(uv.X, c.Domain.X.GetLower(), c.Domain.X.GetUpper()),
+            std::clamp(uv.Y, c.Domain.Y.GetLower(), c.Domain.Y.GetUpper())};
+}
+
+[[nodiscard]] Jet<double> JetAt(const TraceCarrier& c, const Point2& uv)
+{
+    if (c.Analytic) {
+        return JetAt(*c.Analytic, uv);
+    }
+    const Surface& s = *c.Spline->Erased;
+    const Point2 at = Held(*c.Spline, uv);
+    return {Eval(s, at), Deriv(s, at, 1, 0), Deriv(s, at, 0, 1)};
+}
+
+[[nodiscard]] Jet<I> JetOver(const TraceCarrier& c, const IPoint2& uv)
+{
+    if (c.Analytic) {
+        return JetOver(*c.Analytic, uv);
+    }
+    return SplineJetOver(*c.Spline, uv.X.Value, uv.Y.Value);
+}
+
+[[nodiscard]] Point3 PointAt(const TraceCarrier& c, const Point2& uv)
+{
+    if (c.Analytic) {
+        return PointAt(*c.Analytic, uv);
+    }
+    return Eval(*c.Spline->Erased, Held(*c.Spline, uv));
+}
+
+[[nodiscard]] Point2 ProjectOnto(const TraceCarrier& c, const Point3& p)
+{
+    if (c.Analytic) {
+        return ProjectOnto(*c.Analytic, p);
+    }
+    return Held(*c.Spline, Project(*c.Spline->Erased, p));
+}
+
+/// As Implicit.hpp's ValuesOver, for either carrier.
+[[nodiscard]] BoxValues ValuesOver(const TraceCarrier& a, const Quadric& b, const Interval& u,
+                                   const Interval& v)
+{
+    if (a.Analytic) {
+        return ValuesOver(*a.Analytic, b, u, v);
+    }
+    const Composite<I> over = CompositeOf(b, JetOver(a, IPoint2{I{u}, I{v}}));
+    const double mu = 0.5 * (u.GetLower() + u.GetUpper());
+    const double mv = 0.5 * (v.GetLower() + v.GetUpper());
+    const Composite<I> mid = CompositeOf(b, JetOver(a, IPoint2{I{mu}, I{mv}}));
+    const Interval du =
+        Hull(Interval{u.GetLower()} - Interval{mu}, Interval{u.GetUpper()} - Interval{mu});
+    const Interval dv =
+        Hull(Interval{v.GetLower()} - Interval{mv}, Interval{v.GetUpper()} - Interval{mv});
+    const Interval meanValue = mid.F.Value + over.Fu.Value * du + over.Fv.Value * dv;
+    const Interval met = Intersection(over.F.Value, meanValue);
+    return {met.IsEmpty() ? over.F.Value : met, over.Fu.Value, over.Fv.Value};
+}
+
+[[nodiscard]] Interval ValueAt(const TraceCarrier& a, const Quadric& b, const Point2& uv)
+{
+    return CompositeOf(b, JetOver(a, IPoint2{I{uv.X}, I{uv.Y}})).F.Value;
+}
+
+[[nodiscard]] Composite<double> NominalAt(const TraceCarrier& a, const Quadric& b, const Point2& uv)
+{
+    return CompositeOf(b, JetAt(a, uv));
+}
+
 // --- Roles and the search box ---------------------------------------------
 
 /// The pair as the tracer takes it: the carrier, parametric, and the
@@ -113,7 +292,7 @@ constexpr int RootSteps = 80;
 struct Roles {
     const Surface* CarrierErased;
     const Surface* ImplicitErased;
-    Elementary Carrier;
+    TraceCarrier Carrier;
     Elementary ImplicitGeometry;
     Quadric Implicit;
     Box2 ImplicitBox;
@@ -298,7 +477,8 @@ struct Roles {
     if (!search) {
         return std::nullopt;
     }
-    return Roles{&carrier, &other, *c, *o, implicit, otherBox, *search, swapped};
+    return Roles{&carrier, &other, TraceCarrier{*c, nullptr}, *o, implicit, otherBox,
+                 *search,  swapped};
 }
 
 /// The roles in order of preference, the first with a bounded search box.
@@ -643,7 +823,7 @@ struct Cell {
     const bool alongU = SplitAlongU(r, cell);
     const Interval& side = alongU ? cell.U : cell.V;
     const double cut = side.GetLower() + SplitRatio * (side.GetUpper() - side.GetLower());
-    if (!(side.GetLower() < cut && cut < side.GetUpper()) || cell.Depth >= MaxDepth) {
+    if (!(side.GetLower() < cut && cut < side.GetUpper()) || cell.Depth >= TraceDepth) {
         return std::nullopt;
     }
     const Interval low{side.GetLower(), cut};
@@ -878,6 +1058,36 @@ struct Guide {
     }
     if (periodic[1]) {
         uv.Y = Unwrapped(uv.Y, near.Y);
+    }
+    return uv;
+}
+
+/// The parameters of p on the carrier near `near`: an elementary carrier's
+/// angles unwrapped; a B-spline's by Gauss-Newton steps on |S - p|^2 from
+/// `near`, held to the domain. Only a starting point for OntoCurve, which
+/// places the point on the curve; never a decision.
+[[nodiscard]] Point2 ParametersNear(const TraceCarrier& c, const Point3& p, const Point2& near)
+{
+    if (c.Analytic) {
+        return ParametersNear(*c.Analytic, p, near);
+    }
+    const Surface& s = *c.Spline->Erased;
+    Point2 uv = Held(*c.Spline, near);
+    for (int k = 0; k < 8; ++k) {
+        const Vec3 r = Eval(s, uv) - p;
+        const Vec3 su = Deriv(s, uv, 1, 0);
+        const Vec3 sv = Deriv(s, uv, 0, 1);
+        const double a = Dot(su, su);
+        const double b = Dot(su, sv);
+        const double d = Dot(sv, sv);
+        const double det = a * d - b * b;
+        if (!(det > 0.0)) {
+            break;
+        }
+        const double gu = Dot(su, r);
+        const double gv = Dot(sv, r);
+        uv =
+            Held(*c.Spline, Point2{uv.X - (d * gu - b * gv) / det, uv.Y - (a * gv - b * gu) / det});
     }
     return uv;
 }
@@ -1286,7 +1496,89 @@ void Chart(std::vector<Point2>& uv, const std::array<bool, 2>& periodic)
     return {};
 }
 
+/// Every Bezier patch of the B-spline with its partials' nets, enclosed.
+[[nodiscard]] Result<std::shared_ptr<const SplineCarrier>> SplineCarrierOf(const Surface& erased,
+                                                                           const BSplineSurface& s)
+{
+    STEREON_TRY(const std::vector<Patch> patches, PatchesOf(s));
+    auto carrier = std::make_shared<SplineCarrier>();
+    carrier->Erased = &erased;
+    carrier->Domain = Domain(s);
+    for (const Patch& patch : patches) {
+        const Interval wu = WidthOf(patch.Parameters.X);
+        const Interval wv = WidthOf(patch.Parameters.Y);
+        if (!(wu.GetLower() > 0.0 && wv.GetLower() > 0.0)) {
+            return Fail(ErrorCode::IntersectionFailed,
+                        "Intersect: a B-spline surface's span too narrow to enclose");
+        }
+        carrier->Pieces.push_back(
+            {patch, DerivativeNet(patch.Poles, true, wu), DerivativeNet(patch.Poles, false, wv)});
+    }
+    return std::shared_ptr<const SplineCarrier>{std::move(carrier)};
+}
+
+/// Finite poles and positive finite weights, the factory's invariants the
+/// convex-hull enclosures rest on.
+[[nodiscard]] bool UsableSpline(const BSplineSurface& s)
+{
+    const auto finite = [](const Point3& p) {
+        return std::isfinite(p.X) && std::isfinite(p.Y) && std::isfinite(p.Z);
+    };
+    const auto weight = [](const double w) { return std::isfinite(w) && w > 0.0; };
+    return !s.Poles.empty() && std::ranges::all_of(s.Poles, finite) &&
+           std::ranges::all_of(s.Weights, weight) &&
+           (s.Weights.empty() || s.Weights.size() == s.Poles.size());
+}
+
+/// The roles for a B-spline surface against an analytic one: the B-spline
+/// carries, the analytic surface is the implicit side, the search box the
+/// requested box met with the B-spline's domain.
+[[nodiscard]] Result<std::optional<Roles>> SplineRoles(const Surface& a, const Box2& boxA,
+                                                       const Surface& b, const Box2& boxB)
+{
+    const bool aSpline = a.Target<BSplineSurface>() != nullptr;
+    const Surface& spline = aSpline ? a : b;
+    const Surface& other = aSpline ? b : a;
+    const Box2& splineBox = aSpline ? boxA : boxB;
+    const Box2& otherBox = aSpline ? boxB : boxA;
+    const BSplineSurface* s = spline.Target<BSplineSurface>();
+    const std::optional<Elementary> o = ElementaryOf(other);
+    if (s == nullptr || !o) {
+        return Fail(ErrorCode::InvalidInput, "SplineAnalytic: dispatched for other surface types");
+    }
+    if (!UsableSpline(*s)) {
+        return Fail(ErrorCode::InvalidInput, "SplineAnalytic: expected a valid B-spline surface");
+    }
+    STEREON_TRY_VOID(CheckChart(otherBox));
+    const Box2 domain = Domain(*s);
+    const Box2 search{Intersection(domain.X, splineBox.X), Intersection(domain.Y, splineBox.Y)};
+    if (search.X.IsEmpty() || search.Y.IsEmpty()) {
+        return std::optional<Roles>{};
+    }
+    STEREON_TRY(std::shared_ptr<const SplineCarrier> carrier, SplineCarrierOf(spline, *s));
+    return std::optional<Roles>{Roles{&spline, &other,
+                                      TraceCarrier{std::nullopt, std::move(carrier)}, *o,
+                                      QuadricOf(*o), otherBox, search, !aSpline}};
+}
+
 } // namespace
+
+Result<SurfaceSurfaceIntersection> SplineAnalytic(const Surface& a, const Box2& boxA,
+                                                  const Surface& b, const Box2& boxB,
+                                                  [[maybe_unused]] const double tolerance,
+                                                  const Context& ctx)
+{
+    STEREON_TRY(const std::optional<Roles> roles, SplineRoles(a, boxA, b, boxB));
+    if (!roles) {
+        return SurfaceSurfaceIntersection{}; // The requested box misses the domain.
+    }
+    STEREON_TRY(const Trace trace, Subdivide(*roles));
+    SurfaceSurfaceIntersection result;
+    for (const Chain& chain : Chains(trace)) {
+        STEREON_TRY_VOID(AddBranch(result, *roles, trace, chain, ctx));
+    }
+    return roles->Exchanged ? Swapped(std::move(result)) : result;
+}
 
 Result<SurfaceSurfaceIntersection> ImplicitTrace(const Surface& a, const Box2& boxA,
                                                  const Surface& b, const Box2& boxB,
