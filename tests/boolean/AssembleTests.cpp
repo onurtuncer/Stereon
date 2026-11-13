@@ -16,6 +16,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -656,4 +657,60 @@ TEST_CASE("a sphere or an ellipsoid solid is refused by the Booleans, never half
                      code == Stereon::ErrorCode::NotImplemented));
         }
     }
+}
+
+TEST_CASE("a region's seed probing past a sphere's pole does not abort the Boolean",
+          "[boolean][assemble][capability]")
+{
+    // Two spheres whose centres lie off the poles' axis meet in a traced
+    // circle. Seeding the smaller sphere's regions probed outward from the
+    // circle's pcurve past the latitude of a pole, and FaceContains
+    // evaluated the sphere there: a contract violation that terminated the
+    // process (Boolean(b, a, Cut) on 6180e7e). Every order and operation must
+    // return, failing closed or with a result.
+    const auto a =
+        Stereon::MakeSphereSolid(Point3{}, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}, 4.0, ctx);
+    const auto b = Stereon::MakeSphereSolid(Point3{3.0, 0.0, 0.0}, Vec3{1.0, 0.0, 0.0},
+                                            Vec3{0.0, 1.0, 0.0}, 3.0, ctx);
+    REQUIRE(a.has_value());
+    REQUIRE(b.has_value());
+    for (const bool swapped : {true, false}) {
+        for (const BooleanOperation operation :
+             {BooleanOperation::Union, BooleanOperation::Common, BooleanOperation::Cut}) {
+            const Shape& first = swapped ? b->Shape : a->Shape;
+            const Shape& second = swapped ? a->Shape : b->Shape;
+            const auto result = Boolean(first, second, operation, ctx);
+            INFO((swapped ? "B, A " : "A, B ")
+                 << Stereon::ToString(operation) << ": "
+                 << (result ? std::string("succeeded") : std::string(result.error().GetMessage())));
+            if (result) {
+                CHECK(ValidateTopology(result->Shape, Stereon::ValidityLevel::Geometric, ctx)
+                          .IsValid());
+            } else {
+                const Stereon::ErrorCode code = result.error().GetCode();
+                CHECK((code == Stereon::ErrorCode::NotSupported ||
+                       code == Stereon::ErrorCode::Unresolved ||
+                       code == Stereon::ErrorCode::IntersectionFailed));
+            }
+        }
+    }
+}
+
+TEST_CASE("a face contains no parameters beyond its surface's domain", "[boolean][clip]")
+{
+    // Past a pole's latitude the sphere is not defined, and the face is not
+    // there: outside, decided without evaluating the surface.
+    const auto sphere =
+        Stereon::MakeSphereSolid(Point3{}, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}, 4.0, ctx);
+    REQUIRE(sphere.has_value());
+    const Stereon::FaceId face = *AllEntities<Stereon::EntityKind::Face>(sphere->Shape)->begin();
+    for (const double v : {2.0, -2.0}) {
+        const auto inside = FaceContains(sphere->Shape, face, Stereon::Point2{1.0, v}, ctx);
+        REQUIRE(inside.has_value());
+        REQUIRE(*inside == std::optional<bool>{false});
+    }
+    // Inside the domain the face, a whole sphere, holds a point off its seam.
+    const auto middle = FaceContains(sphere->Shape, face, Stereon::Point2{1.0, 0.5}, ctx);
+    REQUIRE(middle.has_value());
+    REQUIRE(*middle == std::optional<bool>{true});
 }

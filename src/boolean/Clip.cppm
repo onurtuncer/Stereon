@@ -71,7 +71,9 @@ struct FaceClip {
 /// Whether the face contains the point at the parameters uv: inside its
 /// loops, by the parity of a ray turned past the loops' vertices; nothing
 /// when the point lies on the boundary, within an edge's tolerance of the
-/// edge (ADR-0001). IntersectionFailed when every ray meets a vertex.
+/// edge (ADR-0001). Outside, without evaluating the surface, for parameters
+/// beyond the surface's domain in a direction it does not repeat in (past a
+/// sphere's pole). IntersectionFailed when every ray meets a vertex.
 [[nodiscard]] Result<std::optional<bool>> FaceContains(const Shape& shape, FaceId face,
                                                        const Point2& uv, const Context& ctx);
 
