@@ -8,10 +8,13 @@
 stereon_add_library(intersect
     MODULES
         Capabilities.cppm
+        ClosestApproach.cppm
         Dispatch.cppm
         Intersect.cppm
         Linearization.cppm
     SOURCES
+        ClosestApproach.cpp
+        ClosestApproachLinearization.cpp
         CylinderCylinder.cpp
         CylinderCylinderSkew.cpp
         Dispatch.cpp

@@ -44,6 +44,17 @@ inline constexpr OperationCapability IntersectCatalogue[] = {
             "event of codimension one, nondifferentiable, a separation valid with no values; "
             "other pairs answer NotSupported",
             {DerivativeProduct::Jvp, DerivativeProduct::Vjp}),
+    Declare("ClosestApproach", {Dependency::InputGeometry, Dependency::Tolerances},
+            {TrackingConvention::UniqueProjection},
+            "two lines, circles or ellipses in space (ADR-0052, addendum of 2026-11-12): the "
+            "pair of closest points, proved the unique global minimiser over the requested "
+            "domains, tracked through ClosestApproachJvp and ClosestApproachVjp in a line's "
+            "origin and direction and a conic's centre and radii at a fixed frame; a parameter "
+            "at an end of its domain is held there; a set of minimisers, a meeting and an end "
+            "the minimum may leave are nondifferentiable, an undecided minimiser or a singular "
+            "Hessian indeterminate, NearEvent below NearEventSine on the normalised Hessian; "
+            "B-spline curves answer NotSupported",
+            {DerivativeProduct::Jvp, DerivativeProduct::Vjp}),
 };
 
 /// The intersection library's declarations.
