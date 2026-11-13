@@ -39,3 +39,32 @@ Replay using RC_PARAMS=seed=<seed> and the test names above; the derivative test
 is `circle and ellipse crossings: second-order Taylor decay and the transpose`.
 The three new deterministic fixtures pass 55 assertions. This evidence is
 implemented, not independently reviewed release qualification.
+
+## Follow-up: coverage branch certification failure (2026-11-13)
+
+The initial #286 head passed Linux, Windows and macOS workflows, but coverage
+failed one of 1071 CTest cases (four unrelated tool tests were skipped).
+[Coverage job](https://github.com/onurtuncer/Stereon/actions/runs/43300991832/job/131471814362)
+failed `branch points: second-order Taylor decay and the transpose` with
+RapidCheck seed `13593231413355092879` (Catch seed `3487449154`).
+
+Both sphere properties shrink to the same generator integers:
+`[-40, -40, -40, 8, -20, -39, -24, -5]`. In RandomPlaneSphere these mean
+center (-5,-5,-5), radius 1, normal (-2.5,-4.875,-3), and signed plane offset
+-5/8. Construct the plane with PlaneWithNormal(center + offset *
+(normal / Length(normal)), normal), exactly as the existing generator does.
+
+The failure occurs in Meet at BranchLinearizationTests.cpp:151, before either
+derivative identity is evaluated: "a traced branch exceeds the sample budget
+before it certifies within the resolution 1e-05 mm". This is an unresolved
+primal certification failure, not evidence that a derivative is incorrect.
+Its relationship to this change has not yet been established by a base/head
+replay. Do not suppress the assertion or increase tolerances to make CI green.
+
+Replay with the gcc16-coverage preset and:
+```sh
+RC_PARAMS=seed=13593231413355092879 build/gcc16-coverage/tests/stereon_intersect_tests \
+  'branch points: second-order Taylor decay and the transpose'
+```
+Next: reproduce on base and head, isolate the pcurve certification budget
+failure, then add direct and metamorphic regression coverage for the repair.
