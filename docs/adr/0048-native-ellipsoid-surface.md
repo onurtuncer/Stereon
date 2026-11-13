@@ -1,7 +1,8 @@
 # ADR-0048: A native ellipsoid surface
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-05
+- **Accepted:** 2026-11-13 by Onur Tuncer, without change. The surface, its intersections, solids, format version 4 and derivative bindings are on main (#211–#235); the curved Booleans of v0.2 build on it.
 - **Owner:** Onur Tuncer
 - **Phase:** 2
 - **Related:** [ADR-0001](0001-tolerance-model.md), [ADR-0003](0003-geometry-polymorphism.md), [ADR-0009](0009-parameter-space-representation.md), [ADR-0010](0010-ssi-strategy.md), [ADR-0021](0021-shape-derivatives.md), [ADR-0029](0029-intersection-and-classification-outcomes.md), [ADR-0047](0047-numerical-operation-completion-and-publication.md)
