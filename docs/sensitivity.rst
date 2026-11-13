@@ -304,19 +304,45 @@ moves the parameters by :math:`F_z z' = B_p p' - A_p p'` and the point by
 system once per point. ``Linearize(a, b, point)``, ``IntersectJvp`` and
 ``IntersectVjp`` take the two ``Curve2d`` and a ``PlaneCurveBinding`` per
 parameter: a line's origin and direction, a circle's centre and radius, an
-ellipse's centre and radii, or a B-spline's poles and weights, whose
-velocity is the curve library's ``PoleVelocity`` on the curve lifted into
-the plane :math:`z = 0`. The statuses are a curve and a surface's: a decided
-crossing ``Valid``, or ``NearEvent`` below ``NearEventSine``; a tangential
-contact or an overlap ``Nondifferentiable``; an undecided one
-``Indeterminate``. A hyperbola or a parabola binds nothing yet and answers
-``NotSupported``.
+ellipse's or a hyperbola's centre and radii, a parabola's vertex and focal
+length, or a B-spline's poles and weights, whose velocity is the curve
+library's ``PoleVelocity`` on the curve lifted into the plane
+:math:`z = 0`. Every frame is held fixed. At fixed parameter the
+hyperbola :math:`C + a \cosh t\, X + b \sinh t\, Y` moves by
+:math:`\cosh t\, X` per unit of ``MajorRadius`` and :math:`\sinh t\, Y`
+per unit of ``MinorRadius``; the parabola
+:math:`V + t^2 / (4 f)\, X + t\, Y` by :math:`-t^2 / (4 f^2)\, X` per unit
+of ``FocalLength``, its vertex bound through ``CenterX`` and ``CenterY``.
+The statuses are a curve and a surface's: a decided crossing ``Valid``, or
+``NearEvent`` below ``NearEventSine``; a tangential contact or an overlap
+``Nondifferentiable``; an undecided one ``Indeterminate``. Every built-in
+plane curve binds; ``NotSupported`` is kept for a kind no binding reaches.
 
 The tests check the x-axis against a circle, an ellipse and a segment
 against their closed forms, and the Taylor and transpose properties on
-random pairs of lines, circles, ellipses and cubic B-splines, rational half
-the time, pairing points by position across a circle's seam and discarding
-a step that changes their number.
+random pairs of lines, circles, ellipses, hyperbolas, parabolas and cubic
+B-splines, rational half the time, pairing points by position across a
+circle's seam and discarding a step that changes their number or that the
+primal solver does not answer. Four closed forms cover the open conics,
+each as either curve of its pair. The line :math:`y = 4` cuts
+:math:`y = x^2` (:math:`f = 1/4`) at :math:`(\mp 2, 4)`, :math:`t = \pm 2`:
+raising the vertex by :math:`v` gives :math:`t = \pm 2 \sqrt{f (4 - v)}`,
+so :math:`x' = \pm 1/4`, and a longer focal length
+:math:`dt/df = \pm \sqrt{4 / f} = \pm 4`, so :math:`x' = \mp 4`. The line
+:math:`x = 2` meets the same parabola at :math:`(2, 4)`, :math:`t = -2`,
+where the focal length moves the height by :math:`-t^2 / (4 f^2) = -16` and
+the vertex's :math:`x` by :math:`-2 (x - u) = -4`. The line :math:`x = 5`
+cuts the rectangular hyperbola of semi-axes 3 at :math:`(5, \pm 4)`,
+:math:`\cosh t = 5/3`: :math:`a \cosh t = 5` gives
+:math:`t' = -5 / (a^2 \sinh t) = \mp 5/12` and
+:math:`y' = b \cosh t\, t' = \mp 25/12` per unit of :math:`a`,
+:math:`y' = \sinh t = \pm 4/3` per unit of :math:`b`. The line :math:`y = 4` meets it once, at :math:`(5, 4)`,
+:math:`\sinh t = 4/3`: :math:`x' = \cosh t = 5/3` per unit of :math:`a`
+and :math:`t' = -4 / (b^2 \cosh t) = -4/15`, :math:`x' = -16/15` per unit of
+:math:`b`. Each new partial's sign, flipped, fails these. A parabola's and a
+hyperbola's tangencies with a line (their exact discriminants vanish) and
+each against itself are ``Nondifferentiable``; a line a hair inside each
+vertex, ``NearEvent``.
 
 Two space curves meet only where their closest approach is within the
 resolution, which a generic change of either curve undoes: a meeting is
