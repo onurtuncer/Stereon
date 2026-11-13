@@ -33,3 +33,18 @@ Replay after building `stereon_intersect_tests`:
 ```sh
 ctest --preset gcc16-debug -R 'intersect: MR macOS ellipse plane shrunk linearization fixture resolves' --output-on-failure
 ```
+
+## Endpoint repair
+
+Construct the plane form using conic-local poles and the interval-enclosed
+center-to-plane displacement. This retains the exact zero instead of adding
+and then subtracting the same world origin with independent rounding.
+For circular/elliptical arcs, sin(0) is kept exactly zero. The arc search
+accepts an exact zero endpoint only after the polynomial derivative is
+proved to have a strict sign throughout the arc. An interval merely
+straddling zero still fails closed. Original world geometry is used for
+polishing, evaluation and plane-domain clipping.
+
+Negative controls exclude the seam by trimming, separate the supporting
+plane beyond the ellipse extent, and demand a single crossing on a bounded
+interval straddling zero. Native validation of this repair is pending CI.

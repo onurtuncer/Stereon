@@ -76,3 +76,29 @@ TEST_CASE("MR macOS ellipse plane shrunk linearization fixture resolves",
         }
     }
 }
+
+TEST_CASE("ellipse plane endpoint proof respects trims and separated supports",
+          "[intersect][metamorphic][regression][conic-surface]")
+{
+    const Point3 center{-1.25, -1.25, -13.0 / 32.0};
+    const Ellipse ellipse{center, 1.5, 0.6, Vec3{1, 0, 0}, Vec3{0, 0, -1}};
+    const Curve curve{ellipse};
+    const Surface plane{Plane{center, Vec3{1, 0, 0}, Vec3{0, 1, 0}}};
+    const Context policy = Context::Default().WithScheduler(Scheduler::Serial);
+    // The seam root is outside this strictly positive angular interval.
+    const auto trimmed = Intersect(curve, Interval{0.01, 0.25}, plane, Domain(plane), policy);
+    REQUIRE(trimmed.has_value());
+    CHECK(trimmed->IsEmpty());
+    // Shift beyond the complete ellipse's z extent: no supporting root.
+    const Surface apart{Plane{center + Vec3{0, 0, 1}, Vec3{1, 0, 0}, Vec3{0, 1, 0}}};
+    const auto separated = Intersect(curve, apart, policy);
+    REQUIRE(separated.has_value());
+    CHECK(separated->IsEmpty());
+    // A bounded interval straddling zero contains exactly the simple root.
+    const auto crossing = Intersect(curve, Interval{-0.25, 0.25}, plane, Domain(plane), policy);
+    REQUIRE(crossing.has_value());
+    REQUIRE(crossing->Points.size() == 1);
+    CHECK(crossing->Points.front().Decided);
+    CHECK(Distance(crossing->Points.front().Position, center + Vec3{1.5, 0, 0}) <=
+          policy.GetResolution());
+}
