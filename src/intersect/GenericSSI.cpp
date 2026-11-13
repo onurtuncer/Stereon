@@ -52,7 +52,7 @@ import Stereon.Robust;
 /// - an isolated touch, polynomial surfaces only: a unique solution of the
 ///   extremal system at which the relative second form is definite, within
 ///   the tolerance (found, not yet settled: it fails closed);
-/// - a transverse node, polynomial surfaces only: a critical point of one
+/// - a transverse node, polynomial or rational: a critical point of one
 ///   surface's height over the other, isolated by Krawczyk's operator within
 ///   the tolerance, around which a Lyapunov function proved on the Hessian's
 ///   enclosure rules out every other piece of the intersection, so that the
@@ -67,10 +67,10 @@ import Stereon.Robust;
 ///
 /// What cannot be settled fails, never a partial or an unproved empty result:
 /// a tangency along a curve, a branch point that is not a proved transverse
-/// node (a higher-order singularity, a node on a line between Bezier patches,
-/// a node of rational surfaces), an overlap, and any tangency of rational
-/// surfaces, at the smallest pair, IntersectionFailed; a search past its
-/// budget, the same.
+/// node (a higher-order singularity, a node on a knot line or seam between
+/// Bezier patches), an overlap, and any other tangency of rational surfaces,
+/// at the smallest pair, IntersectionFailed; a search past its budget, the
+/// same.
 namespace Stereon::Detail {
 namespace {
 
@@ -351,24 +351,66 @@ void AddSeed(std::vector<Seed>& seeds, const Seed& seed, const double join)
     return EdgeRoot(edge, along, other, theirs);
 }
 
+/// How often a piece of an edge is halved while its root is not settled.
+constexpr int EdgeHalvings = 8;
+
+/// One edge of a pair's carrier patch: the patch, or a piece of it along
+/// the edge, which of its two edges across, and the edge's fixed parameter.
+struct EdgePiece {
+    const Patch& Carrier;
+    bool AlongU;
+    bool Upper;
+    double Fixed;
+    int Depth;
+};
+
+/// The roots on a piece of an edge against the other patch, the piece
+/// halved along the edge while Krawczyk's operator settles nothing. A root
+/// just outside the other patch's cell, nearer than the cell is wide but
+/// beyond the rounding it reaches over, leaves the operator on the whole
+/// edge undecided, its image meeting the box without lying in it; on a
+/// narrower piece the image narrows about the root and leaves the box, and
+/// a root inside is isolated. False when a piece is still undecided at the
+/// deepest halving (SSI-translated-boundary: two cuts of the two surfaces
+/// within the tolerance of each other in space where a branch crosses
+/// them).
+[[nodiscard]] bool RootsOnPiece(const PairView& v, const bool carrierIsA, const EdgePiece& e,
+                                std::vector<Seed>& seeds)
+{
+    const Patch& other = carrierIsA ? v.Pair.B : v.Pair.A;
+    const Hulls& theirs = carrierIsA ? v.OnB : v.OnA;
+    const Edge edge{e.Carrier, e.AlongU, e.Fixed};
+    const Isolated<3> root =
+        RootOnEdge(edge, EdgeLine(e.Carrier, e.AlongU, e.Upper), HullsOf(e.Carrier), other, theirs);
+    if (root.Outcome == Isolation::Unique) {
+        AddSeed(seeds, SeedOfRoot(edge, root, other, carrierIsA), v.Join);
+    }
+    if (root.Outcome != Isolation::Unsettled) {
+        return true;
+    }
+    const auto halves = e.Depth < EdgeHalvings
+                            ? Split(e.Carrier, e.AlongU, Midpoint(StretchOf(e.Carrier, e.AlongU)))
+                            : std::nullopt;
+    if (!halves) {
+        return false;
+    }
+    const auto piece = [&](const Patch& half) {
+        return EdgePiece{half, e.AlongU, e.Upper, e.Fixed, e.Depth + 1};
+    };
+    return RootsOnPiece(v, carrierIsA, piece(halves->first), seeds) &&
+           RootsOnPiece(v, carrierIsA, piece(halves->second), seeds);
+}
+
 [[nodiscard]] bool EdgesOfCarrier(const PairView& v, const bool carrierIsA,
                                   std::vector<Seed>& seeds)
 {
     const Patch& carrier = carrierIsA ? v.Pair.A : v.Pair.B;
-    const Patch& other = carrierIsA ? v.Pair.B : v.Pair.A;
-    const Hulls& own = carrierIsA ? v.OnA : v.OnB;
-    const Hulls& theirs = carrierIsA ? v.OnB : v.OnA;
     for (const bool alongU : {true, false}) {
         const Interval across = StretchOf(carrier, !alongU);
         for (const bool upper : {false, true}) {
-            const Edge edge{carrier, alongU, upper ? across.GetUpper() : across.GetLower()};
-            const Isolated<3> root =
-                RootOnEdge(edge, EdgeLine(carrier, alongU, upper), own, other, theirs);
-            if (root.Outcome == Isolation::Unsettled) {
+            const double fixed = upper ? across.GetUpper() : across.GetLower();
+            if (!RootsOnPiece(v, carrierIsA, {carrier, alongU, upper, fixed, 0}, seeds)) {
                 return false;
-            }
-            if (root.Outcome == Isolation::Unique) {
-                AddSeed(seeds, SeedOfRoot(edge, root, other, carrierIsA), v.Join);
             }
         }
     }
@@ -787,51 +829,162 @@ struct NodeFrame {
     return {{{DotOf(f.E1, du), DotOf(f.E1, dv)}, {DotOf(f.E2, du), DotOf(f.E2, dv)}}};
 }
 
-/// A small patch S and a patch C meant to cover it, as a pair (S, C).
+/// A patch's Cartesian point and partials to second order, enclosed, from
+/// its homogeneous nets by the quotient rule on P = H / W:
+///     P_u = (H_u - P W_u) / W,   P_uu = (H_uu - 2 P_u W_u - P W_uu) / W,
+///     P_uv = (H_uv - P_u W_v - P_v W_u - P W_uv) / W,
+/// each holding wherever its inputs do. A polynomial patch has W = 1 and
+/// its partials zero, so its jet is its nets' Cartesian parts.
+struct Jet {
+    Bounds P;
+    Bounds Pu;
+    Bounds Pv;
+    Bounds Puu;
+    Bounds Puv;
+    Bounds Pvv;
+};
+
+/// The homogeneous values the jet is formed from.
+struct HomogeneousJet {
+    HPoint H;
+    HPoint Hu;
+    HPoint Hv;
+    HPoint Huu;
+    HPoint Huv;
+    HPoint Hvv;
+};
+
+[[nodiscard]] Bounds XyzOf(const HPoint& h)
+{
+    return {h.X, h.Y, h.Z};
+}
+
+[[nodiscard]] Bounds Times(const Bounds& b, const Interval& k)
+{
+    return {b[0] * k, b[1] * k, b[2] * k};
+}
+
+[[nodiscard]] Bounds Over(const Bounds& b, const Interval& w)
+{
+    return {b[0] / w, b[1] / w, b[2] / w};
+}
+
+/// The jet, P enclosed separately (a patch's hull is tighter than H / W);
+/// nothing when the weight is not proved positive.
+[[nodiscard]] std::optional<Jet> JetOf(const HomogeneousJet& h, const Bounds& point)
+{
+    const Interval& w = h.H.W;
+    if (!(w.GetLower() > 0.0) || !w.IsBounded()) {
+        return std::nullopt;
+    }
+    const Bounds pu = Over(MinusOf(XyzOf(h.Hu), Times(point, h.Hu.W)), w);
+    const Bounds pv = Over(MinusOf(XyzOf(h.Hv), Times(point, h.Hv.W)), w);
+    const auto second = [&](const HPoint& hjk, const Bounds& pj, const Interval& wk,
+                            const Bounds& pk, const Interval& wj) {
+        return Over(MinusOf(MinusOf(MinusOf(XyzOf(hjk), Times(pj, wk)), Times(pk, wj)),
+                            Times(point, hjk.W)),
+                    w);
+    };
+    return Jet{point,
+               pu,
+               pv,
+               second(h.Huu, pu, h.Hu.W, pu, h.Hu.W),
+               second(h.Huv, pu, h.Hv.W, pv, h.Hu.W),
+               second(h.Hvv, pv, h.Hv.W, pv, h.Hv.W)};
+}
+
+/// The jet over the whole patch.
+[[nodiscard]] std::optional<Jet> JetOver(const Patch& p, const SecondNets& n)
+{
+    return JetOf(
+        {HullOf(p.Poles), HullOf(n.Du), HullOf(n.Dv), HullOf(n.Duu), HullOf(n.Duv), HullOf(n.Dvv)},
+        p.Extent);
+}
+
+/// A net's homogeneous value at enclosed parameters of the patch's stretch;
+/// a net of one pole has it everywhere.
+[[nodiscard]] HPoint HAt(const Net& net, const Box2& stretch, const Interval& u, const Interval& v)
+{
+    return net.Poles.size() == 1 ? net.Poles[0] : ValueOf(net, stretch, u, v);
+}
+
+/// The jet at enclosed parameters.
+[[nodiscard]] std::optional<Jet> JetAt(const Patch& p, const SecondNets& n, const Interval& u,
+                                       const Interval& v)
+{
+    const HPoint h = ValueOf(p.Poles, p.Parameters, u, v);
+    if (!(h.W.GetLower() > 0.0)) {
+        return std::nullopt;
+    }
+    const Box2& b = p.Parameters;
+    return JetOf({h, HAt(n.Du, b, u, v), HAt(n.Dv, b, u, v), HAt(n.Duu, b, u, v),
+                  HAt(n.Duv, b, u, v), HAt(n.Dvv, b, u, v)},
+                 CartesianOf(h));
+}
+
+/// The normal N = P_u x P_v of a jet and its partials.
+[[nodiscard]] NormalJet NormalOf(const Jet& j)
+{
+    return {CrossOf(j.Pu, j.Pv), PlusOf(CrossOf(j.Puu, j.Pv), CrossOf(j.Pu, j.Puv)),
+            PlusOf(CrossOf(j.Puv, j.Pv), CrossOf(j.Pu, j.Pvv))};
+}
+
+/// A small patch S and a patch C meant to cover it, as a pair (S, C), with
+/// their nets and their jets over the whole patches.
 struct NodeSystem {
     const PatchPair& Pair;
     const SecondNets& S;
     const SecondNets& C;
     const NodeFrame& Frame;
+    const Jet& OverS;
+    const Jet& OverC;
 };
+
+[[nodiscard]] IntervalsN<4> Unknown4()
+{
+    const Interval all = Interval::Everything();
+    return {all, all, all, all};
+}
 
 /// The critical point of S's height over C, solved for (u_S, v_S, u_C, v_C):
 ///     e1 . (S - C) = 0,  e2 . (S - C) = 0,  S_u . N_C = 0,  S_v . N_C = 0,
-/// N_C = C_u x C_v. Polynomial patches only.
+/// N_C = C_u x C_v, rational patches by their jets.
 [[nodiscard]] Isolated<4> CriticalPoint(const NodeSystem& sys)
 {
     const Patch& small = sys.Pair.A;
     const Patch& cover = sys.Pair.B;
-    const NormalJet n = NormalHull(sys.C);
-    const Bounds su = XyzHull(sys.S.Du);
-    const Bounds sv = XyzHull(sys.S.Dv);
-    const Bounds cu = XyzHull(sys.C.Du);
-    const Bounds cv = XyzHull(sys.C.Dv);
+    const NormalJet n = NormalOf(sys.OverC);
+    const Jet& js = sys.OverS;
+    const Jet& jc = sys.OverC;
     const NodeFrame& f = sys.Frame;
     IntervalMatrix<4> j{};
-    j[0] = {DotOf(f.E1, su), DotOf(f.E1, sv), -DotOf(f.E1, cu), -DotOf(f.E1, cv)};
-    j[1] = {DotOf(f.E2, su), DotOf(f.E2, sv), -DotOf(f.E2, cu), -DotOf(f.E2, cv)};
-    j[2] = {DotOf(XyzHull(sys.S.Duu), n.N), DotOf(XyzHull(sys.S.Duv), n.N), DotOf(su, n.Nu),
-            DotOf(su, n.Nv)};
-    j[3] = {DotOf(XyzHull(sys.S.Duv), n.N), DotOf(XyzHull(sys.S.Dvv), n.N), DotOf(sv, n.Nu),
-            DotOf(sv, n.Nv)};
+    j[0] = {DotOf(f.E1, js.Pu), DotOf(f.E1, js.Pv), -DotOf(f.E1, jc.Pu), -DotOf(f.E1, jc.Pv)};
+    j[1] = {DotOf(f.E2, js.Pu), DotOf(f.E2, js.Pv), -DotOf(f.E2, jc.Pu), -DotOf(f.E2, jc.Pv)};
+    j[2] = {DotOf(js.Puu, n.N), DotOf(js.Puv, n.N), DotOf(js.Pu, n.Nu), DotOf(js.Pu, n.Nv)};
+    j[3] = {DotOf(js.Puv, n.N), DotOf(js.Pvv, n.N), DotOf(js.Pv, n.Nu), DotOf(js.Pv, n.Nv)};
     const IntervalsN<4> box{small.Parameters.X, small.Parameters.Y, cover.Parameters.X,
                             cover.Parameters.Y};
     return Krawczyk<4>(box, j, [&](const std::array<double, 4>& m) {
-        const Bounds r = MinusOf(XyzValue(small, m[0], m[1]), XyzValue(cover, m[2], m[3]));
-        const Bounds normal = CrossOf(XyzAt(sys.C.Du, cover.Parameters, m[2], m[3]),
-                                      XyzAt(sys.C.Dv, cover.Parameters, m[2], m[3]));
-        return IntervalsN<4>{DotOf(f.E1, r), DotOf(f.E2, r),
-                             DotOf(XyzAt(sys.S.Du, small.Parameters, m[0], m[1]), normal),
-                             DotOf(XyzAt(sys.S.Dv, small.Parameters, m[0], m[1]), normal)};
+        const std::optional<Jet> at = JetAt(small, sys.S, Interval{m[0]}, Interval{m[1]});
+        const std::optional<Jet> on = JetAt(cover, sys.C, Interval{m[2]}, Interval{m[3]});
+        if (!at || !on) {
+            return Unknown4();
+        }
+        const Bounds r = MinusOf(at->P, on->P);
+        const Bounds normal = CrossOf(on->Pu, on->Pv);
+        return IntervalsN<4>{DotOf(f.E1, r), DotOf(f.E2, r), DotOf(at->Pu, normal),
+                             DotOf(at->Pv, normal)};
     });
 }
 
-/// The patch's points over enclosed parameters, polynomial.
+/// The patch's points over enclosed parameters.
 [[nodiscard]] Bounds XyzOver(const Patch& p, const Interval& u, const Interval& v)
 {
     const HPoint h = ValueOf(p.Poles, p.Parameters, u, v);
-    return {h.X, h.Y, h.Z};
+    if (!(h.W.GetLower() > 0.0)) {
+        return Unbounded();
+    }
+    return CartesianOf(h);
 }
 
 /// How far apart the two surfaces can be at the critical point.
@@ -840,12 +993,16 @@ struct NodeSystem {
     return DistanceBetween(MinusOf(XyzOver(pair.A, x[0], x[1]), XyzOver(pair.B, x[2], x[3])));
 }
 
-/// e . P over a polynomial pole line or net, by the convex hull of its poles.
+/// e . P over a pole line or net, by the convex hull of its Cartesian poles
+/// (weights proved positive; otherwise everything).
 [[nodiscard]] Interval Across(const std::vector<HPoint>& poles, const Bounds& e)
 {
     Interval range;
     for (const HPoint& h : poles) {
-        range = Hull(range, DotOf(e, Bounds{h.X, h.Y, h.Z}));
+        if (!(h.W.GetLower() > 0.0)) {
+            return Interval::Everything();
+        }
+        range = Hull(range, DotOf(e, CartesianOf(h)));
     }
     return range;
 }
@@ -874,7 +1031,7 @@ struct NodeSystem {
 {
     const Patch& small = sys.Pair.A;
     const Patch& cover = sys.Pair.B;
-    const Matrix2 dq = ProjectedJacobian(sys.Frame, XyzHull(sys.C.Du), XyzHull(sys.C.Dv));
+    const Matrix2 dq = ProjectedJacobian(sys.Frame, sys.OverC.Pu, sys.OverC.Pv);
     if (!ExcludesZero(dq[0][0] * dq[1][1] - dq[0][1] * dq[1][0])) {
         return false;
     }
@@ -896,7 +1053,7 @@ struct NodeSystem {
 /// entry an adjugate entry over the determinant, which excludes zero.
 [[nodiscard]] std::optional<Matrix2> InverseProjection(const NodeSystem& sys)
 {
-    const Matrix2 dq = ProjectedJacobian(sys.Frame, XyzHull(sys.C.Du), XyzHull(sys.C.Dv));
+    const Matrix2 dq = ProjectedJacobian(sys.Frame, sys.OverC.Pu, sys.OverC.Pv);
     const Interval det = dq[0][0] * dq[1][1] - dq[0][1] * dq[1][0];
     if (!ExcludesZero(det)) {
         return std::nullopt;
@@ -909,21 +1066,20 @@ struct NodeSystem {
 {
     const NodeFrame& f = sys.Frame;
     // G = Dq^-T (n . C_u, n . C_v), the gradient of C's graph.
-    const Interval w1 = DotOf(f.N, XyzHull(sys.C.Du));
-    const Interval w2 = DotOf(f.N, XyzHull(sys.C.Dv));
+    const Interval w1 = DotOf(f.N, sys.OverC.Pu);
+    const Interval w2 = DotOf(f.N, sys.OverC.Pv);
     const Interval g1 = inverse[0][0] * w1 + inverse[1][0] * w2;
     const Interval g2 = inverse[0][1] * w1 + inverse[1][1] * w2;
     const Bounds nu{f.N[0] - g1 * f.E1[0] - g2 * f.E2[0], f.N[1] - g1 * f.E1[1] - g2 * f.E2[1],
                     f.N[2] - g1 * f.E1[2] - g2 * f.E2[2]};
-    const auto second = [&](const SecondNets& s) {
-        const Bounds uv = XyzHull(s.Duv);
-        return Matrix2{{{DotOf(nu, XyzHull(s.Duu)), DotOf(nu, uv)},
-                        {DotOf(nu, uv), DotOf(nu, XyzHull(s.Dvv))}}};
+    const auto second = [&](const Jet& j) {
+        return Matrix2{
+            {{DotOf(nu, j.Puu), DotOf(nu, j.Puv)}, {DotOf(nu, j.Puv), DotOf(nu, j.Pvv)}}};
     };
-    const Matrix2 graph = Times(Transposed(inverse), Times(second(sys.C), inverse));
-    const Matrix2 dp = ProjectedJacobian(f, XyzHull(sys.S.Du), XyzHull(sys.S.Dv));
+    const Matrix2 graph = Times(Transposed(inverse), Times(second(sys.OverC), inverse));
+    const Matrix2 dp = ProjectedJacobian(f, sys.OverS.Pu, sys.OverS.Pv);
     const Matrix2 pulled = Times(Transposed(dp), Times(graph, dp));
-    const Matrix2 own = second(sys.S);
+    const Matrix2 own = second(sys.OverS);
     return Matrix2{{{own[0][0] - pulled[0][0], own[0][1] - pulled[0][1]},
                     {own[1][0] - pulled[1][0], own[1][1] - pulled[1][1]}}};
 }
@@ -1123,7 +1279,12 @@ struct NodeEdge {
     }
     const SecondNets small = SecondNetsOf(pair.A);
     const SecondNets cover = SecondNetsOf(pair.B);
-    const NodeSystem sys{pair, small, cover, *frame};
+    const std::optional<Jet> overS = JetOver(pair.A, small);
+    const std::optional<Jet> overC = JetOver(pair.B, cover);
+    if (!overS || !overC) {
+        return std::nullopt;
+    }
+    const NodeSystem sys{pair, small, cover, *frame, *overS, *overC};
     const std::optional<IntervalsN<4>> x = ProvedCritical(sys, s.Tolerance);
     const std::optional<Matrix2> inverse =
         x && Covered(sys) ? InverseProjection(sys) : std::nullopt;
@@ -1198,9 +1359,25 @@ struct Centred {
     return {seed.Position, seed.OnB, seed.OnA};
 }
 
-[[nodiscard]] Vec3 NormalAt(const SecondNets& s, const Box2& box, const double u, const double v)
+[[nodiscard]] Vec3 NormalAt(const Patch& p, const SecondNets& s, const double u, const double v)
 {
-    return MiddleVec(CrossOf(XyzAt(s.Du, box, u, v), XyzAt(s.Dv, box, u, v)));
+    const std::optional<Jet> j = JetAt(p, s, Interval{u}, Interval{v});
+    return j ? MiddleVec(CrossOf(j->Pu, j->Pv)) : Vec3{0.0, 0.0, 0.0};
+}
+
+/// A patch's first derivatives and second form along n at a point, from its
+/// jet: what FormSign compares.
+[[nodiscard]] std::optional<LocalForm> FormAt(const Patch& p, const SecondNets& s, const double u,
+                                              const double v, const Vec3& n)
+{
+    const std::optional<Jet> j = JetAt(p, s, Interval{u}, Interval{v});
+    if (!j) {
+        return std::nullopt;
+    }
+    return LocalForm{
+        MiddleVec(j->Pu),
+        MiddleVec(j->Pv),
+        {Dot(n, MiddleVec(j->Puu)), Dot(n, MiddleVec(j->Puv)), Dot(n, MiddleVec(j->Pvv))}};
 }
 
 /// Where a pair (small, cover) may hold a node: a critical point isolated,
@@ -1211,23 +1388,29 @@ struct Centred {
 {
     const SecondNets small = SecondNetsOf(pair.A);
     const SecondNets cover = SecondNetsOf(pair.B);
-    const std::optional<NodeFrame> frame = FrameAbout(MiddleVec(NormalHull(cover).N));
+    const std::optional<Jet> overS = JetOver(pair.A, small);
+    const std::optional<Jet> overC = JetOver(pair.B, cover);
+    if (!overS || !overC) {
+        return std::nullopt;
+    }
+    const std::optional<NodeFrame> frame = FrameAbout(MiddleVec(CrossOf(overC->Pu, overC->Pv)));
     if (!frame) {
         return std::nullopt;
     }
-    const Isolated<4> critical = CriticalPoint({pair, small, cover, *frame});
+    const Isolated<4> critical = CriticalPoint({pair, small, cover, *frame, *overS, *overC});
     if (critical.Outcome != Isolation::Unique ||
         GapAt(pair, critical.Box).GetUpper() > s.Tolerance) {
         return std::nullopt;
     }
     const std::array<double, 4> m = MidpointsOf<4>(critical.Box);
-    const Vec3 normal = NormalAt(cover, pair.B.Parameters, m[2], m[3]);
+    const Vec3 normal = NormalAt(pair.B, cover, m[2], m[3]);
     if (!(Length(normal) > 0.0)) {
         return std::nullopt;
     }
     const Vec3 n = Normalized(normal);
-    if (FormSign(LocalAt(small, pair.A.Parameters, m[0], m[1], n),
-                 LocalAt(cover, pair.B.Parameters, m[2], m[3], n)) >= 0) {
+    const std::optional<LocalForm> onS = FormAt(pair.A, small, m[0], m[1], n);
+    const std::optional<LocalForm> onC = FormAt(pair.B, cover, m[2], m[3], n);
+    if (!onS || !onC || FormSign(*onS, *onC) >= 0) {
         return std::nullopt;
     }
     return m;
@@ -1283,8 +1466,7 @@ struct Placed {
     if (!cover) {
         return false;
     }
-    const Vec3 normal =
-        NormalAt(SecondNetsOf(cover->Centre), cover->Centre.Parameters, at.OnC.X, at.OnC.Y);
+    const Vec3 normal = NormalAt(cover->Centre, SecondNetsOf(cover->Centre), at.OnC.X, at.OnC.Y);
     for (int k = 0; k < SmallNarrowings; ++k) {
         const double fs = std::ldexp(0.5, -k);
         const std::optional<Centred> small =
@@ -1339,11 +1521,11 @@ struct Placed {
 [[nodiscard]] Settled SettleTouch(const PatchPair& pair, const SearchSettings& s, Findings& found,
                                   std::vector<PatchPair>& stack)
 {
-    if (!s.Polynomial) {
-        return Settled::Cut;
-    }
     if (SettleNode(pair, s, found, stack)) {
         return Settled::Done;
+    }
+    if (!s.Polynomial) {
+        return Settled::Cut;
     }
     const SecondNets a = SecondNetsOf(pair.A);
     const SecondNets b = SecondNetsOf(pair.B);
@@ -1777,6 +1959,96 @@ Assembled(const Findings& found, const Surface& a, const Box2& domainA, const Su
     return result;
 }
 
+// --- Searching about the origin ----------------------------------------------
+
+/// Whether a - b is a double exactly: TwoSum's error term (Knuth) is zero.
+[[nodiscard]] bool ExactDifference(const double a, const double b)
+{
+    const double s = a - b;
+    const double bb = s - a;
+    return std::isfinite(s) && (a - (s - bb)) + (-b - bb) == 0.0;
+}
+
+/// The coordinate a pole's i-th coordinate would move by.
+[[nodiscard]] double Coordinate(const Point3& p, const std::size_t i)
+{
+    return i == 0 ? p.X : (i == 1 ? p.Y : p.Z);
+}
+
+/// Whether every pole of both surfaces moves by -by along axis i exactly.
+[[nodiscard]] bool MovesExactly(const BSplineSurface& a, const BSplineSurface& b,
+                                const std::size_t i, const double by)
+{
+    const auto exact = [&](const Point3& p) { return ExactDifference(Coordinate(p, i), by); };
+    return std::ranges::all_of(a.Poles, exact) && std::ranges::all_of(b.Poles, exact);
+}
+
+/// The shift that brings both nets about the origin: along each axis the
+/// middle of their boxes, where moving every pole by it is exact (Sterbenz's
+/// lemma makes it so for coordinates within a factor of two of it), else
+/// nothing along that axis.
+[[nodiscard]] Vec3 ShiftOf(const BSplineSurface& sa, const BSplineSurface& sb)
+{
+    const Bounds a = NetBounds(sa);
+    const Bounds b = NetBounds(sb);
+    std::array<double, 3> shift{};
+    for (std::size_t i = 0; i < shift.size(); ++i) {
+        const double middle = 0.5 * std::min(a[i].GetLower(), b[i].GetLower()) +
+                              0.5 * std::max(a[i].GetUpper(), b[i].GetUpper());
+        shift[i] = std::isfinite(middle) && MovesExactly(sa, sb, i, middle) ? middle : 0.0;
+    }
+    return {shift[0], shift[1], shift[2]};
+}
+
+/// The surface moved by -shift, every pole exactly (ShiftOf): the same
+/// surface in other coordinates, so that every proof about it holds for the
+/// input. The search's enclosures widen with the coordinates' magnitude,
+/// while Krawczyk's acceptance of a root is measured in parameters, so far
+/// from the origin a root's box could fail to narrow enough to be accepted
+/// (SSI-translated-boundary).
+[[nodiscard]] BSplineSurface Moved(BSplineSurface s, const Vec3& shift)
+{
+    for (Point3& pole : s.Poles) {
+        pole = {pole.X - shift.X, pole.Y - shift.Y, pole.Z - shift.Z};
+    }
+    return s;
+}
+
+/// Positions found about the origin, moved back to the input's place. Only
+/// the seeds' positions move; parameters are the input's, and marching and
+/// certification evaluate the input surfaces.
+void MovedBack(Findings& found, const Vec3& shift)
+{
+    const auto back = [&](Point3& p) { p = {p.X + shift.X, p.Y + shift.Y, p.Z + shift.Z}; };
+    for (Arc& arc : found.Arcs) {
+        back(arc.From.Position);
+        back(arc.To.Position);
+    }
+    for (IntersectionPoint& touch : found.Touches) {
+        back(touch.Position);
+    }
+    for (Point3& node : found.Nodes) {
+        back(node); // Arcs end at a node by its position: it moves with them.
+    }
+}
+
+/// The pairs of patches to search, of the surfaces moved about the origin
+/// where that is exact, and the shift used.
+struct ShiftedSearch {
+    std::vector<PatchPair> Pairs;
+    Vec3 Shift;
+};
+
+[[nodiscard]] Result<ShiftedSearch> SearchAbout(const BSplineSurface& sa, const Box2& domainA,
+                                                const BSplineSurface& sb, const Box2& domainB)
+{
+    const Vec3 shift = ShiftOf(sa, sb);
+    STEREON_TRY(const std::vector<Patch> patchesA, PatchesOver(Moved(sa, shift), domainA));
+    STEREON_TRY(const std::vector<Patch> patchesB, PatchesOver(Moved(sb, shift), domainB));
+    STEREON_TRY(std::vector<PatchPair> pairs, AllPairs(patchesA, patchesB));
+    return ShiftedSearch{std::move(pairs), shift};
+}
+
 } // namespace
 
 using SSIResult = Result<SurfaceSurfaceIntersection>;
@@ -1792,12 +2064,11 @@ SSIResult NurbsHull(const Surface& a, const Box2& domainA, const Surface& b, con
     if (ProvedApart(NetBounds(*sa), NetBounds(*sb), tolerance)) {
         return SurfaceSurfaceIntersection{}; // Proven empty, including trims.
     }
-    STEREON_TRY(const std::vector<Patch> patchesA, PatchesOver(*sa, domainA));
-    STEREON_TRY(const std::vector<Patch> patchesB, PatchesOver(*sb, domainB));
     const SearchSettings settings{tolerance, 0x1p-7 * ctx.GetResolution(),
                                   sa->Weights.empty() && sb->Weights.empty()};
-    STEREON_TRY(std::vector<PatchPair> pairs, AllPairs(patchesA, patchesB));
-    STEREON_TRY(const Findings found, SearchPairs(std::move(pairs), settings));
+    STEREON_TRY(ShiftedSearch search, SearchAbout(*sa, domainA, *sb, domainB));
+    STEREON_TRY(Findings found, SearchPairs(std::move(search.Pairs), settings));
+    MovedBack(found, search.Shift);
     return Assembled(found, a, SearchedDomain(*sa, domainA), b, SearchedDomain(*sb, domainB),
                      settings, ctx);
 }
