@@ -132,6 +132,18 @@ void SnapToVertex(const Shape& shape, const IntersectionBranch& branch, const Lo
     return std::clamp(s, edge.Range.GetLower(), edge.Range.GetUpper());
 }
 
+/// Whether the surface may be evaluated at uv: inside its domain in each
+/// direction it does not repeat in (a period of zero), anywhere in one it
+/// does.
+[[nodiscard]] bool InDomain(const Surface& surface, const Point2& uv)
+{
+    const Box2 domain = Domain(surface);
+    const Vec2 periods = Periods(surface);
+    const bool repeatsU = periods.X > 0.0; // STEREON-LINT-ALLOW(epsilon): a period's sign
+    const bool repeatsV = periods.Y > 0.0; // STEREON-LINT-ALLOW(epsilon): a period's sign
+    return (repeatsU || Contains(domain.X, uv.X)) && (repeatsV || Contains(domain.Y, uv.Y));
+}
+
 /// Whether a crossing of the coedge within rounding of t is already known.
 [[nodiscard]] bool HasCrossingAt(const FaceClip& clip, const CoedgeId coedge, const double t,
                                  const double sliver)
@@ -343,6 +355,13 @@ Result<std::optional<bool>> FaceContains(const Shape& shape, const FaceId face, 
 {
     STEREON_TRY(const std::vector<LoopEdge> edges, LoopEdgesOf(shape, face));
     const Surface surface = SurfaceOf(shape, face);
+    // A face lies in its surface's domain: parameters beyond it in a
+    // direction that does not repeat (a sphere's latitude past a pole) are
+    // outside the face, and the surface must not be evaluated there. A
+    // region's seed probes outward from its loops and can reach them.
+    if (!InDomain(surface, uv)) {
+        return std::optional<bool>{false};
+    }
     const Point3 point = Eval(surface, uv);
     for (const LoopEdge& edge : edges) {
         const Point2 onEdge = Eval(edge.PCurve, NearestOn(edge, uv));
