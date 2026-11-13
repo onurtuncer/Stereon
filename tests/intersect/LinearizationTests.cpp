@@ -1814,8 +1814,9 @@ TEST_CASE("conic derivative fixtures retain unresolved domain ends and tangencie
     }
     // A regular chart is still required to answer: removing the derivative
     // precondition must not turn a known supported crossing into a skip.
-    const auto regular = Stereon::Intersect(Stereon::Curve{endpoint}, Stereon::Interval{-0.3, tau - 0.3},
-                                            Surface{plane}, Domain(plane), ctx);
+    const auto regular =
+        Stereon::Intersect(Stereon::Curve{endpoint}, Stereon::Interval{-0.3, tau - 0.3},
+                           Surface{plane}, Domain(plane), ctx);
     INFO(IntersectTest::ErrorText(regular));
     REQUIRE(regular.has_value());
     REQUIRE(regular->Points.size() == 2);
