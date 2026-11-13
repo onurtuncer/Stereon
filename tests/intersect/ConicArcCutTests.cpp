@@ -138,3 +138,30 @@ TEST_CASE("an ellipse crossing a plane exactly on its quarter-turn cuts is decid
         }
     }
 }
+
+TEST_CASE("an ellipse touching a cylinder within rounding fails closed, never a guess",
+          "[intersect][conic-surface][arc-cut][regression]")
+{
+    // The linearization property's CI case (RapidCheck seed
+    // 16155406228833616885): its frame at theta = 0, phi = -pi/2 puts the
+    // ellipse in the plane y = 0.125 but for a tilt of cos(-pi/2), 6e-17,
+    // and the cylinder about z through (-2.5, -1.875) of radius 2 is
+    // tangent to that plane along x = -2.5, which the ellipse passes. The
+    // contact is within rounding of a tangency: touch, two crossings or
+    // none, no proof settles it, and the handler fails closed (ADR-0029).
+    // Exactly in the plane it is a tangency, and fails closed as well.
+    const double phi = -16.0 * (2.0 * pi) / 64.0;
+    const Vec3 x{std::cos(0.0), std::sin(0.0), 0.0};
+    const Point3 centre{-37.0 / 8.0 / 4.0, 4.0 / 8.0 / 4.0, -40.0 / 8.0 / 4.0};
+    const double a = 18.0 / 10.0;
+    const Surface tube{
+        Cylinder{Point3{-40.0 / 8.0 / 2.0, -30.0 / 8.0 / 2.0, 0.0}, 20.0 / 10.0, ex, ey}};
+    for (const Vec3 y :
+         {Vec3{-std::sin(0.0) * std::cos(phi), std::cos(0.0) * std::cos(phi), std::sin(phi)},
+          Vec3{0.0, 0.0, -1.0}}) {
+        const Ellipse ellipse{centre, a, a * 4.0 / 10.0, x, y};
+        const auto touch = Intersect(Curve{ellipse}, tube, ctx);
+        REQUIRE_FALSE(touch.has_value());
+        REQUIRE(touch.error().GetCode() == Stereon::ErrorCode::IntersectionFailed);
+    }
+}

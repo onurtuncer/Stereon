@@ -209,6 +209,10 @@ CurveSurfaceIntersection Meet(const C& curve, const S& surface)
 {
     auto result = Intersect(Stereon::Curve{curve}, Surface{surface}, ctx);
     if (!result) {
+        // A proved fail-closed refusal (a contact within rounding of a
+        // tangency, ADR-0029) is no geometry a derivative applies to: the
+        // case is discarded, never counted as passing. Any other error fails.
+        RC_PRE(result.error().GetCode() != Stereon::ErrorCode::IntersectionFailed);
         RC_FAIL(IntersectTest::ErrorText(result));
     }
     return *std::move(result);
