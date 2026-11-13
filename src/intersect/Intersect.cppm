@@ -13,5 +13,6 @@ export module Stereon.Intersect;
 export import Stereon.Surface;
 
 export import :Capabilities;
+export import :ClosestApproach;
 export import :Dispatch;
 export import :Linearization;

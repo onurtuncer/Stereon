@@ -328,8 +328,104 @@ which a small enough change keeps (ADR-0052, the owner's decision of
 2026-11-10).
 Tracking the closest approach smoothly, :math:`(A - B) \cdot A' = 0` and
 :math:`(A - B) \cdot B' = 0` in :math:`(s, t)`, is a separate product,
-``ClosestApproach``, still to come, with its own tracking convention; it is
-not hidden inside ``Intersect``'s derivatives.
+``ClosestApproach`` (below), with its own tracking convention. It is not
+hidden inside ``Intersect``'s derivatives.
+
+Closest approach of two space curves
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``ClosestApproach(a, domainA, b, domainB, ctx)`` follows the owner's
+decisions in ADR-0052's addendum of 2026-11-12. For two lines, circles or
+ellipses it reports both closest points :math:`A(s)` and :math:`B(t)`, the
+parameters, the gap :math:`d = A(s) - B(t)` and its length, and where each
+parameter lies (interior or at an end of its domain). It also reports what
+was proved about the minimiser:
+
+- **Unique**, when one minimiser is proved.
+- **NotUnique**, a proved set of minimisers: exactly parallel lines, a line
+  along a circle's axis, or two coaxial whole circles. These are decided on
+  exact expansions.
+- **Undecided**, when the search could not separate two candidates or prove
+  one alone. The reported pair is then the best found, and ``LowerBound`` is
+  a certified lower bound on the minimum distance.
+
+``Meets`` says the distance is within the resolution. B-spline curves answer
+``NotSupported``.
+
+How the minimum is proved:
+
+- **Two lines** form a convex quadratic, solved by projected Newton.
+- **A line and a conic, or two conics,** are searched by branch and bound on
+  :math:`\varphi = |d|^2 / 2`. A box is pruned when the lower bound
+  :math:`\varphi(c) - |\varphi_s| h_s - |\varphi_t| h_t - M_2 (h_s^2 + h_t^2) / 2`
+  exceeds the best value found. :math:`M_2` bounds the Hessian through the
+  curves' derivative bounds; a line's parameter is first cut to the window
+  where its nearest points to the conic lie.
+- The surviving leaves form clusters. A single cluster holds the unique
+  minimiser when two conditions hold:
+
+  - an end the minimum rests on is pushed outward by more than the gradient
+    can change over the cluster;
+  - :math:`\varphi`'s Hessian over the free parameters outweighs a bound on
+    its third derivatives out to the cluster's farthest corner.
+
+  When the cluster is too wide for that, it is searched again with finer
+  leaves.
+
+``ClosestApproachJvp`` and ``ClosestApproachVjp`` take a ``CurveBindings`` per
+curve: a line's ``LineBinding``\ s or a conic's ``ConicBinding``\ s, frame
+fixed. At an interior minimiser the parameters solve
+:math:`G = (d \cdot A', -d \cdot B') = 0`, so a design change moves them by
+:math:`H z' = -G_p p'` with
+
+.. math::
+
+   H = \begin{pmatrix} A' \cdot A' + d \cdot A'' & -A' \cdot B' \\
+                        -A' \cdot B' & B' \cdot B' - d \cdot B'' \end{pmatrix},
+   \qquad
+   G_p = \big((A_p - B_p) \cdot A' + d \cdot A'_p,\;
+              -(A_p - B_p) \cdot B' - d \cdot B'_p\big).
+
+A parameter at an end is held there and the other solves its own equation.
+The twelve values, ``ClosestApproachValues``, are :math:`A(s)'`,
+:math:`B(t)'`, :math:`s'`, :math:`t'`, :math:`d'` and
+:math:`|d|' = \hat d \cdot d'`. They are linear in each binding's rate, so
+the reverse product pairs the adjoint with each binding's twelve values.
+
+The statuses follow the addendum:
+
+- a proved set of minimisers: ``Nondifferentiable``;
+- curves that meet: ``Nondifferentiable``;
+- an undecided minimiser: ``Indeterminate``;
+- an end whose one-sided gradient is within rounding of zero:
+  ``Nondifferentiable``, since the minimiser may leave the end;
+- a singular Hessian: ``Indeterminate``;
+- ``NearEvent`` when the smaller eigenvalue of the normalised Hessian, or an
+  end's normalised gradient, is below ``NearEventSine``;
+- ``Valid`` otherwise.
+
+The tests (``tests/intersect/ClosestApproachTests.cpp``) check:
+
+- **Closed forms.**
+
+  - Two skew lines: the gap lengthens by one when :math:`B` rises; :math:`s`
+    follows :math:`B` along :math:`x`; tilting :math:`A` up gives
+    :math:`s' = 2`.
+  - The unit circle and the vertical line through :math:`(3, 0, 0)`:
+    :math:`|d|^2 = 10 - 6\cos t`. A growing radius shortens the gap by one,
+    and moving the line along :math:`y` gives :math:`t' = 1/3`.
+  - Minima at a segment's end, :math:`|d|' = 1 / \sqrt 5`, and at an arc's
+    end, :math:`|d|' = 1 / \sqrt{10}`.
+
+- **An independent oracle.** A dense grid, a line's parameter taken as each
+  sample's foot, then projected Newton's method in ``long double``. The
+  tolerances are sized by both types' epsilons, since ``long double`` is
+  ``double`` on some platforms.
+- **Metamorphic relations:** exchange, rigid motion, reversal and scaling. A
+  transformed case whose borderline proof fails must still bracket the
+  distance.
+- **The products:** second-order Taylor decay and the adjoint identity.
+- **Every status**, and the input refused.
 
 Branch points of two surfaces
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
