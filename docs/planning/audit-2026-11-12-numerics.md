@@ -68,3 +68,39 @@ RC_PARAMS=seed=13593231413355092879 build/gcc16-coverage/tests/stereon_intersect
 ```
 Next: reproduce on base and head, isolate the pcurve certification budget
 failure, then add direct and metamorphic regression coverage for the repair.
+
+
+## Narrow seam excursion repair (2026-11-13)
+
+The shrunk sphere-plane case was reproduced directly. Its circle crosses the
+sphere longitude seam twice between adjacent points of the initial 64-step
+scan. Chart then clamps the missed excursion to the seam: increasing fitting
+samples leaves a deviation plateau near 0.0002500838 mm, above the unchanged
+0.00001 mm resolution. This is not a derivative failure.
+
+FitCertified now inspects its unwrapped fitting samples for additional seam
+crossings before fitting/clamping. It returns bracketed, bisected cuts to
+AddBranch, which retries the resulting pieces independently. The initial scan,
+resolution, sample budget and mandatory deviation certificates are unchanged.
+The number of inserted cuts is bounded; exhaustion fails closed. Endpoint
+rounding slivers use the existing geometric reach criterion. Sampling discovers
+cuts but does not replace certification or prove arbitrary seam completeness.
+
+The regression `MR audit narrow sphere seam excursions remain complete certified circles`
+in ImplicitTraceTests.cpp covers 24 configurations: translations, exchange,
+dyadic scaling and a quarter-turn sphere chart (MR-01 through MR-04). Its
+independent plane-section circle oracle checks radial/plane residuals, total
+angular coverage and connectivity; both surface pcurves must certify.
+
+Observed GCC 16.2 debug results before the workspace reset:
+- Regression: 19,080 assertions passed.
+- Entire [trace] group: 20,888 assertions in 17 tests passed.
+- Restoring the original ImplicitTrace.cpp makes the final regression fail at
+  its first required successful result with the original sample-budget error.
+- The full RapidCheck seed replay was started, but its completion was not
+  observed before the workspace reset. It is not counted as passing evidence.
+
+The same source/test edits were reconstructed after the reset. Formatting,
+complexity, inventory and literal checks are rerun; CI must validate the
+published commit, including the coverage configuration. Qualification remains
+MR implemented, not reviewed/verified release evidence.
