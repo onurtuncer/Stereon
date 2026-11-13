@@ -1,5 +1,6 @@
 {"version": 1, "inventory_complete": false, "inventory_review": null,
  "defects": [
+{"id": "CI-272-ellipse-plane", "source": "https://github.com/onurtuncer/Stereon/actions/runs/43273260370", "state": "fixture captured", "fixture": "tests/intersect/EllipsePlaneReplayTests.cpp", "direct": "tests/intersect/EllipsePlaneReplayTests.cpp", "metamorphic": "tests/intersect/EllipsePlaneReplayTests.cpp", "replay": "docs/planning/ellipse-plane-ci-replay.md", "relations": ["MR-01", "MR-03", "MR-04"]},
   {"id": "PR-263-translated-boundary", "source": "https://github.com/onurtuncer/Stereon/actions/runs/43052745077", "state": "MR implemented", "fixture": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-241 spline boundary minimum", "direct": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-241 spline boundary minimum", "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-241 spline boundary minimum", "oracle": "docs/planning/metamorphic-priority-replay.md#PR-263 translated boundary regression", "replay": "docs/planning/metamorphic-priority-replay.md", "relations": ["MR-01", "MR-02", "MR-03", "MR-04"], "evidence_kind": "resolved_geometry"},
   {"id": "PR-75", "source": "https://github.com/onurtuncer/Stereon/pull/75", "state": "untriaged"},
   {"id": "PR-90", "source": "https://github.com/onurtuncer/Stereon/pull/90", "state": "untriaged"},
