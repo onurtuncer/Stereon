@@ -201,6 +201,101 @@ TEST_CASE("FindSpan finds the span of every parameter", "[curve][bspline][basis]
     REQUIRE(Stereon::KnotMultiplicity(u, 2.5) == 0);
 }
 
+namespace {
+
+// A quadratic B-spline with four poles on the knots (0, 0, 0, 1, 2, 2, 2),
+// whose basis functions are exact in binary at t = 1/2: on [0, 1) they are
+// (1 - t)^2, t (1 - t) + t (2 - t) / 2 and t^2 / 2.
+constexpr std::array<double, 7> FixtureKnots{0.0, 0.0, 0.0, 1.0, 2.0, 2.0, 2.0};
+constexpr int FixtureDegree = 2;
+constexpr std::size_t FixturePoles = 4;
+
+constexpr std::size_t FixtureSpan(const double t)
+{
+    return Stereon::FindSpan(FixtureKnots, FixtureDegree, FixturePoles, t);
+}
+
+constexpr std::array<double, 3> FixtureBasis(const double t)
+{
+    std::array<double, 3> values{};
+    Stereon::BasisFunctions(FixtureKnots, FixtureDegree, FixtureSpan(t), t, values);
+    return values;
+}
+
+constexpr std::array<double, 9> FixtureBasisOfAllDegrees(const double t)
+{
+    std::array<double, 9> table{};
+    Stereon::BasisFunctionsOfAllDegrees(FixtureKnots, FixtureDegree, FixtureSpan(t), t, table);
+    return table;
+}
+
+/// Values and derivatives of orders 1 to 3; the third is above the degree.
+constexpr std::array<double, 12> FixtureDerivatives(const double t)
+{
+    std::array<double, 12> values{};
+    Stereon::BasisDerivatives(FixtureKnots, FixtureDegree, FixtureSpan(t), t, 3, values);
+    return values;
+}
+
+/// Degree 9, above the small-table capacity, on one Bezier span.
+constexpr std::array<double, 20> HighDegreeKnots{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                                                 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
+
+constexpr std::array<double, 20> HighDegreeDerivatives(const double t)
+{
+    std::array<double, 20> values{};
+    Stereon::BasisDerivatives(HighDegreeKnots, 9, 9, t, 1, values);
+    return values;
+}
+
+} // namespace
+
+TEST_CASE("FindSpan and the basis functions are constant expressions",
+          "[curve][bspline][basis][constexpr]")
+{
+    // ADR-0042, section 5: the kernels the evaluators call at run time,
+    // checked on a fixture by the compiler.
+    STATIC_REQUIRE(FixtureSpan(-1.0) == 2); // before the domain: the first span
+    STATIC_REQUIRE(FixtureSpan(0.0) == 2);
+    STATIC_REQUIRE(FixtureSpan(0.5) == 2);
+    STATIC_REQUIRE(FixtureSpan(1.0) == 3);
+    STATIC_REQUIRE(FixtureSpan(2.0) == 3); // the end belongs to the last span
+
+    STATIC_REQUIRE(FixtureBasis(0.0) == std::array{1.0, 0.0, 0.0});
+    STATIC_REQUIRE(FixtureBasis(0.5) == std::array{0.25, 0.625, 0.125});
+    STATIC_REQUIRE(FixtureBasis(2.0) == std::array{0.0, 0.0, 1.0});
+
+    // Row j holds the degree-j functions of the span.
+    STATIC_REQUIRE(FixtureBasisOfAllDegrees(0.5) ==
+                   std::array{1.0, 0.0, 0.0, 0.5, 0.5, 0.0, 0.25, 0.625, 0.125});
+
+    // Values, then -2 (1 - t), 2 - 3 t and t, then 2, -3 and 1, then zeros.
+    STATIC_REQUIRE(FixtureDerivatives(0.5) ==
+                   std::array{0.25, 0.625, 0.125, -1.0, 0.5, 0.5, 2.0, -3.0, 1.0, 0.0, 0.0, 0.0});
+
+    // The Bernstein polynomials of degree 9 at 1/2 are C(9, i) / 512.
+    STATIC_REQUIRE(HighDegreeDerivatives(0.5)[0] == 0x1p-9);
+    STATIC_REQUIRE(HighDegreeDerivatives(0.5)[4] == 126.0 * 0x1p-9);
+}
+
+TEST_CASE("the basis functions give the same values at run time and at compile time",
+          "[curve][bspline][basis][constexpr]")
+{
+    // BasisFunctions dispatches to a kernel per degree at run time and uses
+    // the run-time-degree kernel in a constant expression; the fixture's
+    // arithmetic is exact, so the two must agree to the bit.
+    constexpr auto basis = FixtureBasis(0.5);
+    constexpr auto table = FixtureBasisOfAllDegrees(0.5);
+    constexpr auto derivatives = FixtureDerivatives(0.5);
+    constexpr auto high = HighDegreeDerivatives(0.5);
+    volatile double half = 0.5; // not a constant expression
+    const double t = half;
+    REQUIRE(FixtureBasis(t) == basis);
+    REQUIRE(FixtureBasisOfAllDegrees(t) == table);
+    REQUIRE(FixtureDerivatives(t) == derivatives);
+    REQUIRE(HighDegreeDerivatives(t) == high);
+}
+
 TEST_CASE("basis functions agree with the Cox-de Boor recursion",
           "[curve][bspline][basis][property]")
 {
