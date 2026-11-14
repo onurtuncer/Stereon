@@ -210,6 +210,39 @@ constexpr void UnscaledBasisDerivatives(const std::span<const double> knots, con
     }
 }
 
+/// A2.3 complete: BasisDerivatives in a constant expression, and the body
+/// of BasisDerivativesAtRunTime.
+constexpr void BasisDerivativesKernel(const std::span<const double> knots, const int degree,
+                                      const std::size_t span, const double t, const int order,
+                                      const std::span<double> values) noexcept
+{
+    const auto p = static_cast<std::size_t>(degree);
+    const auto n = static_cast<std::size_t>(order);
+    const std::size_t computed = std::min(n, p);
+    // Small tables for the degrees met in practice: a table sized for degree
+    // 25 is 5 KB of stack, which costs more than the arithmetic.
+    if (p < SmallBasisCapacity) {
+        UnscaledBasisDerivatives<SmallBasisCapacity>(knots, p, span, t, computed, values);
+    } else {
+        UnscaledBasisDerivatives<MaxBasisCount>(knots, p, span, t, computed, values);
+    }
+    // Scale order k by p! / (p - k)!; orders above the degree vanish.
+    double factor = 1.0;
+    for (std::size_t k = 1; k <= n; ++k) {
+        factor *= static_cast<double>(p + 1 - std::min(k, p + 1));
+        for (std::size_t r = 0; r <= p; ++r) {
+            values[k * (p + 1) + r] = k > p ? 0.0 : values[k * (p + 1) + r] * factor;
+        }
+    }
+}
+
+/// BasisDerivatives at run time, defined in BSplineBasis.cpp: out of line,
+/// so that the kernel is compiled once, there, and not inlined into every
+/// evaluator that calls it (GCC 16.2 at -O3 then reports its work arrays,
+/// written before read, as maybe uninitialised).
+void BasisDerivativesAtRunTime(std::span<const double> knots, int degree, std::size_t span,
+                               double t, int order, std::span<double> values) noexcept;
+
 } // namespace Stereon::Detail
 
 export namespace Stereon {
@@ -302,25 +335,10 @@ constexpr void BasisDerivatives(const std::span<const double> knots, const int d
                                 const std::size_t span, const double t, const int order,
                                 const std::span<double> values) noexcept
 {
-    const auto p = static_cast<std::size_t>(degree);
-    const auto n = static_cast<std::size_t>(order);
-    const std::size_t computed = std::min(n, p);
-    // Small tables for the degrees met in practice: a table sized for degree
-    // 25 is 5 KB of stack, which costs more than the arithmetic.
-    if (p < Detail::SmallBasisCapacity) {
-        Detail::UnscaledBasisDerivatives<Detail::SmallBasisCapacity>(knots, p, span, t, computed,
-                                                                     values);
+    if consteval {
+        Detail::BasisDerivativesKernel(knots, degree, span, t, order, values);
     } else {
-        Detail::UnscaledBasisDerivatives<Detail::MaxBasisCount>(knots, p, span, t, computed,
-                                                                values);
-    }
-    // Scale order k by p! / (p - k)!; orders above the degree vanish.
-    double factor = 1.0;
-    for (std::size_t k = 1; k <= n; ++k) {
-        factor *= static_cast<double>(p + 1 - std::min(k, p + 1));
-        for (std::size_t r = 0; r <= p; ++r) {
-            values[k * (p + 1) + r] = k > p ? 0.0 : values[k * (p + 1) + r] * factor;
-        }
+        Detail::BasisDerivativesAtRunTime(knots, degree, span, t, order, values);
     }
 }
 

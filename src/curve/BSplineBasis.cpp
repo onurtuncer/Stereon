@@ -55,6 +55,13 @@ void BasisFunctionsDispatched(const std::span<const double> knots, const std::si
     });
 }
 
+void BasisDerivativesAtRunTime(const std::span<const double> knots, const int degree,
+                               const std::size_t span, const double t, const int order,
+                               const std::span<double> values) noexcept
+{
+    BasisDerivativesKernel(knots, degree, span, t, order, values);
+}
+
 } // namespace Detail
 
 std::size_t KnotMultiplicity(const std::span<const double> knots, const double value) noexcept
