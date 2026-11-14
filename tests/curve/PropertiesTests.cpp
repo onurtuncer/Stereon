@@ -15,7 +15,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
 #include <limits>
 #include <numbers>
 #include <vector>
@@ -129,6 +131,62 @@ BSplineCurve Blip()
 }
 
 } // namespace
+
+namespace {
+
+/// The 16-point rule applied to x^power on [-1, 1].
+constexpr double GaussLegendreOfPower(const int power)
+{
+    double sum = 0.0;
+    for (const auto& [node, weight] : Stereon::Detail::GaussLegendre16()) {
+        double value = 1.0;
+        for (int k = 0; k < power; ++k) {
+            value *= node;
+        }
+        sum += weight * value;
+    }
+    return sum;
+}
+
+constexpr bool GaussLegendreIsSymmetricAndIncreasing()
+{
+    const auto& rule = Stereon::Detail::GaussLegendre16();
+    for (std::size_t i = 0; i < rule.size(); ++i) {
+        const auto& mirror = rule[rule.size() - 1 - i];
+        if (rule[i].first != -mirror.first || rule[i].second != mirror.second) {
+            return false;
+        }
+        if (i > 0 && !(rule[i - 1].first < rule[i].first)) {
+            return false;
+        }
+        if (!(rule[i].second > 0.0)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+constexpr bool Within(const double value, const double expected, const double tolerance)
+{
+    return value - expected <= tolerance && expected - value <= tolerance;
+}
+
+} // namespace
+
+TEST_CASE("the Gauss-Legendre rule is a constant with the rule's properties",
+          "[curve][properties][constexpr]")
+{
+    // A 16-point rule is exact for polynomials up to degree 31: the
+    // integral of x^k over [-1, 1] is 2 / (k + 1) for even k and 0 for odd.
+    constexpr double Rounding = 0x1p-50;
+    STATIC_REQUIRE(GaussLegendreIsSymmetricAndIncreasing());
+    STATIC_REQUIRE(Within(GaussLegendreOfPower(0), 2.0, Rounding));
+    STATIC_REQUIRE(Within(GaussLegendreOfPower(2), 2.0 / 3.0, Rounding));
+    STATIC_REQUIRE(Within(GaussLegendreOfPower(30), 2.0 / 31.0, Rounding));
+    STATIC_REQUIRE(Within(GaussLegendreOfPower(31), 0.0, Rounding));
+    // Degree 32 is the first the rule gets wrong.
+    STATIC_REQUIRE_FALSE(Within(GaussLegendreOfPower(32), 2.0 / 33.0, Rounding));
+}
 
 TEST_CASE("a circle's properties are its radius and centre", "[curve][properties]")
 {
