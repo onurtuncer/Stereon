@@ -85,3 +85,18 @@ Each fault was applied alone to a working tree with no committed change to `src/
   - in line × cone and line × torus, whose segments start at -10;
   - additionally, **only by MR-04**, in every spline and rational pair (12 pairs). Their original chart starts at 0, which masks the fault; the equivalent chart on [1, 3] exposes it.
 - **Conic arc offset dropped.** The fault: the second and later quarter-turn arcs start from 0 instead of the domain's lower end. The test process crashed (exit 0xC0000409) in every run. By `tools/mutate.py`'s rules that is inconclusive, not a kill, so it is not claimed as evidence.
+
+#### Audit hardening, 2026-11-12
+
+Every supported fixture must now return a result. `IntersectionFailed`,
+`CertificationFailed`, and `NotImplemented` are failures for a supported pair,
+not a warning counter. Only hyperbolas/parabolas against analytic surfaces may return
+`NotImplemented`; the generic B-spline-surface handler must answer those conics
+too. The six hyperbola/parabola versus B-spline relation cells remain open
+pending their own qualification; they must not be described as missing handlers. This prevents lost handlers or new refusals from
+preserving a green relation test.
+
+Native audit validation (GCC 16.2 debug): the six curve-curve and curve-surface
+relation tests pass 14,388 assertions. A controlled replacement of every
+curve-surface answer by `IntersectionFailed` fails all three curve-surface
+relation tests (exit 42); the unmodified source is restored afterwards.
