@@ -40,7 +40,6 @@ stereon_add_library(curve
         Interchange.cpp
         PeriodicFitting.cpp
         PoleSensitivity.cpp
-        Properties.cpp
         Trimmed.cpp
     DEPENDS
         robust)
