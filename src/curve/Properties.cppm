@@ -15,6 +15,7 @@ module;
 #include <cstddef>
 #include <expected>
 #include <limits>
+#include <numbers>
 #include <optional>
 #include <span>
 #include <type_traits>
@@ -225,13 +226,86 @@ struct ArcLengthResult {
 
 } // namespace Stereon
 
+namespace Stereon::Detail {
+
+inline constexpr std::size_t GaussPoints = 16;
+
+/// Newton steps allowed for one root; the starting points below need four.
+inline constexpr int LegendreNewtonSteps = 100;
+
+/// The Legendre polynomial of degree GaussPoints and its derivative at x,
+/// by the three-term recurrence.
+[[nodiscard]] constexpr std::pair<double, double> Legendre(const double x) noexcept
+{
+    double previous = 1.0;
+    double current = x;
+    for (std::size_t k = 2; k <= GaussPoints; ++k) {
+        const auto kd = static_cast<double>(k);
+        const double next = ((2.0 * kd - 1.0) * x * current - (kd - 1.0) * previous) / kd;
+        previous = current;
+        current = next;
+    }
+    const auto n = static_cast<double>(GaussPoints);
+    return {current, n * (x * current - previous) / (x * x - 1.0)};
+}
+
+/// cos x for 0 <= x <= pi / 2 by its Taylor series, to a few units in the
+/// last place: a starting point for Newton's method below, in arithmetic
+/// only, so that the rule is the same constant on every platform and needs
+/// no C library function in a constant expression.
+[[nodiscard]] constexpr double CosineSeries(const double x) noexcept
+{
+    constexpr int Terms = 12;
+    const double xx = x * x;
+    double term = 1.0;
+    double sum = 1.0;
+    for (int k = 1; k <= Terms; ++k) {
+        term = -term * xx / static_cast<double>((2 * k - 1) * (2 * k));
+        sum += term;
+    }
+    return sum;
+}
+
+[[nodiscard]] constexpr std::array<std::pair<double, double>, GaussPoints>
+ComputeGaussLegendre() noexcept
+{
+    std::array<std::pair<double, double>, GaussPoints> rule{};
+    const auto n = static_cast<double>(GaussPoints);
+    for (std::size_t i = 0; i < GaussPoints / 2; ++i) {
+        // The i-th largest root lies close to cos(pi (i + 3/4) / (n + 1/2)).
+        double x = CosineSeries(std::numbers::pi * (static_cast<double>(i) + 0.75) / (n + 0.5));
+        for (int step = 0; step < LegendreNewtonSteps; ++step) {
+            const auto [p, dp] = Legendre(x);
+            const double next = x - p / dp;
+            if (next == x) {
+                break;
+            }
+            x = next;
+        }
+        const double dp = Legendre(x).second;
+        const double weight = 2.0 / ((1.0 - x * x) * dp * dp);
+        rule[i] = {-x, weight};
+        rule[GaussPoints - 1 - i] = {x, weight};
+    }
+    return rule;
+}
+
+inline constexpr std::array<std::pair<double, double>, GaussPoints> GaussLegendre16Rule =
+    ComputeGaussLegendre();
+
+} // namespace Stereon::Detail
+
 export namespace Stereon::Detail {
 
 /// The points and weights of 16-point Gauss-Legendre quadrature on
-/// [-1, 1], computed once by Newton's method on the Legendre polynomial
-/// (defined in Properties.cpp), so that no 16-digit constants are written
-/// out (ADR-0024).
-[[nodiscard]] const std::array<std::pair<double, double>, 16>& GaussLegendre16() noexcept;
+/// [-1, 1], in increasing order of the points: computed by the compiler,
+/// by Newton's method on the Legendre polynomial, so that no 16-digit
+/// constants are written out (ADR-0024) and every platform uses the same
+/// ones (ADR-0007).
+[[nodiscard]] constexpr const std::array<std::pair<double, double>, 16>& GaussLegendre16() noexcept
+{
+    return GaussLegendre16Rule;
+}
 
 /// The relative accuracy the adaptive quadrature aims at, about 1e-12: a
 /// piece is accepted when its one- and two-piece values agree this closely
