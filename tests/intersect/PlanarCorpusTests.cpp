@@ -507,12 +507,25 @@ void CheckMappedBack(const PlanarIntersection& result, const Reparam& moved,
     }
 }
 
+/// A refusal never establishes a relation. Safety checks its error class;
+/// the separate completeness gate requires a documented fixture limitation.
+void CheckRefusal(const JsonValue& expected, const ErrorCode code, const Gate gate, Tally& tally)
+{
+    const bool documented = expected.Has("may_fail_closed");
+    CHECK(FailsClosed(code));
+    if (gate == Gate::Completeness) {
+        CHECK(documented);
+    }
+    ++(documented ? tally.Refused : tally.Undocumented);
+}
+
 /// MR-04 for one case, one order, one operand moved to its equivalent
 /// chart: the result in the new chart is the case's closed-form answer,
 /// and every parameter on the moved operand maps back, by the closed-form
 /// change of parameter, to a point of the original curve at the same
 /// place.
-void CheckReparam(const JsonValue& c, const bool swapped, const bool moveFirst, Tally& tally)
+void CheckReparam(const JsonValue& c, const bool swapped, const bool moveFirst, const Gate gate,
+                  Tally& tally)
 {
     INFO(c["id"].AsString() << (swapped ? " swapped" : "") << (moveFirst ? " A'" : " B'")
                             << " reparametrized");
@@ -530,11 +543,13 @@ void CheckReparam(const JsonValue& c, const bool swapped, const bool moveFirst, 
     const JsonValue& expected = c["expected"];
     if (!result) {
         INFO(IntersectTest::ErrorText(result));
-        CHECK(FailsClosed(result.error().GetCode()));
-        ++(expected.Has("may_fail_closed") ? tally.Refused : tally.Undocumented);
+        CheckRefusal(expected, result.error().GetCode(), gate, tally);
         return;
     }
     ++tally.Answered;
+    if (gate == Gate::Completeness) {
+        return;
+    }
     if (!expected["overlaps"].AsArray().empty()) {
         CheckOverlaps(*result, expected["overlaps"], a, b);
     } else {
@@ -544,7 +559,8 @@ void CheckReparam(const JsonValue& c, const bool swapped, const bool moveFirst, 
                     ReachOf(expected));
 }
 
-void RunReparam(const std::vector<std::filesystem::path>& files, const bool bothWays)
+void RunReparam(const std::vector<std::filesystem::path>& files, const bool bothWays,
+                const Gate gate = Gate::Safety)
 {
     Tally tally;
     for (const std::filesystem::path& file : files) {
@@ -553,8 +569,8 @@ void RunReparam(const std::vector<std::filesystem::path>& files, const bool both
             if (swapped && !bothWays) {
                 continue;
             }
-            CheckReparam(c, swapped, true, tally);
-            CheckReparam(c, swapped, false, tally);
+            CheckReparam(c, swapped, true, gate, tally);
+            CheckReparam(c, swapped, false, gate, tally);
         }
     }
     WARN(tally.Answered << " answered, " << tally.Refused << " refused as documented, "
@@ -619,4 +635,18 @@ TEST_CASE("MR-04: every planar-curves corpus case answers alike in an equivalent
     const std::vector<std::filesystem::path> files = CaseFiles();
     REQUIRE(files.size() >= 800);
     RunReparam(files, true);
+}
+
+// Incomplete evidence is recorded as MR implemented, never verified. This
+// test exposes the documented completeness debt separately from safety.
+TEST_CASE("MR-04: only documented planar configurations refuse an equivalent chart",
+          "[intersect][planar][corpus][metamorphic][!mayfail]")
+{
+    RunReparam(OnePlacementEach(), false, Gate::Completeness);
+}
+
+TEST_CASE("MR-04: only documented planar corpus cases refuse equivalent charts, both ways",
+          "[.][exhaustive][intersect][planar][corpus][metamorphic][!mayfail]")
+{
+    RunReparam(CaseFiles(), true, Gate::Completeness);
 }

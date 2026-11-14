@@ -17,6 +17,7 @@
 #include <cmath>
 #include <cstddef>
 #include <filesystem>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,7 @@ import Stereon.Intersect;
 
 #include "Checks.hpp"
 #include "CurveCorpus.hpp"
+#include "CurveWitnessChecks.hpp"
 
 namespace {
 
@@ -67,6 +69,32 @@ TEST_CASE("every curve-curve corpus case meets exactly when its gap is within th
             INFO(IntersectTest::ErrorText(r));
             REQUIRE(r.has_value());
             CHECK(MeetsNear(*r, ta, tb, swapped) == meets);
+            for (const auto& p : r->Points) {
+                CHECK(IntersectTest::ValidCurveWitness(p, swapped ? b : a, swapped ? db : da,
+                                                       swapped ? a : b, swapped ? da : db,
+                                                       IntersectTest::ctx));
+            }
         }
     }
+}
+
+TEST_CASE("curve corpus witness checks reject corrupt positions and parameters",
+          "[intersect][curve-curve][corpus][regression]")
+{
+    using namespace Stereon;
+    const Curve a{Line{Point3{}, Vec3{1.0, 0.0, 0.0}}};
+    const Curve b{Line{Point3{}, Vec3{0.0, 1.0, 0.0}}};
+    const Interval domain{-1.0, 1.0};
+    CurveCurvePoint p{0.0, 0.0, Point3{}};
+    CHECK(IntersectTest::ValidCurveWitness(p, a, domain, b, domain, IntersectTest::ctx));
+    p.Position.X = 1.0;
+    CHECK_FALSE(IntersectTest::ValidCurveWitness(p, a, domain, b, domain, IntersectTest::ctx));
+    p.Position = Point3{};
+    p.ParameterA = 2.0;
+    CHECK_FALSE(IntersectTest::ValidCurveWitness(p, a, domain, b, domain, IntersectTest::ctx));
+    p.ParameterA = std::numeric_limits<double>::quiet_NaN();
+    CHECK_FALSE(IntersectTest::ValidCurveWitness(p, a, domain, b, domain, IntersectTest::ctx));
+    p.ParameterA = 0.0;
+    p.Position.X = std::numeric_limits<double>::quiet_NaN();
+    CHECK_FALSE(IntersectTest::ValidCurveWitness(p, a, domain, b, domain, IntersectTest::ctx));
 }
