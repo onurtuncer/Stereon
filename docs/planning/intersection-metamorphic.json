@@ -408,6 +408,11 @@
       "red": "docs/planning/intersection-metamorphic-triage.md#### Campaign replay of the eight earlier faults"
     },
     {
+      "id": "SSI-translated-boundary",
+      "source": "tests/intersect/GenericSSINodeTests.cpp#WEAKENED RELATION, a known open defect: SSI-translated-boundary",
+      "state": "untriaged"
+    },
+    {
       "id": "PR-112-budget",
       "source": "https://github.com/onurtuncer/Stereon/pull/112",
       "state": "verified",
