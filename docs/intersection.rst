@@ -1283,12 +1283,41 @@ ways, the classification shared with the curve–surface handlers
      split -> fail;
    }
 
+The plane handler adds a fifth outcome before it halves a piece
+(``IsolateContacts``, ``OfOrder`` in ``src/intersect/PlanarSpline.cpp``):
+a contact of order :math:`k \ge 3`. If every coefficient of :math:`g`'s
+:math:`k`-th differences has one strict sign, :math:`g^{(k)}` has it over
+the piece and its sub-pieces, so :math:`g^{(k-1)}` is strictly monotone. On
+each sub-piece the handler first tries to prove a lower derivative of one
+sign from its coefficients, which makes the piece monotone, convex or of a
+lower order. Otherwise it reads the signs of :math:`g^{(k-1)}` at the
+piece's ends: one strict sign at both ends means that sign throughout, and
+the piece has order :math:`k-1`. Only the piece holding the single zero of
+:math:`g^{(k-1)}` is halved. When both those ends are within rounding of
+zero (or at ``MaxDepth``) and no lower derivative can be signed, the piece
+is the contact's to rounding. :math:`g` has at most :math:`k` roots there
+(Rolle), and the piece is reported as one ``Tangential`` root with
+``Decided`` false, bracketed by the piece, never dropped. This is
+``Convex``'s argument carried up an order. A contact of order four, where
+:math:`g`, :math:`g'` and :math:`g''` all vanish, is followed down one
+chain of pieces. Before, every piece that rounding hid it in was halved
+until the search's budget ran out. The touch is placed to the rounding
+the contact allows: the fourth root of the coefficients' rounding
+relative to the curve, about :math:`2^{-13}` of the segment's parameter
+near the origin. ``tests/intersect/PlanarSplineOsculationTests.cpp`` uses
+two exact quartics:
+:math:`y = x^2 + (x/3)^4` against the parabola :math:`y = x^2`, and
+:math:`y = x^4` against the axis, the latter also :math:`3\cdot 2^{-40}`
+below it (a proved separation) and above it (two proved crossings at
+:math:`x = \pm g^{1/4}`). Both are run under exchange, reversal,
+translation, scaling by :math:`2^{\pm 10}` and a rational form.
+
 Unlike the curve–surface handlers, which fail on any root they cannot
 decide, the plane curve handlers report an undecided root with ``Decided``
 false, as the conic handlers do, and fail only on an unresolved one: a
-contact of higher order, or the spline lying along the other curve (a
-rational spline along the circle it draws fails so, never coming back
-empty). A hyperbola's other branch is dropped as in Algorithm C. A spline
+piece with no derivative of one sign (the spline lying along the other
+curve; a rational spline along the circle it draws fails so, never coming
+back empty) or a search past its budget. A hyperbola's other branch is dropped as in Algorithm C. A spline
 whose every pole lies exactly on a line lies along it: its overlap is
 reported when the spline is clamped, is requested over its whole domain,
 runs monotonically along the line
