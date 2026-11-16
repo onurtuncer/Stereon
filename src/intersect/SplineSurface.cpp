@@ -18,6 +18,7 @@ module;
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <numbers>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -888,7 +889,13 @@ struct EnclosedQuadratic {
 [[nodiscard]] double PolishedOnCone(const Line& line, const Cone& cone, const double t,
                                     const double other)
 {
-    const LineQuadratic q = MiddleOf(ConeQuadratic(line, Eval(line, t), cone));
+    // Keep the small offset when origin and t * direction nearly cancel.
+    // Rounding that product before adding the origin perturbs the line;
+    // near a generator the root correction amplifies that perturbation.
+    const Point3 point{std::fma(t, line.Direction.X, line.Origin.X),
+                       std::fma(t, line.Direction.Y, line.Origin.Y),
+                       std::fma(t, line.Direction.Z, line.Origin.Z)};
+    const LineQuadratic q = MiddleOf(ConeQuadratic(line, point, cone));
     if (q.A == 0.0) {
         return t;
     }
@@ -1027,9 +1034,56 @@ constexpr std::size_t MaxArcs = 4096;
     return {AngleAt(t0, t1, f.T), Interval{lower, upper}, f.Contact, f.Decided, f.Isolated};
 }
 
+/// The roots of the form on [lower, upper] cut into `arcs` equal arcs, as
+/// angles of the conic, merged: a root on a cut is seen from both arcs and
+/// left undecided.
+template <typename Form>
+[[nodiscard]] Result<std::vector<Found>> ArcRoots(const ConicData& conic, const double lower,
+                                                  const double upper, const std::size_t arcs,
+                                                  Form& form, const std::string_view handler)
+{
+    const double width = upper - lower;
+    const auto count = static_cast<double>(arcs);
+    std::vector<Found> found;
+    for (std::size_t k = 0; k < arcs; ++k) {
+        const double t0 = k == 0 ? lower : lower + width * static_cast<double>(k) / count;
+        const double t1 =
+            k + 1 == arcs ? upper : lower + width * static_cast<double>(k + 1) / count;
+        const Segment arc = ArcSegment(conic, t0, t1);
+        std::vector<Found> local;
+        STEREON_TRY_VOID(RootsOfSegment(arc, form(arc.Poles), handler, local));
+        for (const Found& f : local) {
+            found.push_back(OnConic(f, t0, t1));
+        }
+    }
+    Merge(found);
+    return found;
+}
+
+[[nodiscard]] bool AllDecided(const std::vector<Found>& found)
+{
+    return std::ranges::all_of(found, [](const Found& f) { return f.Decided; });
+}
+
+/// The cuts of the second search are turned by this fraction of an arc,
+/// the golden section 1 / phi: far from every short rational, so that no
+/// cut of it falls on a cut of the first, nor on an angle a conic built
+/// from short binary fractions meets exactly.
+constexpr double CutTurn = std::numbers::phi - 1.0;
+
 /// Every root of the surface's form on the conic over the domain, cut into
 /// quarter-turn arcs, as angles of the conic, merged and placed as RootsOf
 /// places a B-spline's.
+///
+/// A crossing that falls on a cut, a multiple of a quarter turn on a
+/// conic with axis-aligned data, is undecided from both arcs: the form's
+/// enclosure at the shared end straddles zero. The cuts are an artifact of
+/// the search, so such a domain is searched again with them moved. A full
+/// turn is closed: its ends are one point, the seam, which is no boundary
+/// either, so all its cuts are turned and the roots past its upper end
+/// brought back a turn. On a part of a turn only the interior cuts move,
+/// and a root on the domain's own end stays undecided. What the second
+/// search leaves undecided fails (ADR-0010).
 template <typename Form>
 [[nodiscard]] Result<std::vector<Found>> ConicRootsOf(const ConicData& conic,
                                                       const Interval& domain, Form&& form,
@@ -1040,6 +1094,8 @@ template <typename Form>
                     std::string(handler) + ": a conic's domain must be bounded");
     }
     const double quarter = 0.5 * std::numbers::pi;
+    const double lower = domain.GetLower();
+    const double upper = domain.GetUpper();
     const double width = Width(domain);
     const double count = std::max(1.0, std::ceil(width / quarter));
     if (count > static_cast<double>(MaxArcs)) {
@@ -1047,27 +1103,31 @@ template <typename Form>
                     std::string(handler) + ": a domain of more than 1 024 turns");
     }
     const auto arcs = static_cast<std::size_t>(count);
-    std::vector<Found> found;
-    for (std::size_t k = 0; k < arcs; ++k) {
-        const double t0 =
-            k == 0 ? domain.GetLower() : domain.GetLower() + width * static_cast<double>(k) / count;
-        const double t1 = k + 1 == arcs
-                              ? domain.GetUpper()
-                              : domain.GetLower() + width * static_cast<double>(k + 1) / count;
-        const Segment arc = ArcSegment(conic, t0, t1);
-        std::vector<Found> local;
-        STEREON_TRY_VOID(RootsOfSegment(arc, form(arc.Poles), handler, local));
-        for (const Found& f : local) {
-            found.push_back(OnConic(f, t0, t1));
+    STEREON_TRY(std::vector<Found> found, ArcRoots(conic, lower, upper, arcs, form, handler));
+    if (!AllDecided(found)) {
+        if (upper - lower == CirclePeriod) {
+            const double turn = CutTurn * quarter;
+            STEREON_TRY(found, ArcRoots(conic, lower + turn, upper + turn, arcs, form, handler));
+            for (Found& f : found) {
+                if (f.T > upper) {
+                    f.T -= CirclePeriod;
+                    // The period of the conic is 2 pi, not its rounding:
+                    // the bracket brought back is widened by a few units.
+                    const double slack =
+                        4.0 * std::numeric_limits<double>::epsilon() * (1.0 + std::abs(upper));
+                    f.Bracket = Interval{f.Bracket.GetLower() - CirclePeriod - slack,
+                                         f.Bracket.GetUpper() - CirclePeriod + slack};
+                }
+            }
+            std::ranges::stable_sort(found, {}, &Found::T);
+        } else {
+            STEREON_TRY(found, ArcRoots(conic, lower, upper, arcs + 1, form, handler));
         }
     }
-    Merge(found);
-    for (const Found& f : found) {
-        if (!f.Decided) {
-            return Fail(ErrorCode::IntersectionFailed,
-                        std::string(handler) +
-                            ": unresolved root existence or multiplicity in requested domain");
-        }
+    if (!AllDecided(found)) {
+        return Fail(ErrorCode::IntersectionFailed,
+                    std::string(handler) +
+                        ": unresolved root existence or multiplicity in requested domain");
     }
     return found;
 }

@@ -121,6 +121,42 @@ void RequireComplete(const Stereon::SurfaceSurfaceIntersection& result, const Su
     REQUIRE(roots > 0);
 }
 
+/// Independent circle oracle for a plane section, including total angular
+/// coverage. It does not assume a fixed branch count or parameterisation.
+void RequireCircleSection(const Stereon::SurfaceSurfaceIntersection& result, const Plane& plane,
+                          const Sphere& sphere)
+{
+    REQUIRE(result.Points.empty());
+    REQUIRE(result.Overlaps.empty());
+    REQUIRE_FALSE(result.Branches.empty());
+    REQUIRE(IntersectTest::ConnectivityOf(result).Curves == 1);
+    const Vec3 normal = Cross(plane.XAxis, plane.YAxis);
+    const Vec3 unit = normal / Length(normal);
+    const double height = Dot(sphere.Center - plane.Origin, unit);
+    const Point3 center = sphere.Center - height * unit;
+    const double radius = std::sqrt(sphere.Radius * sphere.Radius - height * height);
+    double sweep = 0.0;
+    for (const auto& branch : result.Branches) {
+        double previous = 0.0;
+        double angleSum = 0.0;
+        std::size_t index = 0;
+        for (const double t : IntersectTest::SamplesOf(branch.Range, 128)) {
+            const Point3 point = Eval(branch.Curve3d, t);
+            CHECK(std::abs(Dot(point - plane.Origin, unit)) <= ctx.GetResolution());
+            CHECK(std::abs(Distance(point, center) - radius) <= ctx.GetResolution());
+            const Vec3 delta = point - center;
+            const double angle = std::atan2(Dot(delta, plane.YAxis), Dot(delta, plane.XAxis));
+            if (index++ > 0) {
+                angleSum += std::remainder(angle - previous, 2.0 * pi);
+            }
+            previous = angle;
+        }
+        sweep += std::abs(angleSum);
+    }
+    CHECK(std::abs(sweep - 2.0 * pi) <=
+          8.0 * static_cast<double>(result.Branches.size()) * ctx.GetResolution() / radius);
+}
+
 const Surface torus{Torus{Point3{}, 3.0, 1.0, X, Y, true}};
 const Box2 torusChart{Interval{0.0, 2.0 * pi}, Interval{0.0, 2.0 * pi}};
 
@@ -401,4 +437,35 @@ TEST_CASE("a sphere far from an ellipsoid is proved separate; a tangent one fail
     const auto touch = Intersect(resting, stretched, ctx);
     REQUIRE_FALSE(touch.has_value());
     REQUIRE(touch.error().GetCode() == Stereon::ErrorCode::IntersectionFailed);
+}
+
+TEST_CASE("MR audit narrow sphere seam excursions remain complete certified circles",
+          "[intersect][trace][regression][metamorphic]")
+{
+    // Coverage seed 13593231413355092879. The circle crosses the sphere's
+    // seam twice between adjacent samples of the initial 64-step scan.
+    // MR-01 translation, MR-02 exchange, MR-03 dyadic scale and MR-04 a
+    // quarter-turn of the sphere's chart all preserve this circle oracle.
+    const Vec3 normal{-2.5, -4.875, -3.0};
+    for (const double scale : {0.5, 1.0, 2.0}) {
+        for (const Vec3 shift : {Vec3{}, Vec3{8.0, -4.0, 2.0}}) {
+            const Point3 center = Point3{} + scale * Vec3{-5.0, -5.0, -5.0} + shift;
+            const Plane plane = IntersectTest::PlaneWithNormal(
+                center + (-5.0 / 8.0 * scale) * (normal / Length(normal)), normal);
+            for (const bool turned : {false, true}) {
+                const Sphere sphere{center, scale, turned ? Y : X, turned ? -X : Y};
+                for (const bool exchanged : {false, true}) {
+                    INFO("scale=" << scale << " shift=" << shift.X << " turned=" << turned
+                                  << " exchanged=" << exchanged);
+                    const Surface a = exchanged ? Surface{sphere} : Surface{plane};
+                    const Surface b = exchanged ? Surface{plane} : Surface{sphere};
+                    const auto result = Intersect(a, b, ctx);
+                    INFO(IntersectTest::ErrorText(result));
+                    REQUIRE(result.has_value());
+                    RequireCertified(*result, a, b);
+                    RequireCircleSection(*result, plane, sphere);
+                }
+            }
+        }
+    }
 }
