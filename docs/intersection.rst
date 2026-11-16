@@ -922,7 +922,27 @@ enclosed from the doubles :math:`t_0` and :math:`t_1`, so what is proved
 holds for the conic as given. A root at Bézier parameter :math:`s` is the
 angle :math:`m + 2 \arctan(\tan(h/2)(2s - 1))`, its bracket mapped through
 that monotone map and widened by its rounding; points are reported on the
-conic's angle, which may run over several turns. A conic whose centre and
+conic's angle, which may run over several turns.
+
+The cuts are the kernel's choice, not features of the conic, which is
+smooth across them. A crossing at or within rounding of a cut is
+bracketed by each neighbouring arc across its end, and is undecided there.
+When the first search leaves a root undecided, the domain is searched
+again with its cuts moved (``ConicRootsOf``). A full turn is closed: its
+ends are one point, the seam, which is no boundary either, so every cut
+is turned by :math:`1/\varphi` of an arc and a root found past the upper
+end is brought back a turn, its bracket widened by the rounding of
+:math:`2\pi`; a crossing on the seam is reported once. On part of a turn
+only the interior cuts move, the domain cut into one arc more, and a root
+at the domain's own end stays undecided. What the second search leaves
+undecided fails closed. ``tests/intersect/ConicArcCutTests.cpp`` has the
+closed forms: a circle crossing a plane, a cylinder and a sphere exactly on
+its cuts, and an ellipse crossing a plane on them, under reversal,
+translation and scaling by :math:`2^{\pm 10}`;
+``tests/intersect/ConicSurfaceTests.cpp`` has crossings on the seam, over
+the turn :math:`[-\pi, \pi]` and on a half turn's interior cut.
+
+A conic whose centre and
 axes lie exactly in a plane is an overlap there, its pcurve the same
 conic in the plane's parameters. A conic on a curved surface, the equator
 of a sphere or the meridian of a torus, fails with ``IntersectionFailed``.
