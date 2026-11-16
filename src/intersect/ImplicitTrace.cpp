@@ -1173,18 +1173,66 @@ void Chart(std::vector<Point2>& uv, const std::array<bool, 2>& periodic)
     return {};
 }
 
+/// Seam crossings exposed by the current fitting samples. The initial
+/// scan can miss two crossings between its samples near a seam tangency.
+/// Split before Chart clamps such an excursion away. Endpoint rounding
+/// slivers are ignored by the same geometric reach rule as WithoutSlivers;
+/// the eventual deviation certificate remains mandatory.
+[[nodiscard]] Result<std::vector<double>> SampleCuts(const Roles& r, const Guide& guide,
+                                                     const double g0, const double g1,
+                                                     const Samples& samples,
+                                                     const double resolution)
+{
+    std::vector<double> cuts;
+    const auto periodic = ImplicitPeriodic(r);
+    const double count = static_cast<double>(samples.OnImplicit.size() - 1);
+    for (std::size_t axis = 0; axis < periodic.size(); ++axis) {
+        if (!periodic[axis]) {
+            continue;
+        }
+        for (std::size_t i = 1; i < samples.OnImplicit.size(); ++i) {
+            const auto angle = [&](const std::size_t k) {
+                return axis == 0 ? samples.OnImplicit[k].X : samples.OnImplicit[k].Y;
+            };
+            if (PeriodOf(angle(i - 1)) == PeriodOf(angle(i))) {
+                continue;
+            }
+            const Followed from{g0 + (g1 - g0) * static_cast<double>(i - 1) / count, angle(i - 1)};
+            const Followed to{g0 + (g1 - g0) * static_cast<double>(i) / count, angle(i)};
+            STEREON_TRY(const double cut, SeamBetween(r, guide, static_cast<int>(axis), from, to));
+            const Point3 point = Eval(guide.Curve, cut);
+            if (g0 < cut && cut < g1 && Distance(point, Eval(guide.Curve, g0)) > resolution &&
+                Distance(point, Eval(guide.Curve, g1)) > resolution) {
+                cuts.push_back(cut);
+            }
+        }
+    }
+    std::ranges::sort(cuts);
+    cuts.erase(std::ranges::unique(cuts).begin(), cuts.end());
+    return cuts;
+}
+
+struct PieceFit {
+    std::optional<IntersectionBranch> Branch;
+    std::vector<double> Cuts;
+};
+
 /// The certified branch over the guide's parameters [g0, g1]: the samples
 /// doubled until the midpoints agree with the branch and the certificate
 /// holds, within the sample budget.
-[[nodiscard]] Result<IntersectionBranch> FitCertified(const Roles& r, const Guide& guide,
-                                                      const double g0, const double g1,
-                                                      const BranchPoint& start, const Context& ctx)
+[[nodiscard]] Result<PieceFit> FitCertified(const Roles& r, const Guide& guide, const double g0,
+                                            const double g1, const BranchPoint& start,
+                                            const Context& ctx)
 {
     const double target = ctx.GetResolution();
     const Interval range{guide.Length * g0, guide.Length * g1};
     for (std::size_t count = InitialSamples;; count *= 2) {
         STEREON_TRY(const Samples samples, SamplePiece(r, guide, g0, g1, count, start));
         STEREON_TRY_VOID(CheckSizeBox(samples));
+        STEREON_TRY(std::vector<double> cuts, SampleCuts(r, guide, g0, g1, samples, target));
+        if (!cuts.empty()) {
+            return PieceFit{std::nullopt, std::move(cuts)};
+        }
         STEREON_TRY(IntersectionBranch branch, FitPiece(r, samples, range));
         STEREON_TRY(const double deviation,
                     MidpointDeviation(r, guide, g0, g1, branch, count, start));
@@ -1192,7 +1240,7 @@ void Chart(std::vector<Point2>& uv, const std::array<bool, 2>& periodic)
             const Result<void> certified =
                 Certify(branch, *r.CarrierErased, *r.ImplicitErased, ctx);
             if (certified) {
-                return branch;
+                return PieceFit{std::move(branch), {}};
             }
             if (certified.error().GetCode() != ErrorCode::CertificationFailed) {
                 return std::unexpected(certified.error());
@@ -1272,16 +1320,25 @@ void Chart(std::vector<Point2>& uv, const std::array<bool, 2>& periodic)
         result.Points.push_back(point);
         return {};
     }
-    STEREON_TRY(const std::vector<double> cuts, PieceCuts(r, *guide, ctx.GetResolution()));
+    STEREON_TRY(std::vector<double> cuts, PieceCuts(r, *guide, ctx.GetResolution()));
     STEREON_TRY(BranchPoint start, FirstPoint(r, *guide));
     for (std::size_t k = 1; k < cuts.size(); ++k) {
         if (k > 1) {
             STEREON_TRY(start, PointOf(r, *guide, cuts[k - 1], start));
             start.OnImplicit = ProjectOnto(r.ImplicitGeometry, start.X);
         }
-        STEREON_TRY(IntersectionBranch branch,
-                    FitCertified(r, *guide, cuts[k - 1], cuts[k], start, ctx));
-        result.Branches.push_back(std::move(branch));
+        STEREON_TRY(PieceFit fit, FitCertified(r, *guide, cuts[k - 1], cuts[k], start, ctx));
+        if (!fit.Cuts.empty()) {
+            if (cuts.size() + fit.Cuts.size() > SampleBudget) {
+                return Fail(ErrorCode::IntersectionFailed,
+                            "Intersect: a traced branch exceeds the seam split budget");
+            }
+            cuts.insert(cuts.begin() + static_cast<std::ptrdiff_t>(k), fit.Cuts.begin(),
+                        fit.Cuts.end());
+            --k;
+            continue;
+        }
+        result.Branches.push_back(std::move(*fit.Branch));
     }
     return {};
 }
