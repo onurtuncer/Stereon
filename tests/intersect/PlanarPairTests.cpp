@@ -482,16 +482,18 @@ TEST_CASE("two rational and polynomial B-splines cross at a piece's middle",
     RequireSwapped(one, Curve2d{QuarterCircle()}, diagonal);
 }
 
-TEST_CASE("two B-splines that touch fail closed; 3 2^-40 apart they are proved apart",
+TEST_CASE("two B-splines that touch are a bracketed touch; 3 2^-40 apart they are proved apart",
           "[intersect][planar][spline]")
 {
+    // The arch y = (x - 1)^2 touches the axis at (1, 0), s = t = 1/2
+    // (PlanarSplineTangencyTests.cpp has the full set).
     const Curve2d arch{Bezier({{0.0, 1.0}, {1.0, -1.0}, {2.0, 1.0}})};
     const Curve2d axis{Bezier({{-1.0, 0.0}, {3.0, 0.0}})};
-    const auto touch = Intersect(arch, axis, ctx);
-    REQUIRE_FALSE(touch.has_value());
-    REQUIRE(touch.error().GetCode() == ErrorCode::IntersectionFailed);
-    INFO(touch.error().GetMessage());
-    REQUIRE(std::string(touch.error().GetMessage()).starts_with("BSplineCurve2d x BSplineCurve2d"));
+    const PlanarIntersection touch = Meet(arch, axis);
+    REQUIRE(touch.Points.size() == 1);
+    RequireAll(touch, ContactType::Tangential, false);
+    REQUIRE_THAT(touch.Points.front().ParameterA, WithinAbs(0.5, 1e-6));
+    REQUIRE_THAT(touch.Points.front().ParameterB, WithinAbs(0.5, 1e-6));
     const Curve2d below{Bezier({{-1.0, -3.0 * 0x1p-40}, {3.0, -3.0 * 0x1p-40}})};
     REQUIRE(Meet(arch, below).IsEmpty());
     // Identical splines overlap on their common requested stretch.

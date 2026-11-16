@@ -36,6 +36,7 @@
 #include <cmath>
 #include <cstddef>
 #include <filesystem>
+#include <limits>
 #include <numbers>
 #include <string>
 #include <utility>
@@ -45,6 +46,7 @@ import Stereon.Intersect;
 
 #include "Checks.hpp"
 #include "CurveCorpus.hpp"
+#include "CurveWitnessChecks.hpp"
 
 using Stereon::Context;
 using Stereon::Curve;
@@ -241,6 +243,11 @@ void Claim(const JsonValue& c, const Moved& a, const Moved& b, const Context& po
         INFO(IntersectTest::ErrorText(r));
         REQUIRE(r.has_value());
         CHECK(MeetsNear(*r, ta, tb, swapped) == meets);
+        for (const auto& p : r->Points) {
+            CHECK(IntersectTest::ValidCurveWitness(
+                p, swapped ? b.Value : a.Value, swapped ? b.Domain : a.Domain,
+                swapped ? a.Value : b.Value, swapped ? a.Domain : b.Domain, policy));
+        }
     }
 }
 

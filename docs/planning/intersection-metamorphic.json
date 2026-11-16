@@ -425,8 +425,40 @@
       "red": "docs/planning/intersection-metamorphic-triage.md#### Campaign replay of the eight earlier faults"
     },
     {
+      "id": "AUDIT-20261113-narrow-sphere-seam",
+      "source": "https://github.com/onurtuncer/Stereon/actions/runs/43300991832/job/131471814362",
+      "state": "MR implemented",
+      "fixture": "tests/intersect/ImplicitTraceTests.cpp#MR audit narrow sphere seam excursions remain complete certified circles",
+      "direct": "tests/intersect/ImplicitTraceTests.cpp#MR audit narrow sphere seam excursions remain complete certified circles",
+      "metamorphic": "tests/intersect/ImplicitTraceTests.cpp#MR audit narrow sphere seam excursions remain complete certified circles",
+      "oracle": "docs/planning/audit-2026-11-12-numerics.md#Narrow seam excursion repair",
+      "replay": "docs/planning/audit-2026-11-12-numerics.md",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03",
+        "MR-04"
+      ],
+      "evidence_kind": "resolved_geometry"
+    },
+    {
+      "id": "AUDIT-20261112-cone-polish",
+      "source": "https://github.com/onurtuncer/Stereon/actions/runs/43251352135/job/131297678793",
+      "state": "MR implemented",
+      "fixture": "tests/intersect/LineRevolutionTests.cpp#MR audit cone crossings retain their positions after an exact origin shift",
+      "direct": "tests/intersect/LineRevolutionTests.cpp#MR audit cone crossings retain their positions after an exact origin shift",
+      "metamorphic": "tests/intersect/LineRevolutionTests.cpp#MR audit cone crossings retain their positions after an exact origin shift",
+      "oracle": "docs/planning/audit-2026-11-12-numerics.md#Cone polishing",
+      "replay": "docs/planning/audit-2026-11-12-numerics.md",
+      "relations": [
+        "MR-01",
+        "MR-04"
+      ],
+      "evidence_kind": "resolved_geometry"
+    },
+    {
       "id": "SSI-translated-boundary",
-      "source": "tests/intersect/GenericSSINodeTests.cpp#WEAKENED RELATION, a known open defect: SSI-translated-boundary",
+      "source": "https://github.com/onurtuncer/Stereon/pull/279",
       "state": "untriaged"
     },
     {
@@ -1987,311 +2019,800 @@
     },
     "curve-surface:BSplineCurve:BSplineSurface": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:BSplineCurve:Cone": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:BSplineCurve:Cylinder": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:BSplineCurve:Ellipsoid": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:BSplineCurve:Plane": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:BSplineCurve:Sphere": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:BSplineCurve:Torus": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Circle:BSplineSurface": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Circle:Cone": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Circle:Cylinder": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Circle:Ellipsoid": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Circle:Plane": {
       "MR-01": {
-        "state": "MR implemented",
-        "domain": "docs/planning/metamorphic-priority-replay.md#PR-206",
-        "test": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-206 singleton circle plane domain",
-        "oracle": "docs/planning/metamorphic-priority-replay.md#PR-206",
-        "replay": "docs/planning/metamorphic-priority-replay.md",
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "MR implemented",
-        "domain": "docs/planning/metamorphic-priority-replay.md#PR-206",
-        "test": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-206 singleton circle plane domain",
-        "oracle": "docs/planning/metamorphic-priority-replay.md#PR-206",
-        "replay": "docs/planning/metamorphic-priority-replay.md",
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
-        "domain": "docs/planning/metamorphic-priority-replay.md#PR-206",
-        "test": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-206 singleton circle plane domain",
-        "oracle": "docs/planning/metamorphic-priority-replay.md#PR-206",
-        "replay": "docs/planning/metamorphic-priority-replay.md",
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Circle:Sphere": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Circle:Torus": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Ellipse:BSplineSurface": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Ellipse:Cone": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Ellipse:Cylinder": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Ellipse:Ellipsoid": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Ellipse:Plane": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Ellipse:Sphere": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Ellipse:Torus": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Hyperbola:BSplineSurface": {
@@ -2299,7 +2820,10 @@
         "state": "untriaged"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
         "state": "untriaged"
@@ -2313,7 +2837,10 @@
         "state": "untriaged"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
         "state": "untriaged"
@@ -2327,7 +2854,10 @@
         "state": "untriaged"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
         "state": "untriaged"
@@ -2341,7 +2871,10 @@
         "state": "untriaged"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
         "state": "untriaged"
@@ -2355,7 +2888,10 @@
         "state": "untriaged"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
         "state": "untriaged"
@@ -2369,7 +2905,10 @@
         "state": "untriaged"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
         "state": "untriaged"
@@ -2383,7 +2922,10 @@
         "state": "untriaged"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
         "state": "untriaged"
@@ -2394,130 +2936,268 @@
     },
     "curve-surface:Line:BSplineSurface": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Line:Cone": {
       "MR-01": {
-        "state": "MR implemented",
-        "domain": "docs/planning/metamorphic-priority-replay.md#PR-218",
-        "test": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-218 far-origin cone crossings",
-        "oracle": "docs/planning/metamorphic-priority-replay.md#PR-218",
-        "replay": "docs/planning/metamorphic-priority-replay.md",
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "MR implemented",
-        "domain": "docs/planning/metamorphic-priority-replay.md#PR-218",
-        "test": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-218 far-origin cone crossings",
-        "oracle": "docs/planning/metamorphic-priority-replay.md#PR-218",
-        "replay": "docs/planning/metamorphic-priority-replay.md",
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
-        "domain": "docs/planning/metamorphic-priority-replay.md#PR-218",
-        "test": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-218 far-origin cone crossings",
-        "oracle": "docs/planning/metamorphic-priority-replay.md#PR-218",
-        "replay": "docs/planning/metamorphic-priority-replay.md",
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Line:Cylinder": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Line:Ellipsoid": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Line:Plane": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Line:Sphere": {
       "MR-01": {
-        "state": "MR implemented",
-        "domain": "docs/planning/metamorphic-priority-replay.md#PR-205",
-        "test": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-205 far-origin sphere crossings",
-        "oracle": "docs/planning/metamorphic-priority-replay.md#PR-205",
-        "replay": "docs/planning/metamorphic-priority-replay.md",
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "MR implemented",
-        "domain": "docs/planning/metamorphic-priority-replay.md#PR-205",
-        "test": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-205 far-origin sphere crossings",
-        "oracle": "docs/planning/metamorphic-priority-replay.md#PR-205",
-        "replay": "docs/planning/metamorphic-priority-replay.md",
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
-        "domain": "docs/planning/metamorphic-priority-replay.md#PR-205",
-        "test": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-205 far-origin sphere crossings",
-        "oracle": "docs/planning/metamorphic-priority-replay.md#PR-205",
-        "replay": "docs/planning/metamorphic-priority-replay.md",
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Line:Torus": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Parabola:BSplineSurface": {
@@ -2525,7 +3205,10 @@
         "state": "untriaged"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
         "state": "untriaged"
@@ -2539,7 +3222,10 @@
         "state": "untriaged"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
         "state": "untriaged"
@@ -2553,7 +3239,10 @@
         "state": "untriaged"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
         "state": "untriaged"
@@ -2567,7 +3256,10 @@
         "state": "untriaged"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
         "state": "untriaged"
@@ -2581,7 +3273,10 @@
         "state": "untriaged"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
         "state": "untriaged"
@@ -2595,7 +3290,10 @@
         "state": "untriaged"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
         "state": "untriaged"
@@ -2609,7 +3307,10 @@
         "state": "untriaged"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "exception reviewed",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Domain",
+        "review": "docs/planning/intersection-metamorphic-relations-curve-surface.md#Reviewer:",
+        "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
         "state": "untriaged"
@@ -2620,1513 +3321,1225 @@
     },
     "planar:BSplineCurve2d:BSplineCurve2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:BSplineCurve2d:Circle2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:BSplineCurve2d:Ellipse2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:BSplineCurve2d:Hyperbola2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:BSplineCurve2d:Line2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:BSplineCurve2d:Parabola2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Circle2d:BSplineCurve2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Circle2d:Circle2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Circle2d:Ellipse2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Circle2d:Hyperbola2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Circle2d:Line2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Circle2d:Parabola2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Ellipse2d:BSplineCurve2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Ellipse2d:Circle2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Ellipse2d:Ellipse2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Ellipse2d:Hyperbola2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Ellipse2d:Line2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Ellipse2d:Parabola2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Hyperbola2d:BSplineCurve2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Hyperbola2d:Circle2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Hyperbola2d:Ellipse2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Hyperbola2d:Hyperbola2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Hyperbola2d:Line2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Hyperbola2d:Parabola2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Line2d:BSplineCurve2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Line2d:Circle2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Line2d:Ellipse2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Line2d:Hyperbola2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Line2d:Line2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Line2d:Parabola2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Parabola2d:BSplineCurve2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Parabola2d:Circle2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Parabola2d:Ellipse2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Parabola2d:Hyperbola2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Parabola2d:Line2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Parabola2d:Parabola2d": {
       "MR-01": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "verified",
+        "state": "MR implemented",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
-        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Green",
-        "review": "docs/planning/intersection-metamorphic-relations-planar.md#Reviewer:",
         "evidence_kind": "resolved_geometry"
       }
     },
