@@ -80,10 +80,17 @@ constexpr double PoleRatio = 0x1p-50;
     if (parameter.GetQuantity() != quantity) {
         return Fail(ErrorCode::InvalidInput,
                     std::string(where) +
-                        ": a coordinate is moved by a length and a weight by a dimensionless "
-                        "parameter");
+                        ": a coordinate is moved by a length, a weight by a dimensionless "
+                        "parameter and an angle or a rotation by an angle");
     }
     return {};
+}
+
+/// The velocity w_k e_k x d of a point at offset d from the centre of a
+/// frame (x, y, z) turning about its axis k at unit rate.
+[[nodiscard]] Vec3 Turned(const int k, const Vec3& x, const Vec3& y, const Vec3& z, const Vec3& d)
+{
+    return Cross(k == 0 ? x : (k == 1 ? y : z), d);
 }
 
 /// A line's side: dC/d(component) at t is a unit for the origin, t times a
@@ -157,9 +164,10 @@ template <typename Conic>
 }
 
 /// A circle's or an ellipse's side: its derivative, and dC/d(component) at
-/// the angle t at fixed frame: a unit for a centre coordinate, cos t X +
-/// sin t Y for a circle's radius, cos t X and sin t Y for an ellipse's
-/// major and minor radii.
+/// the angle t: a unit for a centre coordinate, cos t X + sin t Y for a
+/// circle's radius, cos t X and sin t Y for an ellipse's major and minor
+/// radii, and e_k x (C - Center) for a rotation about the frame's axis e_k
+/// (X, Y, X x Y), with C - Center formed in the frame.
 template <typename Conic>
 struct ConicSide {
     const Conic& Geometry;
@@ -167,9 +175,25 @@ struct ConicSide {
 
     [[nodiscard]] Point3 At(const double t) const { return Eval(Geometry, t); }
     [[nodiscard]] Vec3 Tangent(const double t) const { return Deriv(Geometry, t, 1); }
+    /// C(t) - Center, from the frame rather than by subtraction.
+    [[nodiscard]] Vec3 Offset(const double t) const
+    {
+        if constexpr (std::is_same_v<Conic, Circle>) {
+            return Geometry.Radius * (std::cos(t) * Geometry.XAxis + std::sin(t) * Geometry.YAxis);
+        } else {
+            return (Geometry.MajorRadius * std::cos(t)) * Geometry.XAxis +
+                   (Geometry.MinorRadius * std::sin(t)) * Geometry.YAxis;
+        }
+    }
     [[nodiscard]] Vec3 Partial(const ConicBinding& b, const double t) const
     {
         switch (b.Component) {
+        case ConicComponent::RotationX:
+        case ConicComponent::RotationY:
+        case ConicComponent::RotationZ:
+            return Turned(
+                static_cast<int>(b.Component) - static_cast<int>(ConicComponent::RotationX),
+                Geometry.XAxis, Geometry.YAxis, Cross(Geometry.XAxis, Geometry.YAxis), Offset(t));
         case ConicComponent::Radius:
             return std::cos(t) * Geometry.XAxis + std::sin(t) * Geometry.YAxis;
         case ConicComponent::MajorRadius:
@@ -183,7 +207,12 @@ struct ConicSide {
     [[nodiscard]] Result<void> Check(const ParameterSet& set, const std::string_view where) const
     {
         for (const ConicBinding& b : Bindings) {
-            STEREON_TRY_VOID(CheckParameter(set, b.Parameter, ParameterQuantity::Length, where));
+            const bool turn = b.Component == ConicComponent::RotationX ||
+                              b.Component == ConicComponent::RotationY ||
+                              b.Component == ConicComponent::RotationZ;
+            STEREON_TRY_VOID(
+                CheckParameter(set, b.Parameter,
+                               turn ? ParameterQuantity::Angle : ParameterQuantity::Length, where));
             if (!HasRadius<Conic>(b.Component)) {
                 return Fail(ErrorCode::InvalidInput,
                             std::string(where) +
@@ -416,6 +445,87 @@ template <typename S>
     }
 }
 
+[[nodiscard]] bool IsRotation(const SurfaceComponent component)
+{
+    return component == SurfaceComponent::RotationX || component == SurfaceComponent::RotationY ||
+           component == SurfaceComponent::RotationZ;
+}
+
+/// S(u, v) - origin of an analytic surface, formed in its frame, and the
+/// frame: XAxis, YAxis and the third axis, a plane's X x Y, every other
+/// surface's Axis.
+struct FrameOffset {
+    Vec3 Offset;
+    Vec3 X;
+    Vec3 Y;
+    Vec3 Third;
+};
+
+template <typename S>
+[[nodiscard]] FrameOffset InFrame(const S& s, const Vec3& offset, const Vec3& third)
+{
+    return {offset, s.XAxis, s.YAxis, third};
+}
+
+[[nodiscard]] FrameOffset QuadricOffset(const Surface& surface, const Point2& uv)
+{
+    const double u = uv.X;
+    const double v = uv.Y;
+    if (const Sphere* sphere = surface.Target<Sphere>()) {
+        const Vec3 axis = Axis(*sphere);
+        return InFrame(*sphere,
+                       sphere->Radius * (std::cos(v) * Radial(*sphere, u) + std::sin(v) * axis),
+                       axis);
+    }
+    if (const Cylinder* cylinder = surface.Target<Cylinder>()) {
+        const Vec3 axis = Axis(*cylinder);
+        return InFrame(*cylinder, cylinder->Radius * Radial(*cylinder, u) + v * axis, axis);
+    }
+    const Ellipsoid& e = *surface.Target<Ellipsoid>();
+    const Vec3 axis = Axis(e);
+    return InFrame(e,
+                   std::cos(v) * ((e.A * std::cos(u)) * e.XAxis + (e.B * std::sin(u)) * e.YAxis) +
+                       (e.C * std::sin(v)) * axis,
+                   axis);
+}
+
+[[nodiscard]] FrameOffset OffsetOf(const Surface& surface, const Point2& uv)
+{
+    const double u = uv.X;
+    const double v = uv.Y;
+    if (const Plane* plane = surface.Target<Plane>()) {
+        return InFrame(*plane, u * plane->XAxis + v * plane->YAxis,
+                       Cross(plane->XAxis, plane->YAxis));
+    }
+    if (const Cone* cone = surface.Target<Cone>()) {
+        const Vec3 axis = Axis(*cone);
+        const double a = cone->SemiAngle;
+        return InFrame(
+            *cone, (cone->Radius + v * std::sin(a)) * Radial(*cone, u) + (v * std::cos(a)) * axis,
+            axis);
+    }
+    if (const Torus* torus = surface.Target<Torus>()) {
+        const Vec3 axis = Axis(*torus);
+        return InFrame(*torus,
+                       (torus->MajorRadius + torus->MinorRadius * std::cos(v)) * Radial(*torus, u) +
+                           (torus->MinorRadius * std::sin(v)) * axis,
+                       axis);
+    }
+    return QuadricOffset(surface, uv);
+}
+
+/// e_k x (S - origin) for a turn of the frame about its axis k.
+[[nodiscard]] Vec3 TurnPartial(const Surface& surface, const Point2& uv,
+                               const SurfaceComponent component)
+{
+    const FrameOffset f = OffsetOf(surface, uv);
+    return Turned(static_cast<int>(component) - static_cast<int>(SurfaceComponent::RotationX), f.X,
+                  f.Y, f.Third, f.Offset);
+}
+
+[[nodiscard]] Vec3 ShapePartial(const Surface& surface, const Point2& uv,
+                                SurfaceComponent component);
+
 /// dS/d(component) at fixed (u, v), per unit of the component: the origin
 /// moves every point alike; the radius moves a sphere's point along
 /// its unit normal and a cylinder's along its radial direction. Form these
@@ -434,6 +544,16 @@ template <typename S>
         component == SurfaceComponent::OriginZ) {
         return UnitAlong(static_cast<int>(component));
     }
+    if (IsRotation(component)) {
+        return TurnPartial(surface, uv, component);
+    }
+    return ShapePartial(surface, uv, component);
+}
+
+/// An analytic surface's partial in a radius, an angle or a semi-axis.
+[[nodiscard]] Vec3 ShapePartial(const Surface& surface, const Point2& uv,
+                                const SurfaceComponent component)
+{
     if (const Sphere* sphere = surface.Target<Sphere>()) {
         return std::cos(uv.Y) * Radial(*sphere, uv.X) + std::sin(uv.Y) * Axis(*sphere);
     }
@@ -460,7 +580,7 @@ template <typename S>
 {
     for (const SurfaceBinding& b : bindings) {
         ParameterQuantity quantity = ParameterQuantity::Length;
-        if (b.Component == SurfaceComponent::SemiAngle) {
+        if (b.Component == SurfaceComponent::SemiAngle || IsRotation(b.Component)) {
             quantity = ParameterQuantity::Angle;
         } else if (b.Component == SurfaceComponent::PoleWeight) {
             quantity = ParameterQuantity::Dimensionless;

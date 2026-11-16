@@ -1283,12 +1283,41 @@ ways, the classification shared with the curve–surface handlers
      split -> fail;
    }
 
+The plane handler adds a fifth outcome before it halves a piece
+(``IsolateContacts``, ``OfOrder`` in ``src/intersect/PlanarSpline.cpp``):
+a contact of order :math:`k \ge 3`. If every coefficient of :math:`g`'s
+:math:`k`-th differences has one strict sign, :math:`g^{(k)}` has it over
+the piece and its sub-pieces, so :math:`g^{(k-1)}` is strictly monotone. On
+each sub-piece the handler first tries to prove a lower derivative of one
+sign from its coefficients, which makes the piece monotone, convex or of a
+lower order. Otherwise it reads the signs of :math:`g^{(k-1)}` at the
+piece's ends: one strict sign at both ends means that sign throughout, and
+the piece has order :math:`k-1`. Only the piece holding the single zero of
+:math:`g^{(k-1)}` is halved. When both those ends are within rounding of
+zero (or at ``MaxDepth``) and no lower derivative can be signed, the piece
+is the contact's to rounding. :math:`g` has at most :math:`k` roots there
+(Rolle), and the piece is reported as one ``Tangential`` root with
+``Decided`` false, bracketed by the piece, never dropped. This is
+``Convex``'s argument carried up an order. A contact of order four, where
+:math:`g`, :math:`g'` and :math:`g''` all vanish, is followed down one
+chain of pieces. Before, every piece that rounding hid it in was halved
+until the search's budget ran out. The touch is placed to the rounding
+the contact allows: the fourth root of the coefficients' rounding
+relative to the curve, about :math:`2^{-13}` of the segment's parameter
+near the origin. ``tests/intersect/PlanarSplineOsculationTests.cpp`` uses
+two exact quartics:
+:math:`y = x^2 + (x/3)^4` against the parabola :math:`y = x^2`, and
+:math:`y = x^4` against the axis, the latter also :math:`3\cdot 2^{-40}`
+below it (a proved separation) and above it (two proved crossings at
+:math:`x = \pm g^{1/4}`). Both are run under exchange, reversal,
+translation, scaling by :math:`2^{\pm 10}` and a rational form.
+
 Unlike the curve–surface handlers, which fail on any root they cannot
 decide, the plane curve handlers report an undecided root with ``Decided``
 false, as the conic handlers do, and fail only on an unresolved one: a
-contact of higher order, or the spline lying along the other curve (a
-rational spline along the circle it draws fails so, never coming back
-empty). A hyperbola's other branch is dropped as in Algorithm C. A spline
+piece with no derivative of one sign (the spline lying along the other
+curve; a rational spline along the circle it draws fails so, never coming
+back empty) or a search past its budget. A hyperbola's other branch is dropped as in Algorithm C. A spline
 whose every pole lies exactly on a line lies along it: its overlap is
 reported when the spline is clamped, is requested over its whole domain,
 runs monotonically along the line
@@ -1303,7 +1332,17 @@ Algorithm K: two B-splines by subdivision with Krawczyk's test
 
 ``SplineSpline2d`` (``src/intersect/PlanarSplinePair.cpp``) solves
 :math:`F(s, t) = a(s) - b(t) = 0` over pairs of pieces of the two splines'
-enclosed Bézier segments, halving both pieces of a pair until it is
+enclosed Bézier segments, halving both pieces of a pair until it is apart
+or settled, as below. Both splines are first moved by one vector, the middle
+of their poles' box, when every pole's move is exact in doubles (checked by
+Knuth's TwoSum, whose error term is zero exactly then; ``Centred``): the
+translation keeps :math:`F` and both parameters, and the enclosures'
+rounding, relative to the size of the coordinates, then measures against the
+size of the curves. Without it a pair far from the origin, :math:`4\cdot
+10^5` away and a few units across, is enclosed only to about
+:math:`10^{-10}`, and two arcs :math:`3\cdot 2^{-34}` apart, or a crossing,
+could not be settled. When some move would round, the splines are searched
+where they are. Points are placed on the input splines. The two outcomes:
 
 - **apart**: the boxes of the pieces' poles are disjoint, or the hulls of
   both pieces' distances from either piece's chord are, a fat line in the
@@ -1335,16 +1374,88 @@ every side, so that a root on the end of a piece, where the halving put
 it, is proved from either side. The inflation reaches past a segment's ends
 into the segment's polynomial continued: a root whose bracket lies beyond
 the segment is not the segment's and is dropped (the neighbouring segment
-finds it, or it is no point of the curve); one whose bracket straddles a
-segment's end is reported with ``Decided`` false; roots proved from
-overlapping boxes are one. Every proved crossing is ``Decided``. A pair
-that is neither apart nor settled when its pieces can no longer be halved,
-or a search past :math:`2^{16}` pairs, fails with ``IntersectionFailed``:
-a tangency of two B-splines (where :math:`J` is singular and no box ever
-satisfies the test), an overlap, or a crossing too nearly tangential to
-separate in doubles. Two identical splines coincide, and their overlap is
-the requested domains' common stretch on the identity map; their crossings
-with themselves are not reported then.
+finds it, or it is no point of the curve).
+
+A bracket that straddles a segment's end, a crossing at or within rounding
+of an interior knot of either spline, is proved again with each spline
+taken whole, in the curves' own parameters (``AcrossKnots``): :math:`F` at
+the box's middle from the segment holding it, and :math:`J(X)` the hull of
+every segment's slope over its part of the box, the end segments continued
+past the spline's ends. An interior knot is repeated at most :math:`p`
+times, so the splines are continuous and :math:`F` is continuous and
+piecewise polynomial; then
+:math:`F(x) - F(m) = \int_0^1 J\bigl(m + \tau(x - m)\bigr)\,d\tau\,(x - m)`
+lies in :math:`J(X)(x - m)`, which is all Krawczyk's existence and
+uniqueness argument needs, so the test is as sound across a knot, a corner
+included, as inside a segment. The box tried first is the pair's own; if
+that fails, boxes about the segment's bracket, an eighth as wide each time
+while wider than the bracket. A bracket so proved and inside both splines
+is ``Decided``; one across a spline's own end stays undecided (past it the
+end segment continued was proved, not the spline), and a root no box
+proves is reported with ``Decided`` false, never dropped.
+
+Two brackets that meet on both curves are one root only *by proof*: when
+one lies in the box the other was proved the only root of the curves' own
+:math:`F` in (a segment's box restricted to the segment, rounded inward;
+a whole-spline box restricted to the splines' domains). That merges the
+brackets of one crossing found from either side of a knot, and absorbs an
+unproved bracket of a continued segment, which if it is a root of the
+curves at all is the proved one. Brackets that meet otherwise are reported
+as their hull, undecided; equal parameters are never an argument. Every
+proved crossing is ``Decided``.
+
+**Touches** (``Touches``). At a tangency :math:`J` is singular, and no box
+ever passes Krawczyk's test. So a pair that is neither apart nor settled
+is tried as two graphs before it is halved, under three conditions:
+- both pieces' :math:`x = u\cdot(P - O)`, along the chord :math:`u` of the
+  first, are proved strictly monotone;
+- :math:`h'` is *not* proved of one sign over their common :math:`x` (if it
+  were, the pair could hold only a transverse crossing, which Krawczyk's
+  test settles as the pieces are halved);
+- some :math:`h^{(k)}`, :math:`k \in [2, 4]`, is proved of one sign.
+
+Here :math:`h(x) = y_a(x) - y_b(x)` is the difference of the pieces'
+heights :math:`y = n\cdot(P - O)`, whose roots are the pair's meetings. Its
+derivatives are enclosed over a range of :math:`x` from each piece's jets
+in its own parameter: the homogeneous point's derivatives by de Casteljau
+on repeated hodographs, the quotient by :math:`W` and the repeated
+:math:`d/dx = (1/x')\,d/ds` by Leibniz's rule. Each piece's parameters over
+the range come from bisection on its monotone :math:`x`, rounded outward.
+
+The range is then followed as the plane handler's ``OfOrder`` follows a
+spline against a conic (*Algorithm S*):
+- :math:`h` of one sign: no meeting;
+- a lower derivative of one sign: the range has that order, and
+  :math:`h'` of one sign makes :math:`h` monotone. Opposite strict signs
+  at the ends are one crossing, bisected and ``Decided``, unique in the
+  range;
+- otherwise :math:`h^{(k-1)}`'s end signs: one strict sign is that sign
+  throughout; else the range holding its single zero is halved;
+- both ends within rounding, with nothing lower of one sign: :math:`h` has
+  at most :math:`k` roots there, and the range is reported as one
+  ``Tangential`` meeting with ``Decided`` false, bracketed on both curves.
+
+The attempt stands only if every undecided crossing it found is joined to
+a touch by brackets that meet on both curves; Distinct then merges them
+into the touch's rounding. Otherwise it is discarded and the pair is halved
+as before. A tangency of two B-splines of order two to four is so reported,
+never dropped; its order and existence are not decided.
+
+**One curve in two knot vectors** (``SameCurve``). Two splines of one
+degree and domain are refined to each other's knots by Boehm's insertion
+done exactly in doubles: every sum is checked by TwoSum, every product and
+ratio by its fused residual. If the knot vectors and homogeneous poles
+then agree, the two are one spline on one parameter, and they overlap on
+the identity map over the requested domains' common stretch, as identical
+splines do; their crossings with themselves are not reported. If any step
+would round, nothing is proved and the pair is searched.
+
+A pair that is none of these when its pieces can no longer be halved, or a
+search past :math:`2^{16}` pairs, fails with ``IntersectionFailed``:
+- an overlap other than these, including a spline along a different
+  parameterization of itself, or along a conic;
+- a touch with no derivative of order up to four of one sign;
+- a crossing too nearly tangential to separate in doubles.
 
 What is decided
 ~~~~~~~~~~~~~~~
@@ -1365,18 +1476,31 @@ What is decided
      - a root proved a single simple crossing
    * - two B-splines
      - a crossing proved single by Krawczyk's test, its bracket inside both
-       segments
+       segments, or, at or within rounding of an interior knot of either or
+       both splines, proved single with the splines taken whole and its
+       bracket inside both splines, or a crossing beside a touch proved
+       single by the signs of the graphs' height difference; a crossing at
+       a spline's own end, one no box proves, and every touch are reported
+       undecided
 
 A point whose parameter on a conic lies within rounding of a requested
 domain's end may fall on either side of it; a B-spline root whose bracket
 reaches past the requested domain is kept, clamped into it, undecided. The
-tests are ``tests/intersect/PlanarTests.cpp`` and
-``tests/intersect/PlanarPairTests.cpp``: exact configurations and their
-neighbours a rounding or :math:`3\cdot 2^{-40}` either side, tangencies of
-order two and four, coincidences, rational arcs, exchange and reversal of
-the curves, and properties on random geometry (every sign change of a
-conic's equation along a random cubic has a point; random conic pairs
-agree with themselves exchanged).
+tests are ``tests/intersect/PlanarTests.cpp``,
+``tests/intersect/PlanarPairTests.cpp`` and
+``tests/intersect/PlanarSplineKnotTests.cpp``: exact configurations and
+their neighbours a rounding or :math:`3\cdot 2^{-40}` either side,
+tangencies of order two and four, coincidences, rational arcs, exchange and
+reversal of the curves, and properties on random geometry (every sign
+change of a conic's equation along a random cubic has a point; random conic
+pairs agree with themselves exchanged). The knot tests take two cubics
+crossing at both their interior knots, polynomial and rational, a cubic
+across a polyline's vertex at its own knot, a corner (a knot of full
+multiplicity), and crossings a rounding and :math:`2^{-40}` either side of
+a knot, with closed-form answers and an independent de Boor oracle in long
+double, under exchange, reversal, knot insertion (the crossing's knot
+raised to multiplicity three included), translation, a quarter turn and
+scaling by :math:`2^{\pm 20}` (ADR-0053 MR-01 to MR-04).
 
 Certificates
 ------------

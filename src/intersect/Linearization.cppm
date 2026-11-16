@@ -76,8 +76,10 @@ struct LineBinding {
 
 /// What a design parameter moves on a circle or an ellipse: a coordinate of
 /// its centre; a circle's Radius; an ellipse's MajorRadius, along its XAxis,
-/// and MinorRadius, along its YAxis; each a Length. The frame is fixed, as
-/// a surface's is.
+/// and MinorRadius, along its YAxis; each a Length. Or a component of the
+/// infinitesimal rotation w of its frame about its centre, an Angle, along
+/// the current XAxis (RotationX), YAxis (RotationY) and normal XAxis x
+/// YAxis (RotationZ): the point at fixed angle moves by w x (C - Center).
 enum class ConicComponent : std::uint8_t {
     CenterX,
     CenterY,
@@ -85,6 +87,9 @@ enum class ConicComponent : std::uint8_t {
     Radius,
     MajorRadius,
     MinorRadius,
+    RotationX,
+    RotationY,
+    RotationZ,
 };
 
 /// A design parameter bound to one defining value of a circle or an
@@ -101,8 +106,14 @@ struct ConicBinding {
 /// SemiAxisC, along its XAxis, YAxis and axis; each a Length; or a cone's
 /// SemiAngle, an Angle. A B-spline surface's poles move instead: a
 /// coordinate of the binding's Pole (PoleX, PoleY, PoleZ), a Length, or its
-/// weight (PoleWeight), Dimensionless, as PoleVelocity moves them. The
-/// frame is fixed: turning a surface is a later binding.
+/// weight (PoleWeight), Dimensionless, as PoleVelocity moves them. An
+/// analytic surface's frame turns by an infinitesimal rotation w about its
+/// origin, each component an Angle along the current frame's XAxis
+/// (RotationX), YAxis (RotationY) and third axis (RotationZ: the axis of a
+/// cylinder, a cone, a sphere, a torus or an ellipsoid, a plane's XAxis x
+/// YAxis): the point at fixed (u, v) moves by w x (S - origin). A turn about
+/// a surface's own symmetry leaves the surface in place and moves only the
+/// parameters of its points.
 enum class SurfaceComponent : std::uint8_t {
     OriginX,
     OriginY,
@@ -117,6 +128,9 @@ enum class SurfaceComponent : std::uint8_t {
     PoleY,
     PoleZ,
     PoleWeight,
+    RotationX,
+    RotationY,
+    RotationZ,
 };
 
 /// A design parameter bound to one defining value of a surface. Pole is
@@ -312,10 +326,15 @@ IntersectVjp(const Surface& a, std::span<const SurfaceBinding> bindingsA, const 
              const SensitivityContext& sensitivity);
 
 /// What a design parameter moves on a plane curve: a line's origin and
-/// direction coordinates; a circle's or an ellipse's centre coordinates, a
-/// circle's Radius, an ellipse's MajorRadius and MinorRadius; a B-spline's
-/// pole coordinates (PoleX, PoleY) and weight (PoleWeight) of the binding's
-/// Pole. Each a Length but a weight, Dimensionless; frames fixed.
+/// direction coordinates; a circle's, an ellipse's or a hyperbola's centre
+/// coordinates, a circle's Radius, an ellipse's or a hyperbola's MajorRadius
+/// and MinorRadius; a parabola's vertex coordinates (CenterX, CenterY) and
+/// FocalLength; a B-spline's pole coordinates (PoleX, PoleY) and weight
+/// (PoleWeight) of the binding's Pole. Each a Length but a weight,
+/// Dimensionless. A conic's frame (a circle's, an ellipse's, a hyperbola's,
+/// a parabola's) also turns about its centre or vertex by Rotation, an
+/// Angle, counter-clockwise in the plane: the point at fixed parameter moves
+/// by w (-dy, dx) for its offset d = C - centre.
 enum class PlaneCurveComponent : std::uint8_t {
     OriginX,
     OriginY,
@@ -329,6 +348,8 @@ enum class PlaneCurveComponent : std::uint8_t {
     PoleX,
     PoleY,
     PoleWeight,
+    FocalLength,
+    Rotation,
 };
 
 /// A design parameter bound to one defining value of a plane curve. Pole
@@ -371,8 +392,8 @@ struct PlanarLinearization {
 /// The forward product of Intersect(a, b) for plane curves, each moved by
 /// its bindings: for each point of `intersection`, in its order,
 /// PlanarPointValues values. An overlap makes the result Nondifferentiable.
-/// NotSupported (a status) when either curve is a hyperbola or a parabola,
-/// which bind nothing yet. InvalidInput for a binding whose parameter is not
+/// NotSupported (a status) for a curve of a kind no binding reaches, which
+/// no Curve2d of the built-in kinds is. InvalidInput for a binding whose parameter is not
 /// of the context's set or of the wrong quantity, or that moves a value the
 /// curve does not have (a pole past the last included); for a point off a
 /// curve or off the current geometry; or for a seed that was never set.

@@ -33,9 +33,11 @@ import :Linearization;
 /// B(t) = 0, two equations in two unknowns, solved by Cramer's rule forward
 /// and transposed for the reverse product. Each curve's side gives its point,
 /// its tangent and the velocity of its point at fixed parameter for each
-/// binding; the B-spline's is the curve library's PoleVelocity on the curve
-/// lifted into the plane z = 0, where it is the same curve. Two space curves
-/// have no products: their meetings are events (below).
+/// binding (a conic turned about its centre by Rotation, the
+/// parabola's vertex moved by the centre components); the B-spline's is the
+/// curve library's PoleVelocity on the curve lifted into the plane z = 0,
+/// where it is the same curve. Two space curves have no products: their
+/// meetings are events (below).
 
 namespace Stereon {
 
@@ -83,6 +85,16 @@ namespace {
     }
 }
 
+/// The quantity of the parameter moving a component.
+[[nodiscard]] ParameterQuantity QuantityOf(const PlaneCurveComponent c)
+{
+    if (c == PlaneCurveComponent::PoleWeight) {
+        return ParameterQuantity::Dimensionless;
+    }
+    return c == PlaneCurveComponent::Rotation ? ParameterQuantity::Angle
+                                              : ParameterQuantity::Length;
+}
+
 /// One curve's side of the system.
 struct PlaneSide {
     const Curve2d& Geometry;
@@ -102,24 +114,48 @@ struct PlaneSide {
     [[nodiscard]] bool IsSupported() const
     {
         return Geometry.Target<Line2d>() != nullptr || Geometry.Target<Circle2d>() != nullptr ||
-               Geometry.Target<Ellipse2d>() != nullptr || Spline.has_value();
+               Geometry.Target<Ellipse2d>() != nullptr ||
+               Geometry.Target<Hyperbola2d>() != nullptr ||
+               Geometry.Target<Parabola2d>() != nullptr || Spline.has_value();
+    }
+
+    /// A circle, an ellipse, a hyperbola or a parabola: a curve with a frame.
+    [[nodiscard]] bool IsConic() const
+    {
+        return Geometry.Target<Circle2d>() != nullptr || Geometry.Target<Ellipse2d>() != nullptr ||
+               Geometry.Target<Hyperbola2d>() != nullptr ||
+               Geometry.Target<Parabola2d>() != nullptr;
     }
 
     [[nodiscard]] bool Has(const PlaneCurveBinding& b) const
     {
         using C = PlaneCurveComponent;
+        if (b.Component == C::Rotation) {
+            return IsConic();
+        }
         if (Geometry.Target<Line2d>() != nullptr) {
             return Among(b.Component, C::OriginX, C::DirectionY);
         }
-        if (Geometry.Target<Circle2d>() != nullptr) {
-            return Among(b.Component, C::CenterX, C::Radius);
-        }
-        if (Geometry.Target<Ellipse2d>() != nullptr) {
-            return Among(b.Component, C::CenterX, C::CenterY) ||
-                   Among(b.Component, C::MajorRadius, C::MinorRadius);
+        if (IsConic()) {
+            return ConicHas(b.Component);
         }
         return Spline && Among(b.Component, C::PoleX, C::PoleWeight) &&
                b.Pole < Spline->Poles.size();
+    }
+
+    /// The defining values of a conic but its frame's turn.
+    [[nodiscard]] bool ConicHas(const PlaneCurveComponent component) const
+    {
+        using C = PlaneCurveComponent;
+        if (Geometry.Target<Circle2d>() != nullptr) {
+            return Among(component, C::CenterX, C::Radius);
+        }
+        if (Geometry.Target<Parabola2d>() != nullptr) {
+            // The vertex is moved by the centre's components.
+            return Among(component, C::CenterX, C::CenterY) || component == C::FocalLength;
+        }
+        return Among(component, C::CenterX, C::CenterY) ||
+               Among(component, C::MajorRadius, C::MinorRadius);
     }
 
     [[nodiscard]] Point2 At(const double t) const { return Eval(Geometry, t); }
@@ -144,12 +180,51 @@ struct PlaneSide {
         if (b.Component == C::CenterX || b.Component == C::CenterY) {
             return Unit2(static_cast<int>(b.Component) - static_cast<int>(C::CenterX));
         }
+        if (b.Component == C::Rotation) {
+            // w x d for w along +z: the offset turned a quarter, counter-clockwise.
+            const Vec2 d = ConicOffset(t);
+            return {-d.Y, d.X};
+        }
+        return ConicShapePartial(b.Component, t);
+    }
+
+    /// C(t) minus a conic's centre (a parabola's vertex), formed in its frame.
+    [[nodiscard]] Vec2 ConicOffset(const double t) const
+    {
+        if (const Circle2d* circle = Geometry.Target<Circle2d>()) {
+            return circle->Radius * (std::cos(t) * circle->XAxis + std::sin(t) * circle->YAxis);
+        }
+        if (const Hyperbola2d* h = Geometry.Target<Hyperbola2d>()) {
+            return (h->MajorRadius * std::cosh(t)) * h->XAxis +
+                   (h->MinorRadius * std::sinh(t)) * h->YAxis;
+        }
+        if (const Parabola2d* p = Geometry.Target<Parabola2d>()) {
+            return (t * t / (4.0 * p->FocalLength)) * p->XAxis + t * p->YAxis;
+        }
+        const Ellipse2d& e = *Geometry.Target<Ellipse2d>();
+        return (e.MajorRadius * std::cos(t)) * e.XAxis + (e.MinorRadius * std::sin(t)) * e.YAxis;
+    }
+
+    /// A conic's partial in a radius or its focal length, at fixed t.
+    [[nodiscard]] Vec2 ConicShapePartial(const PlaneCurveComponent component, const double t) const
+    {
+        using C = PlaneCurveComponent;
         if (const Circle2d* circle = Geometry.Target<Circle2d>()) {
             return std::cos(t) * circle->XAxis + std::sin(t) * circle->YAxis;
         }
+        if (const Hyperbola2d* hyperbola = Geometry.Target<Hyperbola2d>()) {
+            // C + a cosh t X + b sinh t Y.
+            return component == C::MajorRadius ? std::cosh(t) * hyperbola->XAxis
+                                               : std::sinh(t) * hyperbola->YAxis;
+        }
+        if (const Parabola2d* parabola = Geometry.Target<Parabola2d>()) {
+            // V + t^2 / (4 f) X + t Y: d/df = -t^2 / (4 f^2) X.
+            const double f = parabola->FocalLength;
+            return (-(t * t) / (4.0 * f * f)) * parabola->XAxis;
+        }
         const Ellipse2d& ellipse = *Geometry.Target<Ellipse2d>();
-        return b.Component == C::MajorRadius ? std::cos(t) * ellipse.XAxis
-                                             : std::sin(t) * ellipse.YAxis;
+        return component == C::MajorRadius ? std::cos(t) * ellipse.XAxis
+                                           : std::sin(t) * ellipse.YAxis;
     }
 
     [[nodiscard]] Result<void> Check(const ParameterSet& set, const std::string_view where) const
@@ -159,21 +234,21 @@ struct PlaneSide {
                 return Fail(ErrorCode::InvalidInput,
                             std::string(where) + ": a binding's parameter is not of the set");
             }
-            const ParameterQuantity wanted = b.Component == PlaneCurveComponent::PoleWeight
-                                                 ? ParameterQuantity::Dimensionless
-                                                 : ParameterQuantity::Length;
-            if (b.Parameter.GetQuantity() != wanted) {
+            if (b.Parameter.GetQuantity() != QuantityOf(b.Component)) {
                 return Fail(ErrorCode::InvalidInput,
                             std::string(where) +
-                                ": a coordinate or a radius is moved by a length and a weight by "
-                                "a dimensionless parameter");
+                                ": a coordinate, a radius or a focal length is moved by a length, "
+                                "a weight by a dimensionless parameter and a rotation by an "
+                                "angle");
             }
             if (!Has(b)) {
                 return Fail(ErrorCode::InvalidInput,
                             std::string(where) +
                                 ": a binding of a value the curve does not have (a line's "
                                 "origin and direction, a circle's centre and radius, an "
-                                "ellipse's centre and radii, a B-spline's poles)");
+                                "ellipse's or a hyperbola's centre and radii, a parabola's "
+                                "vertex (CenterX, CenterY) and focal length, a conic's "
+                                "rotation, a B-spline's poles)");
             }
         }
         return {};
@@ -342,8 +417,8 @@ struct PlanarAnalysis {
 {
     return SensitivityResult::Without(DerivativeStatus::NotSupported,
                                       std::string(where) +
-                                          ": a hyperbola or a parabola binds nothing yet; "
-                                          "lines, circles, ellipses and B-splines do");
+                                          ": a plane curve of a kind no binding reaches; "
+                                          "lines, conics and B-splines do");
 }
 
 /// The velocity of a side's point at fixed parameter, for the seed.
