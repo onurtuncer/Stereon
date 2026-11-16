@@ -61,3 +61,13 @@ Each fault was applied alone to a working tree with no committed change to `src/
 - **MR-03, scale.** The fault: the curve pair search uses the default resolution instead of the Context's. Only the new MR-03 test kills it, in both runs, in every family the pair search handles. The existing corpus test, MR-01 and MR-04 all pass with it, because they run at scale 1. The relation catches a fault the plain corpus misses.
 
 No MR-04-specific fault site was found. `LineLine` is exact and the conic pieces read the frames as given, so no sampled fault there would affect only a changed chart. MR-04's evidence is its green run and the kills above, which it shares: it runs both orders, so it also kills the MR-02 fault.
+
+#### Audit hardening, 2026-11-12
+
+Both the original corpus runner and the transformed runners validate every
+returned point against both evaluated supports and parameter domains, with the
+transformed Context resolution and an explicit floating-point allowance.
+Non-finite and out-of-domain parameters are rejected before evaluation. A
+negative-control test rejects corrupted positions, parameters and NaNs.
+The independent local closest-approach claim remains; global completeness and
+rational curves remain outside this corpus's declared domain.
