@@ -11,7 +11,7 @@ on:
       - 'src/surface/**'
       - 'tests/**'
       - 'tools/mutate.py'
-      - 'tools/mutation/intersection-backfill.json'
+      - 'tools/mutation/intersection-backfill*.json'
       - 'tools/check_metamorphic.py'
       - 'tools/test_mutation_evidence.py'
       - '.github/workflows/metamorphic.yml'
@@ -46,7 +46,9 @@ jobs:
           python3 tools/test_mutation_evidence.py
           python3 tools/check_metamorphic.py
       - name: Green baseline and red historical faults
-        run: python3 tools/mutate.py --catalogue tools/mutation/intersection-backfill.json --work build/metamorphic
+        # Every campaign catalogue against one baseline build (check_metamorphic.py
+        # keeps fault IDs unique across them).
+        run: python3 tools/mutate.py --catalogue tools/mutation/intersection-backfill*.json --work build/metamorphic
       - uses: actions/upload-artifact@v7
         if: always()
         with:
