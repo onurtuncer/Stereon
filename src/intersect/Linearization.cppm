@@ -312,10 +312,12 @@ IntersectVjp(const Surface& a, std::span<const SurfaceBinding> bindingsA, const 
              const SensitivityContext& sensitivity);
 
 /// What a design parameter moves on a plane curve: a line's origin and
-/// direction coordinates; a circle's or an ellipse's centre coordinates, a
-/// circle's Radius, an ellipse's MajorRadius and MinorRadius; a B-spline's
-/// pole coordinates (PoleX, PoleY) and weight (PoleWeight) of the binding's
-/// Pole. Each a Length but a weight, Dimensionless; frames fixed.
+/// direction coordinates; a circle's, an ellipse's or a hyperbola's centre
+/// coordinates, a circle's Radius, an ellipse's or a hyperbola's MajorRadius
+/// and MinorRadius; a parabola's vertex coordinates (CenterX, CenterY) and
+/// FocalLength; a B-spline's pole coordinates (PoleX, PoleY) and weight
+/// (PoleWeight) of the binding's Pole. Each a Length but a weight,
+/// Dimensionless; frames fixed.
 enum class PlaneCurveComponent : std::uint8_t {
     OriginX,
     OriginY,
@@ -329,6 +331,7 @@ enum class PlaneCurveComponent : std::uint8_t {
     PoleX,
     PoleY,
     PoleWeight,
+    FocalLength,
 };
 
 /// A design parameter bound to one defining value of a plane curve. Pole
@@ -371,8 +374,8 @@ struct PlanarLinearization {
 /// The forward product of Intersect(a, b) for plane curves, each moved by
 /// its bindings: for each point of `intersection`, in its order,
 /// PlanarPointValues values. An overlap makes the result Nondifferentiable.
-/// NotSupported (a status) when either curve is a hyperbola or a parabola,
-/// which bind nothing yet. InvalidInput for a binding whose parameter is not
+/// NotSupported (a status) for a curve of a kind no binding reaches, which
+/// no Curve2d of the built-in kinds is. InvalidInput for a binding whose parameter is not
 /// of the context's set or of the wrong quantity, or that moves a value the
 /// curve does not have (a pole past the last included); for a point off a
 /// curve or off the current geometry; or for a seed that was never set.
