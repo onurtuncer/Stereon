@@ -380,16 +380,59 @@ TEST_CASE("reversing the curve keeps every point", "[intersect][adversarial][pro
         RC_ASSERT(forward->Points.size() == backward->Points.size());
         RC_ASSERT(forward->Overlaps.size() == backward->Overlaps.size());
         const std::size_t n = forward->Points.size();
-        for (std::size_t i = 0; i < n; ++i) {
-            // The points come in the other order along the reversed curve.
-            const CurveSurfacePoint& f = forward->Points[i];
-            const CurveSurfacePoint& g = backward->Points[n - 1 - i];
-            RC_ASSERT(f.Contact == g.Contact);
-            RC_ASSERT(Distance(f.Position, g.Position) <=
-                      Rounding(ScaleAt(p.C, f.Parameter, f.Position)) +
-                          Rounding(ScaleAt(r, g.Parameter, g.Position)));
+        // The points come in the other order along the reversed curve. A
+        // closed conic's reversal maps t to 2 pi - t, so its seam stays put:
+        // a crossing there keeps its place in both lists, and the order is
+        // reversed only up to a turn of the list (CI seed
+        // 4035963351361492909, an ellipse cut through its centre on its seam
+        // and at t = pi).
+        const bool closed = p.CurveType == CurveKind::Circle || p.CurveType == CurveKind::Ellipse;
+        const auto matchesWithShift = [&](const std::size_t shift) {
+            for (std::size_t i = 0; i < n; ++i) {
+                const CurveSurfacePoint& f = forward->Points[i];
+                const CurveSurfacePoint& g = backward->Points[(2 * n - 1 - i + shift) % n];
+                if (f.Contact != g.Contact ||
+                    Distance(f.Position, g.Position) >
+                        Rounding(ScaleAt(p.C, f.Parameter, f.Position)) +
+                            Rounding(ScaleAt(r, g.Parameter, g.Position))) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        bool matched = n == 0 || matchesWithShift(0);
+        for (std::size_t shift = 1; closed && !matched && shift < n; ++shift) {
+            matched = matchesWithShift(shift);
         }
+        RC_ASSERT(matched);
     });
+}
+
+TEST_CASE("reversing a closed conic keeps a crossing on its seam in place",
+          "[intersect][adversarial][regression]")
+{
+    // The shrunk CI counterexample (seed 4035963351361492909): the plane
+    // y = 2.25 cuts the ellipse through its centre, on its seam and at
+    // t = pi. Eval(Reversed(e), t) == Eval(e, 2 pi - t) fixes the seam and
+    // pi, so both curves list the same two points in the same order (the
+    // seam crossing at the domain's end, 2 pi), not in opposite orders.
+    const Point3 o{-3.0, 2.25, -3.0};
+    const Ellipse e{o, 0.625, 0.5, ex, ey};
+    const Surface plane{Plane{o, ez, ex}};
+    const auto forward = Meet(Curve{e}, plane);
+    const auto backward = Meet(Curve{Reversed(e)}, plane);
+    REQUIRE(forward.has_value());
+    REQUIRE(backward.has_value());
+    REQUIRE(forward->Points.size() == 2);
+    REQUIRE(backward->Points.size() == 2);
+    const Point3 opposite{-3.625, 2.25, -3.0};
+    const Point3 seam{-2.375, 2.25, -3.0};
+    for (const auto* result : {&*forward, &*backward}) {
+        CHECK(Distance(result->Points[0].Position, opposite) <= 1e-12);
+        CHECK(std::abs(result->Points[0].Parameter - pi) <= 1e-12);
+        CHECK(Distance(result->Points[1].Position, seam) <= 1e-12);
+        CHECK(std::abs(result->Points[1].Parameter - 2.0 * pi) <= 1e-12);
+    }
 }
 
 TEST_CASE("a line's origin moved far along it shifts its parameters only",
