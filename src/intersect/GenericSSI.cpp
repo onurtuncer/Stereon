@@ -351,24 +351,66 @@ void AddSeed(std::vector<Seed>& seeds, const Seed& seed, const double join)
     return EdgeRoot(edge, along, other, theirs);
 }
 
+/// How often a piece of an edge is halved while its root is not settled.
+constexpr int EdgeHalvings = 8;
+
+/// One edge of a pair's carrier patch: the patch, or a piece of it along
+/// the edge, which of its two edges across, and the edge's fixed parameter.
+struct EdgePiece {
+    const Patch& Carrier;
+    bool AlongU;
+    bool Upper;
+    double Fixed;
+    int Depth;
+};
+
+/// The roots on a piece of an edge against the other patch, the piece
+/// halved along the edge while Krawczyk's operator settles nothing. A root
+/// just outside the other patch's cell, nearer than the cell is wide but
+/// beyond the rounding it reaches over, leaves the operator on the whole
+/// edge undecided, its image meeting the box without lying in it; on a
+/// narrower piece the image narrows about the root and leaves the box, and
+/// a root inside is isolated. False when a piece is still undecided at the
+/// deepest halving (SSI-translated-boundary: two cuts of the two surfaces
+/// within the tolerance of each other in space where a branch crosses
+/// them).
+[[nodiscard]] bool RootsOnPiece(const PairView& v, const bool carrierIsA, const EdgePiece& e,
+                                std::vector<Seed>& seeds)
+{
+    const Patch& other = carrierIsA ? v.Pair.B : v.Pair.A;
+    const Hulls& theirs = carrierIsA ? v.OnB : v.OnA;
+    const Edge edge{e.Carrier, e.AlongU, e.Fixed};
+    const Isolated<3> root =
+        RootOnEdge(edge, EdgeLine(e.Carrier, e.AlongU, e.Upper), HullsOf(e.Carrier), other, theirs);
+    if (root.Outcome == Isolation::Unique) {
+        AddSeed(seeds, SeedOfRoot(edge, root, other, carrierIsA), v.Join);
+    }
+    if (root.Outcome != Isolation::Unsettled) {
+        return true;
+    }
+    const auto halves = e.Depth < EdgeHalvings
+                            ? Split(e.Carrier, e.AlongU, Midpoint(StretchOf(e.Carrier, e.AlongU)))
+                            : std::nullopt;
+    if (!halves) {
+        return false;
+    }
+    const auto piece = [&](const Patch& half) {
+        return EdgePiece{half, e.AlongU, e.Upper, e.Fixed, e.Depth + 1};
+    };
+    return RootsOnPiece(v, carrierIsA, piece(halves->first), seeds) &&
+           RootsOnPiece(v, carrierIsA, piece(halves->second), seeds);
+}
+
 [[nodiscard]] bool EdgesOfCarrier(const PairView& v, const bool carrierIsA,
                                   std::vector<Seed>& seeds)
 {
     const Patch& carrier = carrierIsA ? v.Pair.A : v.Pair.B;
-    const Patch& other = carrierIsA ? v.Pair.B : v.Pair.A;
-    const Hulls& own = carrierIsA ? v.OnA : v.OnB;
-    const Hulls& theirs = carrierIsA ? v.OnB : v.OnA;
     for (const bool alongU : {true, false}) {
         const Interval across = StretchOf(carrier, !alongU);
         for (const bool upper : {false, true}) {
-            const Edge edge{carrier, alongU, upper ? across.GetUpper() : across.GetLower()};
-            const Isolated<3> root =
-                RootOnEdge(edge, EdgeLine(carrier, alongU, upper), own, other, theirs);
-            if (root.Outcome == Isolation::Unsettled) {
+            const double fixed = upper ? across.GetUpper() : across.GetLower();
+            if (!RootsOnPiece(v, carrierIsA, {carrier, alongU, upper, fixed, 0}, seeds)) {
                 return false;
-            }
-            if (root.Outcome == Isolation::Unique) {
-                AddSeed(seeds, SeedOfRoot(edge, root, other, carrierIsA), v.Join);
             }
         }
     }
@@ -1777,6 +1819,96 @@ Assembled(const Findings& found, const Surface& a, const Box2& domainA, const Su
     return result;
 }
 
+// --- Searching about the origin ----------------------------------------------
+
+/// Whether a - b is a double exactly: TwoSum's error term (Knuth) is zero.
+[[nodiscard]] bool ExactDifference(const double a, const double b)
+{
+    const double s = a - b;
+    const double bb = s - a;
+    return std::isfinite(s) && (a - (s - bb)) + (-b - bb) == 0.0;
+}
+
+/// The coordinate a pole's i-th coordinate would move by.
+[[nodiscard]] double Coordinate(const Point3& p, const std::size_t i)
+{
+    return i == 0 ? p.X : (i == 1 ? p.Y : p.Z);
+}
+
+/// Whether every pole of both surfaces moves by -by along axis i exactly.
+[[nodiscard]] bool MovesExactly(const BSplineSurface& a, const BSplineSurface& b,
+                                const std::size_t i, const double by)
+{
+    const auto exact = [&](const Point3& p) { return ExactDifference(Coordinate(p, i), by); };
+    return std::ranges::all_of(a.Poles, exact) && std::ranges::all_of(b.Poles, exact);
+}
+
+/// The shift that brings both nets about the origin: along each axis the
+/// middle of their boxes, where moving every pole by it is exact (Sterbenz's
+/// lemma makes it so for coordinates within a factor of two of it), else
+/// nothing along that axis.
+[[nodiscard]] Vec3 ShiftOf(const BSplineSurface& sa, const BSplineSurface& sb)
+{
+    const Bounds a = NetBounds(sa);
+    const Bounds b = NetBounds(sb);
+    std::array<double, 3> shift{};
+    for (std::size_t i = 0; i < shift.size(); ++i) {
+        const double middle = 0.5 * std::min(a[i].GetLower(), b[i].GetLower()) +
+                              0.5 * std::max(a[i].GetUpper(), b[i].GetUpper());
+        shift[i] = std::isfinite(middle) && MovesExactly(sa, sb, i, middle) ? middle : 0.0;
+    }
+    return {shift[0], shift[1], shift[2]};
+}
+
+/// The surface moved by -shift, every pole exactly (ShiftOf): the same
+/// surface in other coordinates, so that every proof about it holds for the
+/// input. The search's enclosures widen with the coordinates' magnitude,
+/// while Krawczyk's acceptance of a root is measured in parameters, so far
+/// from the origin a root's box could fail to narrow enough to be accepted
+/// (SSI-translated-boundary).
+[[nodiscard]] BSplineSurface Moved(BSplineSurface s, const Vec3& shift)
+{
+    for (Point3& pole : s.Poles) {
+        pole = {pole.X - shift.X, pole.Y - shift.Y, pole.Z - shift.Z};
+    }
+    return s;
+}
+
+/// Positions found about the origin, moved back to the input's place. Only
+/// the seeds' positions move; parameters are the input's, and marching and
+/// certification evaluate the input surfaces.
+void MovedBack(Findings& found, const Vec3& shift)
+{
+    const auto back = [&](Point3& p) { p = {p.X + shift.X, p.Y + shift.Y, p.Z + shift.Z}; };
+    for (Arc& arc : found.Arcs) {
+        back(arc.From.Position);
+        back(arc.To.Position);
+    }
+    for (IntersectionPoint& touch : found.Touches) {
+        back(touch.Position);
+    }
+    for (Point3& node : found.Nodes) {
+        back(node); // Arcs end at a node by its position: it moves with them.
+    }
+}
+
+/// The pairs of patches to search, of the surfaces moved about the origin
+/// where that is exact, and the shift used.
+struct ShiftedSearch {
+    std::vector<PatchPair> Pairs;
+    Vec3 Shift;
+};
+
+[[nodiscard]] Result<ShiftedSearch> SearchAbout(const BSplineSurface& sa, const Box2& domainA,
+                                                const BSplineSurface& sb, const Box2& domainB)
+{
+    const Vec3 shift = ShiftOf(sa, sb);
+    STEREON_TRY(const std::vector<Patch> patchesA, PatchesOver(Moved(sa, shift), domainA));
+    STEREON_TRY(const std::vector<Patch> patchesB, PatchesOver(Moved(sb, shift), domainB));
+    STEREON_TRY(std::vector<PatchPair> pairs, AllPairs(patchesA, patchesB));
+    return ShiftedSearch{std::move(pairs), shift};
+}
+
 } // namespace
 
 using SSIResult = Result<SurfaceSurfaceIntersection>;
@@ -1792,12 +1924,11 @@ SSIResult NurbsHull(const Surface& a, const Box2& domainA, const Surface& b, con
     if (ProvedApart(NetBounds(*sa), NetBounds(*sb), tolerance)) {
         return SurfaceSurfaceIntersection{}; // Proven empty, including trims.
     }
-    STEREON_TRY(const std::vector<Patch> patchesA, PatchesOver(*sa, domainA));
-    STEREON_TRY(const std::vector<Patch> patchesB, PatchesOver(*sb, domainB));
     const SearchSettings settings{tolerance, 0x1p-7 * ctx.GetResolution(),
                                   sa->Weights.empty() && sb->Weights.empty()};
-    STEREON_TRY(std::vector<PatchPair> pairs, AllPairs(patchesA, patchesB));
-    STEREON_TRY(const Findings found, SearchPairs(std::move(pairs), settings));
+    STEREON_TRY(ShiftedSearch search, SearchAbout(*sa, domainA, *sb, domainB));
+    STEREON_TRY(Findings found, SearchPairs(std::move(search.Pairs), settings));
+    MovedBack(found, search.Shift);
     return Assembled(found, a, SearchedDomain(*sa, domainA), b, SearchedDomain(*sb, domainB),
                      settings, ctx);
 }
