@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <limits>
+#include <numbers>
 #include <string>
 #include <utility>
 #include <vector>
@@ -325,6 +326,241 @@ void RunAll(const std::vector<std::filesystem::path>& files, const bool bothWays
                         << tally.Undocumented << " refused without a documented limitation");
 }
 
+// --- MR-04: equivalent reparameterization ---------------------------------
+
+/// One operand in an equivalent chart, built exactly from the case's data,
+/// not by the kernel: a line's origin moved two directions on and its
+/// direction doubled, t = 2 t' + 2; a circle's frame turned a quarter,
+/// t = t' + pi/2; an ellipse's turned half, t = t' + pi; a hyperbola's or a
+/// parabola's y axis negated, t = -t'; a B-spline reversed (knots
+/// reflected, poles and weights reversed), t = a + b - t'. Every step is
+/// exact on dyadic data: a negation, a doubling or a reflection of dyadic
+/// knots.
+struct Reparam {
+    Curve2d Curve;
+    Interval Domain;
+    double (*Back)(double, double) = nullptr; ///< t from t' and the spline's a + b
+    double Sum = 0.0;
+};
+
+double BackLine(const double t, double /*unused*/)
+{
+    return 2.0 * t + 2.0;
+}
+
+double BackCircle(const double t, double /*unused*/)
+{
+    return t + std::numbers::pi / 2.0;
+}
+
+double BackEllipse(const double t, double /*unused*/)
+{
+    return t + std::numbers::pi;
+}
+
+double BackNegated(const double t, double /*unused*/)
+{
+    return -t;
+}
+
+double BackSpline(const double t, const double sum)
+{
+    return sum - t;
+}
+
+/// The requested domain's ends, when the case bounds it.
+struct Bounds {
+    bool Bounded = false;
+    double Lo = 0.0;
+    double Hi = 0.0;
+};
+
+Bounds BoundsOf(const JsonValue& c)
+{
+    if (!c.Has("domain")) {
+        return {};
+    }
+    return {true, c["domain"][0].AsNumber(), c["domain"][1].AsNumber()};
+}
+
+Reparam ReparamLine(const JsonValue& c, const Bounds& d)
+{
+    const Point2 o = PointOf(c["origin"]);
+    const Vec2 v = VectorOf(c["direction"]);
+    Reparam r;
+    r.Curve = Curve2d{*Stereon::MakeLine(o + 2.0 * v, 2.0 * v)};
+    r.Back = &BackLine;
+    r.Domain =
+        d.Bounded ? Interval{(d.Lo - 2.0) / 2.0, (d.Hi - 2.0) / 2.0} : Interval::Everything();
+    return r;
+}
+
+Reparam ReparamSpline(const JsonValue& c, const Bounds& d)
+{
+    const std::vector<double> knots = NumbersOf(c["knots"]);
+    const double sum = knots.front() + knots.back();
+    std::vector<double> reflected;
+    for (auto it = knots.rbegin(); it != knots.rend(); ++it) {
+        reflected.push_back(sum - *it);
+    }
+    std::vector<Point2> poles;
+    for (const JsonValue& p : c["poles"].AsArray()) {
+        poles.insert(poles.begin(), PointOf(p));
+    }
+    std::vector<double> weights =
+        c.Has("weights") ? NumbersOf(c["weights"]) : std::vector<double>{};
+    std::ranges::reverse(weights);
+    auto made =
+        Stereon::MakeBSplineCurve(static_cast<int>(c["degree"].AsNumber()), std::move(reflected),
+                                  std::move(poles), std::move(weights));
+    REQUIRE(made.has_value());
+    Reparam r;
+    r.Curve = Curve2d{*std::move(made)};
+    r.Back = &BackSpline;
+    r.Sum = sum;
+    r.Domain = d.Bounded ? Interval{sum - d.Hi, sum - d.Lo} : Domain(r.Curve);
+    return r;
+}
+
+/// A closed conic turned by `turn` (a quarter for a circle, half for an
+/// ellipse): its chart shifted by that angle.
+Reparam ReparamTurned(Curve2d curve, double (*back)(double, double), const double turn,
+                      const Bounds& d)
+{
+    Reparam r;
+    r.Curve = std::move(curve);
+    r.Back = back;
+    r.Domain = d.Bounded ? Interval{d.Lo - turn, d.Hi - turn} : Domain(r.Curve);
+    return r;
+}
+
+Reparam ReparamConic(const JsonValue& c, const Bounds& d)
+{
+    const std::string& type = c["type"].AsString();
+    const Vec2 x = VectorOf(c["x_axis"]);
+    const Vec2 y = VectorOf(c["y_axis"]);
+    if (type == "circle") {
+        return ReparamTurned(
+            Curve2d{*Stereon::MakeCircle(PointOf(c["center"]), c["radius"].AsNumber(), y, -x)},
+            &BackCircle, std::numbers::pi / 2.0, d);
+    }
+    if (type == "ellipse") {
+        return ReparamTurned(
+            Curve2d{*Stereon::MakeEllipse(PointOf(c["center"]), c["major"].AsNumber(),
+                                          c["minor"].AsNumber(), -x, -y)},
+            &BackEllipse, std::numbers::pi, d);
+    }
+    Reparam r;
+    if (type == "hyperbola") {
+        r.Curve = Curve2d{*Stereon::MakeHyperbola(PointOf(c["center"]), c["major"].AsNumber(),
+                                                  c["minor"].AsNumber(), x, -y)};
+    } else {
+        r.Curve =
+            Curve2d{*Stereon::MakeParabola(PointOf(c["vertex"]), c["focal"].AsNumber(), x, -y)};
+    }
+    r.Back = &BackNegated;
+    r.Domain = d.Bounded ? Interval{-d.Hi, -d.Lo} : Interval::Everything();
+    return r;
+}
+
+Reparam ReparamOf(const JsonValue& c)
+{
+    const std::string& type = c["type"].AsString();
+    const Bounds d = BoundsOf(c);
+    if (type == "line") {
+        return ReparamLine(c, d);
+    }
+    if (type == "bspline") {
+        return ReparamSpline(c, d);
+    }
+    return ReparamConic(c, d);
+}
+
+/// The largest reach of the case's expected points and overlaps.
+double ReachOf(const JsonValue& expected)
+{
+    double reach = 0.0;
+    for (const JsonValue& p : expected["points"].AsArray()) {
+        reach = std::max(reach, p["within"].AsNumber());
+    }
+    for (const JsonValue& o : expected["overlaps"].AsArray()) {
+        reach = std::max(reach, o["within"].AsNumber());
+    }
+    return reach;
+}
+
+/// Every parameter on the moved operand maps back, by the closed-form
+/// change of parameter, to the original curve at the same place.
+void CheckMappedBack(const PlanarIntersection& result, const Reparam& moved,
+                     const Curve2d& original, const bool moveFirst, const double reach)
+{
+    for (const PlanarPoint& p : result.Points) {
+        const double t = moveFirst ? p.ParameterA : p.ParameterB;
+        CHECK(Distance(Eval(original, moved.Back(t, moved.Sum)), p.Position) <= reach);
+    }
+    for (const Stereon::PlanarOverlap& o : result.Overlaps) {
+        const Interval& range = moveFirst ? o.OnA : o.OnB;
+        for (const double t : {range.GetLower(), range.GetUpper()}) {
+            CHECK(Distance(Eval(original, moved.Back(t, moved.Sum)), Eval(moved.Curve, t)) <=
+                  reach);
+        }
+    }
+}
+
+/// MR-04 for one case, one order, one operand moved to its equivalent
+/// chart: the result in the new chart is the case's closed-form answer,
+/// and every parameter on the moved operand maps back, by the closed-form
+/// change of parameter, to a point of the original curve at the same
+/// place.
+void CheckReparam(const JsonValue& c, const bool swapped, const bool moveFirst, Tally& tally)
+{
+    INFO(c["id"].AsString() << (swapped ? " swapped" : "") << (moveFirst ? " A'" : " B'")
+                            << " reparametrized");
+    const JsonValue& curves = c["inputs"]["curves"];
+    const JsonValue& first = curves[swapped ? 1 : 0];
+    const JsonValue& second = curves[swapped ? 0 : 1];
+    const Curve2d originalA = CurveOf(first);
+    const Curve2d originalB = CurveOf(second);
+    const Reparam moved = ReparamOf(moveFirst ? first : second);
+    const Curve2d& a = moveFirst ? moved.Curve : originalA;
+    const Curve2d& b = moveFirst ? originalB : moved.Curve;
+    const Interval domainA = moveFirst ? moved.Domain : DomainOf(first, originalA);
+    const Interval domainB = moveFirst ? DomainOf(second, originalB) : moved.Domain;
+    const auto result = Intersect(a, domainA, b, domainB, IntersectTest::ctx);
+    const JsonValue& expected = c["expected"];
+    if (!result) {
+        INFO(IntersectTest::ErrorText(result));
+        CHECK(FailsClosed(result.error().GetCode()));
+        ++(expected.Has("may_fail_closed") ? tally.Refused : tally.Undocumented);
+        return;
+    }
+    ++tally.Answered;
+    if (!expected["overlaps"].AsArray().empty()) {
+        CheckOverlaps(*result, expected["overlaps"], a, b);
+    } else {
+        CheckPoints(*result, expected, a, b);
+    }
+    CheckMappedBack(*result, moved, moveFirst ? originalA : originalB, moveFirst,
+                    ReachOf(expected));
+}
+
+void RunReparam(const std::vector<std::filesystem::path>& files, const bool bothWays)
+{
+    Tally tally;
+    for (const std::filesystem::path& file : files) {
+        const JsonValue c = StereonTest::ReadJsonFile(file);
+        for (const bool swapped : {false, true}) {
+            if (swapped && !bothWays) {
+                continue;
+            }
+            CheckReparam(c, swapped, true, tally);
+            CheckReparam(c, swapped, false, tally);
+        }
+    }
+    WARN(tally.Answered << " answered, " << tally.Refused << " refused as documented, "
+                        << tally.Undocumented << " refused without a documented limitation");
+}
+
 } // namespace
 
 TEST_CASE("no planar-curves configuration, rotated or else far, is answered wrongly",
@@ -365,4 +601,22 @@ TEST_CASE("only the planar-curves corpus cases the ledger lists are refused, bot
           "[.][exhaustive][intersect][planar][corpus][!mayfail]")
 {
     RunAll(CaseFiles(), true, Gate::Completeness);
+}
+
+TEST_CASE("MR-04: each planar-curves configuration answers alike in an equivalent chart",
+          "[intersect][planar][corpus][metamorphic]")
+{
+    // One placement of each configuration, one order, each operand in turn
+    // in its equivalent chart (ReparamOf).
+    const std::vector<std::filesystem::path> files = OnePlacementEach();
+    REQUIRE(files.size() >= 140);
+    RunReparam(files, false);
+}
+
+TEST_CASE("MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
+          "[.][exhaustive][intersect][planar][corpus][metamorphic]")
+{
+    const std::vector<std::filesystem::path> files = CaseFiles();
+    REQUIRE(files.size() >= 800);
+    RunReparam(files, true);
 }
