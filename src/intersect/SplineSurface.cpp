@@ -1112,6 +1112,13 @@ template <typename Form>
                     f.Bracket = Interval{f.Bracket.GetLower() - CirclePeriod - slack,
                                          f.Bracket.GetUpper() - CirclePeriod + slack};
                 }
+                // A bracket across the seam holds the root at either end of
+                // the domain, one point: it is kept in the domain, so that
+                // neither the root nor its polishing (inside the bracket)
+                // leaves it.
+                f.Bracket = Interval{std::max(f.Bracket.GetLower(), lower),
+                                     std::min(f.Bracket.GetUpper(), upper)};
+                f.T = std::clamp(f.T, lower, upper);
             }
             std::ranges::stable_sort(found, {}, &Found::T);
         } else {
