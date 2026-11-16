@@ -26,7 +26,7 @@ STATES = {"untriaged", "fixture captured", "MR implemented", "verified", "except
 
 def handler_ids(root):
     def types(path, alias):
-        text = (root / path).read_text()
+        text = (root / path).read_text(encoding="utf-8")
         match = re.search(r"using\s+" + alias + r"\s*=\s*TypeList<([^>]+)>", text)
         if not match:
             raise ValueError(f"cannot read built-in catalogue {alias}")
@@ -67,7 +67,7 @@ def check(root, data, release=False, base=None, expected=None):
     if len(set(ids)) != len(ids):
         errors.append("duplicate defect ID")
     if expected is None:
-        narrative = (root / "docs/planning/intersection-metamorphic-backfill.md").read_text()
+        narrative = (root / "docs/planning/intersection-metamorphic-backfill.md").read_text(encoding="utf-8")
         leads = {"PR-" + number for number in re.findall(r"/pull/(\d+)", narrative)}
         errors.extend(f"historical lead missing from inventory: {name}"
                       for name in sorted(leads - set(ids)))
@@ -125,7 +125,7 @@ def check(root, data, release=False, base=None, expected=None):
 def check_campaign(root, data):
     """Static replay preconditions: never silently run a stale fault catalogue."""
     path = root / "tools/mutation/intersection-backfill.json"
-    catalogue = json.loads(path.read_text())
+    catalogue = json.loads(path.read_text(encoding="utf-8"))
     records = {row["id"]: row for row in data["defects"]}
     errors = []
     ids = [row["id"] for row in catalogue["mutants"]]
@@ -138,7 +138,7 @@ def check_campaign(root, data):
         if not source.resolve().is_relative_to((root / "src").resolve()):
             errors.append(f"{name}: fault must target production source")
             continue
-        if source.read_text().count(fault["find"]) != 1 or fault["find"] == fault["replace"]:
+        if source.read_text(encoding="utf-8").count(fault["find"]) != 1 or fault["find"] == fault["replace"]:
             errors.append(f"{name}: fault site is stale, ambiguous or unchanged")
         if record.get("state") not in {"MR implemented", "verified"}:
             errors.append(f"{name}: missing implemented defect obligation")
@@ -181,7 +181,7 @@ def main():
     args = parser.parse_args()
     root = args.root.resolve()
     try:
-        data = json.loads((root / LEDGER).read_text())
+        data = json.loads((root / LEDGER).read_text(encoding="utf-8"))
         base = None
         if args.base:
             # Only the migration's base lacks this file; check the tree before

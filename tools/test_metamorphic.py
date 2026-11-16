@@ -17,7 +17,7 @@ class GateTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        (self.root / "proof.md").write_text("fixture test oracle replay red green review domain rationale")
+        (self.root / "proof.md").write_text("fixture test oracle replay red green review domain rationale", encoding="utf-8")
         fields = {k: "proof.md#" + k for k in
                   ("fixture", "direct", "oracle", "replay", "red", "green", "review", "metamorphic")}
         fields.update(direct="proof.md#test", metamorphic="proof.md#test")
@@ -133,9 +133,9 @@ class CampaignTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         repo = Path(__file__).resolve().parents[1]
-        self.data = json.loads((repo / "docs/planning/intersection-metamorphic.json").read_text())
+        self.data = json.loads((repo / "docs/planning/intersection-metamorphic.json").read_text(encoding="utf-8"))
         self.path = self.root / "tools/mutation/intersection-backfill.json"
-        catalogue = json.loads((repo / "tools/mutation/intersection-backfill.json").read_text())
+        catalogue = json.loads((repo / "tools/mutation/intersection-backfill.json").read_text(encoding="utf-8"))
         paths = {m["file"] for m in catalogue["mutants"]}
         paths.update(["tools/mutation/intersection-backfill.json", "tests/intersect/MetamorphicRegressionTests.cpp"])
         for relative in paths:
@@ -145,7 +145,7 @@ class CampaignTests(unittest.TestCase):
         self.catalogue = catalogue
 
     def errors(self):
-        self.path.write_text(json.dumps(self.catalogue))
+        self.path.write_text(json.dumps(self.catalogue), encoding="utf-8")
         return check_campaign(self.root, self.data)
 
     def test_current_campaign_is_consistent(self):
@@ -154,10 +154,10 @@ class CampaignTests(unittest.TestCase):
     def test_stale_and_ambiguous_sites_are_rejected(self):
         row = self.catalogue["mutants"][0]
         path = self.root / row["file"]
-        original = path.read_text()
-        path.write_text(original.replace(row["find"], ""))
+        original = path.read_text(encoding="utf-8")
+        path.write_text(original.replace(row["find"], ""), encoding="utf-8")
         self.assertTrue(self.errors())
-        path.write_text(original + row["find"])
+        path.write_text(original + row["find"], encoding="utf-8")
         self.assertTrue(self.errors())
 
     def test_fault_must_change_production_source(self):
