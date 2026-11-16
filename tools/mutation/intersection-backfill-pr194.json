@@ -1,5 +1,6 @@
 {
-  "description": "PR-194's root causes, one fault each, all under the single PR-194 ledger obligation (owner decision 2026-11-12: not split). The campaign checker requires catalogue IDs in intersection-backfill.json to be unique ledger records, so that catalogue holds one of them as PR-194 and this one holds all six. Replay: tools/mutate.py --catalogue on this file.",
+  "description": "PR-194's root causes, one fault each, all under the single PR-194 ledger obligation (owner decision 2026-11-12: not split). Fault IDs in intersection-backfill.json are ledger records, so that catalogue holds one of them as PR-194; this supplementary catalogue declares its ledger defect and holds all six. CI replays every intersection-backfill*.json together (tools/mutate.py --catalogue tools/mutation/intersection-backfill*.json).",
+  "defect": "PR-194",
   "preset": "gcc16-debug",
   "mutants": [
     {
