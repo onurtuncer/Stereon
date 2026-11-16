@@ -927,22 +927,20 @@ conic's angle, which may run over several turns.
 The cuts are the kernel's choice, not features of the conic, which is
 smooth across them. A crossing at or within rounding of a cut is
 bracketed by each neighbouring arc across its end, and is undecided there.
-An arc monotone throughout brackets it with the whole arc, and merged
-brackets can reach several arcs. So the arcs such a bracket reaches,
-joined with any other stuck region they share an arc or a cut with, are
-searched again with every interior cut :math:`c` moved to :math:`c + w/4`,
-:math:`w` the narrowest of them (``AcrossCuts``). The crossing then lies
-inside an arc, about four fifths along it and off the subdivision's dyadic
-points. The new arcs stay under five quarters of a quarter turn, short of
-the half turn where the middle weight :math:`\cos h` vanishes. The new
-search is complete over the region, so its roots replace every root
-bracketed inside the region. If one of them leaves the region, or is
-undecided across a moved cut, the region is left as it was and the
-intersection fails closed. A root at a domain's own end is not moved past
-and stays undecided. ``tests/intersect/ConicArcCutTests.cpp`` has the
+When the first search leaves a root undecided, the domain is searched
+again with its cuts moved (``ConicRootsOf``). A full turn is closed: its
+ends are one point, the seam, which is no boundary either, so every cut
+is turned by :math:`1/\varphi` of an arc and a root found past the upper
+end is brought back a turn, its bracket widened by the rounding of
+:math:`2\pi`; a crossing on the seam is reported once. On part of a turn
+only the interior cuts move, the domain cut into one arc more, and a root
+at the domain's own end stays undecided. What the second search leaves
+undecided fails closed. ``tests/intersect/ConicArcCutTests.cpp`` has the
 closed forms: a circle crossing a plane, a cylinder and a sphere exactly on
-its cuts, and an ellipse crossing a plane on them. These run under
-reversal, translation and scaling by :math:`2^{\pm 10}`.
+its cuts, and an ellipse crossing a plane on them, under reversal,
+translation and scaling by :math:`2^{\pm 10}`;
+``tests/intersect/ConicSurfaceTests.cpp`` has crossings on the seam, over
+the turn :math:`[-\pi, \pi]` and on a half turn's interior cut.
 
 A conic whose centre and
 axes lie exactly in a plane is an overlap there, its pcurve the same
@@ -1572,19 +1570,95 @@ and more need a smaller pair.
 
 and at an isolated touch this system is regular, as the gradient of the
 distance is not. A unique solution within the tolerance, where the relative
-second form of the two surfaces is definite, is a point of the result.
+second form of the two surfaces is definite, is found, but not yet settled: a
+nearby extremum does not rule out a small loop around it, so the pair is cut
+further and fails closed.
+
+*A transverse node*, for polynomial surfaces: a point where the surfaces share
+a tangent plane and the relative second form is indefinite and nondegenerate,
+so that two smooth branches cross there. It is settled on a pair of a small
+patch :math:`S` and a covering patch :math:`C`, both cut out of the pair
+around the node (off-centre, like every cut; the rest of the pair goes back to
+the search), by four facts proved in interval arithmetic:
+
+1. *Coordinates.* With a frame :math:`(e_1, e_2, n)`, :math:`n` near
+   :math:`C`'s normal at the node, the projection
+   :math:`q = (e_1 \cdot C, e_2 \cdot C)` has a regular Jacobian
+   :math:`D_q` over :math:`C`'s whole (convex) parameter box, so by the mean
+   value theorem it is one to one: :math:`C` is a graph :math:`z = g(p)` over
+   a closed disc bounded by the projection of its edges.
+2. *Containment.* The projection of :math:`S`'s hull misses the projection of
+   every edge of :math:`C` (edges halved until it does), and meets the disc at
+   the node, so it lies inside it. The height
+
+   .. math::
+
+      h(s) = n \cdot S(s) - g\big(e \cdot S(s)\big)
+
+   is then defined on :math:`S`'s whole box, and its zeros are exactly the
+   points of :math:`S` on :math:`C`.
+3. *The critical point.* Krawczyk's operator isolates the unique solution of
+
+   .. math::
+
+      e_1 \cdot (S - C) = 0, \quad e_2 \cdot (S - C) = 0, \quad
+      \partial_u S \cdot \mathbf{n}_C = 0, \quad \partial_v S \cdot \mathbf{n}_C = 0,
+
+   a critical point :math:`s^*` of :math:`h`, inside both boxes, with the
+   surfaces there within the pair tolerance of each other.
+4. *Nothing else.* The Hessian of :math:`h` is enclosed over :math:`S`'s box,
+
+   .. math::
+
+      \nabla^2 h = [\nu \cdot \partial_{jk} S] - D_p^{\mathsf T} \nabla^2 g \, D_p,
+      \qquad
+      \nabla^2 g = D_q^{-\mathsf T} [\nu \cdot \partial_{jk} C] D_q^{-1},
+
+   with :math:`\nu = n - G_1 e_1 - G_2 e_2`, :math:`G = D_q^{-\mathsf T}(n
+   \cdot \partial_u C, n \cdot \partial_v C)` the gradient of :math:`g`.
+   The zero set of :math:`h` runs along :math:`J \nabla h`, :math:`J` a
+   quarter turn, and :math:`\nabla h(s) = H (s - s^*)` for some :math:`H` in
+   the enclosure. With :math:`M` the symmetric part of :math:`J H_0`,
+   :math:`H_0` the enclosure's middle, the symmetric part of :math:`M J H` is
+   proved positive definite for every :math:`H` in it. Then
+   :math:`Q(s) = (s - s^*)^{\mathsf T} M (s - s^*)` strictly increases along
+   every arc of the zero set away from :math:`s^*`: there is no other critical
+   point, no closed loop, and no arc that leaves :math:`s^*` and returns to it.
+   :math:`H` is indefinite (for a definite :math:`H_0` no such :math:`M`
+   exists), so four half-branches leave :math:`s^*`.
+
+Every arc of the zero set therefore ends on :math:`S`'s edges or at
+:math:`s^*`. The roots on the edges are counted on pieces of each edge: a piece
+is dropped where Taylor's theorem,
+:math:`h(s) \in h(s^*) + \tfrac12 (s - s^*)^{\mathsf T} H (s - s^*)`,
+excludes zero; otherwise :math:`C`'s parameters are confined by the mean
+value theorem to :math:`c^* + D_q^{-1}(p - p(s^*))` and the root isolated by
+Krawczyk's operator, the piece halved when it is not settled. Exactly four
+roots are the four half-branches and nothing else; the node is the shared end
+of the four branches leaving it, each marched and certified as any other.
+Fewer or more, or anything unproved, and the pair is cut further.
+
+The node is proved within the pair tolerance of both surfaces, not on them: a
+gap within the tolerance (ADR-0050) is not told apart from a crossing, so two
+branches passing that close are reported meeting there. The node is a
+candidate for an arrangement event, never an event by itself (ADR-0054).
 
 Arcs join at shared seeds into branches, every free end on a boundary of the
-domains. Each arc is marched by Newton's method on :math:`S_A = S_B` and
+domains or at a node, where four branches end. Each arc is marched by Newton's method on :math:`S_A = S_B` and
 :math:`L \cdot S_A = s`, halving chords until they hold, and the polylines in
 space and on both surfaces are certified by ``CertifyDeviation``, tightened
 until they pass. They are polylines because a fitted cubic pcurve can leave a
 surface's domain.
 
-Whatever cannot be settled fails: a tangency along a curve, a branch point, an
-overlap, any tangency of rational surfaces, and a search past its budget of
-:math:`2^{14}` pairs return ``IntersectionFailed``, naming the patches, never
-a partial or an unproved empty result (``src/intersect/GenericSSI.cpp``).
+Whatever cannot be settled fails: a tangency along a curve, an isolated touch,
+a branch point not proved a transverse node (a degenerate Hessian, as where
+three branches cross; a node of rational surfaces; a node on a line between
+Bézier patches, where no centred pair fits; a node whose gap the tolerance does
+not admit), an overlap, any tangency of rational surfaces, and a search past
+its budget of :math:`2^{14}` pairs return ``IntersectionFailed``, naming the
+patches, never a partial or an unproved empty result
+(``src/intersect/GenericSSI.cpp``; nodes in
+``tests/intersect/GenericSSINodeTests.cpp``).
 
 A B-spline surface against a plane, cylinder, cone, sphere or torus reports
 ``NotImplemented``.

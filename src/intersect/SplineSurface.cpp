@@ -18,6 +18,7 @@ module;
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <numbers>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -1027,130 +1028,56 @@ constexpr std::size_t MaxArcs = 4096;
     return {AngleAt(t0, t1, f.T), Interval{lower, upper}, f.Contact, f.Decided, f.Isolated};
 }
 
-/// The roots of the surface's form on the arc [t0, t1], as angles.
+/// The roots of the form on [lower, upper] cut into `arcs` equal arcs, as
+/// angles of the conic, merged: a root on a cut is seen from both arcs and
+/// left undecided.
 template <typename Form>
-[[nodiscard]] Result<void> ArcRoots(const ConicData& conic, const double t0, const double t1,
-                                    Form& form, const std::string_view handler,
-                                    std::vector<Found>& found)
+[[nodiscard]] Result<std::vector<Found>> ArcRoots(const ConicData& conic, const double lower,
+                                                  const double upper, const std::size_t arcs,
+                                                  Form& form, const std::string_view handler)
 {
-    const Segment arc = ArcSegment(conic, t0, t1);
-    std::vector<Found> local;
-    STEREON_TRY_VOID(RootsOfSegment(arc, form(arc.Poles), handler, local));
-    for (const Found& f : local) {
-        found.push_back(OnConic(f, t0, t1));
+    const double width = upper - lower;
+    const auto count = static_cast<double>(arcs);
+    std::vector<Found> found;
+    for (std::size_t k = 0; k < arcs; ++k) {
+        const double t0 = k == 0 ? lower : lower + width * static_cast<double>(k) / count;
+        const double t1 =
+            k + 1 == arcs ? upper : lower + width * static_cast<double>(k + 1) / count;
+        const Segment arc = ArcSegment(conic, t0, t1);
+        std::vector<Found> local;
+        STEREON_TRY_VOID(RootsOfSegment(arc, form(arc.Poles), handler, local));
+        for (const Found& f : local) {
+            found.push_back(OnConic(f, t0, t1));
+        }
     }
-    return {};
-}
-
-/// Whether a root found again across moved cuts settles its region: inside
-/// it, and decided or clear of every moved cut.
-[[nodiscard]] bool SettlesRegion(const Found& f, const Interval& region,
-                                 const std::vector<double>& moved)
-{
-    return Contains(region, f.Bracket) &&
-           (f.Decided ||
-            std::ranges::none_of(moved, [&](const double c) { return Contains(f.Bracket, c); }));
-}
-
-/// A root undecided because it lies at or within rounding of a cut between
-/// arcs, where each arc's search brackets it across its end (an arc
-/// monotone throughout brackets it with the whole arc, and Merge joins such
-/// brackets), searched again over every arc its bracket reaches, the
-/// region [cuts.front(), cuts.back()], with each interior cut c moved to
-/// c + w/4, w the narrowest arc: the conic is smooth across c, which is the
-/// kernel's choice and no feature of the curve, and c now lies inside an
-/// arc, about four fifths along it, off the subdivision's dyadic points.
-/// The new arcs are at most five quarters of a quarter turn, short of the
-/// half turn where a rational quadratic's middle weight vanishes. The new
-/// search is complete over the region, so its roots replace every root
-/// whose bracket lies in the region; when one of them leaves the region or
-/// is undecided across a moved cut, the region is left as it was and the
-/// intersection fails closed.
-template <typename Form>
-[[nodiscard]] Result<void> AcrossCuts(const ConicData& conic, const std::vector<double>& cuts,
-                                      Form& form, const std::string_view handler,
-                                      std::vector<Found>& found)
-{
-    double w = cuts.back() - cuts.front();
-    for (std::size_t k = 1; k < cuts.size(); ++k) {
-        w = std::min(w, cuts[k] - cuts[k - 1]);
-    }
-    std::vector<double> moved(cuts.begin() + 1, cuts.end() - 1);
-    for (double& c : moved) {
-        c += 0.25 * w;
-    }
-    std::vector<double> ends{cuts.front()};
-    ends.insert(ends.end(), moved.begin(), moved.end());
-    ends.push_back(cuts.back());
-    std::vector<Found> again;
-    for (std::size_t k = 0; k + 1 < ends.size(); ++k) {
-        STEREON_TRY_VOID(ArcRoots(conic, ends[k], ends[k + 1], form, handler, again));
-    }
-    Merge(again);
-    const Interval region{cuts.front(), cuts.back()};
-    if (!std::ranges::all_of(again,
-                             [&](const Found& f) { return SettlesRegion(f, region, moved); })) {
-        return {};
-    }
-    std::erase_if(found, [&](const Found& f) { return Contains(region, f.Bracket); });
-    found.insert(found.end(), again.begin(), again.end());
     Merge(found);
-    return {};
+    return found;
 }
 
-/// The first and last cut of the arcs an undecided root's bracket reaches,
-/// when it holds an interior cut; nothing otherwise.
-[[nodiscard]] std::optional<std::pair<std::size_t, std::size_t>>
-StuckRegion(const Found& f, const std::vector<double>& cuts)
+[[nodiscard]] bool AllDecided(const std::vector<Found>& found)
 {
-    if (f.Decided || !std::ranges::any_of(cuts.begin() + 1, cuts.end() - 1,
-                                          [&](const double c) { return Contains(f.Bracket, c); })) {
-        return std::nullopt;
-    }
-    std::size_t i = 0;
-    while (i + 1 < cuts.size() && cuts[i + 1] <= f.Bracket.GetLower()) {
-        ++i;
-    }
-    std::size_t j = cuts.size() - 1;
-    while (j > i + 1 && cuts[j - 1] >= f.Bracket.GetUpper()) {
-        --j;
-    }
-    return std::pair{i, j};
+    return std::ranges::all_of(found, [](const Found& f) { return f.Decided; });
 }
 
-/// The regions of the stuck roots, those that share an arc or a cut joined
-/// into one (a cut that ends one region would stay a cut of the other's
-/// search, where its root would be stuck again), as runs of cuts.
-[[nodiscard]] std::vector<std::vector<double>> StuckRegions(const std::vector<Found>& found,
-                                                            const std::vector<double>& cuts)
-{
-    std::vector<std::pair<std::size_t, std::size_t>> spans;
-    for (const Found& f : found) {
-        if (const std::optional<std::pair<std::size_t, std::size_t>> s = StuckRegion(f, cuts)) {
-            spans.push_back(*s);
-        }
-    }
-    std::ranges::sort(spans);
-    std::vector<std::pair<std::size_t, std::size_t>> joined;
-    for (const auto& s : spans) {
-        if (!joined.empty() && s.first <= joined.back().second) {
-            joined.back().second = std::max(joined.back().second, s.second);
-        } else {
-            joined.push_back(s);
-        }
-    }
-    std::vector<std::vector<double>> regions;
-    for (const auto& [i, j] : joined) {
-        regions.emplace_back(cuts.begin() + static_cast<std::ptrdiff_t>(i),
-                             cuts.begin() + static_cast<std::ptrdiff_t>(j) + 1);
-    }
-    return regions;
-}
+/// The cuts of the second search are turned by this fraction of an arc,
+/// the golden section 1 / phi: far from every short rational, so that no
+/// cut of it falls on a cut of the first, nor on an angle a conic built
+/// from short binary fractions meets exactly.
+constexpr double CutTurn = std::numbers::phi - 1.0;
 
 /// Every root of the surface's form on the conic over the domain, cut into
 /// quarter-turn arcs, as angles of the conic, merged and placed as RootsOf
-/// places a B-spline's; a root undecided at a cut between arcs is searched
-/// again across it (AcrossCuts).
+/// places a B-spline's.
+///
+/// A crossing that falls on a cut, a multiple of a quarter turn on a
+/// conic with axis-aligned data, is undecided from both arcs: the form's
+/// enclosure at the shared end straddles zero. The cuts are an artifact of
+/// the search, so such a domain is searched again with them moved. A full
+/// turn is closed: its ends are one point, the seam, which is no boundary
+/// either, so all its cuts are turned and the roots past its upper end
+/// brought back a turn. On a part of a turn only the interior cuts move,
+/// and a root on the domain's own end stays undecided. What the second
+/// search leaves undecided fails (ADR-0010).
 template <typename Form>
 [[nodiscard]] Result<std::vector<Found>> ConicRootsOf(const ConicData& conic,
                                                       const Interval& domain, Form&& form,
@@ -1161,6 +1088,8 @@ template <typename Form>
                     std::string(handler) + ": a conic's domain must be bounded");
     }
     const double quarter = 0.5 * std::numbers::pi;
+    const double lower = domain.GetLower();
+    const double upper = domain.GetUpper();
     const double width = Width(domain);
     const double count = std::max(1.0, std::ceil(width / quarter));
     if (count > static_cast<double>(MaxArcs)) {
@@ -1168,25 +1097,31 @@ template <typename Form>
                     std::string(handler) + ": a domain of more than 1 024 turns");
     }
     const auto arcs = static_cast<std::size_t>(count);
-    std::vector<double> cuts{domain.GetLower()};
-    for (std::size_t k = 1; k < arcs; ++k) {
-        cuts.push_back(domain.GetLower() + width * static_cast<double>(k) / count);
-    }
-    cuts.push_back(domain.GetUpper());
-    std::vector<Found> found;
-    for (std::size_t k = 0; k < arcs; ++k) {
-        STEREON_TRY_VOID(ArcRoots(conic, cuts[k], cuts[k + 1], form, handler, found));
-    }
-    Merge(found);
-    for (const std::vector<double>& region : StuckRegions(found, cuts)) {
-        STEREON_TRY_VOID(AcrossCuts(conic, region, form, handler, found));
-    }
-    for (const Found& f : found) {
-        if (!f.Decided) {
-            return Fail(ErrorCode::IntersectionFailed,
-                        std::string(handler) +
-                            ": unresolved root existence or multiplicity in requested domain");
+    STEREON_TRY(std::vector<Found> found, ArcRoots(conic, lower, upper, arcs, form, handler));
+    if (!AllDecided(found)) {
+        if (upper - lower == CirclePeriod) {
+            const double turn = CutTurn * quarter;
+            STEREON_TRY(found, ArcRoots(conic, lower + turn, upper + turn, arcs, form, handler));
+            for (Found& f : found) {
+                if (f.T > upper) {
+                    f.T -= CirclePeriod;
+                    // The period of the conic is 2 pi, not its rounding:
+                    // the bracket brought back is widened by a few units.
+                    const double slack =
+                        4.0 * std::numeric_limits<double>::epsilon() * (1.0 + std::abs(upper));
+                    f.Bracket = Interval{f.Bracket.GetLower() - CirclePeriod - slack,
+                                         f.Bracket.GetUpper() - CirclePeriod + slack};
+                }
+            }
+            std::ranges::stable_sort(found, {}, &Found::T);
+        } else {
+            STEREON_TRY(found, ArcRoots(conic, lower, upper, arcs + 1, form, handler));
         }
+    }
+    if (!AllDecided(found)) {
+        return Fail(ErrorCode::IntersectionFailed,
+                    std::string(handler) +
+                        ": unresolved root existence or multiplicity in requested domain");
     }
     return found;
 }
