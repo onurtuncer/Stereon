@@ -1283,12 +1283,41 @@ ways, the classification shared with the curve–surface handlers
      split -> fail;
    }
 
+The plane handler adds a fifth outcome before it halves a piece
+(``IsolateContacts``, ``OfOrder`` in ``src/intersect/PlanarSpline.cpp``):
+a contact of order :math:`k \ge 3`. If every coefficient of :math:`g`'s
+:math:`k`-th differences has one strict sign, :math:`g^{(k)}` has it over
+the piece and its sub-pieces, so :math:`g^{(k-1)}` is strictly monotone. On
+each sub-piece the handler first tries to prove a lower derivative of one
+sign from its coefficients, which makes the piece monotone, convex or of a
+lower order. Otherwise it reads the signs of :math:`g^{(k-1)}` at the
+piece's ends: one strict sign at both ends means that sign throughout, and
+the piece has order :math:`k-1`. Only the piece holding the single zero of
+:math:`g^{(k-1)}` is halved. When both those ends are within rounding of
+zero (or at ``MaxDepth``) and no lower derivative can be signed, the piece
+is the contact's to rounding. :math:`g` has at most :math:`k` roots there
+(Rolle), and the piece is reported as one ``Tangential`` root with
+``Decided`` false, bracketed by the piece, never dropped. This is
+``Convex``'s argument carried up an order. A contact of order four, where
+:math:`g`, :math:`g'` and :math:`g''` all vanish, is followed down one
+chain of pieces. Before, every piece that rounding hid it in was halved
+until the search's budget ran out. The touch is placed to the rounding
+the contact allows: the fourth root of the coefficients' rounding
+relative to the curve, about :math:`2^{-13}` of the segment's parameter
+near the origin. ``tests/intersect/PlanarSplineOsculationTests.cpp`` uses
+two exact quartics:
+:math:`y = x^2 + (x/3)^4` against the parabola :math:`y = x^2`, and
+:math:`y = x^4` against the axis, the latter also :math:`3\cdot 2^{-40}`
+below it (a proved separation) and above it (two proved crossings at
+:math:`x = \pm g^{1/4}`). Both are run under exchange, reversal,
+translation, scaling by :math:`2^{\pm 10}` and a rational form.
+
 Unlike the curve–surface handlers, which fail on any root they cannot
 decide, the plane curve handlers report an undecided root with ``Decided``
 false, as the conic handlers do, and fail only on an unresolved one: a
-contact of higher order, or the spline lying along the other curve (a
-rational spline along the circle it draws fails so, never coming back
-empty). A hyperbola's other branch is dropped as in Algorithm C. A spline
+piece with no derivative of one sign (the spline lying along the other
+curve; a rational spline along the circle it draws fails so, never coming
+back empty) or a search past its budget. A hyperbola's other branch is dropped as in Algorithm C. A spline
 whose every pole lies exactly on a line lies along it: its overlap is
 reported when the spline is clamped, is requested over its whole domain,
 runs monotonically along the line
@@ -1303,7 +1332,17 @@ Algorithm K: two B-splines by subdivision with Krawczyk's test
 
 ``SplineSpline2d`` (``src/intersect/PlanarSplinePair.cpp``) solves
 :math:`F(s, t) = a(s) - b(t) = 0` over pairs of pieces of the two splines'
-enclosed Bézier segments, halving both pieces of a pair until it is
+enclosed Bézier segments, halving both pieces of a pair until it is apart
+or settled, as below. Both splines are first moved by one vector, the middle
+of their poles' box, when every pole's move is exact in doubles (checked by
+Knuth's TwoSum, whose error term is zero exactly then; ``Centred``): the
+translation keeps :math:`F` and both parameters, and the enclosures'
+rounding, relative to the size of the coordinates, then measures against the
+size of the curves. Without it a pair far from the origin, :math:`4\cdot
+10^5` away and a few units across, is enclosed only to about
+:math:`10^{-10}`, and two arcs :math:`3\cdot 2^{-34}` apart, or a crossing,
+could not be settled. When some move would round, the splines are searched
+where they are. Points are placed on the input splines. The two outcomes:
 
 - **apart**: the boxes of the pieces' poles are disjoint, or the hulls of
   both pieces' distances from either piece's chord are, a fat line in the
@@ -1335,9 +1374,35 @@ every side, so that a root on the end of a piece, where the halving put
 it, is proved from either side. The inflation reaches past a segment's ends
 into the segment's polynomial continued: a root whose bracket lies beyond
 the segment is not the segment's and is dropped (the neighbouring segment
-finds it, or it is no point of the curve); one whose bracket straddles a
-segment's end is reported with ``Decided`` false; roots proved from
-overlapping boxes are one. Every proved crossing is ``Decided``. A pair
+finds it, or it is no point of the curve).
+
+A bracket that straddles a segment's end, a crossing at or within rounding
+of an interior knot of either spline, is proved again with each spline
+taken whole, in the curves' own parameters (``AcrossKnots``): :math:`F` at
+the box's middle from the segment holding it, and :math:`J(X)` the hull of
+every segment's slope over its part of the box, the end segments continued
+past the spline's ends. An interior knot is repeated at most :math:`p`
+times, so the splines are continuous and :math:`F` is continuous and
+piecewise polynomial; then
+:math:`F(x) - F(m) = \int_0^1 J\bigl(m + \tau(x - m)\bigr)\,d\tau\,(x - m)`
+lies in :math:`J(X)(x - m)`, which is all Krawczyk's existence and
+uniqueness argument needs, so the test is as sound across a knot, a corner
+included, as inside a segment. The box tried first is the pair's own; if
+that fails, boxes about the segment's bracket, an eighth as wide each time
+while wider than the bracket. A bracket so proved and inside both splines
+is ``Decided``; one across a spline's own end stays undecided (past it the
+end segment continued was proved, not the spline), and a root no box
+proves is reported with ``Decided`` false, never dropped.
+
+Two brackets that meet on both curves are one root only *by proof*: when
+one lies in the box the other was proved the only root of the curves' own
+:math:`F` in (a segment's box restricted to the segment, rounded inward;
+a whole-spline box restricted to the splines' domains). That merges the
+brackets of one crossing found from either side of a knot, and absorbs an
+unproved bracket of a continued segment, which if it is a root of the
+curves at all is the proved one. Brackets that meet otherwise are reported
+as their hull, undecided; equal parameters are never an argument. Every
+proved crossing is ``Decided``. A pair
 that is neither apart nor settled when its pieces can no longer be halved,
 or a search past :math:`2^{16}` pairs, fails with ``IntersectionFailed``:
 a tangency of two B-splines (where :math:`J` is singular and no box ever
@@ -1365,18 +1430,29 @@ What is decided
      - a root proved a single simple crossing
    * - two B-splines
      - a crossing proved single by Krawczyk's test, its bracket inside both
-       segments
+       segments, or, at or within rounding of an interior knot of either or
+       both splines, proved single with the splines taken whole and its
+       bracket inside both splines; a crossing at a spline's own end, or
+       one no box proves, is reported undecided
 
 A point whose parameter on a conic lies within rounding of a requested
 domain's end may fall on either side of it; a B-spline root whose bracket
 reaches past the requested domain is kept, clamped into it, undecided. The
-tests are ``tests/intersect/PlanarTests.cpp`` and
-``tests/intersect/PlanarPairTests.cpp``: exact configurations and their
-neighbours a rounding or :math:`3\cdot 2^{-40}` either side, tangencies of
-order two and four, coincidences, rational arcs, exchange and reversal of
-the curves, and properties on random geometry (every sign change of a
-conic's equation along a random cubic has a point; random conic pairs
-agree with themselves exchanged).
+tests are ``tests/intersect/PlanarTests.cpp``,
+``tests/intersect/PlanarPairTests.cpp`` and
+``tests/intersect/PlanarSplineKnotTests.cpp``: exact configurations and
+their neighbours a rounding or :math:`3\cdot 2^{-40}` either side,
+tangencies of order two and four, coincidences, rational arcs, exchange and
+reversal of the curves, and properties on random geometry (every sign
+change of a conic's equation along a random cubic has a point; random conic
+pairs agree with themselves exchanged). The knot tests take two cubics
+crossing at both their interior knots, polynomial and rational, a cubic
+across a polyline's vertex at its own knot, a corner (a knot of full
+multiplicity), and crossings a rounding and :math:`2^{-40}` either side of
+a knot, with closed-form answers and an independent de Boor oracle in long
+double, under exchange, reversal, knot insertion (the crossing's knot
+raised to multiplicity three included), translation, a quarter turn and
+scaling by :math:`2^{\pm 20}` (ADR-0053 MR-01 to MR-04).
 
 Certificates
 ------------
@@ -1474,19 +1550,95 @@ and more need a smaller pair.
 
 and at an isolated touch this system is regular, as the gradient of the
 distance is not. A unique solution within the tolerance, where the relative
-second form of the two surfaces is definite, is a point of the result.
+second form of the two surfaces is definite, is found, but not yet settled: a
+nearby extremum does not rule out a small loop around it, so the pair is cut
+further and fails closed.
+
+*A transverse node*, for polynomial surfaces: a point where the surfaces share
+a tangent plane and the relative second form is indefinite and nondegenerate,
+so that two smooth branches cross there. It is settled on a pair of a small
+patch :math:`S` and a covering patch :math:`C`, both cut out of the pair
+around the node (off-centre, like every cut; the rest of the pair goes back to
+the search), by four facts proved in interval arithmetic:
+
+1. *Coordinates.* With a frame :math:`(e_1, e_2, n)`, :math:`n` near
+   :math:`C`'s normal at the node, the projection
+   :math:`q = (e_1 \cdot C, e_2 \cdot C)` has a regular Jacobian
+   :math:`D_q` over :math:`C`'s whole (convex) parameter box, so by the mean
+   value theorem it is one to one: :math:`C` is a graph :math:`z = g(p)` over
+   a closed disc bounded by the projection of its edges.
+2. *Containment.* The projection of :math:`S`'s hull misses the projection of
+   every edge of :math:`C` (edges halved until it does), and meets the disc at
+   the node, so it lies inside it. The height
+
+   .. math::
+
+      h(s) = n \cdot S(s) - g\big(e \cdot S(s)\big)
+
+   is then defined on :math:`S`'s whole box, and its zeros are exactly the
+   points of :math:`S` on :math:`C`.
+3. *The critical point.* Krawczyk's operator isolates the unique solution of
+
+   .. math::
+
+      e_1 \cdot (S - C) = 0, \quad e_2 \cdot (S - C) = 0, \quad
+      \partial_u S \cdot \mathbf{n}_C = 0, \quad \partial_v S \cdot \mathbf{n}_C = 0,
+
+   a critical point :math:`s^*` of :math:`h`, inside both boxes, with the
+   surfaces there within the pair tolerance of each other.
+4. *Nothing else.* The Hessian of :math:`h` is enclosed over :math:`S`'s box,
+
+   .. math::
+
+      \nabla^2 h = [\nu \cdot \partial_{jk} S] - D_p^{\mathsf T} \nabla^2 g \, D_p,
+      \qquad
+      \nabla^2 g = D_q^{-\mathsf T} [\nu \cdot \partial_{jk} C] D_q^{-1},
+
+   with :math:`\nu = n - G_1 e_1 - G_2 e_2`, :math:`G = D_q^{-\mathsf T}(n
+   \cdot \partial_u C, n \cdot \partial_v C)` the gradient of :math:`g`.
+   The zero set of :math:`h` runs along :math:`J \nabla h`, :math:`J` a
+   quarter turn, and :math:`\nabla h(s) = H (s - s^*)` for some :math:`H` in
+   the enclosure. With :math:`M` the symmetric part of :math:`J H_0`,
+   :math:`H_0` the enclosure's middle, the symmetric part of :math:`M J H` is
+   proved positive definite for every :math:`H` in it. Then
+   :math:`Q(s) = (s - s^*)^{\mathsf T} M (s - s^*)` strictly increases along
+   every arc of the zero set away from :math:`s^*`: there is no other critical
+   point, no closed loop, and no arc that leaves :math:`s^*` and returns to it.
+   :math:`H` is indefinite (for a definite :math:`H_0` no such :math:`M`
+   exists), so four half-branches leave :math:`s^*`.
+
+Every arc of the zero set therefore ends on :math:`S`'s edges or at
+:math:`s^*`. The roots on the edges are counted on pieces of each edge: a piece
+is dropped where Taylor's theorem,
+:math:`h(s) \in h(s^*) + \tfrac12 (s - s^*)^{\mathsf T} H (s - s^*)`,
+excludes zero; otherwise :math:`C`'s parameters are confined by the mean
+value theorem to :math:`c^* + D_q^{-1}(p - p(s^*))` and the root isolated by
+Krawczyk's operator, the piece halved when it is not settled. Exactly four
+roots are the four half-branches and nothing else; the node is the shared end
+of the four branches leaving it, each marched and certified as any other.
+Fewer or more, or anything unproved, and the pair is cut further.
+
+The node is proved within the pair tolerance of both surfaces, not on them: a
+gap within the tolerance (ADR-0050) is not told apart from a crossing, so two
+branches passing that close are reported meeting there. The node is a
+candidate for an arrangement event, never an event by itself (ADR-0054).
 
 Arcs join at shared seeds into branches, every free end on a boundary of the
-domains. Each arc is marched by Newton's method on :math:`S_A = S_B` and
+domains or at a node, where four branches end. Each arc is marched by Newton's method on :math:`S_A = S_B` and
 :math:`L \cdot S_A = s`, halving chords until they hold, and the polylines in
 space and on both surfaces are certified by ``CertifyDeviation``, tightened
 until they pass. They are polylines because a fitted cubic pcurve can leave a
 surface's domain.
 
-Whatever cannot be settled fails: a tangency along a curve, a branch point, an
-overlap, any tangency of rational surfaces, and a search past its budget of
-:math:`2^{14}` pairs return ``IntersectionFailed``, naming the patches, never
-a partial or an unproved empty result (``src/intersect/GenericSSI.cpp``).
+Whatever cannot be settled fails: a tangency along a curve, an isolated touch,
+a branch point not proved a transverse node (a degenerate Hessian, as where
+three branches cross; a node of rational surfaces; a node on a line between
+Bézier patches, where no centred pair fits; a node whose gap the tolerance does
+not admit), an overlap, any tangency of rational surfaces, and a search past
+its budget of :math:`2^{14}` pairs return ``IntersectionFailed``, naming the
+patches, never a partial or an unproved empty result
+(``src/intersect/GenericSSI.cpp``; nodes in
+``tests/intersect/GenericSSINodeTests.cpp``).
 
 A B-spline surface against a plane, cylinder, cone, sphere or torus reports
 ``NotImplemented``.
