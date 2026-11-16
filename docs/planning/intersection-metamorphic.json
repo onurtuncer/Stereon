@@ -426,7 +426,7 @@
     },
     {
       "id": "SSI-translated-boundary",
-      "source": "tests/intersect/GenericSSINodeTests.cpp#WEAKENED RELATION, a known open defect: SSI-translated-boundary",
+      "source": "https://github.com/onurtuncer/Stereon/pull/279",
       "state": "untriaged"
     },
     {
