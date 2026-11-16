@@ -46,6 +46,11 @@ Mutants never touch tests or oracles, and nothing is committed: the
 worktree is removed at the end. Run from anywhere inside the repository:
 
     python tools/mutate.py --catalogue tools/mutation/pilot.json
+
+Several catalogues with the same preset may be replayed together against one
+baseline build; their mutant IDs must then be unique across all of them:
+
+    python tools/mutate.py --catalogue tools/mutation/intersection-backfill*.json
 """
 
 import argparse
@@ -374,7 +379,7 @@ def select_mutants(mutants, only):
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--catalogue", required=True, type=Path)
+    parser.add_argument("--catalogue", required=True, type=Path, nargs="+")
     parser.add_argument("--work", type=Path, default=Path("build/mutation"))
     parser.add_argument("--only", default="", help="comma-separated mutant ids")
     parser.add_argument("--build-timeout", type=int, default=1800)
@@ -385,11 +390,14 @@ def main():
 
     repo = Path(run(["git", "rev-parse", "--show-toplevel"], None, 60)[1].strip())
     revision = run(["git", "rev-parse", "HEAD"], repo, 60)[1].strip()
-    catalogue = json.loads((repo / args.catalogue).read_text(encoding="utf-8"))
-    mutants = catalogue["mutants"]
+    catalogues = [json.loads((repo / path).read_text(encoding="utf-8")) for path in args.catalogue]
+    presets = {catalogue.get("preset", "gcc16-debug") for catalogue in catalogues}
+    if len(presets) != 1:
+        raise ValueError("catalogues replayed together must share one preset: " + ", ".join(sorted(presets)))
+    mutants = [mutant for catalogue in catalogues for mutant in catalogue["mutants"]]
     mutants = select_mutants(mutants, args.only)
     work = (repo / args.work).resolve()
-    tree = Worktree(repo, work, catalogue.get("preset", "gcc16-debug"))
+    tree = Worktree(repo, work, presets.pop())
     start = time.monotonic()
     tree.create()
     try:
@@ -409,7 +417,8 @@ def main():
     finally:
         if not args.keep:
             tree.remove()
-    report = summarise(outcomes, str(args.catalogue), revision, time.monotonic() - start)
+    report = summarise(outcomes, ", ".join(path.as_posix() for path in args.catalogue), revision,
+                       time.monotonic() - start)
     work.mkdir(parents=True, exist_ok=True)
     (work / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     (work / "report.md").write_text(markdown(report), encoding="utf-8")

@@ -22,11 +22,20 @@ and tolerance ceiling, x translations 0 and 8, and curve reversal. The default
 angular policy is unchanged and execution is serial. It uses the production
 default curve domain, including its seam, as did the failing property.
 
-This is stacked on #283's conic arc-cut fix. The previous CI failure is observed;
-passing the new deterministic replay on #283 remains to be established by CI.
-The ledger therefore stays `fixture captured`, not verified. The broader
-linearization property discards IntersectionFailed on #283; this fixed test
-specifically prevents that discard from hiding this known transverse fixture.
+The repair is #300's, on main: `ConicRootsOf` searches the domain again
+with its cuts moved when the first search leaves a root undecided, and a
+full turn's seam turns with them, so the crossing at t = 0 (and 2 pi) is
+found inside an arc and reported once. #283 was folded onto it. This
+branch's earlier endpoint repair (an exact zero accepted at an arc's end,
+the plane form in conic-local coordinates, sin(0) kept exact) is no longer
+needed for this fixture and was dropped in the merge: the deterministic
+replay and its controls pass on main's implementation alone (Windows,
+GCC 16, gcc16-debug, 2026-11-16). The ledger stays `fixture captured`
+until CI and review confirm it.
+
+The broader linearization property discards IntersectionFailed (#283);
+this fixed test specifically prevents that discard from hiding this known
+transverse fixture.
 
 Replay after building `stereon_intersect_tests`:
 
@@ -34,17 +43,6 @@ Replay after building `stereon_intersect_tests`:
 ctest --preset gcc16-debug -R 'intersect: MR macOS ellipse plane shrunk linearization fixture resolves' --output-on-failure
 ```
 
-## Endpoint repair
-
-Construct the plane form using conic-local poles and the interval-enclosed
-center-to-plane displacement. This retains the exact zero instead of adding
-and then subtracting the same world origin with independent rounding.
-For circular/elliptical arcs, sin(0) is kept exactly zero. The arc search
-accepts an exact zero endpoint only after the polynomial derivative is
-proved to have a strict sign throughout the arc. An interval merely
-straddling zero still fails closed. Original world geometry is used for
-polishing, evaluation and plane-domain clipping.
-
 Negative controls exclude the seam by trimming, separate the supporting
 plane beyond the ellipse extent, and demand a single crossing on a bounded
-interval straddling zero. Native validation of this repair is pending CI.
+interval straddling zero.

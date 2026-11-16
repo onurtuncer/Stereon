@@ -321,6 +321,6 @@
         100.0
       ]
     ],
-    "may_fail_closed": "two branches cross at a node; the generic path fails closed at a branch point"
+    "may_fail_closed": "two branches cross at a node of rational surfaces; the generic path fails closed at a branch point it cannot prove a transverse node of polynomial surfaces"
   }
 }
