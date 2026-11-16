@@ -379,17 +379,21 @@ TEST_CASE("near extrema never replace closed loops with isolated touches",
     }
 }
 
-TEST_CASE("tangency along a curve and a branch point fail closed", "[intersect][generic][special]")
+TEST_CASE("tangency along a curve fails closed; a transverse node is split",
+          "[intersect][generic][special]")
 {
     const Surface flat{Patch(0.0)};
     // Height exactly 0 along u = 1/2: tangent to the plane along a line.
     const auto tangent = Intersect(flat, Surface{Bowl(0.0, 1.0)}, ctx);
     REQUIRE_FALSE(tangent.has_value());
     REQUIRE(tangent.error().GetCode() == ErrorCode::IntersectionFailed);
-    // z = (u - 1/2)(v - 1/2): two lines crossing at the centre.
+    // z = (u - 1/2)(v - 1/2): two lines crossing at the centre, four branches
+    // ending there (GenericSSINodeTests.cpp holds them to the closed form).
     const auto node = Intersect(flat, Surface{Saddle()}, ctx);
-    REQUIRE_FALSE(node.has_value());
-    REQUIRE(node.error().GetCode() == ErrorCode::IntersectionFailed);
+    INFO(IntersectTest::ErrorText(node));
+    REQUIRE(node.has_value());
+    REQUIRE(node->Branches.size() == 4);
+    REQUIRE(IntersectTest::ConnectivityOf(*node, 1e-9).Curves == 1);
 }
 
 TEST_CASE("a bilinear pair's transverse line certifies against B-spline surfaces",
