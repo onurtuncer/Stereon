@@ -1422,14 +1422,60 @@ brackets of one crossing found from either side of a knot, and absorbs an
 unproved bracket of a continued segment, which if it is a root of the
 curves at all is the proved one. Brackets that meet otherwise are reported
 as their hull, undecided; equal parameters are never an argument. Every
-proved crossing is ``Decided``. A pair
-that is neither apart nor settled when its pieces can no longer be halved,
-or a search past :math:`2^{16}` pairs, fails with ``IntersectionFailed``:
-a tangency of two B-splines (where :math:`J` is singular and no box ever
-satisfies the test), an overlap, or a crossing too nearly tangential to
-separate in doubles. Two identical splines coincide, and their overlap is
-the requested domains' common stretch on the identity map; their crossings
-with themselves are not reported then.
+proved crossing is ``Decided``.
+
+**Touches** (``Touches``). At a tangency :math:`J` is singular, and no box
+ever passes Krawczyk's test. So a pair that is neither apart nor settled
+is tried as two graphs before it is halved, under three conditions:
+- both pieces' :math:`x = u\cdot(P - O)`, along the chord :math:`u` of the
+  first, are proved strictly monotone;
+- :math:`h'` is *not* proved of one sign over their common :math:`x` (if it
+  were, the pair could hold only a transverse crossing, which Krawczyk's
+  test settles as the pieces are halved);
+- some :math:`h^{(k)}`, :math:`k \in [2, 4]`, is proved of one sign.
+
+Here :math:`h(x) = y_a(x) - y_b(x)` is the difference of the pieces'
+heights :math:`y = n\cdot(P - O)`, whose roots are the pair's meetings. Its
+derivatives are enclosed over a range of :math:`x` from each piece's jets
+in its own parameter: the homogeneous point's derivatives by de Casteljau
+on repeated hodographs, the quotient by :math:`W` and the repeated
+:math:`d/dx = (1/x')\,d/ds` by Leibniz's rule. Each piece's parameters over
+the range come from bisection on its monotone :math:`x`, rounded outward.
+
+The range is then followed as the plane handler's ``OfOrder`` follows a
+spline against a conic (*Algorithm S*):
+- :math:`h` of one sign: no meeting;
+- a lower derivative of one sign: the range has that order, and
+  :math:`h'` of one sign makes :math:`h` monotone. Opposite strict signs
+  at the ends are one crossing, bisected and ``Decided``, unique in the
+  range;
+- otherwise :math:`h^{(k-1)}`'s end signs: one strict sign is that sign
+  throughout; else the range holding its single zero is halved;
+- both ends within rounding, with nothing lower of one sign: :math:`h` has
+  at most :math:`k` roots there, and the range is reported as one
+  ``Tangential`` meeting with ``Decided`` false, bracketed on both curves.
+
+The attempt stands only if every undecided crossing it found is joined to
+a touch by brackets that meet on both curves; Distinct then merges them
+into the touch's rounding. Otherwise it is discarded and the pair is halved
+as before. A tangency of two B-splines of order two to four is so reported,
+never dropped; its order and existence are not decided.
+
+**One curve in two knot vectors** (``SameCurve``). Two splines of one
+degree and domain are refined to each other's knots by Boehm's insertion
+done exactly in doubles: every sum is checked by TwoSum, every product and
+ratio by its fused residual. If the knot vectors and homogeneous poles
+then agree, the two are one spline on one parameter, and they overlap on
+the identity map over the requested domains' common stretch, as identical
+splines do; their crossings with themselves are not reported. If any step
+would round, nothing is proved and the pair is searched.
+
+A pair that is none of these when its pieces can no longer be halved, or a
+search past :math:`2^{16}` pairs, fails with ``IntersectionFailed``:
+- an overlap other than these, including a spline along a different
+  parameterization of itself, or along a conic;
+- a touch with no derivative of order up to four of one sign;
+- a crossing too nearly tangential to separate in doubles.
 
 What is decided
 ~~~~~~~~~~~~~~~
@@ -1452,8 +1498,10 @@ What is decided
      - a crossing proved single by Krawczyk's test, its bracket inside both
        segments, or, at or within rounding of an interior knot of either or
        both splines, proved single with the splines taken whole and its
-       bracket inside both splines; a crossing at a spline's own end, or
-       one no box proves, is reported undecided
+       bracket inside both splines, or a crossing beside a touch proved
+       single by the signs of the graphs' height difference; a crossing at
+       a spline's own end, one no box proves, and every touch are reported
+       undecided
 
 A point whose parameter on a conic lies within rounding of a requested
 domain's end may fall on either side of it; a B-spline root whose bracket
@@ -1574,7 +1622,7 @@ second form of the two surfaces is definite, is found, but not yet settled: a
 nearby extremum does not rule out a small loop around it, so the pair is cut
 further and fails closed.
 
-*A transverse node*, for polynomial surfaces: a point where the surfaces share
+*A transverse node*, of polynomial or rational surfaces: a point where the surfaces share
 a tangent plane and the relative second form is indefinite and nondegenerate,
 so that two smooth branches cross there. It is settled on a pair of a small
 patch :math:`S` and a covering patch :math:`C`, both cut out of the pair
@@ -1638,6 +1686,22 @@ roots are the four half-branches and nothing else; the node is the shared end
 of the four branches leaving it, each marched and certified as any other.
 Fewer or more, or anything unproved, and the pair is cut further.
 
+For rational patches every enclosure above is of the Cartesian point and
+its partials to second order, formed from the homogeneous nets' enclosures by
+the quotient rule on :math:`P = H / W`:
+
+.. math::
+
+   P_u = \frac{H_u - P W_u}{W}, \qquad
+   P_{uu} = \frac{H_{uu} - 2 P_u W_u - P W_{uu}}{W}, \qquad
+   P_{uv} = \frac{H_{uv} - P_u W_v - P_v W_u - P W_{uv}}{W},
+
+the weight proved positive; the projections' hulls are those of the
+Cartesian poles. For polynomial patches these are the nets' own enclosures.
+A node on a knot line or on a closed surface's seam, where no single Bézier
+cell of each surface holds it inside (as in the corpus's crossing
+cylinders), still fails closed.
+
 The node is proved within the pair tolerance of both surfaces, not on them: a
 gap within the tolerance (ADR-0050) is not told apart from a crossing, so two
 branches passing that close are reported meeting there. The node is a
@@ -1652,7 +1716,7 @@ surface's domain.
 
 Whatever cannot be settled fails: a tangency along a curve, an isolated touch,
 a branch point not proved a transverse node (a degenerate Hessian, as where
-three branches cross; a node of rational surfaces; a node on a line between
+three branches cross; a node on a line between
 Bézier patches, where no centred pair fits; a node whose gap the tolerance does
 not admit), an overlap, any tangency of rational surfaces, and a search past
 its budget of :math:`2^{14}` pairs return ``IntersectionFailed``, naming the
