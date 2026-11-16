@@ -557,3 +557,290 @@ TEST_CASE("MR PR-238 rounded pole plane fails closed on ellipsoid and sphere",
         }
     }
 }
+
+namespace {
+
+/// A placement without translation: exact axis permutations and powers of
+/// two, which keep a rounding-sized premise (a tangency on a seam) intact.
+[[nodiscard]] bool Untranslated(const Placement& p)
+{
+    return p.Offset.X == 0 && p.Offset.Y == 0 && p.Offset.Z == 0;
+}
+
+[[nodiscard]] std::string Where(const Placement& p)
+{
+    return "scale=" + std::to_string(p.Scale) + " axis=" + std::to_string(p.X.X) + ',' +
+           std::to_string(p.X.Y) + ',' + std::to_string(p.X.Z) +
+           " offset=" + std::to_string(p.Offset.X) + ',' + std::to_string(p.Offset.Y) + ',' +
+           std::to_string(p.Offset.Z);
+}
+
+/// The overlap between two heights' requested intervals, from the closed
+/// form: their intersection.
+void CheckClippedHeights(const SurfaceSurfaceIntersection& r, const Interval& expected,
+                         const double scale)
+{
+    REQUIRE(r.Overlaps.size() == 1);
+    const auto& o = r.Overlaps.front();
+    CHECK(std::abs(o.OnA.Y.GetLower() - expected.GetLower()) <= 1e-14 * scale);
+    CHECK(std::abs(o.OnA.Y.GetUpper() - expected.GetUpper()) <= 1e-14 * scale);
+    CHECK(std::abs(o.OnB.Y.GetLower() - expected.GetLower()) <= 1e-14 * scale);
+    CHECK(std::abs(o.OnB.Y.GetUpper() - expected.GetUpper()) <= 1e-14 * scale);
+}
+
+} // namespace
+
+TEST_CASE("MR PR-112 coincident cylinders clipped to the requested domains",
+          "[intersect][metamorphic][backfill][PR-112]")
+{
+    // PR #112: coincident cylinders returned the whole requested boxes as
+    // their overlap, whatever the other's box, even boxes apart. The same
+    // cylinder twice, under every placement (MR-01, MR-03: heights and the
+    // resolution scale, angles do not) and in both orders (MR-02). The
+    // oracle is the closed-form intersection of the requested intervals.
+    for (const auto& p : Placements()) {
+        INFO("PR-112 " << Where(p));
+        Replay("PR-112", p);
+        const Surface cylinder{Cylinder{p.Point(0, 0, 0), 3 * p.Scale, p.X, p.Y, true}};
+        const Interval turn{0.0, 2 * pi};
+        const Box2 first{turn, Interval{0, p.Scale}};
+        for (const bool swapped : {false, true}) {
+            CAPTURE(swapped);
+            const auto meet = [&](const Box2& a, const Box2& b) {
+                return swapped ? Intersect(cylinder, b, cylinder, a, p.Policy().GetResolution(),
+                                           p.Policy())
+                               : Intersect(cylinder, a, cylinder, b, p.Policy().GetResolution(),
+                                           p.Policy());
+            };
+            const auto apart = meet(first, Box2{turn, Interval{2 * p.Scale, 3 * p.Scale}});
+            REQUIRE(apart.has_value());
+            CHECK(apart->IsEmpty());
+            const auto partial = meet(first, Box2{turn, Interval{0.5 * p.Scale, 2 * p.Scale}});
+            REQUIRE(partial.has_value());
+            CheckClippedHeights(*partial, Interval{0.5 * p.Scale, p.Scale}, p.Scale);
+            CHECK_FALSE(partial->Overlaps.front().FullDomain);
+            // Angular arcs [0, 1] and [2, 3] are apart, modulo a turn too.
+            const Interval height{0, p.Scale};
+            const auto arcs = meet(Box2{Interval{0, 1}, height}, Box2{Interval{2, 3}, height});
+            REQUIRE(arcs.has_value());
+            CHECK(arcs->IsEmpty());
+        }
+    }
+}
+
+TEST_CASE("MR PR-112-budget plane cylinder pcurve work is bounded",
+          "[intersect][metamorphic][backfill][PR-112-budget]")
+{
+    // PR #112: the plane-cylinder ellipse pcurve converted and allocated a
+    // sample count that a tiny resolution made unbounded. With the
+    // resolution 1e-20 times the scale, the sample spacing, which goes as
+    // (resolution / radius)^(1/4) times the radius, the count, angle over
+    // spacing, is the same at every scale (MR-03) and placement (MR-01), in
+    // both orders (MR-02): about 2e5 samples, beyond the budget of 2^16, so
+    // the contract is CertificationFailed naming the sample budget.
+    for (const auto& p : Placements()) {
+        INFO("PR-112-budget " << Where(p));
+        const Context policy = p.Policy().WithResolution(1e-20 * p.Scale);
+        const Surface oblique{
+            IntersectTest::PlaneWithNormal(p.Point(0, 0, 0), p.Y + Cross(p.X, p.Y))};
+        const Surface cylinder{Cylinder{p.Point(0, 0, 0), 5 * p.Scale, p.X, p.Y, true}};
+        for (const bool swapped : {false, true}) {
+            CAPTURE(swapped);
+            const auto result = swapped ? Intersect(cylinder, oblique, policy)
+                                        : Intersect(oblique, cylinder, policy);
+            REQUIRE_FALSE(result.has_value());
+            CHECK(result.error().GetCode() == ErrorCode::CertificationFailed);
+            CHECK(std::string(result.error().GetMessage()).find("sample budget") !=
+                  std::string::npos);
+        }
+    }
+}
+
+TEST_CASE("MR PR-120 skew cylinder angular sectors of B",
+          "[intersect][metamorphic][backfill][PR-120]")
+{
+    // PR #120's cases, repaired in #118 (3a2ba89): B's angular sector was
+    // not clipped. A is the cylinder of radius 3 about z; B, of radius 2,
+    // runs along x through (0, 4, 0), its angle from y towards z. They meet
+    // only where cos(u_B) <= -1/2, the closed form. So the sector [-2, 2]
+    // (wider than pi, a turn on too) and the singleton {0} must be proved
+    // empty, and the sector [2.5, 3.8], inside [2 pi / 3, 4 pi / 3], must
+    // not. Every placement (MR-01, MR-03) and both orders (MR-02).
+    for (const auto& p : Placements()) {
+        INFO("PR-120 " << Where(p));
+        Replay("PR-120", p);
+        const Vec3 z = Cross(p.X, p.Y);
+        const Surface a{Cylinder{p.Point(0, 0, 0), 3 * p.Scale, p.X, p.Y, true}};
+        const Surface b{Cylinder{p.Point(0, 4, 0), 2 * p.Scale, p.Y, z, true}};
+        const auto meet = [&](const Box2& patch, const bool swapped) {
+            return swapped ? Intersect(b, patch, a, Domain(a), p.Policy())
+                           : Intersect(a, Domain(a), b, patch, p.Policy());
+        };
+        for (const bool swapped : {false, true}) {
+            CAPTURE(swapped);
+            for (const double shift : {0.0, 2 * pi}) {
+                const auto wide =
+                    meet(Box2{Interval{-2 + shift, 2 + shift}, Interval::Everything()}, swapped);
+                INFO(IntersectTest::ErrorText(wide));
+                REQUIRE(wide.has_value());
+                CHECK(wide->IsEmpty());
+            }
+            const auto single = meet(Box2{Interval{0.0}, Interval::Everything()}, swapped);
+            REQUIRE(single.has_value());
+            CHECK(single->IsEmpty());
+            const auto inside = meet(Box2{Interval{2.5, 3.8}, Interval::Everything()}, swapped);
+            INFO(IntersectTest::ErrorText(inside));
+            REQUIRE(inside.has_value());
+            CHECK_FALSE(inside->IsEmpty());
+        }
+    }
+}
+
+TEST_CASE("MR PR-159 skew cylinders tangent on both seams meet at a node",
+          "[intersect][metamorphic][backfill][PR-159]")
+{
+    // PR #159 (issue #155): radius 3 inside radius 5 with a tilted axis,
+    // touching at (5, 0, 0), on the seam of each, was refused. Exact axis
+    // permutations and powers of two (MR-01, MR-03; no translation, which
+    // could round the tangency's premise), both orders (MR-02). The oracle:
+    // one node at the closed-form point of tangency with four branch ends,
+    // and every branch on both cylinders by the closed-form distance from
+    // each axis.
+    for (const auto& p : Placements()) {
+        if (!Untranslated(p)) {
+            continue;
+        }
+        INFO("PR-159 " << Where(p));
+        Replay("PR-159", p);
+        const Vec3 z = Cross(p.X, p.Y);
+        const Vec3 tilted = 0.6 * p.Y + 0.8 * z;
+        const Surface larger{Cylinder{p.Point(0, 0, 0), 5 * p.Scale, p.X, p.Y, true}};
+        const Surface smaller{Cylinder{p.Point(2, 0, 0), 3 * p.Scale, p.X, tilted, true}};
+        const Point3 node = p.Point(5, 0, 0);
+        const double reach = 1e-7 * p.Scale;
+        for (const bool swapped : {false, true}) {
+            CAPTURE(swapped);
+            const auto result = swapped ? Intersect(smaller, larger, p.Policy())
+                                        : Intersect(larger, smaller, p.Policy());
+            INFO(IntersectTest::ErrorText(result));
+            REQUIRE(result.has_value());
+            CHECK(IntersectTest::ConnectivityOf(*result, reach).Nodes == 1);
+            std::size_t ends = 0;
+            for (const IntersectionBranch& branch : result->Branches) {
+                for (const double t : {branch.Range.GetLower(), branch.Range.GetUpper()}) {
+                    if (Distance(Eval(branch.Curve3d, t), node) <= reach) {
+                        ++ends;
+                    }
+                }
+                for (const double t : IntersectTest::SamplesOf(branch.Range, 16)) {
+                    const Point3 q = Eval(branch.Curve3d, t);
+                    const double slack = branch.Bound + p.Policy().GetResolution();
+                    CHECK(OffCylinder(q, p.Point(0, 0, 0), z, 5 * p.Scale) <= slack);
+                    CHECK(OffCylinder(q, p.Point(2, 0, 0), Cross(p.X, tilted), 3 * p.Scale) <=
+                          slack);
+                }
+            }
+            CHECK(ends == 4);
+        }
+    }
+}
+
+TEST_CASE("MR PR-236 concentric spheres within the tolerance are declared",
+          "[intersect][metamorphic][backfill][PR-236]")
+{
+    // PR #236: concentric spheres whose radii differ by less than the pair
+    // tolerance were an Exact overlap at distance 0. ADR-0029 section 6: a
+    // coincidence declared within the tolerance is Tolerant and records how
+    // far apart the surfaces are, here |R_b - R_a|, the closed form. Every
+    // placement with the tolerance scaled (MR-01, MR-03), both orders
+    // (MR-02); beyond the tolerance they are apart.
+    for (const auto& p : Placements()) {
+        INFO("PR-236 " << Where(p));
+        Replay("PR-236", p);
+        const double ra = 2 * p.Scale;
+        const double rb = 2.0005 * p.Scale;
+        const Surface a{Sphere{p.Point(0, 0, 0), ra, p.X, p.Y, true}};
+        const Surface b{Sphere{p.Point(0, 0, 0), rb, p.X, p.Y, true}};
+        for (const bool swapped : {false, true}) {
+            CAPTURE(swapped);
+            const auto meet = [&](const double tolerance) {
+                return swapped ? Intersect(b, Box2::Everything(), a, Box2::Everything(), tolerance,
+                                           p.Policy())
+                               : Intersect(a, Box2::Everything(), b, Box2::Everything(), tolerance,
+                                           p.Policy());
+            };
+            const auto declared = meet(1e-3 * p.Scale);
+            REQUIRE(declared.has_value());
+            REQUIRE(declared->Overlaps.size() == 1);
+            CHECK(declared->Overlaps.front().Evidence == CoincidenceEvidence::Tolerant);
+            CHECK(std::abs(declared->Overlaps.front().Distance - (rb - ra)) <= 1e-15 * p.Scale);
+            const auto apart = meet(1e-4 * p.Scale);
+            REQUIRE(apart.has_value());
+            CHECK(apart->IsEmpty());
+        }
+    }
+}
+
+TEST_CASE("MR PR-236-tangent sphere on a cylinder's axis within the tolerance",
+          "[intersect][metamorphic][backfill][PR-236-tangent]")
+{
+    // PR #236: a sphere centred on a cylinder's axis, radii 5e-4 apart under
+    // a pair tolerance of 1e-3, is declared tangent along a circle; its
+    // certification against the resolution failed the whole intersection.
+    // Every placement with lengths and the tolerance scaled (MR-01, MR-03),
+    // both orders (MR-02). Oracle: one tangential curve, certified, its
+    // bound at least 0.8 of the closed-form gap |R_c - R_s| and within the
+    // tolerance.
+    for (const auto& p : Placements()) {
+        INFO("PR-236-tangent " << Where(p));
+        Replay("PR-236-tangent", p);
+        const Surface sphere{Sphere{p.Point(0, 0, 0), 2 * p.Scale, p.X, p.Y, true}};
+        for (const double radius : {2.0 - 5e-4, 2.0 + 5e-4}) {
+            const Surface cylinder{Cylinder{p.Point(0, 0, 0), radius * p.Scale, p.X, p.Y, true}};
+            const double gap = std::abs(radius - 2.0) * p.Scale;
+            const double tolerance = 1e-3 * p.Scale;
+            for (const bool swapped : {false, true}) {
+                CAPTURE(radius, swapped);
+                const auto touch = swapped ? Intersect(cylinder, Box2::Everything(), sphere,
+                                                       Box2::Everything(), tolerance, p.Policy())
+                                           : Intersect(sphere, Box2::Everything(), cylinder,
+                                                       Box2::Everything(), tolerance, p.Policy());
+                INFO(IntersectTest::ErrorText(touch));
+                REQUIRE(touch.has_value());
+                CHECK(IntersectTest::ConnectivityOf(*touch, 1e-7 * p.Scale).Curves == 1);
+                for (const IntersectionBranch& arc : touch->Branches) {
+                    CHECK(arc.Contact == ContactType::Tangential);
+                    CHECK(arc.IsCertified());
+                    CHECK(arc.Bound >= 0.8 * gap);
+                    CHECK(arc.Bound <= tolerance);
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("MR PR-263-translated-boundary spline end meeting away from the origin",
+          "[intersect][metamorphic][backfill][PR-263-translated-boundary]")
+{
+    // PR #263: the PR-241 fixture failed natively at scale 1/4 translated
+    // by (8, -4, 2) (Actions run 43052745077, job 130633998895), resolved
+    // at the origin: the pair search inverted an ill-conditioned Krawczyk
+    // matrix where no stationary point could exist. The translated
+    // placements, every scale (MR-01, MR-03), with reversal and knot maps
+    // (MR-04) and both orders (MR-02), as SplineEndMeeting checks.
+    for (const auto& p : Placements()) {
+        if (Untranslated(p)) {
+            continue;
+        }
+        CAPTURE(p.Scale, p.X.X, p.X.Y, p.X.Z);
+        Replay("PR-263-translated-boundary", p);
+        for (const bool reversed : {false, true}) {
+            for (const bool remapped : {false, true}) {
+                for (const bool apart : {false, true}) {
+                    CAPTURE(reversed, remapped, apart);
+                    SplineEndMeeting(p, reversed, remapped, apart);
+                }
+            }
+        }
+    }
+}
