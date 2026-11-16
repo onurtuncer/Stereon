@@ -32,7 +32,7 @@ verification evidence is linked; do not silently change status to complete.
 | [#230](https://github.com/onurtuncer/Stereon/pull/230) | Plane–ellipsoid tangent and longitude-box errors | MR-02, MR-04 | Original PR's tangent/pole tests already swap operands; test stability and link replay evidence | verified (fault killed by `mutate.py`, batch 2 [triage](intersection-metamorphic-triage.md); owner review pending) |
 | [#236](https://github.com/onurtuncer/Stereon/pull/236) | Two corpus-declared SSI configurations incorrect | MR-01, MR-02, MR-03 | Two ElementaryPairs defects, PR-236 and PR-236-tangent; MR tests, faults killed by `mutate.py` ([triage](intersection-metamorphic-triage.md)) | verified (agent review; owner review pending) |
 | [#238](https://github.com/onurtuncer/Stereon/pull/238) | Property counterexamples from CI seeds | Relation depends on exact counterexample | PlaneEllipsoid pole-rate defect; MR PR-238 test, fault killed by `mutate.py` ([triage](intersection-metamorphic-triage.md)) | verified (agent review; owner review pending) |
-| [#239](https://github.com/onurtuncer/Stereon/pull/239) | 3D line resolution semantics differed from spline | MR-02, MR-03 | Owner semantic decision; defect or contract change awaits the owner's classification ([triage](intersection-metamorphic-triage.md)) | untriaged |
+| [#239](https://github.com/onurtuncer/Stereon/pull/239) | 3D line resolution semantics differed from spline | MR-02, MR-03 | Owner decision 2026-11-12: a contract change, not a defect; the residual it documented is closed by #241 ([triage](intersection-metamorphic-triage.md)) | not a defect |
 | [#240](https://github.com/onurtuncer/Stereon/pull/240), [#241](https://github.com/onurtuncer/Stereon/pull/241) | B-spline curve meeting on domain boundary | MR-04, MR-02 | One root cause, shared PR-241 fault killed by `mutate.py` ([triage](intersection-metamorphic-triage.md)) | verified (owner review pending) |
 | [#244](https://github.com/onurtuncer/Stereon/pull/244) | Near-axis sphere–cone contact misclassified as points | MR-02, MR-01 | Priority campaign in `MetamorphicRegressionTests.cpp`; replay and fault catalogue linked in JSON | verified (fault killed by `mutate.py`, batch 2 [triage](intersection-metamorphic-triage.md); owner review pending) |
 | [#247](https://github.com/onurtuncer/Stereon/pull/247) | Unequal near-parallel cones falsely coincident | MR-02 | Priority campaign in `MetamorphicRegressionTests.cpp`; replay and fault catalogue linked in JSON | verified (fault killed by `mutate.py`, batch 2 [triage](intersection-metamorphic-triage.md); owner review pending) |
@@ -45,8 +45,8 @@ counting or closing obligations. Batch 1 of the
 [triage](intersection-metamorphic-triage.md) records PR-75, PR-90, PR-106,
 PR-126 and PR-135 as `not a defect`, since none changes an intersection handler,
 and PR-112, PR-120, PR-159 and PR-194 as `fixture captured`. Batch 2 verifies PR-112 (with
-PR-112-budget split out), PR-120 (repaired in #118) and PR-159; PR-194 awaits its
-split into sub-IDs:
+PR-112-budget split out), PR-120 (repaired in #118) and PR-159. PR-194 stays one
+obligation (owner decision) and is verified with all six root causes' faults killed:
 
 - [#75](https://github.com/onurtuncer/Stereon/pull/75),
   [#90](https://github.com/onurtuncer/Stereon/pull/90),
