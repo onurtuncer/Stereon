@@ -120,6 +120,24 @@ void RequireComplete(const CurveSurfaceIntersection& result, const C& curve, con
     }
 }
 
+/// Exactly the expected points, decided crossings, in any order: one
+/// within rounding of each.
+void RequireAt(const CurveSurfaceIntersection& result, const std::vector<Point3>& expected)
+{
+    REQUIRE(result.Overlaps.empty());
+    REQUIRE(result.Points.size() == expected.size());
+    for (const Point3& q : expected) {
+        INFO("expected (" << q.X << ", " << q.Y << ", " << q.Z << ")");
+        REQUIRE(std::ranges::count_if(result.Points, [&](const CurveSurfacePoint& p) {
+                    return Distance(p.Position, q) <= 1e-15;
+                }) == 1);
+    }
+    for (const CurveSurfacePoint& p : result.Points) {
+        REQUIRE(p.Decided);
+        REQUIRE(p.Contact == ContactType::Crossing);
+    }
+}
+
 } // namespace
 
 TEST_CASE("a circle crosses a plane at its two angles", "[intersect][conic-surface]")
@@ -179,6 +197,63 @@ TEST_CASE("an empty conic result is a proof: 2^-40 above the top is apart, below
         REQUIRE_FALSE(touching->Points.empty());
     } else {
         REQUIRE(touching.error().GetCode() == ErrorCode::IntersectionFailed);
+    }
+}
+
+TEST_CASE("crossings on a quarter-turn cut or on the seam are decided, each once",
+          "[intersect][conic-surface][regression]")
+{
+    // A conic is searched in quarter-turn arcs: a crossing exactly on a cut
+    // was seen from both arcs, undecided, and failed. The cuts are the
+    // search's, not the geometry's.
+    SECTION("radius 2 in the xz-plane against z = 0: t = 0, the seam, and pi, a cut")
+    {
+        const Circle upright{Point3{}, 2.0, ex, ez};
+        const auto result = Meet(upright, ground);
+        INFO(IntersectTest::ErrorText(result));
+        REQUIRE(result.has_value());
+        RequireAt(*result, {Point3{2.0, 0.0, 0.0}, Point3{-2.0, 0.0, 0.0}});
+        RequireComplete(*result, upright, ground, Domain(upright),
+                        [](const Point3& p) { return p.Z; });
+    }
+    SECTION("the ellipse a property test drew, upright, against the plane through its centre")
+    {
+        // Its frame turned by -pi / 2 as the generator turns it: Y is
+        // (0, cos(-pi / 2), -1), cos(-pi / 2) a rounding off zero.
+        const double phi = -pi / 2.0;
+        const Ellipse upright{Point3{-1.25, -1.25, 0.21875}, 1.5, 0.6, ex,
+                              Vec3{0.0, std::cos(phi), std::sin(phi)}};
+        const Plane level{Point3{-1.25, -1.25, 0.21875}, ex, ey};
+        const auto result = Meet(upright, level);
+        INFO(IntersectTest::ErrorText(result));
+        REQUIRE(result.has_value());
+        RequireAt(*result, {Point3{0.25, -1.25, 0.21875}, Point3{-2.75, -1.25, 0.21875}});
+        RequireComplete(*result, upright, level, Domain(upright),
+                        [](const Point3& p) { return p.Z - 0.21875; });
+    }
+    SECTION("over the turn [-pi, pi]: t = 0 on a cut, and +-pi, the seam, once")
+    {
+        const Circle upright{Point3{}, 2.0, ex, ez};
+        const Interval turn{-pi, pi};
+        const auto result = Intersect(Curve{upright}, turn, Surface{ground}, Domain(ground), ctx);
+        INFO(IntersectTest::ErrorText(result));
+        REQUIRE(result.has_value());
+        RequireAt(*result, {Point3{2.0, 0.0, 0.0}, Point3{-2.0, 0.0, 0.0}});
+        for (const CurveSurfacePoint& p : result->Points) {
+            REQUIRE(Contains(turn, p.Parameter));
+        }
+        RequireComplete(*result, upright, ground, turn, [](const Point3& p) { return p.Z; });
+    }
+    SECTION("over a half turn the crossing at t = 0 is its one interior cut")
+    {
+        const Circle upright{Point3{}, 2.0, ex, ez};
+        const Interval half{-pi / 2.0, pi / 2.0};
+        const auto result = Intersect(Curve{upright}, half, Surface{ground}, Domain(ground), ctx);
+        INFO(IntersectTest::ErrorText(result));
+        REQUIRE(result.has_value());
+        RequireAt(*result, {Point3{2.0, 0.0, 0.0}});
+        REQUIRE(std::abs(result->Points[0].Parameter) <= 1e-15);
+        RequireComplete(*result, upright, ground, half, [](const Point3& p) { return p.Z; });
     }
 }
 
