@@ -844,3 +844,270 @@ TEST_CASE("MR PR-263-translated-boundary spline end meeting away from the origin
         }
     }
 }
+
+// --- PR-194: one ledger entry, one test per root cause ---------------------
+
+namespace {
+
+/// The proper cyclic permutations of the axes and the identity: exact on
+/// every double.
+const std::array<std::array<Vec3, 3>, 3> Turns{{
+    {Vec3{1, 0, 0}, Vec3{0, 1, 0}, Vec3{0, 0, 1}},
+    {Vec3{0, 1, 0}, Vec3{0, 0, 1}, Vec3{1, 0, 0}},
+    {Vec3{0, 0, 1}, Vec3{1, 0, 0}, Vec3{0, 1, 0}},
+}};
+
+Vec3 Turned(const std::array<Vec3, 3>& t, const Vec3& v)
+{
+    return v.X * t[0] + v.Y * t[1] + v.Z * t[2];
+}
+
+Point3 Turned(const std::array<Vec3, 3>& t, const Point3& p)
+{
+    return Point3{} + Turned(t, p - Point3{});
+}
+
+/// A Bezier curve of degree poles - 1 on [0, 1].
+BSplineCurve Bezier3(std::vector<Point3> poles)
+{
+    const std::size_t n = poles.size();
+    std::vector<double> knots(n, 0.0);
+    knots.resize(2 * n, 1.0);
+    return BSplineCurve{static_cast<int>(n) - 1, std::move(knots), std::move(poles), {}};
+}
+
+BSplineCurve Reversed3(BSplineCurve c)
+{
+    const double sum = c.Knots.front() + c.Knots.back();
+    std::vector<double> knots;
+    for (auto it = c.Knots.rbegin(); it != c.Knots.rend(); ++it) {
+        knots.push_back(sum - *it);
+    }
+    c.Knots = std::move(knots);
+    std::ranges::reverse(c.Poles);
+    return c;
+}
+
+} // namespace
+
+TEST_CASE("MR PR-194 rotated bounded plane coincidence",
+          "[intersect][metamorphic][backfill][PR-194]")
+{
+    // Root cause (PlanePlane): a rotated, bounded coincidence was encoded as
+    // the AABB of its image, which invents overlaps. The unit square of the
+    // xy plane, and the square of half-side 0.35 turned 45 degrees about a
+    // centre (c, c, 0): the diamond |x - c| + |y - c| <= 0.35 sqrt 2. For
+    // c = 1.4 its least x + y is 2.8 - 0.495 > 2, the unit square's
+    // greatest, so they are apart (closed form) though the AABBs overlap;
+    // for c = 0.7 they truly overlap partly, which a rectangle cannot
+    // represent: NotImplemented. MR-01 by exact axis permutations and the
+    // translation (8, -4, 2), MR-02 by exchanging the planes.
+    const double h = std::sqrt(0.5);
+    const Box2 a{Interval{0.0, 1.0}, Interval{0.0, 1.0}};
+    const Box2 b{Interval{-0.35, 0.35}, Interval{-0.35, 0.35}};
+    for (const auto& t : Turns) {
+        for (const Vec3 offset : {Vec3{}, Vec3{8, -4, 2}}) {
+            const Surface xy{Plane{Turned(t, Point3{}) + offset, t[0], t[1]}};
+            for (const double centre : {1.4, 0.7}) {
+                const Surface turned{Plane{Turned(t, Point3{centre, centre, 0.0}) + offset,
+                                           Turned(t, Vec3{h, h, 0.0}),
+                                           Turned(t, Vec3{-h, h, 0.0})}};
+                for (const bool swapped : {false, true}) {
+                    INFO("PR-194 plane-plane centre=" << centre << " offset=" << offset.X
+                                                      << " swapped=" << swapped);
+                    const auto r = swapped ? Intersect(turned, b, xy, a, Context::Default())
+                                           : Intersect(xy, a, turned, b, Context::Default());
+                    if (centre > 1.0) {
+                        REQUIRE(r.has_value());
+                        CHECK(r->IsEmpty());
+                    } else {
+                        REQUIRE_FALSE(r.has_value());
+                        CHECK(r.error().GetCode() == ErrorCode::NotImplemented);
+                    }
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("MR PR-194 near-parallel planes underflowed cross norm",
+          "[intersect][metamorphic][backfill][PR-194]")
+{
+    // Root cause (PlanePlane): the squared norm of an exactly nonzero cross
+    // product of normals underflowed, and normalising it gave no direction.
+    // z = 0 and the plane through the origin spanned by x and (0, 1, 2^-600)
+    // meet along the x axis (closed form): one branch, finite, along x,
+    // through the origin. MR-01 by exact axis permutations (a translation
+    // would not change the tilt), MR-02 by exchanging the planes.
+    const double tilt = std::ldexp(1.0, -600);
+    for (const auto& t : Turns) {
+        const Surface xy{Plane{Point3{}, t[0], t[1]}};
+        const Surface tilted{Plane{Point3{}, t[0], Turned(t, Vec3{0.0, 1.0, tilt})}};
+        for (const bool swapped : {false, true}) {
+            INFO("PR-194 underflow turn=" << t[0].X << t[0].Y << t[0].Z << " swapped=" << swapped);
+            const auto r = swapped ? Intersect(tilted, xy, Context::Default())
+                                   : Intersect(xy, tilted, Context::Default());
+            INFO(IntersectTest::ErrorText(r));
+            REQUIRE(r.has_value());
+            REQUIRE(r->Branches.size() == 1);
+            const auto* line = r->Branches.front().Curve3d.Target<Line>();
+            REQUIRE(line != nullptr);
+            const Vec3 d = line->Direction;
+            REQUIRE(std::isfinite(d.X));
+            REQUIRE(std::isfinite(d.Y));
+            REQUIRE(std::isfinite(d.Z));
+            CHECK(Length(Cross(d, t[0])) <= 1e-12 * Length(d));
+            CHECK(Length(Cross(line->Origin - Point3{}, t[0])) <= 1e-12);
+        }
+    }
+}
+
+TEST_CASE("MR PR-194 bounded plane box gets no uncut conic branch",
+          "[intersect][metamorphic][backfill][PR-194]")
+{
+    // Root cause (PlaneCylinder): a section was kept whole whatever the
+    // plane's requested box. The cylinder of radius 5 about z; the plane
+    // through the origin with normal (0, 1, 1), whose section is an ellipse
+    // with semi-axes 5 sqrt 2 and 5 (closed form). Over the plane box
+    // [-0.1, 0.1]^2, deep inside the ellipse, there is nothing; over
+    // [-1, 1] x [4, 6], which the ellipse crosses, either a certified piece
+    // whose every point lies in the box, or a refusal: never the whole
+    // ellipse. MR-01 by exact axis permutations, MR-02 by exchanging the
+    // surfaces.
+    for (const auto& t : Turns) {
+        const Surface cylinder{Cylinder{Point3{}, 5.0, t[0], t[1], true}};
+        const Plane support =
+            IntersectTest::PlaneWithNormal(Point3{}, Turned(t, Vec3{0.0, 1.0, 1.0}));
+        const Surface plane{support};
+        for (const bool partial : {false, true}) {
+            const Box2 box = partial ? Box2{Interval{-1.0, 1.0}, Interval{4.0, 6.0}}
+                                     : Box2{Interval{-0.1, 0.1}, Interval{-0.1, 0.1}};
+            for (const bool swapped : {false, true}) {
+                INFO("PR-194 plane-cylinder partial=" << partial << " swapped=" << swapped);
+                const auto r =
+                    swapped
+                        ? Intersect(cylinder, Box2::Everything(), plane, box, Context::Default())
+                        : Intersect(plane, box, cylinder, Box2::Everything(), Context::Default());
+                if (!partial) {
+                    REQUIRE(r.has_value());
+                    CHECK(r->IsEmpty());
+                    continue;
+                }
+                if (!r) {
+                    CHECK(r.error().GetCode() == ErrorCode::NotImplemented);
+                    continue;
+                }
+                for (const IntersectionBranch& branch : r->Branches) {
+                    for (const double s : IntersectTest::SamplesOf(branch.Range, 64)) {
+                        const Point3 p = Eval(branch.Curve3d, s);
+                        const double u = Dot(p - support.Origin, support.XAxis);
+                        const double v = Dot(p - support.Origin, support.YAxis);
+                        CHECK(Contains(Interval{-1.0 - 1e-9, 1.0 + 1e-9}, u));
+                        CHECK(Contains(Interval{4.0 - 1e-9, 6.0 + 1e-9}, v));
+                    }
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("MR PR-194 undecided spline root fails closed",
+          "[intersect][metamorphic][backfill][PR-194]")
+{
+    // Root cause (SplineSurface): a root enclosure left undecided (a touch
+    // or a near miss, or a root on a knot) was reported as a contact. The
+    // Bezier (0,0,1), (1,0,-1), (2,0,1) is z = (1 - 2s)^2: it touches z = 0
+    // at s = 1/2, a double root (closed form); the polyline through
+    // (0,0,-1), (1,0,0), (2,0,1) crosses z = 0 exactly at its knot. Both
+    // must fail with IntersectionFailed. MR-01 by exact axis permutations,
+    // MR-04 by reversing the curve (knots reflected, poles reversed).
+    for (const auto& t : Turns) {
+        const Surface ground{Plane{Point3{}, t[0], t[1]}};
+        const auto at = [&](const double x, const double z) {
+            return Turned(t, Point3{x, 0.0, z});
+        };
+        const BSplineCurve touch = Bezier3({at(0, 1), at(1, -1), at(2, 1)});
+        const BSplineCurve knotted{
+            1, {0.0, 0.0, 1.0, 2.0, 2.0}, {at(0, -1), at(1, 0), at(2, 1)}, {}};
+        for (const bool reversed : {false, true}) {
+            for (const BSplineCurve& curve : {touch, knotted}) {
+                INFO("PR-194 spline-surface reversed=" << reversed << " degree=" << curve.Degree);
+                const Curve c{reversed ? Reversed3(curve) : curve};
+                const auto r = Intersect(c, Domain(c), ground, Domain(ground), Context::Default());
+                REQUIRE_FALSE(r.has_value());
+                CHECK(r.error().GetCode() == ErrorCode::IntersectionFailed);
+            }
+        }
+    }
+}
+
+TEST_CASE("MR PR-194 stale geometry is refused by JVP and VJP",
+          "[intersect][metamorphic][backfill][PR-194]")
+{
+    // Root cause (Linearization): a result computed for other geometry was
+    // differentiated as if current. The line x = y = 0 meets z = 0 at the
+    // origin; the plane moved 0.01 along its normal no longer holds that
+    // point (closed form: the stored point is 0.01 off it), so JVP and VJP
+    // must refuse with InvalidInput, and accept the current pair. MR-01 by
+    // exact axis permutations and the translation (8, -4, 2), MR-03 by the
+    // scales 1/4 and 4 (the move scales with the geometry).
+    for (const auto& t : Turns) {
+        for (const Vec3 offset : {Vec3{}, Vec3{8, -4, 2}}) {
+            for (const double scale : {0.25, 1.0, 4.0}) {
+                INFO("PR-194 stale offset=" << offset.X << " scale=" << scale);
+                const Point3 origin = Point3{} + offset;
+                const Vec3 normal = Cross(t[0], t[1]);
+                const Plane ground{origin, t[0], t[1]};
+                const Plane moved{origin + 0.01 * scale * normal, t[0], t[1]};
+                const Line up{origin - scale * normal, scale * normal};
+                const auto at = Intersect(Curve{up}, Surface{ground}, Context::Default());
+                REQUIRE(at.has_value());
+                REQUIRE(at->Points.size() == 1);
+                SensitivityContext sensitivity{ParameterSet{}};
+                const auto stale = IntersectJvp(up, {}, Surface{moved}, {}, *at, sensitivity);
+                REQUIRE_FALSE(stale.has_value());
+                CHECK(stale.error().GetCode() == ErrorCode::InvalidInput);
+                const auto staleVjp = IntersectVjp(up, {}, Surface{moved}, {}, *at, sensitivity);
+                REQUIRE_FALSE(staleVjp.has_value());
+                CHECK(staleVjp.error().GetCode() == ErrorCode::InvalidInput);
+                const auto current = IntersectJvp(up, {}, Surface{ground}, {}, *at, sensitivity);
+                INFO(IntersectTest::ErrorText(current));
+                CHECK(current.has_value());
+            }
+        }
+    }
+}
+
+TEST_CASE("MR PR-194 NURBS hull applies the factory bounds",
+          "[intersect][metamorphic][backfill][PR-194]")
+{
+    // Root cause (GenericSSI): a B-spline surface built directly, bypassing
+    // MakeBSplineSurface, reached the convex-hull test with a weight beyond
+    // the factory's bound [2^-256, 2^256], where the hull theorem's premise
+    // fails. A bilinear patch with weight 2^257 must be refused with
+    // InvalidInput (the factory's own verdict on the same data, checked
+    // here). MR-01 by exact axis permutations of the poles, MR-02 by
+    // exchanging the surfaces.
+    const std::vector<double> knots{0.0, 0.0, 1.0, 1.0};
+    const Box2 middle{Interval{0.25, 0.75}, Interval{0.25, 0.75}};
+    for (const auto& t : Turns) {
+        const auto patch = [&](const double z) {
+            return std::vector<Point3>{Turned(t, Point3{0, 0, z}), Turned(t, Point3{0, 1, z}),
+                                       Turned(t, Point3{1, 0, z}), Turned(t, Point3{1, 1, z})};
+        };
+        const std::vector<double> heavy{0x1p257, 3.0, 2.0, 4.0};
+        REQUIRE_FALSE(MakeBSplineSurface(1, 1, knots, knots, patch(0.0), heavy).has_value());
+        const BSplineSurface invalid{1, 1, knots, knots, patch(0.0), heavy};
+        const auto valid = MakeBSplineSurface(1, 1, knots, knots, patch(100.0));
+        REQUIRE(valid.has_value());
+        for (const bool swapped : {false, true}) {
+            INFO("PR-194 nurbs-hull swapped=" << swapped);
+            const auto r = swapped ? Intersect(Surface{*valid}, middle, Surface{invalid}, middle,
+                                               0.0, Context::Default())
+                                   : Intersect(Surface{invalid}, middle, Surface{*valid}, middle,
+                                               0.0, Context::Default());
+            REQUIRE_FALSE(r.has_value());
+            CHECK(r.error().GetCode() == ErrorCode::InvalidInput);
+        }
+    }
+}
