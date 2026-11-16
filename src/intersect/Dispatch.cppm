@@ -337,6 +337,13 @@ Result<SurfaceSurfaceIntersection> EllipsoidPlane(const Surface&, const Box2&, c
 Result<SurfaceSurfaceIntersection> ImplicitTrace(const Surface&, const Box2&, const Surface&,
                                                  const Box2&, const Context&);
 
+/// A B-spline surface against an analytic one, either order: the
+/// parametric-implicit trace with the B-spline as the carrier, enclosed by
+/// its interval Bezier patches, against the analytic surface's implicit
+/// equation. Defined in ImplicitTrace.cpp.
+Result<SurfaceSurfaceIntersection> SplineAnalytic(const Surface&, const Box2&, const Surface&,
+                                                  const Box2&, double, const Context&);
+
 /// Certified convex-hull rejection for positive-weight NURBS pairs;
 /// unknown overlaps fail closed until the Phase 2 solver is implemented.
 Result<SurfaceSurfaceIntersection> NurbsHull(const Surface&, const Box2&, const Surface&,
@@ -575,6 +582,11 @@ consteval SurfaceHandler SurfaceHandlerFor()
 {
     if constexpr (std::same_as<A, BSplineSurface> && std::same_as<B, BSplineSurface>) {
         return &NurbsHull;
+    } else if constexpr ((std::same_as<A, BSplineSurface> &&
+                          (IsElementarySurface<B> || std::same_as<B, Ellipsoid>)) ||
+                         (std::same_as<B, BSplineSurface> &&
+                          (IsElementarySurface<A> || std::same_as<A, Ellipsoid>))) {
+        return &SplineAnalytic;
     } else {
         return AnalyticSurfaceHandlerFor<A, B>();
     }
