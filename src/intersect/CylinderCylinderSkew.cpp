@@ -1116,12 +1116,9 @@ void ChartOnB(std::vector<Point2>& onB)
     return {};
 }
 
-} // namespace
-
-Result<SurfaceSurfaceIntersection> CylinderCylinderSkew(const Surface& a, const Box2& boxA,
-                                                        const Surface& b, const Box2& boxB,
-                                                        const double /*tolerance*/,
-                                                        const Context& ctx)
+/// The skew pair parametrised by A's angle, as the operands are given.
+[[nodiscard]] Result<SurfaceSurfaceIntersection>
+SkewWith(const Surface& a, const Box2& boxA, const Surface& b, const Box2& boxB, const Context& ctx)
 {
     const Cylinder* ca = a.Target<Cylinder>();
     const Cylinder* cb = b.Target<Cylinder>();
@@ -1146,6 +1143,73 @@ Result<SurfaceSurfaceIntersection> CylinderCylinderSkew(const Surface& a, const 
         STEREON_TRY_VOID(AddTrack(result, p, c, k, boxA, boxB, ctx));
     }
     return result;
+}
+
+/// What orders the two cylinders as the parametrising one, from their
+/// geometry and boxes alone, never from the operands' order: the larger
+/// radius first, then the origin, the frame and the requested box,
+/// compared lexicographically.
+using CarrierKey = std::array<double, 15>;
+
+[[nodiscard]] CarrierKey KeyOf(const Cylinder& c, const Box2& box)
+{
+    return {c.Radius,
+            c.Origin.X,
+            c.Origin.Y,
+            c.Origin.Z,
+            c.XAxis.X,
+            c.XAxis.Y,
+            c.XAxis.Z,
+            c.YAxis.X,
+            c.YAxis.Y,
+            c.YAxis.Z,
+            c.RightHanded ? 1.0 : 0.0,
+            box.X.GetLower(),
+            box.X.GetUpper(),
+            box.Y.GetLower(),
+            box.Y.GetUpper()};
+}
+
+/// The refusals after which the other parametrisation is tried: a branch
+/// that would not certify within the sample budget, or one that could not
+/// be resolved. Each parametrisation's answer stands on its own (the
+/// configuration decided exactly, every branch certified against both
+/// cylinders), so the second is tried only when the first gave no answer:
+/// it never replaces a proved answer, nor does a refusal stand for one.
+[[nodiscard]] bool Refusal(const ErrorCode code)
+{
+    return code == ErrorCode::CertificationFailed || code == ErrorCode::IntersectionFailed;
+}
+
+} // namespace
+
+Result<SurfaceSurfaceIntersection> CylinderCylinderSkew(const Surface& a, const Box2& boxA,
+                                                        const Surface& b, const Box2& boxB,
+                                                        const double /*tolerance*/,
+                                                        const Context& ctx)
+{
+    const Cylinder* ca = a.Target<Cylinder>();
+    const Cylinder* cb = b.Target<Cylinder>();
+    if (ca == nullptr || cb == nullptr) {
+        return Fail(ErrorCode::InvalidInput,
+                    "CylinderCylinderSkew: dispatched for other surface types");
+    }
+    // The parametrising cylinder chosen canonically (MR-02): the order of
+    // the operands changes neither which is tried first nor the outcome.
+    const bool bFirst = KeyOf(*ca, boxA) < KeyOf(*cb, boxB);
+    const auto run = [&](const bool exchanged) -> Result<SurfaceSurfaceIntersection> {
+        if (!exchanged) {
+            return SkewWith(a, boxA, b, boxB, ctx);
+        }
+        STEREON_TRY(SurfaceSurfaceIntersection r, SkewWith(b, boxB, a, boxA, ctx));
+        return Swapped(std::move(r));
+    };
+    Result<SurfaceSurfaceIntersection> first = run(bFirst);
+    if (first || !Refusal(first.error().GetCode())) {
+        return first;
+    }
+    Result<SurfaceSurfaceIntersection> second = run(!bFirst);
+    return second ? std::move(second) : std::move(first);
 }
 
 } // namespace Stereon::Detail
