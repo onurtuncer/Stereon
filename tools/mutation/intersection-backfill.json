@@ -192,7 +192,7 @@
       "file": "src/intersect/CylinderCylinderSkew.cpp",
       "find": "ExtentOf(p, c, k, distinct.back(), cuts[i]) > resolution",
       "replace": "(static_cast<void>(resolution), cuts[i] - distinct.back() > 1e-9 * (span.GetUpper() - span.GetLower()))",
-      "site": "statement",
+      "site": "expression",
       "target": "stereon_intersect_tests",
       "tests": "^intersect:\\ MR\\ PR\\-159\\ skew\\ cylinders\\ tangent\\ on\\ both\\ seams\\ meet\\ at\\ a\\ node$",
       "diagnostic": "intersect: MR PR-159 skew cylinders tangent on both seams meet at a node",
