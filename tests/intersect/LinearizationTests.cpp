@@ -1867,25 +1867,39 @@ TEST_CASE("a conic's bindings are refused where it has no such radius",
                                        sensitivity)) == ErrorCode::InvalidInput);
 }
 
-TEST_CASE("conic derivative fixtures retain unresolved domain ends and tangencies",
+TEST_CASE("conic derivative fixtures: a seam crossing is decided, a near tangency fails closed",
           "[intersect][linearization][conic][regression]")
 {
     // Shrunk CI seeds 17041817369036985825 and 16155406228833616885.
-    // The first crosses at its domain's own end. The second lies within
-    // rounding of the cylinder's tangent plane. Neither supplies the
-    // resolved, well-conditioned primal required by the Taylor property.
+    // The first crosses on its seam, its domain's own end. Since #283 that
+    // crossing is decided on the arc cut, and the Taylor property holds on
+    // it (both seeds pass); before, the primal failed closed. The second
+    // lies within rounding of the cylinder's tangent plane and still fails
+    // closed, so it supplies no well-conditioned primal.
     const Vec3 x{1.0, 0.0, 0.0};
     const Vec3 y{0.0, std::cos(-tau / 4.0), std::sin(-tau / 4.0)};
     const Ellipse endpoint{Point3{-1.25, -1.25, -13.0 / 32.0}, 1.5, 0.6, x, y};
     const Plane plane{endpoint.Center, x, Vec3{0.0, 1.0, 0.0}};
     const Ellipse tangent{Point3{-37.0 / 32.0, 0.125, -1.25}, 1.8, 0.72, x, y};
     const Cylinder cylinder{Point3{-2.5, -1.875, 0.0}, 2.0, x, Vec3{0.0, 1.0, 0.0}};
-    for (const auto& result :
-         {Stereon::Intersect(Stereon::Curve{endpoint}, Surface{plane}, ctx),
-          Stereon::Intersect(Stereon::Curve{tangent}, Surface{cylinder}, ctx)}) {
-        REQUIRE_FALSE(result.has_value());
-        CHECK(result.error().GetCode() == ErrorCode::IntersectionFailed);
+    const auto seam = Stereon::Intersect(Stereon::Curve{endpoint}, Surface{plane}, ctx);
+    INFO(IntersectTest::ErrorText(seam));
+    REQUIRE(seam.has_value());
+    REQUIRE(seam->Points.size() == 2);
+    // The ellipse lies in the plane y = -1.25 through its centre and crosses
+    // the plane z = -13/32 at its major vertices: t = pi and t = 2 pi.
+    const std::array expected{Point3{-2.75, -1.25, -13.0 / 32.0},
+                              Point3{0.25, -1.25, -13.0 / 32.0}};
+    for (std::size_t i = 0; i < 2; ++i) {
+        const auto& point = seam->Points[i];
+        CHECK(point.Decided);
+        CHECK(point.Contact == Stereon::ContactType::Crossing);
+        CHECK(Distance(point.Position, expected[i]) <= 1e-12);
+        CHECK(std::abs(point.Parameter - static_cast<double>(i + 1) * tau / 2.0) <= 1e-12);
     }
+    const auto touch = Stereon::Intersect(Stereon::Curve{tangent}, Surface{cylinder}, ctx);
+    REQUIRE_FALSE(touch.has_value());
+    CHECK(touch.error().GetCode() == ErrorCode::IntersectionFailed);
     // A regular chart is still required to answer: removing the derivative
     // precondition must not turn a known supported crossing into a skip.
     const auto regular =
