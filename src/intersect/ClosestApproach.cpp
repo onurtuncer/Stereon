@@ -401,14 +401,27 @@ struct Refined {
         const Local l = LocalAt(a, b, z.S, z.T);
         z.EndS = Released(z.EndS, l.Grad[0]);
         z.EndT = Released(z.EndT, l.Grad[1]);
-        const auto [ds, dt] =
-            Step(l, z.EndS == ApproachEnd::Interior, z.EndT == ApproachEnd::Interior);
+        const bool freeS = z.EndS == ApproachEnd::Interior;
+        const bool freeT = z.EndT == ApproachEnd::Interior;
+        const auto [ds, dt] = Step(l, freeS, freeT);
+        // Near the minimiser a step of size h lowers phi by about h^2, below
+        // phi's rounding once h is near sqrt(eps): a descent test alone then
+        // stops the parameters at sqrt(eps). The gradient is still computed
+        // to rounding there, so a step that shrinks the free gradient and
+        // raises phi by no more than its rounding is taken too.
+        const auto freeGradient = [&](const Local& m) {
+            return (freeS ? m.Grad[0] * m.Grad[0] : 0.0) + (freeT ? m.Grad[1] * m.Grad[1] : 0.0);
+        };
+        const double reach =
+            Length(a.Origin - b.Origin) + Length(a.Offset(z.S)) + Length(b.Offset(z.T));
+        const double slack = 64.0 * Epsilon * (l.Phi + Length(l.Gap) * reach);
         double alpha = 1.0;
         Refined next = z;
         for (int halving = 0; halving < 60; ++halving, alpha *= 0.5) {
             std::tie(next.S, next.EndS) = Clamp(z.S + alpha * ds, rs);
             std::tie(next.T, next.EndT) = Clamp(z.T + alpha * dt, rt);
-            if (LocalAt(a, b, next.S, next.T).Phi <= l.Phi) {
+            const Local m = LocalAt(a, b, next.S, next.T);
+            if (m.Phi <= l.Phi || (m.Phi <= l.Phi + slack && freeGradient(m) < freeGradient(l))) {
                 break;
             }
         }
