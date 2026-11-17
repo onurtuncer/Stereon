@@ -889,7 +889,13 @@ struct EnclosedQuadratic {
 [[nodiscard]] double PolishedOnCone(const Line& line, const Cone& cone, const double t,
                                     const double other)
 {
-    const LineQuadratic q = MiddleOf(ConeQuadratic(line, Eval(line, t), cone));
+    // Keep the small offset when origin and t * direction nearly cancel.
+    // Rounding that product before adding the origin perturbs the line;
+    // near a generator the root correction amplifies that perturbation.
+    const Point3 point{std::fma(t, line.Direction.X, line.Origin.X),
+                       std::fma(t, line.Direction.Y, line.Origin.Y),
+                       std::fma(t, line.Direction.Z, line.Origin.Z)};
+    const LineQuadratic q = MiddleOf(ConeQuadratic(line, point, cone));
     if (q.A == 0.0) {
         return t;
     }
@@ -1112,6 +1118,13 @@ template <typename Form>
                     f.Bracket = Interval{f.Bracket.GetLower() - CirclePeriod - slack,
                                          f.Bracket.GetUpper() - CirclePeriod + slack};
                 }
+                // A bracket across the seam holds the root at either end of
+                // the domain, one point: it is kept in the domain, so that
+                // neither the root nor its polishing (inside the bracket)
+                // leaves it.
+                f.Bracket = Interval{std::max(f.Bracket.GetLower(), lower),
+                                     std::min(f.Bracket.GetUpper(), upper)};
+                f.T = std::clamp(f.T, lower, upper);
             }
             std::ranges::stable_sort(found, {}, &Found::T);
         } else {

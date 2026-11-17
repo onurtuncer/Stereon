@@ -152,6 +152,17 @@ below holds, within a budget of 2^14; beyond it the intersection fails with
 size box of ADR-0001, where the rounding of a B-spline's poles alone
 exceeds the resolution.
 
+Which cylinder's angle parametrises the curve does not depend on the
+operands' order (ADR-0053, MR-02). The cylinder with the larger radius is
+tried first; ties are broken by the origin, the frame and the requested box,
+compared lexicographically. If that parametrisation refuses
+(``CertificationFailed`` past the sample budget, or ``IntersectionFailed``),
+the other cylinder's is tried. Each parametrisation's answer stands on its
+own: the configuration is decided exactly and every branch is certified
+against both cylinders. So the second is used only where the first gave no
+answer. It never replaces a proved answer, nor does a refusal stand in for
+one.
+
 A branch is first clipped to the requested angular and height restrictions
 on both cylinders by interval evaluation of the closed form over spans of
 its parameter, bisected until a span is proved outside or inside. Half-infinite
@@ -922,7 +933,27 @@ enclosed from the doubles :math:`t_0` and :math:`t_1`, so what is proved
 holds for the conic as given. A root at Bézier parameter :math:`s` is the
 angle :math:`m + 2 \arctan(\tan(h/2)(2s - 1))`, its bracket mapped through
 that monotone map and widened by its rounding; points are reported on the
-conic's angle, which may run over several turns. A conic whose centre and
+conic's angle, which may run over several turns.
+
+The cuts are the kernel's choice, not features of the conic, which is
+smooth across them. A crossing at or within rounding of a cut is
+bracketed by each neighbouring arc across its end, and is undecided there.
+When the first search leaves a root undecided, the domain is searched
+again with its cuts moved (``ConicRootsOf``). A full turn is closed: its
+ends are one point, the seam, which is no boundary either, so every cut
+is turned by :math:`1/\varphi` of an arc and a root found past the upper
+end is brought back a turn, its bracket widened by the rounding of
+:math:`2\pi`; a crossing on the seam is reported once. On part of a turn
+only the interior cuts move, the domain cut into one arc more, and a root
+at the domain's own end stays undecided. What the second search leaves
+undecided fails closed. ``tests/intersect/ConicArcCutTests.cpp`` has the
+closed forms: a circle crossing a plane, a cylinder and a sphere exactly on
+its cuts, and an ellipse crossing a plane on them, under reversal,
+translation and scaling by :math:`2^{\pm 10}`;
+``tests/intersect/ConicSurfaceTests.cpp`` has crossings on the seam, over
+the turn :math:`[-\pi, \pi]` and on a half turn's interior cut.
+
+A conic whose centre and
 axes lie exactly in a plane is an overlap there, its pcurve the same
 conic in the plane's parameters. A conic on a curved surface, the equator
 of a sphere or the meridian of a torus, fails with ``IntersectionFailed``.
@@ -1704,8 +1735,27 @@ patches, never a partial or an unproved empty result
 (``src/intersect/GenericSSI.cpp``; nodes in
 ``tests/intersect/GenericSSINodeTests.cpp``).
 
-A B-spline surface against a plane, cylinder, cone, sphere or torus reports
-``NotImplemented``.
+A B-spline surface against a plane, cylinder, cone, sphere, torus or
+ellipsoid, in either order, goes to the parametric-implicit trace of
+*Elementary surfaces*. The B-spline is the carrier and the analytic surface
+supplies the implicit equation. The trace's enclosures of :math:`S`,
+:math:`S_u` and :math:`S_v` over a box of parameters come from the
+B-spline's Bézier patches, which are enclosed by Boehm's knot insertion in
+interval arithmetic and cut down to the box by de Casteljau's algorithm.
+Rational patches go through the quotient rule. The enclosure is the hull
+over every patch the box meets, so a box across a knot holds both one-sided
+partials, and the mean-value form stays valid at a knot where the surface
+is only :math:`C^0`. At a point, or along an edge of no width, the patches'
+nets are evaluated at the enclosed parameters.
+
+The search box is the requested box met with the B-spline's domain, and a
+B-spline chart has no seam. Everything else is the trace's: proved
+separation, proved transverse arcs, branches fitted and certified by
+``CertifyDeviation`` against the B-spline and the analytic surface, and
+``IntersectionFailed`` at a box that cannot be resolved (a tangency, a
+singular point) or past its budget. It never returns an unproved empty
+result (``src/intersect/ImplicitTrace.cpp``,
+``tests/intersect/SplineAnalyticTests.cpp``).
 
 .. todo::
 
