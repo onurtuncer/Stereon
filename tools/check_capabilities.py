@@ -101,6 +101,11 @@ NOT_OPERATIONS: dict[str, str] = {
         "a derivative product of Intersect, or the linearisation it is computed from, declared "
         "with Intersect's capability (ADR-0021, sections 6 and 7)",
     ),
+    **dict.fromkeys(
+        ("ClosestApproachJvp", "ClosestApproachVjp"),
+        "a derivative product of ClosestApproach, declared with its capability (ADR-0052, "
+        "addendum of 2026-11-12)",
+    ),
     "Describe": "a diagnostic text of a shape",
     "ToString": "the name of an enumerator",
     "ValidateTopology": "a validator: it reports on a shape and makes nothing (ADR-0018)",
