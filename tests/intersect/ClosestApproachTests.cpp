@@ -992,3 +992,47 @@ TEST_CASE("closest approach products: second-order Taylor decay and the transpos
         RC_ASSERT(std::abs(left - right) <= 1e-12 * (1.0 + scale));
     });
 }
+
+TEST_CASE("closest approach places the free parameter to rounding when the other rests on an end",
+          "[intersect][closest-approach][regression]")
+{
+    // The shrunk macOS CI counterexample (seed 9376910471991398838): circle
+    // A rests on its upper end, circle B is free. The search's descent test
+    // compared phi = |A - B|^2 / 2, whose change near the minimiser falls
+    // below its rounding once the step is near sqrt(eps), so B's parameter
+    // stopped about 1e-8 short and the products' Taylor test failed. The
+    // closest point on B to A's end is the projection's angle, in closed form.
+    const Circle a{Point3{-0.125, -0.625, -1.25}, 1.125,
+                   Vec3{-0.46303632848027881, 0.8662800404646892, -0.1875},
+                   Vec3{0.78096480768274434, 0.49879441994300905, 0.37589638970701905}};
+    const Circle b{Point3{-1.625, -0.875, -0.875}, 1.125,
+                   Vec3{0.034108521304589856, 0.34630962847488705, -0.9375},
+                   Vec3{0.98021459587788196, -0.19459554818054772, -0.036220417671148579}};
+    const Interval domainA{0.98174770424681035, 1.9817477042468103};
+    // The products' Taylor test moves the curves by steps of 1e-4 and 1e-3;
+    // every such move must be placed as well as the unmoved pair.
+    int placed = 0;
+    for (int i = -8; i <= 8; ++i) {
+        for (int j = -8; j <= 8; ++j) {
+            const Circle moved{b.Center + Vec3{i * 1.25e-4, j * 1.25e-4, (i - j) * 0.5e-4},
+                               b.Radius, b.XAxis, b.YAxis};
+            const auto r =
+                Stereon::ClosestApproach(Curve{a}, domainA, Curve{moved}, Interval{0.0, tau}, ctx);
+            REQUIRE(r.has_value());
+            if (r->Uniqueness != ApproachUniqueness::Unique || r->EndA != ApproachEnd::Upper ||
+                r->EndB != ApproachEnd::Interior) {
+                continue;
+            }
+            const Vec3 v = Eval(a, domainA.GetUpper()) - moved.Center;
+            double expected = std::atan2(Dot(v, moved.YAxis), Dot(v, moved.XAxis));
+            if (expected < 0.0) {
+                expected += tau;
+            }
+            INFO("shift (" << i << ", " << j << "): parameter " << r->ParameterB << ", expected "
+                           << expected);
+            CHECK(std::abs(r->ParameterB - expected) <= 1e-13);
+            ++placed;
+        }
+    }
+    CHECK(placed > 200);
+}

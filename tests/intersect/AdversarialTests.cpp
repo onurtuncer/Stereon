@@ -262,26 +262,96 @@ Result<CurveSurfaceIntersection> Meet(const Curve& c, const Surface& s)
     return Intersect(c, Domain(c), s, Domain(s), ctx);
 }
 
+/// How far along the curve a crossing moves per unit off the surface: one
+/// over the sine of the angle between the curve's tangent and the surface's
+/// tangent plane. Validated holds each point on both geometries to
+/// rounding; at a grazing crossing two such points of one exact crossing
+/// lie up to this many times farther apart. 1 where it is undefined.
+double Conditioning(const Curve& curve, const double t, const Surface& surface, const Point2& uv)
+{
+    const Vec3 normal = Cross(Deriv(surface, uv, 1, 0), Deriv(surface, uv, 0, 1));
+    const Vec3 tangent = Deriv(curve, t, 1);
+    const double sine = std::abs(Dot(normal, tangent)) / (Length(normal) * Length(tangent));
+    return std::isfinite(sine) && sine > 0.0 ? std::max(1.0, 1.0 / sine) : 1.0;
+}
+
+/// The curve's period when its domain is a full turn of it, 0 otherwise.
+/// Such a domain is closed: its seam is one point at both ends, and a
+/// crossing there may be placed at either end, so two results agree in
+/// their order only up to a turn of the cycle, the same for every point,
+/// and in their parameters only modulo the period.
+double ClosedPeriod(const Curve& curve)
+{
+    const double period = Period(curve);
+    return period > 0.0 && Width(Domain(curve)) >= period ? period : 0.0;
+}
+
+/// The least turn of the cycle under which `agree(i, turn)` holds for
+/// every point i; 0 on a curve that is not closed, or when none does, for
+/// the caller's assertions to report.
+template <typename Agree>
+std::size_t SeamTurn(const std::size_t n, const bool closed, Agree&& agree)
+{
+    for (std::size_t turn = 0; closed && turn < n; ++turn) {
+        bool all = true;
+        for (std::size_t i = 0; i < n && all; ++i) {
+            all = agree(i, turn);
+        }
+        if (all) {
+            RC_TAG(turn == 0 ? "in order" : "across the seam");
+            return turn;
+        }
+    }
+    return 0;
+}
+
 /// Two results of transformed problems agree: the same points, contacts
 /// and overlaps, each point's position mapped by `map` and its parameter
-/// by `parameter`, within the rounding of both.
+/// by `parameter`, within the rounding of both, times a crossing's
+/// conditioning on `surfaceA`; on a closed curve up to a turn of the cycle
+/// and modulo the period (ClosedPeriod).
 template <typename Map, typename Parameter>
 void RequireSame(const CurveSurfaceIntersection& a, const CurveSurfaceIntersection& b,
-                 const Curve& curveA, const Curve& curveB, Map&& map, Parameter&& parameter)
+                 const Curve& curveA, const Curve& curveB, const Surface& surfaceA, Map&& map,
+                 Parameter&& parameter)
 {
     RC_ASSERT(a.Points.size() == b.Points.size());
     RC_ASSERT(a.Overlaps.size() == b.Overlaps.size());
-    for (std::size_t i = 0; i < a.Points.size(); ++i) {
+    const std::size_t n = a.Points.size();
+    const double period = ClosedPeriod(curveB);
+    const auto partner = [&](const std::size_t i, const std::size_t turn) -> const auto& {
+        return b.Points[(i + turn) % n];
+    };
+    const auto within = [&](const CurveSurfacePoint& p, const CurveSurfacePoint& q) {
+        const double conditioning = p.Contact == Stereon::ContactType::Crossing
+                                        ? Conditioning(curveA, p.Parameter, surfaceA, p.OnSurface)
+                                        : 1.0;
+        return (Rounding(ScaleAt(curveA, p.Parameter, p.Position)) +
+                Rounding(ScaleAt(curveB, q.Parameter, q.Position))) *
+               conditioning;
+    };
+    const auto apart = [&](const CurveSurfacePoint& p, const CurveSurfacePoint& q) {
+        const double d = parameter(p.Parameter) - q.Parameter;
+        return std::abs(period > 0.0 ? std::remainder(d, period) : d);
+    };
+    const auto tolerance = [](const CurveSurfacePoint& q) {
+        return 1e-9 * std::max(1.0, std::abs(q.Parameter));
+    };
+    const std::size_t turn =
+        SeamTurn(n, period > 0.0, [&](const std::size_t i, const std::size_t k) {
+            const CurveSurfacePoint& p = a.Points[i];
+            const CurveSurfacePoint& q = partner(i, k);
+            return p.Contact == q.Contact && p.Decided == q.Decided &&
+                   Distance(map(p.Position), q.Position) <= within(p, q) &&
+                   apart(p, q) <= tolerance(q);
+        });
+    for (std::size_t i = 0; i < n; ++i) {
         const CurveSurfacePoint& p = a.Points[i];
-        const CurveSurfacePoint& q = b.Points[i];
+        const CurveSurfacePoint& q = partner(i, turn);
         RC_ASSERT(p.Contact == q.Contact);
         RC_ASSERT(p.Decided == q.Decided);
-        const Point3 mapped = map(p.Position);
-        const double within = Rounding(ScaleAt(curveA, p.Parameter, p.Position)) +
-                              Rounding(ScaleAt(curveB, q.Parameter, q.Position));
-        RC_ASSERT(Distance(mapped, q.Position) <= within);
-        RC_ASSERT(std::abs(parameter(p.Parameter) - q.Parameter) <=
-                  1e-9 * std::max(1.0, std::abs(q.Parameter)));
+        RC_ASSERT(Distance(map(p.Position), q.Position) <= within(p, q));
+        RC_ASSERT(apart(p, q) <= tolerance(q));
     }
 }
 
@@ -318,7 +388,7 @@ TEST_CASE("translating the pair translates every point", "[intersect][adversaria
         const bool b = Validated(after, c, Domain(c), s, Domain(s));
         if (a && b) {
             RequireSame(
-                *before, *after, p.C, c, [&](const Point3& q) { return q + offset; },
+                *before, *after, p.C, c, p.S, [&](const Point3& q) { return q + offset; },
                 [](const double t) { return t; });
         }
     });
@@ -339,7 +409,7 @@ TEST_CASE("scaling the pair by a power of two scales every point",
         const bool b = Validated(after, c, Domain(c), s, Domain(s));
         if (a && b) {
             RequireSame(
-                *before, *after, p.C, c,
+                *before, *after, p.C, c, p.S,
                 [&](const Point3& q) { return Point3{} + factor * Stereon::ToVec(q); },
                 [](const double t) { return t; });
         }
@@ -361,31 +431,27 @@ TEST_CASE("reversing the curve keeps every point", "[intersect][adversarial][pro
         RC_ASSERT(forward->Points.size() == backward->Points.size());
         RC_ASSERT(forward->Overlaps.size() == backward->Overlaps.size());
         const std::size_t n = forward->Points.size();
-        // The points come in the other order along the reversed curve. A
-        // closed conic's reversal maps t to 2 pi - t, so its seam stays put:
-        // a crossing there keeps its place in both lists, and the order is
-        // reversed only up to a turn of the list (CI seed
-        // 4035963351361492909, an ellipse cut through its centre on its seam
-        // and at t = pi).
-        const bool closed = p.CurveType == CurveKind::Circle || p.CurveType == CurveKind::Ellipse;
-        const auto matchesWithShift = [&](const std::size_t shift) {
-            for (std::size_t i = 0; i < n; ++i) {
-                const CurveSurfacePoint& f = forward->Points[i];
-                const CurveSurfacePoint& g = backward->Points[(2 * n - 1 - i + shift) % n];
-                if (f.Contact != g.Contact ||
-                    Distance(f.Position, g.Position) >
-                        Rounding(ScaleAt(p.C, f.Parameter, f.Position)) +
-                            Rounding(ScaleAt(r, g.Parameter, g.Position))) {
-                    return false;
-                }
-            }
-            return true;
+        // The points come in the other order along the reversed curve; on a
+        // closed curve up to a turn of the cycle (ClosedPeriod).
+        const auto partner = [&](const std::size_t i, const std::size_t turn) -> const auto& {
+            return backward->Points[(2 * n - 1 - i + turn) % n];
         };
-        bool matched = n == 0 || matchesWithShift(0);
-        for (std::size_t shift = 1; closed && !matched && shift < n; ++shift) {
-            matched = matchesWithShift(shift);
+        const auto within = [&](const CurveSurfacePoint& f, const CurveSurfacePoint& g) {
+            return Rounding(ScaleAt(p.C, f.Parameter, f.Position)) +
+                   Rounding(ScaleAt(r, g.Parameter, g.Position));
+        };
+        const std::size_t turn =
+            SeamTurn(n, ClosedPeriod(p.C) > 0.0, [&](const std::size_t i, const std::size_t k) {
+                const CurveSurfacePoint& f = forward->Points[i];
+                const CurveSurfacePoint& g = partner(i, k);
+                return f.Contact == g.Contact && Distance(f.Position, g.Position) <= within(f, g);
+            });
+        for (std::size_t i = 0; i < n; ++i) {
+            const CurveSurfacePoint& f = forward->Points[i];
+            const CurveSurfacePoint& g = partner(i, turn);
+            RC_ASSERT(f.Contact == g.Contact);
+            RC_ASSERT(Distance(f.Position, g.Position) <= within(f, g));
         }
-        RC_ASSERT(matched);
     });
 }
 
@@ -436,7 +502,38 @@ TEST_CASE("a line's origin moved far along it shifts its parameters only",
         const bool vb = Validated(b, far, Domain(far), surface, Domain(surface));
         if (va && vb) {
             RequireSame(
-                *a, *b, near, far, [](const Point3& q) { return q; },
+                *a, *b, near, far, surface, [](const Point3& q) { return q; },
+                [&](const double t) { return t + run; });
+        }
+    });
+}
+
+TEST_CASE("a line nearly along a cone's generator, its origin moved far, crosses where it did",
+          "[intersect][adversarial][regression]")
+{
+    // The CI counterexample of 2026-11-13 (seed 17298607298449989786): the
+    // line runs 0.027 degrees off the cone's tangent plane at its far
+    // crossing, so a point on both geometries to rounding may lie
+    // 1 / sin = 2128 times farther along the line. From 2^19 back (and
+    // 2^13 ... 2^28 on other builds) the two placements of that crossing
+    // differed by just over the unconditioned rounding of both, while each
+    // validates and lies within the attainable 1 / sin x 0.5 ulp.
+    rc::prop("the decoded cone and line, from far origins", [] {
+        const Line line{Point3{-2.0 / 8, -2.0 / 8, 21.0 / 8}, Vec3{13.0 / 8, -23.0 / 8, 19.0 / 8}};
+        const Curve near{line};
+        const Surface cone{Cone{Point3{23.0 / 8, -17.0 / 8, 12.0 / 8}, 0.0, pi / 4.0, ez, ex}};
+        const auto a = Meet(near, cone);
+        RC_ASSERT(Validated(a, near, Domain(near), cone, Domain(cone)));
+        RC_ASSERT(a->Points.size() == 2U);
+        RC_ASSERT(Conditioning(near, a->Points[0].Parameter, cone, a->Points[0].OnSurface) >
+                  2000.0);
+        for (const int e : {13, 18, 19, 21, 22, 24, 27, 28}) {
+            const double run = std::ldexp(1.0, e);
+            const Curve far{Line{line.Origin - run * line.Direction, line.Direction}};
+            const auto b = Meet(far, cone);
+            RC_ASSERT(Validated(b, far, Domain(far), cone, Domain(cone)));
+            RequireSame(
+                *a, *b, near, far, cone, [](const Point3& q) { return q; },
                 [&](const double t) { return t + run; });
         }
     });
@@ -463,7 +560,7 @@ TEST_CASE("a periodic surface's box a turn on gives the same points a turn on",
             return;
         }
         RequireSame(
-            *a, *b, curve, curve, [](const Point3& q) { return q; },
+            *a, *b, curve, curve, surface, [](const Point3& q) { return q; },
             [](const double t) { return t; });
     });
 }
