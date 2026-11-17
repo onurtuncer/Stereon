@@ -705,7 +705,9 @@ TEST_CASE("MR PR-159 skew cylinders tangent on both seams meet at a node",
     // could round the tangency's premise), both orders (MR-02). The oracle:
     // one node at the closed-form point of tangency with four branch ends,
     // and every branch on both cylinders by the closed-form distance from
-    // each axis.
+    // each axis. Since #289 a refused parametrisation falls back to the
+    // other cylinder's, which would hide the fault: the canonical one, by
+    // the larger radius, must answer on its own, the meeting logged once.
     for (const auto& p : Placements()) {
         if (!Untranslated(p)) {
             continue;
@@ -720,10 +722,17 @@ TEST_CASE("MR PR-159 skew cylinders tangent on both seams meet at a node",
         const double reach = 1e-7 * p.Scale;
         for (const bool swapped : {false, true}) {
             CAPTURE(swapped);
-            const auto result = swapped ? Intersect(smaller, larger, p.Policy())
-                                        : Intersect(larger, smaller, p.Policy());
+            std::vector<std::string> log;
+            const Context policy = p.Policy().WithLogSink(
+                [&log](const LogRecord& record) { log.emplace_back(record.Message); });
+            const auto result =
+                swapped ? Intersect(smaller, larger, policy) : Intersect(larger, smaller, policy);
             INFO(IntersectTest::ErrorText(result));
             REQUIRE(result.has_value());
+            const auto meetings = std::ranges::count_if(log, [](const std::string& line) {
+                return line.find("internally tangent") != std::string::npos;
+            });
+            CHECK(meetings == 1);
             CHECK(IntersectTest::ConnectivityOf(*result, reach).Nodes == 1);
             std::size_t ends = 0;
             for (const IntersectionBranch& branch : result->Branches) {
