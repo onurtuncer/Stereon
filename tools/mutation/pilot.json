@@ -48,7 +48,8 @@
       "site": "statement",
       "target": [
         "stereon_core_tests",
-        "stereon_contract_probe"
+        "stereon_contract_probe",
+        "stereon_profiling_tests"
       ],
       "tests": "^core: ",
       "diagnostic": "core: generation tables detect stale handles"
@@ -64,7 +65,8 @@
       "site": "statement",
       "target": [
         "stereon_core_tests",
-        "stereon_contract_probe"
+        "stereon_contract_probe",
+        "stereon_profiling_tests"
       ],
       "tests": "^core: ",
       "diagnostic": [
@@ -257,7 +259,8 @@
       "site": "statement",
       "target": [
         "stereon_core_tests",
-        "stereon_contract_probe"
+        "stereon_contract_probe",
+        "stereon_profiling_tests"
       ],
       "tests": "^core: ",
       "diagnostic": "core: taking an arena page inside its edit callback is reported"
