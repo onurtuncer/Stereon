@@ -63,7 +63,7 @@ Open questions that have to be researched before they can be decided live in [`d
 | [0045](0045-cppad-ad-backend.md) | CppAD as the automatic-differentiation backend | 0 | Proposed |
 | [0046](0046-ownership-borrowing-and-pointer-lifetimes.md) | Explicit ownership, borrowing and pointer lifetimes | 0 | Proposed |
 | [0047](0047-numerical-operation-completion-and-publication.md) | Numerical operation completion and publication | 0–1 | Proposed |
-| [0048](0048-native-ellipsoid-surface.md) | A native ellipsoid surface, with exact decisions where its quadric allows them | 2 | Proposed |
+| [0048](0048-native-ellipsoid-surface.md) | A native ellipsoid surface, with exact decisions where its quadric allows them | 2 | Accepted |
 | [0049](0049-machining-collision-and-clearance-queries.md) | Machining collision and clearance queries with bounded motion | M7 (staged) | Proposed |
 | [0050](0050-tolerant-topology.md) | Tolerant topology: named, bounded tolerance growth; supersedes ADR-0001's pair rule and ceiling | 2–3 | Accepted |
 | [0051](0051-face-adjacency-and-canonical-surfaces.md) | Face adjacency graph and canonical surface classification as kernel queries | 3 | Proposed |
@@ -71,3 +71,4 @@ Open questions that have to be researched before they can be decided live in [`d
 | [0053](0053-metamorphic-testing.md) | Contract-driven metamorphic testing and intersection-bug promotion | 2 | Proposed |
 | [0054](0054-topological-event-detection.md) | Topological event detection and classification | 2–4 (staged); later parameter tracking | Proposed |
 | [0055](0055-geometric-assurance-profiles.md) | Geometric assurance profiles and representation-independent query contracts | 2–6 (staged) | Proposed |
+| [0056](0056-cpp26-feature-usage.md) | Where C++26 features are used in kernel code | 0 | Proposed |

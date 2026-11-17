@@ -38,3 +38,25 @@ Option 3 for `Intersect`, now; option 1 later, as its own product.
 
 - `tests/intersect/PlanarLinearizationTests.cpp`, *a meeting of two space curves is an event, a separation keeps*: two crossing lines answer `Nondifferentiable` with no values; two lines apart answer `Valid`, no values forward and a zero in reverse, and refuse a non-empty adjoint; a B-spline against itself, an overlap, answers `Nondifferentiable`.
 - For `ClosestApproach`, when it is built: closed forms for two lines, second-order Taylor decay and the adjoint identity on random curves against an independent closest-approach solver, and `Nondifferentiable` for parallel curves.
+
+## Addendum 2026-11-12: ClosestApproach design, owner decision
+
+The owner accepted, on 2026-11-12, the design of option 1's product. It changes none of the decisions above: `Intersect`'s products for two space curves stay as decided.
+
+1. **Result.** `ClosestApproach` reports both closest points `A(s)` and `B(t)`, the parameters `s` and `t`, the gap vector `d = A(s) − B(t)` and its length `|d|`. It reports no single "position": not on A, on B, or the midpoint.
+2. **Domain ends.** A minimum at an end of a parameter's domain holds that parameter fixed, and its products differentiate the remaining equation. A minimum that switches between an end and the interior is `Nondifferentiable`.
+3. **Ties.** A tie between candidate minima that the primal cannot decide is `Indeterminate`. A set of minimisers proved exactly is `Nondifferentiable`.
+4. **Meetings.** When the curves actually meet (the distance is within the resolution), the whole result is `Nondifferentiable`. `SensitivityResult` carries a single status, so the parameters do not get a separate `Valid` status.
+5. **Supported domain.** v0.2 certifies lines, circles and ellipses. B-spline pairs answer `NotSupported` until a subdivision proof of their minimum exists.
+6. **Near events.** `NearEventSine` (2⁻²⁰) is reused, applied to the smaller eigenvalue of the Hessian normalised by the tangents' lengths.
+7. **Tracking convention.** `ClosestApproach` declares `TrackingConvention::UniqueProjection` in the capability catalogue. No core API changes.
+
+Implementation: `src/intersect/ClosestApproach.cppm` (a new `Stereon.Intersect:ClosestApproach` partition), `ClosestApproach.cpp` (the primal) and `ClosestApproachLinearization.cpp` (the products); `docs/sensitivity.rst`, *Closest approach of two space curves*.
+
+Verification for this addendum: `tests/intersect/ClosestApproachTests.cpp`. It checks:
+
+- closed forms for two skew lines, a line and a circle, and minima at a segment's end and at an arc's end;
+- an independent oracle: dense sampling, then Newton's method in `long double`, with tolerances sized by `std::numeric_limits<long double>::epsilon()` (which equals `double`'s on some platforms);
+- the metamorphic relations of exchange, rigid motion, reversal and scaling;
+- second-order Taylor decay and the adjoint identity;
+- every status, and the input refused.

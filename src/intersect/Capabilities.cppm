@@ -30,19 +30,31 @@ inline constexpr OperationCapability IntersectCatalogue[] = {
             "cone, a sphere, a torus, "
             "an ellipsoid or a B-spline surface, "
             "through IntersectJvp and IntersectVjp, in the line's origin and direction, a "
-            "conic's centre and radii at a fixed frame, the "
+            "conic's centre, radii and frame rotation, the "
             "curve's poles and weights at fixed knots, and the surface's origin, its radii, a "
             "cone's semi-angle, an ellipsoid's semi-axes and a B-spline surface's poles and "
-            "weights at fixed knots: decided transversal "
+            "weights at fixed knots, and an analytic surface's frame rotation: decided "
+            "transversal "
             "crossings only, NearEvent below NearEventSine; "
             "Tangential and Overlap contacts (ADR-0010) are nondifferentiable, undecided points "
             "and poles of the surface's parameters indeterminate; the point count and the "
             "tolerance stay fixed; branch points of two such surfaces under the normal-plane "
             "tracking constraint (BranchSample), certified crossing branches only; "
-            "points where two plane curves (lines, circles, ellipses, B-splines) cross, in "
+            "points where two plane curves (lines, conics, B-splines) cross, in "
             "their defining values (PlaneCurveBinding); a meeting of two space curves is an "
             "event of codimension one, nondifferentiable, a separation valid with no values; "
             "other pairs answer NotSupported",
+            {DerivativeProduct::Jvp, DerivativeProduct::Vjp}),
+    Declare("ClosestApproach", {Dependency::InputGeometry, Dependency::Tolerances},
+            {TrackingConvention::UniqueProjection},
+            "two lines, circles or ellipses in space (ADR-0052, addendum of 2026-11-12): the "
+            "pair of closest points, proved the unique global minimiser over the requested "
+            "domains, tracked through ClosestApproachJvp and ClosestApproachVjp in a line's "
+            "origin and direction and a conic's centre and radii at a fixed frame; a parameter "
+            "at an end of its domain is held there; a set of minimisers, a meeting and an end "
+            "the minimum may leave are nondifferentiable, an undecided minimiser or a singular "
+            "Hessian indeterminate, NearEvent below NearEventSine on the normalised Hessian; "
+            "B-spline curves answer NotSupported",
             {DerivativeProduct::Jvp, DerivativeProduct::Vjp}),
 };
 

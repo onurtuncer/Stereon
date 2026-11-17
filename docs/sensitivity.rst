@@ -195,7 +195,7 @@ a B-spline curve against a plane, a cylinder, a cone, a sphere, a torus or
 an ellipsoid.
 ``LineBinding`` binds a parameter to a coordinate of the line's origin or
 direction. ``SurfaceBinding`` binds one to a value of the surface, each a
-``Length`` but the semi-angle, an ``Angle``:
+``Length`` but the semi-angle and the rotations, ``Angle``\ s:
 
 - ``OriginX``, ``OriginY``, ``OriginZ``: a coordinate of its origin (a
   sphere's or a torus's centre);
@@ -204,7 +204,11 @@ direction. ``SurfaceBinding`` binds one to a value of the surface, each a
 - ``MinorRadius``: a torus's tube;
 - ``SemiAngle``: a cone's opening;
 - ``SemiAxisA``, ``SemiAxisB``, ``SemiAxisC``: an ellipsoid's semi-axes,
-  along its ``XAxis``, its ``YAxis`` and its axis.
+  along its ``XAxis``, its ``YAxis`` and its axis;
+- ``RotationX``, ``RotationY``, ``RotationZ``: the components of an
+  infinitesimal rotation :math:`\omega` of an analytic surface's frame about
+  its origin, along the current frame's ``XAxis``, ``YAxis`` and third axis
+  (a plane's :math:`X \times Y`, every other surface's axis).
 
 A binding of a value the surface does not have is ``InvalidInput``. The
 surface's partials :math:`S_u`, :math:`S_v` come from its own ``Deriv``.
@@ -220,7 +224,17 @@ At fixed :math:`(u, v)`, with :math:`\hat\rho = \cos u\,X + \sin u\,Y` and
   :math:`\cos v\,\hat\rho + \sin v\,A`;
 - an ellipsoid's semi-axes move it by the factor each multiplies,
   :math:`\cos v \cos u\,X`, :math:`\cos v \sin u\,Y` and
-  :math:`\sin v\,A`; its poles are detected as the sphere's are.
+  :math:`\sin v\,A`; its poles are detected as the sphere's are;
+- a rotation about the frame's axis :math:`e_k` moves it by
+  :math:`e_k \times (S - O)`, the owner's convention: :math:`S - O` is formed
+  in the frame (:math:`u X + v Y` on a plane, :math:`r \hat\rho + v A` on a
+  cylinder, and so on), not by subtracting world positions.
+
+A turn about a surface's own symmetry (a sphere about any axis through its
+centre, a cylinder, a cone or a torus about its axis, a plane about its
+normal) leaves the surface where it is: a point's position does not move,
+only its parameters :math:`(u, v)`, which the products report. Only B-spline
+surfaces have no frame to turn: a rotation bound to one is ``InvalidInput``.
 
 ``Intersect`` has no line handler for the cone and the torus yet, so their
 points come from B-spline curves, or from a caller's own closed form, which
@@ -262,11 +276,14 @@ reports, is ``Nondifferentiable``.
 A ``Circle`` and an ``Ellipse`` have the same products, the point's
 parameter their angle, their defining values moved by ``ConicBinding``: a
 coordinate of the centre, a circle's ``Radius``, an ellipse's
-``MajorRadius`` and ``MinorRadius``, each a ``Length``, the frame fixed as a
-surface's is. At the angle :math:`t`, :math:`C = O + r(\cos t X + \sin t
-Y)` moves by a unit with a centre coordinate and by :math:`\cos t X + \sin
-t Y` with its radius; an ellipse :math:`O + a \cos t X + b \sin t Y` by
-:math:`\cos t X` with :math:`a` and :math:`\sin t Y` with :math:`b`. The
+``MajorRadius`` and ``MinorRadius``, each a ``Length``, or its frame's
+``RotationX``, ``RotationY`` and ``RotationZ``, ``Angle``\ s along its
+``XAxis``, ``YAxis`` and normal :math:`X \times Y`, about its centre. At the
+angle :math:`t`, :math:`C = O + r(\cos t X + \sin t Y)` moves by a unit with
+a centre coordinate, by :math:`\cos t X + \sin t Y` with its radius and by
+:math:`e_k \times (C - O)` with a rotation; an ellipse
+:math:`O + a \cos t X + b \sin t Y` by :math:`\cos t X` with :math:`a` and
+:math:`\sin t Y` with :math:`b`. The
 tests check a circle of radius 2 and an ellipse of semi-axes 3 and 2, both
 cut by the plane :math:`z = 1`, against their closed forms, and the Taylor
 and transpose properties on random circles and ellipses through spheres,
@@ -275,6 +292,31 @@ properties discard a step that changes the number of crossings (a near
 miss elsewhere becoming two crossings), pair crossings by position (one
 near :math:`t = 0` may pass the seam), and keep away from a sphere's poles,
 where :math:`u` moves too fast for the steps.
+
+Frame rotations are checked against closed forms. The line
+:math:`y = 0, z = 2` meets the cylinder of radius 1.5 about :math:`z` at
+:math:`(\mp 1.5, 0, 2)`. Turning its axis about :math:`Y` to
+:math:`(\sin\omega, 0, \cos\omega)` keeps the points where
+:math:`x^2 + h^2 - (x \sin\omega + h \cos\omega)^2 = R^2`, so
+:math:`x' = h = 2` at both and :math:`v' = x`. About :math:`X` the
+crossings move only at second order: :math:`x' = 0` and :math:`u' = h / x`.
+About the axis only :math:`u` moves, by :math:`-1`. A vertical line through
+:math:`(1, 0, 0)` meets the plane :math:`z = 0`, whose ``XAxis`` turned about
+:math:`Y` dips to :math:`z = -\tan\omega`: :math:`x' = (0, 0, -1)`. About its
+normal the plane only turns in itself, :math:`(u, v)' = (y, -x)`. The
+x-axis through a sphere turned about its centre moves no point; :math:`u`
+moves by :math:`-1` about :math:`z`, and :math:`v` by :math:`\mp 1` about
+:math:`y`. The circle of radius 2 in the :math:`xz`-plane, cut by
+:math:`z = 1` at :math:`(\pm\sqrt 3, 0, 1)`, moves by
+:math:`X \times (C - O) = (0, -1, 0)` turning about :math:`X`, by
+:math:`(0, \pm\sqrt 3, 0)` about :math:`Y`, and not at all about its
+normal, where :math:`t' = -1`. The Taylor and transpose properties run with
+every frame turning on random lines through planes, spheres, cylinders and
+ellipsoids, on random cubic B-splines through cones and tori, and on random
+circles and ellipses through spheres, cylinders and planes. Each rotation
+partial, its sign flipped, fails them. A rotation bound to a B-spline
+surface or measured as a ``Length`` is refused, and a turned tangency stays
+``Nondifferentiable``.
 
 A ``BSplineSurface`` binds its poles and weights the same way: a
 ``SurfaceBinding`` with ``SurfaceComponent::PoleX``, ``PoleY`` or ``PoleZ``
@@ -307,7 +349,12 @@ parameter: a line's origin and direction, a circle's centre and radius, an
 ellipse's or a hyperbola's centre and radii, a parabola's vertex and focal
 length, or a B-spline's poles and weights, whose velocity is the curve
 library's ``PoleVelocity`` on the curve lifted into the plane
-:math:`z = 0`. Every frame is held fixed. At fixed parameter the
+:math:`z = 0`. A conic's frame (a circle's, an ellipse's, a hyperbola's
+or a parabola's) also turns about its centre or vertex by ``Rotation``, an
+``Angle`` counter-clockwise in the plane, whatever the frame's handedness:
+the point at fixed parameter moves by :math:`\omega (-d_y, d_x)` for its
+offset :math:`d = C - O`, formed in the frame. A line or a B-spline has no
+frame, and a rotation bound to one is ``InvalidInput``. At fixed parameter the
 hyperbola :math:`C + a \cosh t\, X + b \sinh t\, Y` moves by
 :math:`\cosh t\, X` per unit of ``MajorRadius`` and :math:`\sinh t\, Y`
 per unit of ``MinorRadius``; the parabola
@@ -344,6 +391,25 @@ hyperbola's tangencies with a line (their exact discriminants vanish) and
 each against itself are ``Nondifferentiable``; a line a hair inside each
 vertex, ``NearEvent``.
 
+Turning a plane conic is checked against four closed forms.
+
+- **Ellipse.** The ellipse of semi-axes 5 and 4 meets :math:`y = 12/5` at
+  :math:`(\pm 4, 12/5)`. In the turned frame the point solves
+  :math:`X^2/25 + Y^2/16 = 1` with :math:`X = x + \omega y` and
+  :math:`Y = y - \omega x`, so :math:`x' = 27/20` at both points and
+  :math:`t' = -5/4`.
+- **Parabola.** :math:`y = x^2` turned about its vertex meets :math:`y = 4`
+  where :math:`Y = X^2`, so :math:`x' = -9/2` and :math:`t' = 1/2` at both
+  points.
+- **Hyperbola.** The rectangular hyperbola, bound second, meets :math:`y = 4`
+  at :math:`(5, 4)`, so :math:`x' = -8` and :math:`t' = -1`.
+- **Circle.** A circle turned about its centre moves no point; only its
+  angle moves, by :math:`-1`.
+
+The random pairs above turn every conic's frame. A rotation bound to a line
+or a B-spline, or measured as a ``Length``, is refused. A turned tangency
+stays ``Nondifferentiable``.
+
 Two space curves meet only where their closest approach is within the
 resolution, which a generic change of either curve undoes: a meeting is
 itself an event, of codimension one. ``IntersectJvp(a, b, intersection,
@@ -354,8 +420,104 @@ which a small enough change keeps (ADR-0052, the owner's decision of
 2026-11-10).
 Tracking the closest approach smoothly, :math:`(A - B) \cdot A' = 0` and
 :math:`(A - B) \cdot B' = 0` in :math:`(s, t)`, is a separate product,
-``ClosestApproach``, still to come, with its own tracking convention; it is
-not hidden inside ``Intersect``'s derivatives.
+``ClosestApproach`` (below), with its own tracking convention. It is not
+hidden inside ``Intersect``'s derivatives.
+
+Closest approach of two space curves
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``ClosestApproach(a, domainA, b, domainB, ctx)`` follows the owner's
+decisions in ADR-0052's addendum of 2026-11-12. For two lines, circles or
+ellipses it reports both closest points :math:`A(s)` and :math:`B(t)`, the
+parameters, the gap :math:`d = A(s) - B(t)` and its length, and where each
+parameter lies (interior or at an end of its domain). It also reports what
+was proved about the minimiser:
+
+- **Unique**, when one minimiser is proved.
+- **NotUnique**, a proved set of minimisers: exactly parallel lines, a line
+  along a circle's axis, or two coaxial whole circles. These are decided on
+  exact expansions.
+- **Undecided**, when the search could not separate two candidates or prove
+  one alone. The reported pair is then the best found, and ``LowerBound`` is
+  a certified lower bound on the minimum distance.
+
+``Meets`` says the distance is within the resolution. B-spline curves answer
+``NotSupported``.
+
+How the minimum is proved:
+
+- **Two lines** form a convex quadratic, solved by projected Newton.
+- **A line and a conic, or two conics,** are searched by branch and bound on
+  :math:`\varphi = |d|^2 / 2`. A box is pruned when the lower bound
+  :math:`\varphi(c) - |\varphi_s| h_s - |\varphi_t| h_t - M_2 (h_s^2 + h_t^2) / 2`
+  exceeds the best value found. :math:`M_2` bounds the Hessian through the
+  curves' derivative bounds; a line's parameter is first cut to the window
+  where its nearest points to the conic lie.
+- The surviving leaves form clusters. A single cluster holds the unique
+  minimiser when two conditions hold:
+
+  - an end the minimum rests on is pushed outward by more than the gradient
+    can change over the cluster;
+  - :math:`\varphi`'s Hessian over the free parameters outweighs a bound on
+    its third derivatives out to the cluster's farthest corner.
+
+  When the cluster is too wide for that, it is searched again with finer
+  leaves.
+
+``ClosestApproachJvp`` and ``ClosestApproachVjp`` take a ``CurveBindings`` per
+curve: a line's ``LineBinding``\ s or a conic's ``ConicBinding``\ s, frame
+fixed. At an interior minimiser the parameters solve
+:math:`G = (d \cdot A', -d \cdot B') = 0`, so a design change moves them by
+:math:`H z' = -G_p p'` with
+
+.. math::
+
+   H = \begin{pmatrix} A' \cdot A' + d \cdot A'' & -A' \cdot B' \\
+                        -A' \cdot B' & B' \cdot B' - d \cdot B'' \end{pmatrix},
+   \qquad
+   G_p = \big((A_p - B_p) \cdot A' + d \cdot A'_p,\;
+              -(A_p - B_p) \cdot B' - d \cdot B'_p\big).
+
+A parameter at an end is held there and the other solves its own equation.
+The twelve values, ``ClosestApproachValues``, are :math:`A(s)'`,
+:math:`B(t)'`, :math:`s'`, :math:`t'`, :math:`d'` and
+:math:`|d|' = \hat d \cdot d'`. They are linear in each binding's rate, so
+the reverse product pairs the adjoint with each binding's twelve values.
+
+The statuses follow the addendum:
+
+- a proved set of minimisers: ``Nondifferentiable``;
+- curves that meet: ``Nondifferentiable``;
+- an undecided minimiser: ``Indeterminate``;
+- an end whose one-sided gradient is within rounding of zero:
+  ``Nondifferentiable``, since the minimiser may leave the end;
+- a singular Hessian: ``Indeterminate``;
+- ``NearEvent`` when the smaller eigenvalue of the normalised Hessian, or an
+  end's normalised gradient, is below ``NearEventSine``;
+- ``Valid`` otherwise.
+
+The tests (``tests/intersect/ClosestApproachTests.cpp``) check:
+
+- **Closed forms.**
+
+  - Two skew lines: the gap lengthens by one when :math:`B` rises; :math:`s`
+    follows :math:`B` along :math:`x`; tilting :math:`A` up gives
+    :math:`s' = 2`.
+  - The unit circle and the vertical line through :math:`(3, 0, 0)`:
+    :math:`|d|^2 = 10 - 6\cos t`. A growing radius shortens the gap by one,
+    and moving the line along :math:`y` gives :math:`t' = 1/3`.
+  - Minima at a segment's end, :math:`|d|' = 1 / \sqrt 5`, and at an arc's
+    end, :math:`|d|' = 1 / \sqrt{10}`.
+
+- **An independent oracle.** A dense grid, a line's parameter taken as each
+  sample's foot, then projected Newton's method in ``long double``. The
+  tolerances are sized by both types' epsilons, since ``long double`` is
+  ``double`` on some platforms.
+- **Metamorphic relations:** exchange, rigid motion, reversal and scaling. A
+  transformed case whose borderline proof fails must still bracket the
+  distance.
+- **The products:** second-order Taylor decay and the adjoint identity.
+- **Every status**, and the input refused.
 
 Branch points of two surfaces
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -436,6 +598,17 @@ found in the same tracking plane and held there, and on both moved
 surfaces, to rounding. Further tests check the transpose identity, the
 statuses of a tangential branch, an overlap and an uncertified branch, and
 the refusal of stale results.
+
+Branch points take the surfaces' rotations exactly as curve–surface points
+do. Turning the plane :math:`z = h` about its ``XAxis`` gives
+:math:`z - h = \omega y` (about its ``YAxis``, :math:`-\omega x`). The
+sample :math:`(x, y, h)` then moves in its tracking plane by
+:math:`a \hat r + b \hat z`, with :math:`b = y` (or :math:`-x`) from the
+plane and :math:`\rho a + h b = 0` from the sphere. About its normal the
+plane only turns in itself: no point moves, and its :math:`(u, v)` moves by
+:math:`(y, -x)`. The sphere turned about its centre moves no sample. The
+Taylor and transpose properties run on every random case with both frames
+turning.
 
 The AD backend: CppAD
 ---------------------
