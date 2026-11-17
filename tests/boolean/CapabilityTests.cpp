@@ -77,17 +77,21 @@ TEST_CASE("every declaration states its dependencies and assumptions", "[boolean
     }
 }
 
-TEST_CASE("only Eval and Intersect implement products; the rest answer NotSupported",
+TEST_CASE("only Eval, Intersect and ClosestApproach implement products; the rest answer "
+          "NotSupported",
           "[boolean][sensitivity]")
 {
     // The derivative slices so far (ADR-0021): Eval of a B-spline curve
     // (stage 2) and Intersect of a line and a plane (stage 4, at v0.2) have
-    // JVP and VJP. An evaluation asked of any other operation is
+    // JVP and VJP, and ClosestApproach of two space curves (ADR-0052, its
+    // addendum of 2026-11-12). An evaluation asked of any other operation is
     // NotSupported and carries no values, never a zero. A new slice changes
     // this test deliberately.
     const OperationCapability& eval = Declared(Stereon::CurveCapabilities(), "Eval");
     const OperationCapability& intersect = Declared(Stereon::IntersectCapabilities(), "Intersect");
-    for (const OperationCapability* implementing : {&eval, &intersect}) {
+    const OperationCapability& approach =
+        Declared(Stereon::IntersectCapabilities(), "ClosestApproach");
+    for (const OperationCapability* implementing : {&eval, &intersect, &approach}) {
         REQUIRE(implementing->Supports(DerivativeProduct::Jvp));
         REQUIRE(implementing->Supports(DerivativeProduct::Vjp));
         REQUIRE_FALSE(implementing->Supports(DerivativeProduct::DenseJacobian));
@@ -97,9 +101,12 @@ TEST_CASE("only Eval and Intersect implement products; the rest answer NotSuppor
         INFO(capability.Operation);
         if (!capability.Products.IsEmpty()) {
             // KernelCapabilities copies the declarations: each implementing
-            // one is Eval's or Intersect's, products and correspondence alike.
-            const OperationCapability& expected =
-                capability.Operation == eval.Operation ? eval : intersect;
+            // one is Eval's, Intersect's or ClosestApproach's, products and
+            // correspondence alike.
+            const OperationCapability& expected = capability.Operation == eval.Operation ? eval
+                                                  : capability.Operation == intersect.Operation
+                                                      ? intersect
+                                                      : approach;
             REQUIRE(capability.Operation == expected.Operation);
             REQUIRE(capability.Products == expected.Products);
             REQUIRE(capability.Correspondence == expected.Correspondence);
@@ -114,7 +121,7 @@ TEST_CASE("only Eval and Intersect implement products; the rest answer NotSuppor
             REQUIRE(result.GetReason().find(capability.Operation) != std::string_view::npos);
         }
     }
-    REQUIRE(implemented == 2);
+    REQUIRE(implemented == 3);
 }
 
 TEST_CASE("operations on points declare how their samples correspond", "[boolean][sensitivity]")

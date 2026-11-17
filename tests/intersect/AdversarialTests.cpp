@@ -436,6 +436,33 @@ TEST_CASE("reversing the curve keeps every point", "[intersect][adversarial][pro
     });
 }
 
+TEST_CASE("reversing a closed conic keeps a crossing on its seam in place",
+          "[intersect][adversarial][regression]")
+{
+    // The shrunk CI counterexample (seed 4035963351361492909): the plane
+    // y = 2.25 cuts the ellipse through its centre, on its seam and at
+    // t = pi. Eval(Reversed(e), t) == Eval(e, 2 pi - t) fixes the seam and
+    // pi, so both curves list the same two points in the same order (the
+    // seam crossing at the domain's end, 2 pi), not in opposite orders.
+    const Point3 o{-3.0, 2.25, -3.0};
+    const Ellipse e{o, 0.625, 0.5, ex, ey};
+    const Surface plane{Plane{o, ez, ex}};
+    const auto forward = Meet(Curve{e}, plane);
+    const auto backward = Meet(Curve{Reversed(e)}, plane);
+    REQUIRE(forward.has_value());
+    REQUIRE(backward.has_value());
+    REQUIRE(forward->Points.size() == 2);
+    REQUIRE(backward->Points.size() == 2);
+    const Point3 opposite{-3.625, 2.25, -3.0};
+    const Point3 seam{-2.375, 2.25, -3.0};
+    for (const auto* result : {&*forward, &*backward}) {
+        CHECK(Distance(result->Points[0].Position, opposite) <= 1e-12);
+        CHECK(std::abs(result->Points[0].Parameter - pi) <= 1e-12);
+        CHECK(Distance(result->Points[1].Position, seam) <= 1e-12);
+        CHECK(std::abs(result->Points[1].Parameter - 2.0 * pi) <= 1e-12);
+    }
+}
+
 TEST_CASE("a line's origin moved far along it shifts its parameters only",
           "[intersect][adversarial][property][regression]")
 {

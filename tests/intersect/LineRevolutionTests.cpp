@@ -342,3 +342,52 @@ TEST_CASE("every sign change along a random line has a point in it",
         check(line, torus, [&](const Point3& p) { return TorusLevel(torus, p); });
     });
 }
+
+TEST_CASE("MR audit cone crossings retain their positions after an exact origin shift",
+          "[intersect][cone][metamorphic][regression]")
+{
+    // CI seed 17298607298449989786, shrunk on 2026-11-12. All inputs and
+    // the origin shift are dyadic. The ideal right cone gives
+    // t^2 + 382 t + 481 = 0: -191 +/- 60 sqrt(10), independently of Intersect.
+    // MR-04 shifts the line's chart; MR-01 translates both operands.
+    const Vec3 direction{13.0 / 8.0, -23.0 / 8.0, 19.0 / 8.0};
+    const double run = 0x1p19;
+    for (const Vec3 shift : {Vec3{}, Vec3{8.0, -4.0, 2.0}}) {
+        const Line near{Point3{-0.25, -0.25, 21.0 / 8.0} + shift, direction};
+        const Line far{near.Origin - run * direction, direction};
+        const Cone cone{Point3{23.0 / 8.0, -17.0 / 8.0, 1.5} + shift, 0.0, pi / 4.0, ez, ex};
+        const auto a = Intersect(Curve{near}, Surface{cone}, ctx);
+        const auto b = Intersect(Curve{far}, Surface{cone}, ctx);
+        INFO(IntersectTest::ErrorText(a));
+        INFO(IntersectTest::ErrorText(b));
+        REQUIRE(a.has_value());
+        REQUIRE(b.has_value());
+        REQUIRE(a->Points.size() == 2);
+        REQUIRE(b->Points.size() == 2);
+        for (std::size_t k = 0; k < 2; ++k) {
+            const auto& p = a->Points[k];
+            const auto& q = b->Points[k];
+            const double exact = -191.0 + (k == 0 ? -60.0 : 60.0) * std::sqrt(10.0);
+            const auto rounding = [&](const Line& line, const CurveSurfacePoint& point) {
+                return 512.0 * std::numeric_limits<double>::epsilon() *
+                       std::max({1.0, Length(point.Position - Point3{}),
+                                 std::abs(point.Parameter) * Length(line.Direction)});
+            };
+            const double within = rounding(near, p) + rounding(far, q);
+            // The input angle is rounded pi/4. Near a generator, comparing
+            // its large root to the ideal right cone magnifies that angle
+            // rounding. Check the actual support independently instead.
+            const Vec3 local = p.Position - cone.Origin;
+            CHECK(std::abs(std::hypot(local.X, local.Z) * std::cos(cone.SemiAngle) -
+                           std::abs(local.Y) * std::sin(cone.SemiAngle)) <= rounding(near, p));
+            CHECK(Distance(p.Position, Eval(near, p.Parameter)) <= rounding(near, p));
+            CHECK(Distance(q.Position, Eval(near, exact)) <= within);
+            CHECK(Distance(p.Position, q.Position) <= within);
+            CHECK(std::abs(q.Parameter - p.Parameter - run) <= within / Length(direction));
+            CHECK(p.Contact == ContactType::Crossing);
+            CHECK(q.Contact == p.Contact);
+            const Vec3 w = q.Position - cone.Origin;
+            CHECK(std::abs(std::hypot(w.X, w.Z) - std::abs(w.Y)) <= within);
+        }
+    }
+}
