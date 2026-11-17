@@ -2,8 +2,9 @@
 
 This campaign implements tests and fault reintroductions for eight identified
 faults. It does **not** close the historical inventory or claim native CI has
-passed. Records stay `MR implemented` until the baseline, fault-detection logs,
-and independent review are linked. The matrix covers only the domains below,
+passed. The baseline, the fault-detection results and the verification agent's
+review are now linked ([triage, batch 2](intersection-metamorphic-triage.md)),
+and the defect records are `verified`, pending the owner's review. The matrix covers only the domains below,
 not every behavior of each handler.
 
 ## Replay and effective context
@@ -169,9 +170,14 @@ reintroduces the relevant omission addressed by
 
 ## Remaining qualification
 
-Every campaign record stays `MR implemented`, not `verified`, until native
-GCC 16 baseline/fault logs and review are linked. Other historical leads,
-unreviewed relations and the complete-inventory audit remain open.
+Batch 2 of the [triage](intersection-metamorphic-triage.md) replayed all eight
+faults with `tools/mutate.py` on b78bb2d (Windows, GCC 16.2, `gcc16-debug`).
+The baseline was green, and each fault was killed twice by its named test.
+The defect records, PR-240 included through the shared PR-241 fault, are now
+`verified` on the verification agent's review, pending the owner's review.
+Linux and macOS logs are not yet linked. The handler matrix cells these tests
+cover stay `MR implemented`. Unreviewed relations, PR-194, PR-239 and the
+complete-inventory audit remain open.
 
 ## PR-263 translated boundary regression
 
@@ -183,7 +189,10 @@ when an interval gradient component excludes zero over the actual parameter
 box, before the ill-conditioned Krawczyk inversion. This does not discard
 boundary minima: SearchEnds still searches the ends and corners separately.
 The existing test covers translation, scale, operand exchange and knot maps;
-the negative control remains separated. Native validation of this fix is pending.
+the negative control remains separated. Native validation on Windows GCC 16:
+"MR PR-263-translated-boundary spline end meeting away from the origin" passes,
+and the disabled stationary-point exclusion is killed by it (batch 2 replay on
+ec0acc3, [triage](intersection-metamorphic-triage.md)).
 
 The original failing baseline is preserved in Actions run 43052745077,
 job 130633998895 (PR head f651783d755800088392275908136074acb92f9c).
