@@ -363,7 +363,6 @@ constexpr double ParameterReach = 1e-7;
 
 struct Tally {
     std::size_t Answered = 0;
-    std::size_t Unsupported = 0;
 };
 
 /// The claim for one pair under one motion and chart.
@@ -383,18 +382,11 @@ void Claim(const SurfaceFixture& s, const Kind kind, const Motion& m, const bool
     const Context policy = m.Policy();
     const double reach = 4.0 * policy.GetResolution();
     const auto r = Intersect(c.Value, c.Domain, surface, Domain(surface), policy);
-    // These conics lack analytic-surface handlers; the generic B-spline
-    // surface handler supports them. An error code cannot turn
-    // a supported fixture into an unsupported one, or qualify a relation.
-    const bool unsupported = (kind == Kind::Hyperbola || kind == Kind::Parabola) &&
-                             surface.Target<BSplineSurface>() == nullptr;
+    // Every pair has a handler, hyperbolas and parabolas against the
+    // analytic surfaces included (OpenConicSurface). An error code cannot
+    // turn a supported fixture into an unsupported one, or qualify a
+    // relation.
     INFO(IntersectTest::ErrorText(r));
-    if (unsupported) {
-        REQUIRE_FALSE(r.has_value());
-        CHECK(r.error().GetCode() == ErrorCode::NotImplemented);
-        ++tally.Unsupported;
-        return;
-    }
     REQUIRE(r.has_value());
     ++tally.Answered;
     CHECK(r->Overlaps.empty());
@@ -424,7 +416,7 @@ void RunAll(const std::function<void(const SurfaceFixture&, Kind, Tally&)>& run)
         }
     }
     CHECK(tally.Answered > 0);
-    WARN(tally.Answered << " answered, " << tally.Unsupported << " without a handler");
+    WARN(tally.Answered << " answered");
 }
 
 } // namespace

@@ -138,6 +138,34 @@ void RequireAt(const CurveSurfaceIntersection& result, const std::vector<Point3>
     }
 }
 
+/// Full-turn conics have no distinguished first crossing: a seam root
+/// can be placed at either 0 or 2 pi by equivalent implicit equations.
+/// Preserve cyclic order and a bijection, comparing angles modulo one turn.
+bool SameClosedConicPoints(const std::vector<CurveSurfacePoint>& a,
+                           const std::vector<CurveSurfacePoint>& b)
+{
+    if (a.size() != b.size()) {
+        return false;
+    }
+    if (a.empty()) {
+        return true;
+    }
+    for (std::size_t shift = 0; shift < a.size(); ++shift) {
+        bool same = true;
+        for (std::size_t i = 0; i < a.size(); ++i) {
+            const auto& p = a[i];
+            const auto& q = b[(i + shift) % b.size()];
+            same = same && p.Contact == q.Contact &&
+                   std::abs(std::remainder(p.Parameter - q.Parameter, 2.0 * pi)) <= 1e-9 &&
+                   Distance(p.Position, q.Position) <= 1e-9;
+        }
+        if (same) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 TEST_CASE("a circle crosses a plane at its two angles", "[intersect][conic-surface]")
@@ -675,14 +703,42 @@ TEST_CASE("a circle against an ellipsoid with equal semi-axes meets it where it 
             RC_ASSERT(failed.error().GetCode() == ErrorCode::IntersectionFailed);
             return;
         }
-        RC_ASSERT(onSphere->Points.size() == onEllipsoid->Points.size());
-        for (std::size_t i = 0; i < onSphere->Points.size(); ++i) {
-            const CurveSurfacePoint& p = onSphere->Points[i];
-            const CurveSurfacePoint& q = onEllipsoid->Points[i];
-            RC_ASSERT(q.Contact == p.Contact);
-            RC_ASSERT(std::abs(q.Parameter - p.Parameter) <= 1e-9);
-            RC_ASSERT(Distance(q.Position, p.Position) <= 1e-9);
+        RC_ASSERT(SameClosedConicPoints(onSphere->Points, onEllipsoid->Points));
+        for (const CurveSurfacePoint& q : onEllipsoid->Points) {
             RC_ASSERT(Distance(Eval(ellipsoid, q.OnSurface), q.Position) <= 1e-9);
         }
     });
+}
+
+TEST_CASE("equal-axis ellipsoid and sphere agree at a conic seam",
+          "[intersect][conic-surface][ellipsoid][regression]")
+{
+    // ASan CI seed 10057118381934748002, shrunk dyadic counterexample.
+    const Curve curve{Ellipse{Point3{-1.25, -1.25, -1.0}, 0.75, 0.625, ey, ez}};
+    const Point3 center{-0.75, -1.0, -0.75};
+    const Surface sphere{Sphere{center, 0.75, ex, ey}};
+    const Surface ellipsoid{Ellipsoid{center, 0.75, 0.75, 0.75, ex, ey}};
+    const auto onSphere = Intersect(curve, sphere, ctx);
+    const auto onEllipsoid = Intersect(curve, ellipsoid, ctx);
+    REQUIRE(onSphere.has_value());
+    REQUIRE(onEllipsoid.has_value());
+    REQUIRE(onSphere->Points.size() == 2);
+    REQUIRE(onEllipsoid->Points.size() == 2);
+    REQUIRE(SameClosedConicPoints(onSphere->Points, onEllipsoid->Points));
+    // The seam point is exactly on both surfaces: its displacement from
+    // the centre is (-1/2, 1/2, -1/4), whose squared norm is (3/4)^2.
+    const Point3 seam{-1.25, -0.5, -1.0};
+    for (const auto* result : {&*onSphere, &*onEllipsoid}) {
+        REQUIRE(std::ranges::count_if(result->Points, [&](const CurveSurfacePoint& p) {
+                    return Distance(p.Position, seam) <= 1e-9;
+                }) == 1);
+        for (const auto& p : result->Points) {
+            REQUIRE(p.Decided);
+            REQUIRE(p.Contact == ContactType::Crossing);
+            REQUIRE(p.Parameter >= 0.0);
+            REQUIRE(p.Parameter <= 2.0 * pi);
+            REQUIRE(Distance(Eval(curve, p.Parameter), p.Position) <= 1e-9);
+            REQUIRE(std::abs(Distance(p.Position, center) - 0.75) <= 1e-9);
+        }
+    }
 }

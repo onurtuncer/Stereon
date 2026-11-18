@@ -935,23 +935,54 @@ angle :math:`m + 2 \arctan(\tan(h/2)(2s - 1))`, its bracket mapped through
 that monotone map and widened by its rounding; points are reported on the
 conic's angle, which may run over several turns.
 
-The cuts are the kernel's choice, not features of the conic, which is
-smooth across them. A crossing at or within rounding of a cut is
-bracketed by each neighbouring arc across its end, and is undecided there.
-When the first search leaves a root undecided, the domain is searched
-again with its cuts moved (``ConicRootsOf``). A full turn is closed: its
-ends are one point, the seam, which is no boundary either, so every cut
-is turned by :math:`1/\varphi` of an arc and a root found past the upper
-end is brought back a turn, its bracket widened by the rounding of
-:math:`2\pi`; a crossing on the seam is reported once. On part of a turn
-only the interior cuts move, the domain cut into one arc more, and a root
-at the domain's own end stays undecided. What the second search leaves
-undecided fails closed. ``tests/intersect/ConicArcCutTests.cpp`` has the
-closed forms: a circle crossing a plane, a cylinder and a sphere exactly on
-its cuts, and an ellipse crossing a plane on them, under reversal,
-translation and scaling by :math:`2^{\pm 10}`;
-``tests/intersect/ConicSurfaceTests.cpp`` has crossings on the seam, over
-the turn :math:`[-\pi, \pi]` and on a half turn's interior cut.
+A ``Hyperbola``'s branch :math:`C + a\cosh t\,X + b\sinh t\,Y` and a
+``Parabola`` :math:`V + t^2/(4f)\,X + t\,Y` go through the same search
+(``OpenConicSurface``, the arcs described by a ``ConicChart``):
+- a hyperbola is cut into stretches of at most one unit of :math:`t`,
+  each the rational quadratic with :math:`\cosh` and :math:`\sinh` for
+  :math:`\cos` and :math:`\sin` and middle weight :math:`\cosh h`, which
+  never vanishes; a root at Bézier parameter :math:`s` is
+  :math:`m + 2\operatorname{artanh}(\tanh(h/2)(2s - 1))`;
+- a parabola, a polynomial, is one quadratic Bézier segment over the
+  whole domain, with poles :math:`P(t_0)`,
+  :math:`V + t_0 t_1/(4f)\,X + (t_0 + t_1)/2\,Y` and :math:`P(t_1)`; its
+  parameter is linear in :math:`s`.
+
+Both are enclosed from the input doubles. Neither curve is bounded, so its
+requested domain must be: an unbounded one is ``NotSupported``, never
+clipped to a guessed stretch. In a plane, either is an overlap, its pcurve
+the same curve in the plane's parameters, always clipped to the box.
+
+The cuts, and the dyadic points of each arc's subdivision, are the
+kernel's choice, not features of the conic, which is smooth across them.
+A crossing at or within rounding of one is bracketed by each neighbouring
+piece across its end, and is undecided there. When the first search
+leaves a root undecided, the domain is searched again with every cut
+moved by :math:`1/\varphi` of an arc (``ConicRootsOf``): irrational, so no
+new cut falls on an old cut or on a dyadic point of the old subdivision,
+and a lone arc, a parabola's or a short domain's, is cut in two at its
+golden section. No new arc is wider than the old, for a circle short of
+the half turn where the middle weight :math:`\cos h` vanishes. A full turn
+of a circle or an ellipse is closed: its ends are one point, the seam,
+which is no boundary either, so the whole domain turns with its cuts and
+a root found past the upper end is brought back a turn, its bracket
+widened by the rounding of :math:`2\pi`; a crossing on the seam is
+reported once. On any other domain the ends stay, and a root at the
+domain's own end stays undecided. What the second search leaves undecided
+fails closed; a tangency stays undecided wherever the cuts are.
+
+The tests have the closed forms:
+- ``tests/intersect/ConicArcCutTests.cpp``: a circle crossing a plane, a
+  cylinder and a sphere exactly on its cuts, and an ellipse crossing a
+  plane on them;
+- ``tests/intersect/ConicSurfaceTests.cpp``: crossings on the seam, over
+  the turn :math:`[-\pi, \pi]` and on a half turn's interior cut;
+- ``tests/intersect/OpenConicSurfaceTests.cpp``: a hyperbola against
+  planes (one crossing on a cut), a sphere and a cylinder; a parabola
+  against planes and a cylinder at dyadic points of its segment; a circle
+  crossing a plane at an arc's middle.
+
+Each runs under reversal, translation and scaling by :math:`2^{\pm 10}`.
 
 A conic whose centre and
 axes lie exactly in a plane is an overlap there, its pcurve the same
