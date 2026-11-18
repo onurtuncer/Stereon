@@ -157,11 +157,16 @@ TEST_CASE("every curve-surface pair has a handler; lines against planes, spheres
         Stereon::Ellipsoid{Point3{}, 3.0, 2.0, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}});
     REQUIRE(Intersect(SomeLine(), ellipsoid, ctx).has_value());
     REQUIRE(Intersect(SomeCircle(), ellipsoid, ctx).has_value());
-    // The other pairs name their types, the curve first.
+    // A parabola has its handler too, over a bounded domain; over its whole,
+    // unbounded one it is NotSupported, and the message names both types,
+    // the curve first.
     const Curve parabola(
         Stereon::Parabola{Point3{}, 1.0, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}});
-    REQUIRE(
-        MessageOf(Intersect(parabola, SomePlane(), ctx).error()).starts_with("Parabola x Plane"));
+    REQUIRE(Intersect(parabola, Stereon::Interval{-2.0, 2.0}, ellipsoid, Domain(ellipsoid), ctx)
+                .has_value());
+    const auto whole = Intersect(parabola, SomePlane(), ctx);
+    REQUIRE(whole.error().GetCode() == ErrorCode::NotSupported);
+    REQUIRE(MessageOf(whole.error()).starts_with("Parabola x Plane"));
     REQUIRE(
         MessageOf(Intersect(parabola, ellipsoid, ctx).error()).starts_with("Parabola x Ellipsoid"));
 }
