@@ -1036,3 +1036,43 @@ TEST_CASE("closest approach places the free parameter to rounding when the other
     }
     CHECK(placed > 200);
 }
+
+TEST_CASE("closest approach moves the other parameter on once one lands on an end",
+          "[intersect][closest-approach]")
+{
+    // Nightly, 2026-11-17: the long double oracle's property found a circle
+    // arc and an ellipse arc whose minimum is at the upper end of both. The
+    // coupled Newton steps brought B onto its end while moving A back a
+    // rounding, and the refinement stopped there, A 1.5e-7 short of its end
+    // and the distance 1.4e-7 too large. Landing on an end changes the
+    // active set, so the free parameter must be stepped again.
+    const auto unit = [](const int theta, const int z) {
+        const double h = z / 16.0;
+        const double r = std::sqrt(1.0 - h * h);
+        return Vec3{r * std::cos(theta * tau / 64.0), r * std::sin(theta * tau / 64.0), h};
+    };
+    const auto frame = [&](const int theta, const int z, const int turn) {
+        const Vec3 x = unit(theta, z);
+        const Vec3 helper = std::abs(x.Z) < 0.9 ? Vec3{0.0, 0.0, 1.0} : Vec3{1.0, 0.0, 0.0};
+        const Vec3 y = Cross(helper, x) / Length(Cross(helper, x));
+        const double phi = turn * tau / 32.0;
+        return std::pair{x, std::cos(phi) * y + std::sin(phi) * Cross(x, y)};
+    };
+    const auto [ax, ay] = frame(60, 11, 22);
+    const Curve a{Circle{Point3{-0.625, -0.375, -0.125}, 1.375, ax, ay}};
+    const Interval da{26 * tau / 32.0, 26 * tau / 32.0 + 3.0};
+    const auto [bx, by] = frame(50, -7, 4);
+    const Curve b{Ellipse{Point3{0.375, 1.5, -1.125}, 1.875, 1.875 * 0.9, bx, by}};
+    const Interval db{21 * tau / 32.0, 21 * tau / 32.0 + 0.5};
+    const auto [phi, st] = OracleMinimum(OracleOf(a, da), OracleOf(b, db));
+    const double oracle = static_cast<double>(std::sqrt(2 * phi));
+    for (const bool swapped : {false, true}) {
+        CAPTURE(swapped);
+        const auto r = swapped ? Stereon::ClosestApproach(b, db, a, da, ctx)
+                               : Stereon::ClosestApproach(a, da, b, db, ctx);
+        REQUIRE(r.has_value());
+        CHECK(r->EndA == ApproachEnd::Upper);
+        CHECK(r->EndB == ApproachEnd::Upper);
+        CHECK(std::abs(r->Distance - oracle) <= 1e-12 * oracle);
+    }
+}

@@ -435,8 +435,11 @@ struct Refined {
         const Refined next =
             Backtracked(a, b, rs, rt, z, l,
                         Step(l, z.EndS == ApproachEnd::Interior, z.EndT == ApproachEnd::Interior));
+        // A step that lands a parameter on an end changes the active set:
+        // the other may still have to move, so it is not the minimiser yet.
         const bool still = std::abs(next.S - z.S) <= 4.0 * Epsilon * (1.0 + std::abs(z.S)) &&
-                           std::abs(next.T - z.T) <= 4.0 * Epsilon * (1.0 + std::abs(z.T));
+                           std::abs(next.T - z.T) <= 4.0 * Epsilon * (1.0 + std::abs(z.T)) &&
+                           next.EndS == z.EndS && next.EndT == z.EndT;
         z = next;
         if (still && iteration > 2) {
             break;
