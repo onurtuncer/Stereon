@@ -1002,6 +1002,14 @@ degree or by a case analysis:
 - **Batched projection**: ``ProjectAll`` gives each chunk of the parallel
   loop one set of work arrays (the segments ordered by bound, the roots of
   a segment), where every point built its own.
+- **Curve-pair subdivision** (``Bernstein.hpp``, ``BezierArc.hpp``):
+  halving a piece or an arc reduces de Casteljau's triangle in the right
+  half's own storage, two allocations where there were three, and the
+  enclosed evaluation of an arc keeps its work array in an
+  ``inplace_vector`` of 26 poles. The halves themselves stay on the heap:
+  the searches keep them on a stack of boxes. ``HotPath/Intersect/SplinePair``
+  measures both; no figure is recorded here until the reference runner has
+  one.
 
 Allocations per operation, counted by a replacement ``operator new`` in a
 probe build (exact, so no repetitions were needed):
