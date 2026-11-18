@@ -18,6 +18,7 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
+#include <inplace_vector>
 #include <limits>
 #include <memory>
 #include <numbers>

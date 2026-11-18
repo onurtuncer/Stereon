@@ -502,6 +502,20 @@
       "review": "docs/planning/intersection-metamorphic-triage.md#Reviewer:",
       "green": "docs/planning/intersection-metamorphic-triage.md#### Green on main, batch 2",
       "red": "docs/planning/intersection-metamorphic-triage.md#### Batch 2 fault replay"
+    },
+    {
+      "id": "CI-272-ellipse-plane",
+      "source": "https://github.com/onurtuncer/Stereon/actions/runs/43273260370",
+      "state": "fixture captured",
+      "fixture": "tests/intersect/EllipsePlaneReplayTests.cpp",
+      "direct": "tests/intersect/EllipsePlaneReplayTests.cpp",
+      "metamorphic": "tests/intersect/EllipsePlaneReplayTests.cpp",
+      "replay": "docs/planning/ellipse-plane-ci-replay.md",
+      "relations": [
+        "MR-01",
+        "MR-03",
+        "MR-04"
+      ]
     }
   ],
   "handlers": {

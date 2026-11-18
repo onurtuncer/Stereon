@@ -210,6 +210,7 @@ enum class Strict : std::uint8_t { Positive, Negative, Unknown };
 [[maybe_unused]] [[nodiscard]] inline Coefficients Differences(const Coefficients& c)
 {
     Coefficients d;
+    d.reserve(c.size());
     for (std::size_t k = 0; k + 1 < c.size(); ++k) {
         d.push_back(c[k + 1] - c[k]);
     }
@@ -230,22 +231,22 @@ struct Piece {
     return 0.5 * piece.S0 + 0.5 * piece.S1;
 }
 
-/// de Casteljau at the middle, enclosed.
+/// de Casteljau at the middle, enclosed. The triangle is reduced in the
+/// right half's own storage: level r writes entries 0 to m - 1 - r and no
+/// later level reaches entry m - 1 - r again, so what is left when the
+/// reduction ends is the right half, and no third array is needed.
 [[maybe_unused]] [[nodiscard]] inline std::pair<Piece, Piece> Halves(const Piece& piece)
 {
     const Interval half{0.5};
     const std::size_t m = piece.G.size();
-    Coefficients work = piece.G;
     Coefficients left(m);
-    Coefficients right(m);
-    left[0] = work[0];
-    right[m - 1] = work[m - 1];
+    Coefficients right = piece.G;
+    left[0] = right[0];
     for (std::size_t level = 1; level < m; ++level) {
         for (std::size_t i = 0; i + level < m; ++i) {
-            work[i] = (work[i] + work[i + 1]) * half;
+            right[i] = (right[i] + right[i + 1]) * half;
         }
-        left[level] = work[0];
-        right[m - 1 - level] = work[m - 1 - level];
+        left[level] = right[0];
     }
     const double mid = MidOf(piece);
     return {Piece{piece.S0, mid, std::move(left)}, Piece{mid, piece.S1, std::move(right)}};
