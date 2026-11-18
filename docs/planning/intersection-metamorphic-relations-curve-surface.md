@@ -100,3 +100,22 @@ Native audit validation (GCC 16.2 debug): the six curve-curve and curve-surface
 relation tests pass 14,388 assertions. A controlled replacement of every
 curve-surface answer by `IntersectionFailed` fails all three curve-surface
 relation tests (exit 42); the unmodified source is restored afterwards.
+
+#### Addendum, 2026-11-16: hyperbola and parabola handlers (#292)
+
+#292 adds handlers for hyperbolas and parabolas against the analytic
+surfaces (`OpenConicSurface`). `CurveSurfaceRelationTests.cpp` no longer
+expects `NotImplemented` for them: every pair must now answer. On #292's
+branch (main b292fd3 merged; Windows, GCC 16.2, `gcc16-debug`):
+
+| Test | Assertions | Runs answered |
+| --- | --- | --- |
+| MR-01 | 2461 | 392 |
+| MR-03 | 919 | 147 |
+| MR-04 | 2461 | 392 |
+
+All three pass. The runs that previously had no handler (96, 36 and 96) all
+answer. The 36 hyperbola/parabola cells against analytic surfaces have
+therefore been exercised, but they have not been reclassified here. With the
+six against the B-spline surface, they await the same review as the 84 cells
+above before the table at the top changes.
