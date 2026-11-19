@@ -1628,11 +1628,11 @@ struct Sample {
     double Advance;
 };
 
+/// The surfaces moved about the origin (Moved), which the branches are
+/// marched and certified on, and the shift that moves them back.
 struct Marcher {
     const Surface& A;
     const Surface& B;
-    const Surface& OriginalA;
-    const Surface& OriginalB;
     Vec3 Shift;
     double Chord;
 };
@@ -1941,19 +1941,89 @@ ChainSamples(const Marcher& m, const std::vector<Arc>& arcs, const Chain& chain)
                     Interval{0.0, knots.back()});
 }
 
-/// The chain's branch, its chords tightened until it certifies.
+/// |fl(a + b) - (a + b)|, exactly: TwoSum's error term (Knuth).
+[[nodiscard]] double SumRounding(const double a, const double b)
+{
+    const double s = a + b;
+    const double bb = s - a;
+    return std::abs((a - (s - bb)) + (b - bb));
+}
+
+/// How far moving the poles by the shift, each sum rounded, can move the
+/// curve from the exact translate: a B-spline is a convex combination of
+/// its poles, so no farther than the farthest pole moves. Twice the largest
+/// coordinate's rounding bounds the length of three such roundings.
+[[nodiscard]] double MoveRounding(const std::vector<Point3>& poles, const Vec3& shift)
+{
+    double largest = 0.0;
+    for (const Point3& p : poles) {
+        largest = std::max({largest, SumRounding(p.X, shift.X), SumRounding(p.Y, shift.Y),
+                            SumRounding(p.Z, shift.Z)});
+    }
+    return 2.0 * largest;
+}
+
+/// The context to certify the local branch in: the resolution less the
+/// rounding of moving it back, so that the moved branch is within the
+/// resolution of the input surfaces.
+[[nodiscard]] Result<Context> LocalContext(const Context& ctx, const double rounding)
+{
+    if (rounding == 0.0) {
+        return ctx;
+    }
+    // Below r - rounding: the difference rounded, one step down.
+    const double target = std::nextafter(ctx.GetResolution() - rounding, 0.0);
+    if (!(target > 0.0)) {
+        return Fail(ErrorCode::CertificationFailed,
+                    "BSpline x BSpline: moving a branch back from about the origin rounds by " +
+                        Number(rounding) + " mm, not within the resolution");
+    }
+    return ctx.WithResolution(target);
+}
+
+/// The local branch, certified on the local surfaces, moved back to the
+/// input's place. The local surfaces are the input's translated exactly
+/// (Moved), so the exact translate of the local curve deviates from the
+/// input surfaces as the local curve does from the local ones; the moved
+/// curve lies within `rounding` of that translate.
+[[nodiscard]] Result<void> MoveBack(IntersectionBranch& branch, const BSplineCurve& local,
+                                    const Vec3& shift, const double rounding,
+                                    const double resolution)
+{
+    if (shift == Vec3{}) {
+        return {};
+    }
+    std::vector<Point3> poles;
+    poles.reserve(local.Poles.size());
+    for (const Point3& p : local.Poles) {
+        poles.push_back(p + shift);
+    }
+    STEREON_TRY(BSplineCurve moved, MakeBSplineCurve(local.Degree, local.Knots, std::move(poles)));
+    branch.Curve3d = Curve(std::move(moved));
+    // The local bound is at most r - rounding, so both are upper bounds on
+    // the moved curve's deviation.
+    branch.Bound = std::min(resolution, std::nextafter(branch.Bound + rounding,
+                                                       std::numeric_limits<double>::infinity()));
+    return {};
+}
+
+/// The chain's branch, its chords tightened until it certifies. It is
+/// marched and certified on the surfaces moved about the origin: far from
+/// it, the enclosures of the input's homogeneous coordinates widen with
+/// their magnitude, enough to miss the resolution at any span width.
 [[nodiscard]] Result<void> AddBranch(SurfaceSurfaceIntersection& result, Marcher m,
                                      const std::vector<Arc>& arcs, const Chain& chain,
                                      const Context& ctx)
 {
     for (int attempt = 0;; ++attempt) {
         STEREON_TRY(std::vector<Sample> samples, ChainSamples(m, arcs, chain));
-        for (Sample& sample : samples) {
-            sample.Position = sample.Position + m.Shift;
-        }
-        STEREON_TRY(IntersectionBranch branch, BranchOf(Distinct(samples)));
-        const Result<void> certified = Certify(branch, m.OriginalA, m.OriginalB, ctx);
+        STEREON_TRY(IntersectionBranch branch, BranchOf(Distinct(std::move(samples))));
+        const BSplineCurve local = *branch.Curve3d.Target<BSplineCurve>();
+        const double rounding = MoveRounding(local.Poles, m.Shift);
+        STEREON_TRY(const Context localCtx, LocalContext(ctx, rounding));
+        const Result<void> certified = Certify(branch, m.A, m.B, localCtx);
         if (certified) {
+            STEREON_TRY_VOID(MoveBack(branch, local, m.Shift, rounding, ctx.GetResolution()));
             result.Branches.push_back(std::move(branch));
             return {};
         }
@@ -2120,7 +2190,7 @@ SSIResult NurbsHull(const Surface& a, const Box2& domainA, const Surface& b, con
     STEREON_TRY(Findings found, SearchPairs(std::move(search.Pairs), settings));
     const Surface localA{Moved(*sa, search.Shift)};
     const Surface localB{Moved(*sb, search.Shift)};
-    const Marcher marcher{localA, localB, a, b, search.Shift, 0.25 * ctx.GetResolution()};
+    const Marcher marcher{localA, localB, search.Shift, 0.25 * ctx.GetResolution()};
     return Assembled(found, marcher, SearchedDomain(*sa, domainA), SearchedDomain(*sb, domainB),
                      settings, ctx);
 }

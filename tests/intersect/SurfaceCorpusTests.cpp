@@ -289,6 +289,27 @@ TEST_CASE("rational SSI circles certify across a closed spline chart",
     }
 }
 
+// Far from the origin (poles near (480000, -300000, 210000)) the rational
+// surfaces' homogeneous enclosures widen the weight by a margin scaled to
+// the coordinates, a deviation bound of about 0.007 mm at any span width.
+// The branches are certified on the surfaces moved about the origin, then
+// moved back with their rounding; CheckCase measures them against the
+// input surfaces. The origin placement is the same configuration
+// translated (MR-01): both must answer as the closed form says.
+TEST_CASE("far-placed rational SSI branches certify against the input surfaces",
+          "[intersect][surface-surface][corpus][nurbs][regression]")
+{
+    for (const char* fixture : {"cylinder-plane/circle", "cylinder-plane/two-lines",
+                                "cylinder-cylinder/two-loops", "sphere-plane/circle"}) {
+        for (const char* placement : {"-far-x1.json", "-origin-x1.json"}) {
+            const JsonValue c = StereonTest::ReadJsonFile(corpus / "nurbs-ssi" /
+                                                          (std::string(fixture) + placement));
+            CheckCase(c, false);
+            CheckCase(c, true);
+        }
+    }
+}
+
 // [!mayfail] until the generic SSI answers what the corpus asks (2026-11-10):
 // six tilted cases are refused, never answered wrongly. The small loop
 // (bump-plane/loop-1e-3) as a possible tangency; simple circles on the
