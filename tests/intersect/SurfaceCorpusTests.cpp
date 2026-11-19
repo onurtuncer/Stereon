@@ -275,6 +275,20 @@ TEST_CASE("no nurbs-ssi configuration is answered wrongly",
     REQUIRE(count >= 15);
 }
 
+// A full circle crosses the spline chart's duplicated endpoints. A pcurve
+// that interpolates across that join leaves the spatial intersection.
+TEST_CASE("rational SSI circles certify across a closed spline chart",
+          "[intersect][surface-surface][corpus][nurbs][regression]")
+{
+    for (const char* family : {"cylinder-plane", "sphere-plane"}) {
+        for (const char* fixture : {"circle-origin-x1.json", "circle-tilted-x1.json"}) {
+            const JsonValue c = StereonTest::ReadJsonFile(corpus / "nurbs-ssi" / family / fixture);
+            CheckCase(c, false);
+            CheckCase(c, true);
+        }
+    }
+}
+
 // [!mayfail] until the generic SSI answers what the corpus asks (2026-11-10):
 // six tilted cases are refused, never answered wrongly. The small loop
 // (bump-plane/loop-1e-3) as a possible tangency; simple circles on the
@@ -325,6 +339,23 @@ TEST_CASE("every nurbs-ssi corpus case is answered as its closed form says",
         CheckCase(c, false);
         CheckCase(c, true);
     }
+}
+
+// The v0.2 release scope is the reference subset. Hard cases still run
+// through the exhaustive safety test below in both operand orders.
+TEST_CASE("every v0.2 NURBS SSI reference case resolves to its closed-form answer",
+          "[.][nurbs-ssi-release]")
+{
+    std::size_t count = 0;
+    for (const auto& file : CaseFiles("nurbs-ssi")) {
+        const JsonValue c = StereonTest::ReadJsonFile(file);
+        if (!c["expected"].Has("may_fail_closed")) {
+            CheckCase(c, false);
+            CheckCase(c, true);
+            ++count;
+        }
+    }
+    REQUIRE(count >= 58);
 }
 
 TEST_CASE("no nurbs-ssi corpus case is answered wrongly, both ways",
