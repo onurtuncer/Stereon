@@ -899,7 +899,7 @@ struct SurfaceEnclosure {
     }
 };
 
-[[nodiscard]] std::optional<SurfaceTrace> SplineSurfaceTrace(const BSplineSurface& surface)
+[[nodiscard]] std::optional<SurfaceEnclosure> EnclosureOf(const BSplineSurface& surface)
 {
     TensorSpline s = HomogeneousOf(surface);
     std::optional<TensorSpline> su = PartialOf(s, true);
@@ -912,7 +912,16 @@ struct SurfaceEnclosure {
     e.Suv = PartialOf(e.Su, false, true);
     e.Svv = PartialOf(e.Sv, false, true);
     e.Magnitude = MagnitudeOf(e.S);
-    const auto c = std::make_shared<const SurfaceEnclosure>(std::move(e));
+    return e;
+}
+
+[[nodiscard]] std::optional<SurfaceTrace> SplineSurfaceTrace(const BSplineSurface& surface)
+{
+    std::optional<SurfaceEnclosure> e = EnclosureOf(surface);
+    if (!e) {
+        return std::nullopt;
+    }
+    const auto c = std::make_shared<const SurfaceEnclosure>(std::move(*e));
     return SurfaceTrace{[c](const IPoint2& uv, int) { return c->JetAt(uv); }, false};
 }
 
@@ -1464,5 +1473,24 @@ Result<DeviationCertificate> CertifyDeviation(const Curve& curve, const Surface&
     }
     return Bisect(*c, *p, *s, range, target);
 }
+
+namespace Detail {
+
+std::optional<HomogeneousJet> HomogeneousJetAt(const Surface& surface, const double u,
+                                               const double v)
+{
+    const BSplineSurface* spline = surface.Target<BSplineSurface>();
+    if (spline == nullptr) {
+        return std::nullopt;
+    }
+    const std::optional<SurfaceEnclosure> e = EnclosureOf(*spline);
+    if (!e) {
+        return std::nullopt;
+    }
+    return HomogeneousJet{ValueAt(e->S, e->Magnitude, u, v), ValueAt(e->Su, e->Magnitude, u, v),
+                          ValueAt(e->Sv, e->Magnitude, u, v)};
+}
+
+} // namespace Detail
 
 } // namespace Stereon
