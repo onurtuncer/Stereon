@@ -5,10 +5,13 @@ on:
   push:
     tags: ['v0.2*']
   workflow_dispatch:
+  pull_request:
+    paths: ['.github/workflows/intersection-release.yml']
 permissions:
   contents: read
 jobs:
   evidence:
+    if: github.event_name != 'pull_request'
     name: ADR-0053 release qualification
     runs-on: ubuntu-24.04
     steps:

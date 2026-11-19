@@ -682,8 +682,11 @@ struct TensorSpline {
 
 /// The derivative along one direction, as DerivativeCurve along each line:
 /// degree one lower, poles d (P_{i+1} - P_i) / (u_{i+d+1} - u_{i+1}).
-/// Nothing at degree 0 or for a knot difference not proved positive.
-[[nodiscard]] std::optional<TensorSpline> PartialOf(const TensorSpline& s, const bool alongU)
+/// Nothing at degree 0 or for a knot difference not proved positive. For
+/// second partials, coefficients whose basis support is exactly empty are
+/// immaterial: these partials bound variation only within a knot span.
+[[nodiscard]] std::optional<TensorSpline> PartialOf(const TensorSpline& s, const bool alongU,
+                                                     const bool allowEmptySupport = false)
 {
     const auto d = static_cast<std::size_t>(alongU ? s.DegreeU : s.DegreeV);
     const std::vector<double>& knots = alongU ? s.KnotsU : s.KnotsV;
@@ -699,6 +702,10 @@ struct TensorSpline {
     for (std::size_t i = 0; i < t.CountU; ++i) {
         for (std::size_t j = 0; j < t.CountV; ++j) {
             const std::size_t k = alongU ? i : j;
+            if (allowEmptySupport && knots[k + d + 1] == knots[k + 1]) {
+                t.Poles.push_back({Interval{0.0}, Interval{0.0}, Interval{0.0}, Interval{0.0}});
+                continue;
+            }
             const Interval step = Interval{knots[k + d + 1]} - Interval{knots[k + 1]};
             if (!(step.GetLower() > 0.0)) {
                 return std::nullopt;
@@ -884,9 +891,9 @@ struct SurfaceEnclosure {
         return std::nullopt;
     }
     SurfaceEnclosure e{std::move(s), std::move(*su), std::move(*sv), {}, {}, {}, 0.0};
-    e.Suu = PartialOf(e.Su, true);
-    e.Suv = PartialOf(e.Su, false);
-    e.Svv = PartialOf(e.Sv, false);
+    e.Suu = PartialOf(e.Su, true, true);
+    e.Suv = PartialOf(e.Su, false, true);
+    e.Svv = PartialOf(e.Sv, false, true);
     e.Magnitude = MagnitudeOf(e.S);
     const auto c = std::make_shared<const SurfaceEnclosure>(std::move(e));
     return SurfaceTrace{[c](const IPoint2& uv, int) { return c->JetAt(uv); }, false};
