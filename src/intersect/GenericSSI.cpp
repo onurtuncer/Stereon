@@ -714,10 +714,15 @@ enum class Settled : std::uint8_t { Done, Cut };
     return {std::nextafter(lower, 0.0), std::nextafter(upper, Infinity)};
 }
 
+[[nodiscard]] double SideSlack(const Interval& domain)
+{
+    return 0x1p-30 * std::max(1.0, Width(domain));
+}
+
 /// Whether the parameter lies on a side of its domain, within the join.
 [[nodiscard]] bool OnSide(const double x, const Interval& domain)
 {
-    const double slack = 0x1p-30 * std::max(1.0, Width(domain));
+    const double slack = SideSlack(domain);
     return x <= domain.GetLower() + slack || x >= domain.GetUpper() - slack;
 }
 
@@ -1843,6 +1848,19 @@ using Chain = std::vector<ChainStep>;
     return {};
 }
 
+/// A spatial join can cross between opposite ends of a closed chart.
+[[nodiscard]] bool CrossesSeam(const double a, const double b, const Interval& axis)
+{
+    const double slack = SideSlack(axis);
+    const auto [lo, hi] = std::minmax(a, b);
+    return hi - lo > slack && lo <= axis.GetLower() + slack && hi >= axis.GetUpper() - slack;
+}
+
+[[nodiscard]] bool CrossesSeam(const Point2& a, const Point2& b, const Box2& domain)
+{
+    return CrossesSeam(a.X, b.X, domain.X) || CrossesSeam(a.Y, b.Y, domain.Y);
+}
+
 /// The chain's samples in order, each arc's shared end used once.
 [[nodiscard]] Result<std::vector<Sample>>
 ChainSamples(const Marcher& m, const std::vector<Arc>& arcs, const Chain& chain)
@@ -1921,6 +1939,28 @@ ChainSamples(const Marcher& m, const std::vector<Arc>& arcs, const Chain& chain)
     }
 }
 
+/// Keep each pcurve continuous in its chart. The spatial graph still
+/// validates the whole chain, including the joins between the pieces.
+[[nodiscard]] Result<void> AddChain(SurfaceSurfaceIntersection& result, const Marcher& marcher,
+                                    const std::vector<Arc>& arcs, const Chain& chain,
+                                    const Box2& domainA, const Box2& domainB, const Context& ctx)
+{
+    Chain piece;
+    const Seed* previous = nullptr;
+    for (const ChainStep& step : chain) {
+        const Arc& arc = arcs[step.Arc];
+        const Seed& start = step.Reversed ? arc.To : arc.From;
+        if (previous && (CrossesSeam(previous->OnA, start.OnA, domainA) ||
+                         CrossesSeam(previous->OnB, start.OnB, domainB))) {
+            STEREON_TRY_VOID(AddBranch(result, marcher, arcs, piece, ctx));
+            piece.clear();
+        }
+        piece.push_back(step);
+        previous = step.Reversed ? &arc.From : &arc.To;
+    }
+    return AddBranch(result, marcher, arcs, piece, ctx);
+}
+
 /// The domains actually searched: the request met with the surface's own.
 [[nodiscard]] Box2 SearchedDomain(const BSplineSurface& s, const Box2& requested)
 {
@@ -1954,7 +1994,7 @@ Assembled(const Findings& found, const Surface& a, const Box2& domainA, const Su
     STEREON_TRY_VOID(CheckGraph(graph, found.Arcs, domainA, domainB));
     const Marcher marcher{a, b, 0.25 * ctx.GetResolution()};
     for (const Chain& chain : ChainsOf(graph)) {
-        STEREON_TRY_VOID(AddBranch(result, marcher, found.Arcs, chain, ctx));
+        STEREON_TRY_VOID(AddChain(result, marcher, found.Arcs, chain, domainA, domainB, ctx));
     }
     return result;
 }
