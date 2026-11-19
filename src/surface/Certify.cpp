@@ -680,6 +680,20 @@ struct TensorSpline {
     return t;
 }
 
+/// A zero multiplier represents a derivative basis function with empty support.
+[[nodiscard]] std::optional<Interval> PartialScale(const double low, const double high,
+                                                   const Interval& degree, const bool allowEmpty)
+{
+    if (allowEmpty && low == high) {
+        return Interval{0.0};
+    }
+    const Interval step = Interval{high} - Interval{low};
+    if (!(step.GetLower() > 0.0)) {
+        return std::nullopt;
+    }
+    return degree / step;
+}
+
 /// The derivative along one direction, as DerivativeCurve along each line:
 /// degree one lower, poles d (P_{i+1} - P_i) / (u_{i+d+1} - u_{i+1}).
 /// Nothing at degree 0 or for a knot difference not proved positive. For
@@ -702,20 +716,20 @@ struct TensorSpline {
     for (std::size_t i = 0; i < t.CountU; ++i) {
         for (std::size_t j = 0; j < t.CountV; ++j) {
             const std::size_t k = alongU ? i : j;
-            if (allowEmpty && knots[k + d + 1] == knots[k + 1]) {
+            const auto scale = PartialScale(knots[k + 1], knots[k + d + 1], degree, allowEmpty);
+            if (!scale) {
+                return std::nullopt;
+            }
+            if (*scale == Interval{0.0}) {
                 t.Poles.push_back({Interval{0.0}, Interval{0.0}, Interval{0.0}, Interval{0.0}});
                 continue;
-            }
-            const Interval step = Interval{knots[k + d + 1]} - Interval{knots[k + 1]};
-            if (!(step.GetLower() > 0.0)) {
-                return std::nullopt;
             }
             const Homogeneous4& low = s.Poles[i * s.CountV + j];
             const Homogeneous4& high =
                 s.Poles[(alongU ? i + 1 : i) * s.CountV + (alongU ? j : j + 1)];
             Homogeneous4 pole;
             for (std::size_t c = 0; c < pole.size(); ++c) {
-                pole[c] = (high[c] - low[c]) * (degree / step);
+                pole[c] = (high[c] - low[c]) * *scale;
             }
             t.Poles.push_back(pole);
         }
