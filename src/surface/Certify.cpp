@@ -680,10 +680,27 @@ struct TensorSpline {
     return t;
 }
 
+/// A zero multiplier represents a derivative basis function with empty support.
+[[nodiscard]] std::optional<Interval> PartialScale(const double low, const double high,
+                                                   const Interval& degree, const bool allowEmpty)
+{
+    if (allowEmpty && low == high) {
+        return Interval{0.0};
+    }
+    const Interval step = Interval{high} - Interval{low};
+    if (!(step.GetLower() > 0.0)) {
+        return std::nullopt;
+    }
+    return degree / step;
+}
+
 /// The derivative along one direction, as DerivativeCurve along each line:
 /// degree one lower, poles d (P_{i+1} - P_i) / (u_{i+d+1} - u_{i+1}).
-/// Nothing at degree 0 or for a knot difference not proved positive.
-[[nodiscard]] std::optional<TensorSpline> PartialOf(const TensorSpline& s, const bool alongU)
+/// Nothing at degree 0 or for a knot difference not proved positive. For
+/// second partials, coefficients whose basis support is exactly empty are
+/// immaterial: these partials bound variation only within a knot span.
+[[nodiscard]] std::optional<TensorSpline> PartialOf(const TensorSpline& s, const bool alongU,
+                                                    const bool allowEmpty = false)
 {
     const auto d = static_cast<std::size_t>(alongU ? s.DegreeU : s.DegreeV);
     const std::vector<double>& knots = alongU ? s.KnotsU : s.KnotsV;
@@ -699,16 +716,20 @@ struct TensorSpline {
     for (std::size_t i = 0; i < t.CountU; ++i) {
         for (std::size_t j = 0; j < t.CountV; ++j) {
             const std::size_t k = alongU ? i : j;
-            const Interval step = Interval{knots[k + d + 1]} - Interval{knots[k + 1]};
-            if (!(step.GetLower() > 0.0)) {
+            const auto scale = PartialScale(knots[k + 1], knots[k + d + 1], degree, allowEmpty);
+            if (!scale) {
                 return std::nullopt;
+            }
+            if (*scale == Interval{0.0}) {
+                t.Poles.push_back({Interval{0.0}, Interval{0.0}, Interval{0.0}, Interval{0.0}});
+                continue;
             }
             const Homogeneous4& low = s.Poles[i * s.CountV + j];
             const Homogeneous4& high =
                 s.Poles[(alongU ? i + 1 : i) * s.CountV + (alongU ? j : j + 1)];
             Homogeneous4 pole;
             for (std::size_t c = 0; c < pole.size(); ++c) {
-                pole[c] = (high[c] - low[c]) * (degree / step);
+                pole[c] = (high[c] - low[c]) * *scale;
             }
             t.Poles.push_back(pole);
         }
@@ -809,17 +830,20 @@ struct SurfaceEnclosure {
     std::optional<TensorSpline> Svv;
     double Magnitude = 0.0;
 
-    /// The spline's enclosure over the box: its active poles' hull, met,
-    /// within one knot span, with its value at the midpoint plus its
-    /// derivatives' enclosures times the offsets.
+    /// Meet the active poles' hull with a mean-value enclosure. The
+    /// surface position is continuous across knots when both first partial
+    /// splines exist, so their hulls also bound its variation across a knot.
+    /// A derivative itself may jump, so only narrow it within one span.
     [[nodiscard]] Homogeneous4 Over(const TensorSpline& f, const TensorSpline* du,
                                     const TensorSpline* dv, const Interval& u,
                                     const Interval& v) const
     {
         Homogeneous4 hull = PoleHull(f, u, v);
         const ActiveSpans spans = SpansOver(f, u, v);
-        if (spans.U0 != spans.U1 || spans.V0 != spans.V1 || (du == nullptr && f.DegreeU > 0) ||
-            (dv == nullptr && f.DegreeV > 0)) {
+        if (&f != &S && (spans.U0 != spans.U1 || spans.V0 != spans.V1)) {
+            return hull;
+        }
+        if ((du == nullptr && f.DegreeU > 0) || (dv == nullptr && f.DegreeV > 0)) {
             return hull;
         }
         const double mu = 0.5 * (u.GetLower() + u.GetUpper());
@@ -884,9 +908,9 @@ struct SurfaceEnclosure {
         return std::nullopt;
     }
     SurfaceEnclosure e{std::move(s), std::move(*su), std::move(*sv), {}, {}, {}, 0.0};
-    e.Suu = PartialOf(e.Su, true);
-    e.Suv = PartialOf(e.Su, false);
-    e.Svv = PartialOf(e.Sv, false);
+    e.Suu = PartialOf(e.Su, true, true);
+    e.Suv = PartialOf(e.Su, false, true);
+    e.Svv = PartialOf(e.Sv, false, true);
     e.Magnitude = MagnitudeOf(e.S);
     const auto c = std::make_shared<const SurfaceEnclosure>(std::move(e));
     return SurfaceTrace{[c](const IPoint2& uv, int) { return c->JetAt(uv); }, false};
