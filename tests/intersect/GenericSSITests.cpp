@@ -15,9 +15,11 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <numbers>
 #include <string>
 #include <vector>
 
@@ -466,4 +468,141 @@ TEST_CASE("initial SSI patch pairs obey the search budget", "[intersect][generic
     const auto result = Intersect(Surface{*many}, Surface{Patch(0.0)}, ctx);
     REQUIRE_FALSE(result.has_value());
     REQUIRE(result.error().GetCode() == ErrorCode::IntersectionFailed);
+}
+
+namespace {
+
+/// A rigid placement: local (x, y, z) to x E1 + y E2 + z E3 + O.
+struct Placement {
+    Stereon::Vec3 E1;
+    Stereon::Vec3 E2;
+    Stereon::Vec3 E3;
+    Point3 O;
+};
+
+const Placement atOrigin{{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}, {0.0, 0.0, 0.0}};
+/// The corpus's tilted placement: a rational rotation, orthonormal to rounding.
+const Placement tilted{{0.6, 0.8, 0.0}, {-0.48, 0.36, 0.8}, {0.64, -0.48, 0.6}, {12.0, -7.0, 5.0}};
+
+Point3 Placed(const Placement& at, const double x, const double y, const double z)
+{
+    return at.O + x * at.E1 + y * at.E2 + z * at.E3;
+}
+
+/// A point's local coordinates under a placement.
+Stereon::Vec3 Local(const Placement& at, const Point3& p)
+{
+    const Stereon::Vec3 d = p - at.O;
+    return {Dot(d, at.E1), Dot(d, at.E2), Dot(d, at.E3)};
+}
+
+/// The unit sphere, exact: a rational quadratic full circle in u, a half
+/// circle from the south pole to the north one in v, the first and last rows
+/// of v collapsed to the poles.
+BSplineSurface UnitSphere(const Placement& at)
+{
+    const double s = std::sqrt(0.5);
+    const std::vector<std::array<double, 2>> circle{{1, 0},   {1, 1},  {0, 1},  {-1, 1}, {-1, 0},
+                                                    {-1, -1}, {0, -1}, {1, -1}, {1, 0}};
+    const std::vector<double> circleWeights{1.0, s, 1.0, s, 1.0, s, 1.0, s, 1.0};
+    const std::vector<std::array<double, 2>> half{{0, -1}, {1, -1}, {1, 0}, {1, 1}, {0, 1}};
+    const std::vector<double> halfWeights{1.0, s, 1.0, s, 1.0};
+    std::vector<Point3> poles;
+    std::vector<double> weights;
+    for (std::size_t i = 0; i < circle.size(); ++i) {
+        for (std::size_t j = 0; j < half.size(); ++j) {
+            const double rho = half[j][0];
+            poles.push_back(Placed(at, rho * circle[i][0], rho * circle[i][1], half[j][1]));
+            weights.push_back(circleWeights[i] * halfWeights[j]);
+        }
+    }
+    const std::vector<double> knotsU{0.0, 0.0,  0.0,  0.25, 0.25, 0.5,
+                                     0.5, 0.75, 0.75, 1.0,  1.0,  1.0};
+    const std::vector<double> knotsV{0.0, 0.0, 0.0, 0.5, 0.5, 1.0, 1.0, 1.0};
+    const auto made = Stereon::MakeBSplineSurface(2, 2, knotsU, knotsV, poles, weights);
+    REQUIRE(made.has_value());
+    return *made;
+}
+
+/// The square [-2, 2]^2 at height z, bilinear.
+BSplineSurface Square(const double z, const Placement& at)
+{
+    const std::vector<Point3> poles{Placed(at, -2.0, -2.0, z), Placed(at, -2.0, 2.0, z),
+                                    Placed(at, 2.0, -2.0, z), Placed(at, 2.0, 2.0, z)};
+    const std::vector<double> knots{0.0, 0.0, 1.0, 1.0};
+    const auto made = Stereon::MakeBSplineSurface(1, 1, knots, knots, poles, {});
+    REQUIRE(made.has_value());
+    return *made;
+}
+
+} // namespace
+
+// The plane z = 0.999 meets the unit sphere in the circle of radius
+// sqrt(1 - 0.999^2) = 0.0447 about the north pole, transverse everywhere at
+// acos(0.999) = 2.56 degrees, along the latitude v* = 0.98433 of the Bezier
+// patch that ends at the collapsed pole row. The partials of the sphere's
+// rational patches, enclosed by the quotient rule about the origin, were
+// widened by the patch's distance from it, one unit, times the width of the
+// weight's derivative: S_u . z, zero on the sphere, enclosed as +-0.04 on a
+// cell 0.002 wide, where the normals' 2.56 degrees part only by 0.045. No
+// advance direction and no boundary root was proved near the circle, and the
+// search cut pairs down to the tolerance and refused them as a tangential
+// contact (corpus/nurbs-ssi/sphere-plane/near-pole-*). Tilted off the world
+// axes, the boxes of the partials wrapped them further and the search ran
+// out of its budget. MR: the same pair under the corpus's rigid tilt, and
+// with the operands exchanged.
+TEST_CASE("a plane a thousandth below a rational sphere's pole cuts its small circle",
+          "[intersect][generic][nurbs][regression]")
+{
+    constexpr double height = 1.0 - 1e-3;
+    constexpr double tolerance = 1e-5;
+    const double radius = std::sqrt(1.0 - height * height);
+    for (const Placement* at : {&atOrigin, &tilted}) {
+        const Surface sphere{UnitSphere(*at)};
+        const Surface flat{Square(height, *at)};
+        for (const bool swapped : {false, true}) {
+            INFO((at == &tilted ? "tilted, " : "at the origin, ")
+                 << (swapped ? "plane first" : "sphere first"));
+            const auto result = swapped ? Intersect(flat, Box2::Everything(), sphere,
+                                                    Box2::Everything(), tolerance, ctx)
+                                        : Intersect(sphere, Box2::Everything(), flat,
+                                                    Box2::Everything(), tolerance, ctx);
+            INFO(IntersectTest::ErrorText(result));
+            REQUIRE(result.has_value());
+            REQUIRE(result->Points.empty());
+            REQUIRE(result->Overlaps.empty());
+            REQUIRE(IntersectTest::ConnectivityOf(*result, 2.0 * tolerance).Curves == 1);
+            double turned = 0.0;
+            for (const Stereon::IntersectionBranch& branch : result->Branches) {
+                REQUIRE(branch.Contact == Stereon::ContactType::Crossing);
+                REQUIRE(branch.IsCertified());
+                REQUIRE(branch.Bound <= ctx.GetResolution());
+                const std::vector<double> t = IntersectTest::SamplesOf(branch.Range, 200);
+                Stereon::Vec3 previous = Local(*at, Eval(branch.Curve3d, t.front()));
+                for (const double s : t) {
+                    const Stereon::Vec3 p = Local(*at, Eval(branch.Curve3d, s));
+                    REQUIRE(std::abs(std::hypot(p.X, p.Y) - radius) <= tolerance);
+                    REQUIRE(std::abs(p.Z - height) <= tolerance);
+                    turned += std::abs(
+                        std::remainder(std::atan2(p.Y, p.X) - std::atan2(previous.Y, previous.X),
+                                       2.0 * std::numbers::pi));
+                    previous = p;
+                }
+            }
+            // The branches go once round the circle: no arc is missing.
+            REQUIRE(std::abs(turned - 2.0 * std::numbers::pi) <= 1e-6);
+        }
+    }
+}
+
+TEST_CASE("a plane a thousandth above a rational sphere's pole is proved apart",
+          "[intersect][generic][nurbs][regression]")
+{
+    const Surface sphere{UnitSphere(atOrigin)};
+    const Surface flat{Square(1.0 + 1e-3, atOrigin)};
+    const auto result = Intersect(sphere, Box2::Everything(), flat, Box2::Everything(), 1e-5, ctx);
+    INFO(IntersectTest::ErrorText(result));
+    REQUIRE(result.has_value());
+    REQUIRE(result->Branches.empty());
+    REQUIRE(result->Points.empty());
 }
