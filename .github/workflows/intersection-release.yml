@@ -20,3 +20,22 @@ jobs:
         run: python tools/test_metamorphic.py
       - name: Require completed inventory, defect evidence and handler relations
         run: python tools/check_metamorphic.py --release
+  nurbs-completeness:
+    name: NURBS SSI release completeness (GCC 16)
+    runs-on: ubuntu-24.04
+    container: gcc:16.2
+    timeout-minutes: 90
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: "4"
+    steps:
+      - name: Install CMake and Ninja
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends cmake ninja-build
+      - uses: actions/checkout@v7
+      - name: Configure
+        run: cmake --preset gcc16-release
+      - name: Build intersection tests
+        run: cmake --build --preset gcc16-release --target stereon_intersect_tests
+      - name: Require complete results for the v0.2 NURBS SSI reference corpus
+        run: ./build/gcc16-release/tests/stereon_intersect_tests "[nurbs-ssi-release]" --durations yes

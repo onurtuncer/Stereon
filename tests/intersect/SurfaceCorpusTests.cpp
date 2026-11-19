@@ -327,6 +327,23 @@ TEST_CASE("every nurbs-ssi corpus case is answered as its closed form says",
     }
 }
 
+// The v0.2 release scope is the reference subset. Hard cases still run
+// through the exhaustive safety test below in both operand orders.
+TEST_CASE("every v0.2 NURBS SSI reference case resolves to its closed-form answer",
+          "[.][nurbs-ssi-release]")
+{
+    std::size_t count = 0;
+    for (const auto& file : CaseFiles("nurbs-ssi")) {
+        const JsonValue c = StereonTest::ReadJsonFile(file);
+        if (!c["expected"].Has("may_fail_closed")) {
+            CheckCase(c, false);
+            CheckCase(c, true);
+            ++count;
+        }
+    }
+    REQUIRE(count >= 58);
+}
+
 TEST_CASE("no nurbs-ssi corpus case is answered wrongly, both ways",
           "[.][exhaustive][surface-surface][corpus][nurbs][safety]")
 {
