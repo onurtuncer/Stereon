@@ -830,17 +830,20 @@ struct SurfaceEnclosure {
     std::optional<TensorSpline> Svv;
     double Magnitude = 0.0;
 
-    /// The spline's enclosure over the box: its active poles' hull, met,
-    /// within one knot span, with its value at the midpoint plus its
-    /// derivatives' enclosures times the offsets.
+    /// Meet the active poles' hull with a mean-value enclosure. The
+    /// surface position is continuous across knots when both first partial
+    /// splines exist, so their hulls also bound its variation across a knot.
+    /// A derivative itself may jump, so only narrow it within one span.
     [[nodiscard]] Homogeneous4 Over(const TensorSpline& f, const TensorSpline* du,
                                     const TensorSpline* dv, const Interval& u,
                                     const Interval& v) const
     {
         Homogeneous4 hull = PoleHull(f, u, v);
         const ActiveSpans spans = SpansOver(f, u, v);
-        if (spans.U0 != spans.U1 || spans.V0 != spans.V1 || (du == nullptr && f.DegreeU > 0) ||
-            (dv == nullptr && f.DegreeV > 0)) {
+        if (&f != &S && (spans.U0 != spans.U1 || spans.V0 != spans.V1)) {
+            return hull;
+        }
+        if ((du == nullptr && f.DegreeU > 0) || (dv == nullptr && f.DegreeV > 0)) {
             return hull;
         }
         const double mu = 0.5 * (u.GetLower() + u.GetUpper());
