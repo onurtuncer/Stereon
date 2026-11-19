@@ -21,6 +21,7 @@
 #include <cmath>
 #include <cstddef>
 #include <numbers>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -556,7 +557,11 @@ TEST_CASE("MakeBSplineCurve validates data from outside the kernel", "[curve][bs
     const std::vector<double> clamped{0.0, 0.0, 0.0, 1.0, 1.0, 1.0};
     REQUIRE(Stereon::MakeBSplineCurve(2, clamped, poles).has_value());
     REQUIRE(Stereon::MakeBSplineCurve(2, clamped, poles, {1.0, 2.0, 1.0}).has_value());
-    const auto codeOf = [](const auto& r) { return r.error().GetCode(); };
+    // No code for an accepted input: a check the factory misses then fails
+    // the REQUIRE instead of aborting on error() of a value.
+    const auto codeOf = [](const auto& r) {
+        return r.has_value() ? std::optional<ErrorCode>{} : std::optional{r.error().GetCode()};
+    };
     const auto invalid = ErrorCode::InvalidInput;
     REQUIRE(codeOf(Stereon::MakeBSplineCurve(0, clamped, poles)) == invalid);
     REQUIRE(codeOf(Stereon::MakeBSplineCurve(26, clamped, poles)) == invalid);
@@ -575,6 +580,7 @@ TEST_CASE("MakeBSplineCurve validates data from outside the kernel", "[curve][bs
     REQUIRE(codeOf(Stereon::MakeBSplineCurve(1, {0.0, 0.0, 0.5, 0.5, 1.0, 1.0},
                                              {Point3{}, Point3{}, Point3{}, Point3{}})) == invalid);
     const auto negative = Stereon::MakeBSplineCurve(2, clamped, poles, {1.0, -1.0, 1.0});
+    REQUIRE_FALSE(negative.has_value());
     REQUIRE(negative.error().GetMessage() ==
             "MakeBSplineCurve: weights must be finite and positive");
 }
@@ -589,7 +595,11 @@ TEST_CASE("weights outside the supported range are refused, and a common scale c
     constexpr double MaxWeight = Stereon::Detail::MaxWeight;
     const std::vector<double> knots{0.0, 0.0, 1.0, 1.0};
     const std::vector<Point3> poles{Point3{10.0, 0.0, 0.0}, Point3{20.0, 0.0, 0.0}};
-    const auto codeOf = [](const auto& r) { return r.error().GetCode(); };
+    // No code for an accepted input: a check the factory misses then fails
+    // the REQUIRE instead of aborting on error() of a value.
+    const auto codeOf = [](const auto& r) {
+        return r.has_value() ? std::optional<ErrorCode>{} : std::optional{r.error().GetCode()};
+    };
     const auto invalid = ErrorCode::InvalidInput;
     REQUIRE(codeOf(Stereon::MakeBSplineCurve(1, knots, poles, {1e308, 1e308})) == invalid);
     REQUIRE(codeOf(Stereon::MakeBSplineCurve(1, knots, poles, {1e-320, 1.0})) == invalid);
