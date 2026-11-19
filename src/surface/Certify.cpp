@@ -777,21 +777,17 @@ struct ActiveSpans {
     return hull;
 }
 
-[[nodiscard]] double MagnitudeOf(const TensorSpline& s)
-{
-    double magnitude = 0.0;
-    for (const Homogeneous4& pole : s.Poles) {
-        for (const Interval& c : pole) {
-            magnitude = std::max({magnitude, std::abs(c.GetLower()), std::abs(c.GetUpper())});
-        }
-    }
-    return magnitude;
-}
-
-/// The spline's value at (u, v). The basis functions are rounded doubles,
-/// so the sum is widened by a margin of the form of EnclosedPoint's.
-[[nodiscard]] Homogeneous4 ValueAt(const TensorSpline& s, const double magnitude, const double u,
-                                   const double v)
+/// The spline's value at (u, v). The interval sum encloses the combination
+/// of the poles by the computed basis functions, which are rounded doubles:
+/// A2.2 reaches each through one recurrence step per degree, of at most six
+/// rounded operations on non-negative numbers, so a product of two is
+/// within 6 (p + q) units of 2^-53 of the exact one, relatively, and the sum
+/// of a component within that much of the largest magnitude that component
+/// has among the poles it combines. Each component is widened by a margin
+/// of the form of EnclosedPoint's on that magnitude, which is larger. It is
+/// the spline's own: a partial's poles are a degree over a knot span times
+/// the differences of the surface's, and may be far larger than those.
+[[nodiscard]] Homogeneous4 ValueAt(const TensorSpline& s, const double u, const double v)
 {
     const auto p = static_cast<std::size_t>(s.DegreeU);
     const auto q = static_cast<std::size_t>(s.DegreeV);
@@ -802,18 +798,21 @@ struct ActiveSpans {
     BasisFunctions(s.KnotsU, s.DegreeU, su, std::clamp(u, s.KnotsU[p], s.KnotsU[s.CountU]), nu);
     BasisFunctions(s.KnotsV, s.DegreeV, sv, std::clamp(v, s.KnotsV[q], s.KnotsV[s.CountV]), nv);
     Homogeneous4 sum{Interval{0.0}, Interval{0.0}, Interval{0.0}, Interval{0.0}};
+    std::array<double, 4> magnitude{};
     for (std::size_t i = 0; i <= p; ++i) {
         for (std::size_t j = 0; j <= q; ++j) {
             const Homogeneous4& pole = s.Poles[(su - p + i) * s.CountV + (sv - q + j)];
             const Interval basis = Interval{nu[i]} * Interval{nv[j]};
             for (std::size_t c = 0; c < sum.size(); ++c) {
                 sum[c] = sum[c] + basis * pole[c];
+                magnitude[c] = std::max(
+                    {magnitude[c], std::abs(pole[c].GetLower()), std::abs(pole[c].GetUpper())});
             }
         }
     }
     const auto terms = static_cast<double>(p + q + 2);
-    for (Interval& c : sum) {
-        c = Inflated(c, 8.0 * terms * terms * 0x1p-53 * magnitude);
+    for (std::size_t c = 0; c < sum.size(); ++c) {
+        sum[c] = Inflated(sum[c], 8.0 * terms * terms * 0x1p-53 * magnitude[c]);
     }
     return sum;
 }
@@ -828,7 +827,6 @@ struct SurfaceEnclosure {
     std::optional<TensorSpline> Suu;
     std::optional<TensorSpline> Suv;
     std::optional<TensorSpline> Svv;
-    double Magnitude = 0.0;
 
     /// Meet the active poles' hull with a mean-value enclosure. The
     /// surface position is continuous across knots when both first partial
@@ -848,7 +846,7 @@ struct SurfaceEnclosure {
         }
         const double mu = 0.5 * (u.GetLower() + u.GetUpper());
         const double mv = 0.5 * (v.GetLower() + v.GetUpper());
-        const Homogeneous4 at = ValueAt(f, Magnitude, mu, mv);
+        const Homogeneous4 at = ValueAt(f, mu, mv);
         const Homogeneous4 slopeU = du != nullptr ? PoleHull(*du, u, v)
                                                   : Homogeneous4{Interval{0.0}, Interval{0.0},
                                                                  Interval{0.0}, Interval{0.0}};
@@ -907,11 +905,10 @@ struct SurfaceEnclosure {
     if (!su || !sv) {
         return std::nullopt;
     }
-    SurfaceEnclosure e{std::move(s), std::move(*su), std::move(*sv), {}, {}, {}, 0.0};
+    SurfaceEnclosure e{std::move(s), std::move(*su), std::move(*sv), {}, {}, {}};
     e.Suu = PartialOf(e.Su, true, true);
     e.Suv = PartialOf(e.Su, false, true);
     e.Svv = PartialOf(e.Sv, false, true);
-    e.Magnitude = MagnitudeOf(e.S);
     return e;
 }
 
@@ -1487,8 +1484,7 @@ std::optional<HomogeneousJet> HomogeneousJetAt(const Surface& surface, const dou
     if (!e) {
         return std::nullopt;
     }
-    return HomogeneousJet{ValueAt(e->S, e->Magnitude, u, v), ValueAt(e->Su, e->Magnitude, u, v),
-                          ValueAt(e->Sv, e->Magnitude, u, v)};
+    return HomogeneousJet{ValueAt(e->S, u, v), ValueAt(e->Su, u, v), ValueAt(e->Sv, u, v)};
 }
 
 } // namespace Detail
