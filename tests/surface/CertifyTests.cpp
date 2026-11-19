@@ -434,3 +434,120 @@ TEST_CASE("repeated knots do not turn unavailable derivatives into zero",
         CertifyDeviation(Curve{*curve}, Surface{*surface}, Curve2d{*pc}, Interval{0, 1}, 1e-6);
     REQUIRE_FALSE(certificate.has_value());
 }
+
+namespace {
+
+/// A surface whose x (alongU) or y (across) is exactly linear in one
+/// parameter over knots a short span `h` apart, so that the partial along
+/// it is one number, `slope`, at every parameter: the oracle is exact.
+struct SteepPatch {
+    Stereon::Surface Patch;
+    bool AlongU;
+    double Slope;
+    int PartialDegrees; // the sum of the partial spline's two degrees
+    double EndU;
+    double EndV;
+};
+
+/// The poles are in proportion to the Greville abscissae, small dyadic
+/// numbers for these knots, so every pole difference and knot difference is
+/// exact in doubles: 3 u / h on one span, u / h with a knot at h.
+[[nodiscard]] SteepPatch Steep(const bool interiorKnot, const bool alongU, const double h)
+{
+    const std::vector<double> shortKnots =
+        interiorKnot ? std::vector<double>{0, 0, 0, h, 2 * h, 2 * h, 2 * h}
+                     : std::vector<double>{0, 0, 0, 0, h, h, h, h};
+    const std::vector<double> steps =
+        interiorKnot ? std::vector<double>{0, 0.5, 1.5, 2} : std::vector<double>{0, 1, 2, 3};
+    const std::vector<double> unitKnots{0, 0, 0, 0, 1, 1, 1, 1};
+    const int shortDegree = interiorKnot ? 2 : 3;
+    std::vector<Point3> poles;
+    for (std::size_t i = 0; i < 4; ++i) {
+        for (std::size_t j = 0; j < 4; ++j) {
+            poles.push_back(alongU ? Point3{steps[i], static_cast<double>(j), 0.0}
+                                   : Point3{static_cast<double>(i), steps[j], 0.0});
+        }
+    }
+    auto surface = alongU
+                       ? Stereon::MakeBSplineSurface(shortDegree, 3, shortKnots, unitKnots, poles)
+                       : Stereon::MakeBSplineSurface(3, shortDegree, unitKnots, shortKnots, poles);
+    REQUIRE(surface.has_value());
+    const double end = shortKnots.back();
+    return {Stereon::Surface{*surface},
+            alongU,
+            (interiorKnot ? 1.0 : 3.0) / h,
+            shortDegree - 1 + 3,
+            alongU ? end : 1.0,
+            alongU ? 1.0 : end};
+}
+
+} // namespace
+
+// The margin of a partial derivative's enclosure was sized by the largest
+// pole of the surface, not of the partial. Over a knot span h the partial's
+// poles are about 1 / h times the surface's, so on a short span the margin
+// was a small fraction of the rounding it is there to cover, and the
+// enclosure held the exact value only by the outward steps of the interval
+// sum, which no bound relates to the basis functions' rounding.
+//
+// The property is the one the margin is defined by: Detail::PoleBoxMargin
+// bounds "how far Eval's rounding can move a computed point", relative to
+// the largest pole coordinate of the spline evaluated, and SplineEnclosure
+// keeps that magnitude per derivative curve. CertifyDeviation cannot show
+// it: its bound meets this enclosure with the hull of the poles and adds
+// the roundings of everything after, so the test reads the enclosure itself
+// through Detail::HomogeneousJetAt.
+//
+// A2.2 reaches a basis function of degree p through p recurrence steps of
+// at most six rounded operations each, all on non-negative numbers, so its
+// relative error is within 6 p units of 2^-53 to first order, and that of a
+// product of two within 6 (p + q). The partial here is `slope` exactly, and
+// its poles all equal it, so its computed sum can be that far from it,
+// relatively: the enclosure has to reach that far both ways.
+TEST_CASE("a partial's enclosure covers the worst rounding of its own poles",
+          "[surface][certify][regression]")
+{
+    const double h = 0x1p-20;
+    for (const bool interiorKnot : {false, true}) {
+        for (const bool alongU : {true, false}) {
+            const SteepPatch patch = Steep(interiorKnot, alongU, h);
+            const double reach = 6.0 * patch.PartialDegrees * 0x1p-53 * patch.Slope;
+            CAPTURE(interiorKnot, alongU, patch.Slope, reach);
+            for (int a = 1; a < 8; ++a) {
+                for (int b = 1; b < 8; ++b) {
+                    const double u = patch.EndU * a / 8.0;
+                    const double v = patch.EndV * b / 8.0;
+                    const auto jet = Stereon::Detail::HomogeneousJetAt(patch.Patch, u, v);
+                    REQUIRE(jet.has_value());
+                    const Interval partial = alongU ? jet->AlongU[0] : jet->AlongV[1];
+                    CAPTURE(u, v, partial.GetLower() - patch.Slope,
+                            partial.GetUpper() - patch.Slope);
+                    // Sound: the exact value is inside.
+                    REQUIRE(Contains(partial, patch.Slope));
+                    // Proved so: with room for the worst rounding.
+                    REQUIRE(partial.GetLower() <= patch.Slope - reach);
+                    REQUIRE(partial.GetUpper() >= patch.Slope + reach);
+                    // And still a rounding margin, not a loose box.
+                    REQUIRE(Width(partial) <= 0x1p-40 * patch.Slope);
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("a steep patch's own value is enclosed within its poles' margin", "[surface][certify]")
+{
+    // x = 3 u / h exactly, a dyadic number at these parameters: the value's
+    // enclosure holds it, within the margin of the surface's own poles.
+    const double h = 0x1p-20;
+    const SteepPatch patch = Steep(false, true, h);
+    for (int a = 0; a <= 8; ++a) {
+        const double u = h * a / 8.0;
+        const auto jet = Stereon::Detail::HomogeneousJetAt(patch.Patch, u, 0.5);
+        REQUIRE(jet.has_value());
+        const double x = 3.0 * a / 8.0;
+        REQUIRE(Contains(jet->Value[0], x));
+        REQUIRE(Contains(jet->Value[3], 1.0));
+        REQUIRE(Width(jet->Value[0]) <= 0x1p-40);
+    }
+}
