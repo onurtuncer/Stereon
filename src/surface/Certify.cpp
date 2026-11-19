@@ -686,7 +686,7 @@ struct TensorSpline {
 /// second partials, coefficients whose basis support is exactly empty are
 /// immaterial: these partials bound variation only within a knot span.
 [[nodiscard]] std::optional<TensorSpline> PartialOf(const TensorSpline& s, const bool alongU,
-                                                     const bool allowEmptySupport = false)
+                                                    const bool allowEmpty = false)
 {
     const auto d = static_cast<std::size_t>(alongU ? s.DegreeU : s.DegreeV);
     const std::vector<double>& knots = alongU ? s.KnotsU : s.KnotsV;
@@ -702,7 +702,7 @@ struct TensorSpline {
     for (std::size_t i = 0; i < t.CountU; ++i) {
         for (std::size_t j = 0; j < t.CountV; ++j) {
             const std::size_t k = alongU ? i : j;
-            if (allowEmptySupport && knots[k + d + 1] == knots[k + 1]) {
+            if (allowEmpty && knots[k + d + 1] == knots[k + 1]) {
                 t.Poles.push_back({Interval{0.0}, Interval{0.0}, Interval{0.0}, Interval{0.0}});
                 continue;
             }

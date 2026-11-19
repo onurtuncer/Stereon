@@ -1554,6 +1554,23 @@ struct Placed {
     return Settled::Cut;
 }
 
+/// A patch normal supplies a separating axis even when world-axis boxes
+/// overlap. The projected pole hulls and the tolerance test are enclosed.
+[[nodiscard]] bool ApartAlongNormal(const PatchPair& pair, const Hulls& hulls,
+                                    const double tolerance)
+{
+    const Bounds normals = CrossOf(hulls.Du, hulls.Dv);
+    if (!AllBounded(normals)) {
+        return false;
+    }
+    const Vec3 n = MiddleVec(normals);
+    const Bounds axis{Interval{n.X}, Interval{n.Y}, Interval{n.Z}};
+    const Interval a = Across(pair.A.Poles.Poles, axis);
+    const Interval b = Across(pair.B.Poles.Poles, axis);
+    const Interval threshold = Interval{tolerance} * DistanceBetween(axis);
+    return (a - b).GetLower() > threshold.GetUpper() || (b - a).GetLower() > threshold.GetUpper();
+}
+
 [[nodiscard]] Settled Settle(const PatchPair& pair, const SearchSettings& s, Findings& found,
                              std::vector<PatchPair>& stack)
 {
@@ -1561,6 +1578,9 @@ struct Placed {
     const Hulls b = HullsOf(pair.B);
     if (const std::optional<Vec3> direction = AdvanceDirection(a, b)) {
         return SettleTransverse(pair, a, b, *direction, s, found);
+    }
+    if (ApartAlongNormal(pair, a, s.Tolerance) || ApartAlongNormal(pair, b, s.Tolerance)) {
+        return Settled::Done;
     }
     return SettleTouch(pair, s, found, stack);
 }
@@ -1611,6 +1631,9 @@ struct Sample {
 struct Marcher {
     const Surface& A;
     const Surface& B;
+    const Surface& OriginalA;
+    const Surface& OriginalB;
+    Vec3 Shift;
     double Chord;
 };
 
@@ -1924,9 +1947,12 @@ ChainSamples(const Marcher& m, const std::vector<Arc>& arcs, const Chain& chain)
                                      const Context& ctx)
 {
     for (int attempt = 0;; ++attempt) {
-        STEREON_TRY(const std::vector<Sample> samples, ChainSamples(m, arcs, chain));
+        STEREON_TRY(std::vector<Sample> samples, ChainSamples(m, arcs, chain));
+        for (Sample& sample : samples) {
+            sample.Position = sample.Position + m.Shift;
+        }
         STEREON_TRY(IntersectionBranch branch, BranchOf(Distinct(samples)));
-        const Result<void> certified = Certify(branch, m.A, m.B, ctx);
+        const Result<void> certified = Certify(branch, m.OriginalA, m.OriginalB, ctx);
         if (certified) {
             result.Branches.push_back(std::move(branch));
             return {};
@@ -1985,14 +2011,16 @@ ChainSamples(const Marcher& m, const std::vector<Arc>& arcs, const Chain& chain)
 
 /// Arcs and touches into a result.
 [[nodiscard]] Result<SurfaceSurfaceIntersection>
-Assembled(const Findings& found, const Surface& a, const Box2& domainA, const Surface& b,
-          const Box2& domainB, const SearchSettings& s, const Context& ctx)
+Assembled(const Findings& found, const Marcher& marcher, const Box2& domainA, const Box2& domainB,
+          const SearchSettings& s, const Context& ctx)
 {
     SurfaceSurfaceIntersection result;
     result.Points = found.Touches;
     const ArcGraph graph = GraphOf(found, s.Join);
     STEREON_TRY_VOID(CheckGraph(graph, found.Arcs, domainA, domainB));
-    const Marcher marcher{a, b, 0.25 * ctx.GetResolution()};
+    for (IntersectionPoint& touch : result.Points) {
+        touch.Position = touch.Position + marcher.Shift;
+    }
     for (const Chain& chain : ChainsOf(graph)) {
         STEREON_TRY_VOID(AddChain(result, marcher, found.Arcs, chain, domainA, domainB, ctx));
     }
@@ -2054,24 +2082,6 @@ Assembled(const Findings& found, const Surface& a, const Box2& domainA, const Su
     return s;
 }
 
-/// Positions found about the origin, moved back to the input's place. Only
-/// the seeds' positions move; parameters are the input's, and marching and
-/// certification evaluate the input surfaces.
-void MovedBack(Findings& found, const Vec3& shift)
-{
-    const auto back = [&](Point3& p) { p = {p.X + shift.X, p.Y + shift.Y, p.Z + shift.Z}; };
-    for (Arc& arc : found.Arcs) {
-        back(arc.From.Position);
-        back(arc.To.Position);
-    }
-    for (IntersectionPoint& touch : found.Touches) {
-        back(touch.Position);
-    }
-    for (Point3& node : found.Nodes) {
-        back(node); // Arcs end at a node by its position: it moves with them.
-    }
-}
-
 /// The pairs of patches to search, of the surfaces moved about the origin
 /// where that is exact, and the shift used.
 struct ShiftedSearch {
@@ -2108,8 +2118,10 @@ SSIResult NurbsHull(const Surface& a, const Box2& domainA, const Surface& b, con
                                   sa->Weights.empty() && sb->Weights.empty()};
     STEREON_TRY(ShiftedSearch search, SearchAbout(*sa, domainA, *sb, domainB));
     STEREON_TRY(Findings found, SearchPairs(std::move(search.Pairs), settings));
-    MovedBack(found, search.Shift);
-    return Assembled(found, a, SearchedDomain(*sa, domainA), b, SearchedDomain(*sb, domainB),
+    const Surface localA{Moved(*sa, search.Shift)};
+    const Surface localB{Moved(*sb, search.Shift)};
+    const Marcher marcher{localA, localB, a, b, search.Shift, 0.25 * ctx.GetResolution()};
+    return Assembled(found, marcher, SearchedDomain(*sa, domainA), SearchedDomain(*sb, domainB),
                      settings, ctx);
 }
 
