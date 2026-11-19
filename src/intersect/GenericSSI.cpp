@@ -2007,6 +2007,18 @@ ChainSamples(const Marcher& m, const std::vector<Arc>& arcs, const Chain& chain)
     return {};
 }
 
+/// The branch's curve, the B-spline BranchOf fits. Checked, not assumed:
+/// an unchecked Target is a null dereference the optimised builds reject.
+[[nodiscard]] Result<BSplineCurve> LocalCurveOf(const IntersectionBranch& branch)
+{
+    const BSplineCurve* curve = branch.Curve3d.Target<BSplineCurve>();
+    if (curve == nullptr) {
+        return Fail(ErrorCode::IntersectionFailed,
+                    "BSpline x BSpline: a marched branch is not a B-spline curve");
+    }
+    return *curve;
+}
+
 /// The chain's branch, its chords tightened until it certifies. It is
 /// marched and certified on the surfaces moved about the origin: far from
 /// it, the enclosures of the input's homogeneous coordinates widen with
@@ -2018,7 +2030,7 @@ ChainSamples(const Marcher& m, const std::vector<Arc>& arcs, const Chain& chain)
     for (int attempt = 0;; ++attempt) {
         STEREON_TRY(std::vector<Sample> samples, ChainSamples(m, arcs, chain));
         STEREON_TRY(IntersectionBranch branch, BranchOf(Distinct(std::move(samples))));
-        const BSplineCurve local = *branch.Curve3d.Target<BSplineCurve>();
+        STEREON_TRY(const BSplineCurve local, LocalCurveOf(branch));
         const double rounding = MoveRounding(local.Poles, m.Shift);
         STEREON_TRY(const Context localCtx, LocalContext(ctx, rounding));
         const Result<void> certified = Certify(branch, m.A, m.B, localCtx);
