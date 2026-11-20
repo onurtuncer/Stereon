@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <numbers>
 #include <string>
 #include <utility>
@@ -528,6 +529,46 @@ TEST_CASE("plane crossings: second-order Taylor decay and the transpose",
         RC_PRE(WellConditioned(a.Curve, b.Curve));
         RequireProducts(std::move(a), std::move(b));
     });
+}
+
+TEST_CASE("two cubic Beziers' proved crossings lie on both curves to rounding",
+          "[intersect][linearization][planar]")
+{
+    // The pair RapidCheck shrank to from seed 15971369584168069721 of the
+    // property above. Both crossings are decided and transverse, but the
+    // second was reported at the middle of brackets 8e-13 wide, where the
+    // pieces' Krawczyk refinement stalled: the curves' points at its
+    // parameters were 1.5e-13 apart, beyond IntersectJvp's 512 ulp check,
+    // which refused the primal's own result as stale. Refined on the
+    // splines' own poles, each point is within a few ulp of both curves.
+    const auto bezier = [](std::vector<Point2> poles) {
+        const auto made = Stereon::MakeBSplineCurve(3, {0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0},
+                                                    std::move(poles));
+        REQUIRE(made.has_value());
+        return Curve2d{*made};
+    };
+    const Curve2d a = bezier({{-3.0, 1.625}, {-1.375, -0.5}, {0.8125, -1.375}, {2.59375, 1.5}});
+    const Curve2d b = bezier({{-3.3125, -1.0}, {-1.03125, -0.75}, {0.5, 1.25}, {2.65625, -1.625}});
+    const auto at = Stereon::Intersect(a, b, ctx);
+    REQUIRE(at.has_value());
+    REQUIRE(at->Points.size() == 2);
+    for (const PlanarPoint& p : at->Points) {
+        CHECK(p.Contact == ContactType::Crossing);
+        CHECK(p.Decided);
+        const double gap =
+            Stereon::Distance(Stereon::Eval(a, p.ParameterA), Stereon::Eval(b, p.ParameterB));
+        INFO("s = " << p.ParameterA << ", t = " << p.ParameterB << ": |A(s) - B(t)| = " << gap);
+        CHECK(gap <= 64.0 * std::numeric_limits<double>::epsilon());
+    }
+    ParameterSet set;
+    const ParameterId id = *set.Add("p", ParameterQuantity::Length, 1.0);
+    SensitivityContext sensitivity(std::move(set));
+    REQUIRE(sensitivity.SetSeed(std::vector<double>{1.0}).has_value());
+    const std::vector<PlaneCurveBinding> bindings{{id, PlaneCurveComponent::PoleX, 1}};
+    const auto jvp = Stereon::IntersectJvp(a, bindings, b, {}, *at, sensitivity);
+    INFO(IntersectTest::ErrorText(jvp));
+    REQUIRE(jvp.has_value());
+    CHECK(jvp->GetStatus() == DerivativeStatus::Valid);
 }
 
 TEST_CASE("a plane tangency, an overlap and unbound curves carry no derivative",

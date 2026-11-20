@@ -312,6 +312,43 @@ SlopeAcross(const std::vector<Segment>& segments, const Interval& t)
     return KrawczykStep(x, f, {(*da)[0], -(*db)[0], (*da)[1], -(*db)[1]});
 }
 
+/// A box holding a root, narrowed by X <- K(X) ∩ X with the splines whole,
+/// which keeps every root of X, while the box shrinks. The splines' own
+/// poles are doubles, so F is enclosed to the rounding of one evaluation
+/// and a regular root's box closes to a few units in the last place; a
+/// piece's poles are enclosures widened by every halving, and Refined's box
+/// stops shrinking at their width (8e-13 in the parameters for a crossing
+/// of two unit cubics, whose midpoints then missed each other by 1.5e-13).
+[[nodiscard]] ParameterBox RefinedAcross(const PairSearch& search, ParameterBox x)
+{
+    for (int step = 0; step < RefineSteps; ++step) {
+        const std::optional<ParameterBox> k = KrawczykAcross(search, x);
+        if (!k) {
+            break;
+        }
+        const ParameterBox next{Intersection(k->S, x.S), Intersection(k->T, x.T)};
+        if (next.S.IsEmpty() || next.T.IsEmpty() ||
+            (Width(next.S) >= Width(x.S) && Width(next.T) >= Width(x.T))) {
+            break;
+        }
+        x = next;
+    }
+    return x;
+}
+
+/// A proved crossing bracketed to rounding on the curves (RefinedAcross):
+/// its point is placed at the brackets' middle and must lie on both. A
+/// touch or an undecided meeting keeps its brackets.
+[[nodiscard]] Meeting Tightened(const PairSearch& search, Meeting root)
+{
+    if (root.Decided && root.Contact == ContactType::Crossing) {
+        const ParameterBox tight = RefinedAcross(search, {root.OnA, root.OnB});
+        root.OnA = tight.S;
+        root.OnB = tight.T;
+    }
+    return root;
+}
+
 /// The parameters the spline's segments cover, its domain.
 [[nodiscard]] Interval Covered(const std::vector<Segment>& segments)
 {
@@ -383,19 +420,7 @@ ProofBox(const PairSearch& search, const ParameterBox& pair, const ParameterBox&
         return std::nullopt;
     }
     const ParameterBox proof = *found;
-    ParameterBox x = proof;
-    for (int step = 0; step < RefineSteps; ++step) {
-        const std::optional<ParameterBox> k = KrawczykAcross(search, x);
-        if (!k) {
-            break;
-        }
-        const ParameterBox next{Intersection(k->S, x.S), Intersection(k->T, x.T)};
-        if (next.S.IsEmpty() || next.T.IsEmpty() ||
-            (Width(next.S) >= Width(x.S) && Width(next.T) >= Width(x.T))) {
-            break;
-        }
-        x = next;
-    }
+    const ParameterBox x = RefinedAcross(search, proof);
     // Past a spline's end its end segment continued was proved, not the
     // spline: a bracket across the end is undecided (and one beyond it is
     // dropped by the caller).
@@ -1246,7 +1271,8 @@ Result<PlanarIntersection> SplineSpline2d(const Curve2d& a, const Interval& doma
     if (onA.IsEmpty() || onB.IsEmpty()) {
         return result;
     }
-    for (const Meeting& root : Distinct(std::move(search.Roots))) {
+    for (Meeting root : Distinct(std::move(search.Roots))) {
+        root = Tightened(search, root);
         bool decided = root.Decided;
         const std::optional<double> ta = Placed(root.OnA, onA, decided);
         const std::optional<double> tb = Placed(root.OnB, onB, decided);
