@@ -900,8 +900,7 @@ void SeamCutsOnA(const Pair& p, const Track& k, const Interval& span, std::vecto
         return Fail(ErrorCode::IntersectionFailed,
                     "CylinderCylinder: B seam cannot be isolated to a representable parameter");
     }
-    STEREON_TRY_VOID(
-        IsolateSeamOnB(p, c, k, Interval{lo, middle}, cuts, evaluations));
+    STEREON_TRY_VOID(IsolateSeamOnB(p, c, k, Interval{lo, middle}, cuts, evaluations));
     return IsolateSeamOnB(p, c, k, Interval{middle, hi}, cuts, evaluations);
 }
 
