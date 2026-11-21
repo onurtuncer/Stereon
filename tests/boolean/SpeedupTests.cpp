@@ -123,10 +123,10 @@ TEST_CASE("issue 160: overlapping level-cap cylinder grids publish valid topolog
         const Shape a = Drills(n);
         const Shape b = Drills(n, Stereon::Vec3{10.0 * n - 9.0, 0.0, 0.0});
         const auto imprinted = ImprintBodies(a, b, serial);
-        INFO(imprinted ? "" : std::string(imprinted.error().GetMessage()));
+        INFO((imprinted ? "" : std::string(imprinted.error().GetMessage())));
         REQUIRE(imprinted.has_value());
         const auto result = Boolean(a, b, BooleanOperation::Union, serial);
-        INFO(result ? "" : std::string(result.error().GetMessage()));
+        INFO((result ? "" : std::string(result.error().GetMessage())));
         REQUIRE(result.has_value());
         const std::size_t expected = static_cast<std::size_t>(2 * n * n - n);
         CHECK(CountOf<EntityKind::Solid>(result->Shape) == expected);
@@ -143,7 +143,7 @@ TEST_CASE("issue 160: level-cap 20 by 20 drill grids unite",
     const Shape a = Drills(n);
     const Shape b = Drills(n, Stereon::Vec3{191.0, 0.0, 0.0});
     const auto result = Boolean(a, b, BooleanOperation::Union, serial);
-    INFO(result ? "" : std::string(result.error().GetMessage()));
+    INFO((result ? "" : std::string(result.error().GetMessage())));
     REQUIRE(result.has_value());
     CHECK(CountOf<EntityKind::Solid>(result->Shape) == 2 * n * n - n);
     CHECK(ValidateTopology(result->Shape).IsValid());
