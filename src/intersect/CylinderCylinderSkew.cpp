@@ -885,6 +885,115 @@ void SeamCutsOnA(const Pair& p, const Track& k, const Interval& span, std::vecto
     return (left < 0.0 && right > 0.0) || (left > 0.0 && right < 0.0);
 }
 
+/// Exact count of intersections between B's positive seam ruling and A's
+/// cylinder. In raw (not normalised) axis coordinates the squared distance
+/// between their axes is
+/// ((O_B - O_A + r_B X_B) . (axis_A x axis_B))^2 / |axis_A x axis_B|^2.
+/// This predicate distinguishes true tangency from a pair of near roots.
+[[nodiscard]] Sign SeamDiscriminantSign(const Pair& p)
+{
+    const ExactVector<64> n = ExactCross(ExactAxisOf(p.A), ExactAxisOf(p.B));
+    const auto fromOrigins = ExactDot(ExactOffset(p.B.Origin, p.A.Origin), n);
+    const auto fromRadius = ExactDot(Exactly(p.B.XAxis), n);
+    const Interval offset = fromOrigins.Hull + Interval{p.B.Radius} * fromRadius.Hull;
+    const Interval norm = Squared(n.Hull[0]) + Squared(n.Hull[1]) + Squared(n.Hull[2]);
+    const Interval residual = Squared(offset) - Squared(Interval{p.A.Radius}) * norm;
+    return FilteredSign(residual, [&] {
+        const DynamicExpansion shift =
+            Sum(DynamicExpansion{fromOrigins.Value()},
+                Scaled(DynamicExpansion{fromRadius.Value()}, p.B.Radius));
+        DynamicExpansion normExact;
+        for (const auto& component : n.Value) {
+            const DynamicExpansion v{component()};
+            normExact = Sum(normExact, Product(v, v));
+        }
+        const DynamicExpansion radius{p.A.Radius};
+        return Difference(Product(shift, shift),
+                          Product(Product(radius, radius), normExact))
+            .GetSign();
+    });
+}
+
+/// The positive B seam ruling intersects the A cylinder at zero, one, or
+/// two geometric sites. Compute their approximate positions only after
+/// deciding their exact number from the input doubles.
+struct SeamSites {
+    std::array<Point3, 2> Points;
+    std::size_t Count = 0;
+};
+
+[[nodiscard]] Result<SeamSites> SeamSitesOf(const Pair& p)
+{
+    const Sign outside = SeamDiscriminantSign(p);
+    SeamSites sites;
+    if (outside == Sign::Positive) {
+        return sites;
+    }
+    const Point3 origin = p.B.Origin + p.B.Radius * p.B.XAxis;
+    const Vec3 offset = origin - p.A.Origin;
+    const Vec3 direction = p.AxisB - Dot(p.AxisB, p.AxisA) * p.AxisA;
+    const Vec3 radial = offset - Dot(offset, p.AxisA) * p.AxisA;
+    const double a = Dot(direction, direction);
+    if (!(a > 0.0)) {
+        return Fail(ErrorCode::IntersectionFailed,
+                    "CylinderCylinder: the skew B seam has no resolvable ruling");
+    }
+    const double b = Dot(radial, direction);
+    const double c = Dot(radial, radial) - p.A.Radius * p.A.Radius;
+    const double middle = -b / a;
+    if (outside == Sign::Zero) {
+        sites.Points[0] = origin + middle * p.AxisB;
+        sites.Count = 1;
+        return sites;
+    }
+    const double discriminant = std::fma(-a, c, b * b);
+    if (!(discriminant > 0.0)) {
+        return Fail(ErrorCode::IntersectionFailed,
+                    "CylinderCylinder: the B seam has two roots unresolved in double precision");
+    }
+    const double half = std::sqrt(discriminant) / a;
+    sites.Points[0] = origin + (middle - half) * p.AxisB;
+    sites.Points[1] = origin + (middle + half) * p.AxisB;
+    sites.Count = 2;
+    return sites;
+}
+
+/// An unresolved cell can be discarded only when every *exactly counted*
+/// B-seam site is either on the cell's existing endpoint or provably away
+/// from the closed-form point enclosure. A pair collapsed onto the same
+/// endpoint is ambiguous and must be refused, not silently coalesced.
+[[nodiscard]] bool BoundarySitesOnly(const Pair& p, const Configuration& c, const Track& k,
+                                     const Interval& cell, const SeamSites& sites)
+{
+    using I = IntervalScalar;
+    const auto box = PlaceOf(p, c, k, I{cell}).Point;
+    const Point3 first = PlaceOf(p, c, k, cell.GetLower()).Point;
+    const Point3 last = PlaceOf(p, c, k, cell.GetUpper()).Point;
+    const double scale = std::max({1.0, p.A.Radius, p.B.Radius, Distance(first, last)});
+    const double slack = 1e-8 * scale;
+    int previousEndpoint = -1;
+    for (std::size_t i = 0; i < sites.Count; ++i) {
+        const Point3 site = sites.Points[i];
+        const bool outside = site.X < box.X.Value.GetLower() - slack ||
+                             site.X > box.X.Value.GetUpper() + slack ||
+                             site.Y < box.Y.Value.GetLower() - slack ||
+                             site.Y > box.Y.Value.GetUpper() + slack ||
+                             site.Z < box.Z.Value.GetLower() - slack ||
+                             site.Z > box.Z.Value.GetUpper() + slack;
+        if (outside) {
+            continue;
+        }
+        const int endpoint = Distance(site, first) <= slack
+                                 ? 0
+                                 : (Distance(site, last) <= slack ? 1 : -1);
+        if (endpoint < 0 || endpoint == previousEndpoint) {
+            return false;
+        }
+        previousEndpoint = endpoint;
+    }
+    return true;
+}
+
 [[nodiscard]] Result<void> IsolateSeamOnB(const Pair& p, const Configuration& c, const Track& k,
                                           const Interval& range, std::vector<double>& cuts,
                                           std::size_t& evaluations)
