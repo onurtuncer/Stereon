@@ -713,7 +713,6 @@ TEST_CASE("the small circle near the pole follows the sphere's requested domain"
     REQUIRE(none->Points.empty());
 }
 
-
 // The old PatchesOver treated the right-hand patch touching u=0.5 as an
 // entire searched patch, so a requested hemisphere answered up to u=0.75.
 // Every successful result must stay in its own requested chart box, under

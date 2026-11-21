@@ -310,8 +310,7 @@ PatchesOver(const BSplineSurface& s, const Box2& domain)
         // A patch meeting a positive-width request only along a knot edge
         // contributes no interior: the adjacent, continuous patch on the
         // requested side covers that edge. Never search the entire outside patch.
-        if (uOver.IsEmpty() || vOver.IsEmpty() ||
-            uOver.GetLower() == uOver.GetUpper() ||
+        if (uOver.IsEmpty() || vOver.IsEmpty() || uOver.GetLower() == uOver.GetUpper() ||
             vOver.GetLower() == vOver.GetUpper()) {
             continue;
         }

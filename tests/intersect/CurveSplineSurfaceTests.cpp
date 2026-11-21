@@ -310,7 +310,6 @@ TEST_CASE("a crossing at a closed surface's seam is one point at the domain's en
     CHECK(part.error().GetCode() == ErrorCode::IntersectionFailed);
 }
 
-
 // A degree-1 spline plane has a real u knot at 1/2. Its right-hand patch
 // touches a request ending at that knot, but does not belong to the requested
 // half. The original clipping kept all of it, including the crossing at 3/4.
@@ -319,9 +318,8 @@ TEST_CASE("a requested B-spline surface knot excludes curve crossings beyond it"
 {
     const std::vector<double> knotsU{0.0, 0.0, 0.5, 1.0, 1.0};
     const std::vector<double> knotsV{0.0, 0.0, 1.0, 1.0};
-    const std::vector<Point3> poles{{0.0, 0.0, 0.0}, {0.0, 1.0, 0.0},
-                                    {0.5, 0.0, 0.0}, {0.5, 1.0, 0.0},
-                                    {1.0, 0.0, 0.0}, {1.0, 1.0, 0.0}};
+    const std::vector<Point3> poles{{0.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.5, 0.0, 0.0},
+                                    {0.5, 1.0, 0.0}, {1.0, 0.0, 0.0}, {1.0, 1.0, 0.0}};
     const auto built = Stereon::MakeBSplineSurface(1, 1, knotsU, knotsV, poles, {});
     REQUIRE(built.has_value());
     const Surface spline{*built};
@@ -333,15 +331,15 @@ TEST_CASE("a requested B-spline surface knot excludes curve crossings beyond it"
         INFO(IntersectTest::ErrorText(full));
         REQUIRE(full.has_value());
         REQUIRE(full->Points.size() == 1);
-        const auto within = Intersect(line, Interval{0.0, 2.0}, spline,
-                                      x < 0.5 ? left : right, ctx);
+        const auto within =
+            Intersect(line, Interval{0.0, 2.0}, spline, x < 0.5 ? left : right, ctx);
         INFO(IntersectTest::ErrorText(within));
         REQUIRE(within.has_value());
         REQUIRE(within->Points.size() == 1);
         CHECK(within->Points.front().OnSurface.X >= (x < 0.5 ? 0.0 : 0.5));
         CHECK(within->Points.front().OnSurface.X <= (x < 0.5 ? 0.5 : 1.0));
-        const auto outside = Intersect(line, Interval{0.0, 2.0}, spline,
-                                       x < 0.5 ? right : left, ctx);
+        const auto outside =
+            Intersect(line, Interval{0.0, 2.0}, spline, x < 0.5 ? right : left, ctx);
         INFO(IntersectTest::ErrorText(outside));
         REQUIRE(outside.has_value());
         CHECK(outside->Points.empty());
