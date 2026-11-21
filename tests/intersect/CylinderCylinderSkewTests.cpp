@@ -659,3 +659,56 @@ TEST_CASE("skew B seam isolates both generator crossings near a fold",
         }
     }
 }
+
+
+TEST_CASE("two B seam crossings inside a former scan cell are both isolated",
+          "[intersect][cylinder][skew][regression][issue195]")
+{
+    // The seam ruling of B runs in x through y=3-delta. Its two
+    // intersections with A are x=±sqrt(9-(3-delta)^2), at fixed y,z.
+    // delta=1e-7 produces two roots much closer than 2*pi/256 in the
+    // track parameter. A sign-change scan of only the cell endpoints
+    // misses both; a certified enclosing isolator may not.
+    for (const double delta : {1e-4, 1e-7}) {
+        const double q = (1.0 + delta) / 2.0;
+        const double s = std::sqrt(1.0 - q * q);
+        const double y = 4.0 - 2.0 * q;
+        const double z = 2.0 * s;
+        const double x = std::sqrt(9.0 - y * y);
+        const Point3 positive{x, y, z};
+        const Point3 negative{-x, y, z};
+        const Point3 origin{0.0, 4.0, 0.0};
+        const Vec3 bx{0.0, -q, s};
+        const Vec3 by{0.0, -s, -q};
+        for (const bool rightHanded : {false, true}) {
+            const Surface b{Cylinder{origin, 2.0, bx, by, rightHanded}};
+            for (const bool swap : {false, true}) {
+                INFO("delta " << delta << ", handedness " << rightHanded << ", swap " << swap);
+                const Surface& first = swap ? b : a;
+                const Surface& second = swap ? a : b;
+                const auto result = Intersect(first, second, ctx);
+                INFO(IntersectTest::ErrorText(result));
+                if (!result) {
+                    // The smaller separation may exhaust certification;
+                    // a refusal is permitted, a missing branch is not.
+                    REQUIRE(delta < 1e-6);
+                    REQUIRE((result.error().GetCode() == ErrorCode::IntersectionFailed ||
+                             result.error().GetCode() == ErrorCode::CertificationFailed));
+                    continue;
+                }
+                RequireBranchesOn(*result, first, second);
+                bool plus = false;
+                bool minus = false;
+                for (const auto& branch : result->Branches) {
+                    for (const double t : {branch.Range.GetLower(), branch.Range.GetUpper()}) {
+                        const Point3 point = Eval(branch.Curve3d, t);
+                        plus = plus || Distance(point, positive) <= 2.0 * ctx.GetResolution();
+                        minus = minus || Distance(point, negative) <= 2.0 * ctx.GetResolution();
+                    }
+                }
+                REQUIRE(plus);
+                REQUIRE(minus);
+            }
+        }
+    }
+}
