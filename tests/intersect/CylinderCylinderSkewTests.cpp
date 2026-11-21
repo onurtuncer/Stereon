@@ -660,7 +660,6 @@ TEST_CASE("skew B seam isolates both generator crossings near a fold",
     }
 }
 
-
 TEST_CASE("two B seam crossings inside a former scan cell are both isolated",
           "[intersect][cylinder][skew][regression][issue195]")
 {
