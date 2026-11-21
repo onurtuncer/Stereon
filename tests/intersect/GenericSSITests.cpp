@@ -15,9 +15,11 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <numbers>
 #include <string>
 #include <vector>
 
@@ -466,4 +468,249 @@ TEST_CASE("initial SSI patch pairs obey the search budget", "[intersect][generic
     const auto result = Intersect(Surface{*many}, Surface{Patch(0.0)}, ctx);
     REQUIRE_FALSE(result.has_value());
     REQUIRE(result.error().GetCode() == ErrorCode::IntersectionFailed);
+}
+
+namespace {
+
+/// A rigid placement: local (x, y, z) to x E1 + y E2 + z E3 + O.
+struct Placement {
+    Stereon::Vec3 E1;
+    Stereon::Vec3 E2;
+    Stereon::Vec3 E3;
+    Point3 O;
+};
+
+const Placement atOrigin{{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}, {0.0, 0.0, 0.0}};
+/// The corpus's tilted placement: a rational rotation, orthonormal to rounding.
+const Placement tilted{{0.6, 0.8, 0.0}, {-0.48, 0.36, 0.8}, {0.64, -0.48, 0.6}, {12.0, -7.0, 5.0}};
+
+Point3 Placed(const Placement& at, const double x, const double y, const double z)
+{
+    return at.O + x * at.E1 + y * at.E2 + z * at.E3;
+}
+
+/// A point's local coordinates under a placement.
+Stereon::Vec3 Local(const Placement& at, const Point3& p)
+{
+    const Stereon::Vec3 d = p - at.O;
+    return {Dot(d, at.E1), Dot(d, at.E2), Dot(d, at.E3)};
+}
+
+/// The unit sphere, exact: a rational quadratic full circle in u, a half
+/// circle from the south pole to the north one in v, the first and last rows
+/// of v collapsed to the poles.
+BSplineSurface UnitSphere(const Placement& at)
+{
+    const double s = std::sqrt(0.5);
+    const std::vector<std::array<double, 2>> circle{{1, 0},   {1, 1},  {0, 1},  {-1, 1}, {-1, 0},
+                                                    {-1, -1}, {0, -1}, {1, -1}, {1, 0}};
+    const std::vector<double> circleWeights{1.0, s, 1.0, s, 1.0, s, 1.0, s, 1.0};
+    const std::vector<std::array<double, 2>> half{{0, -1}, {1, -1}, {1, 0}, {1, 1}, {0, 1}};
+    const std::vector<double> halfWeights{1.0, s, 1.0, s, 1.0};
+    std::vector<Point3> poles;
+    std::vector<double> weights;
+    for (std::size_t i = 0; i < circle.size(); ++i) {
+        for (std::size_t j = 0; j < half.size(); ++j) {
+            const double rho = half[j][0];
+            poles.push_back(Placed(at, rho * circle[i][0], rho * circle[i][1], half[j][1]));
+            weights.push_back(circleWeights[i] * halfWeights[j]);
+        }
+    }
+    const std::vector<double> knotsU{0.0, 0.0,  0.0,  0.25, 0.25, 0.5,
+                                     0.5, 0.75, 0.75, 1.0,  1.0,  1.0};
+    const std::vector<double> knotsV{0.0, 0.0, 0.0, 0.5, 0.5, 1.0, 1.0, 1.0};
+    const auto made = Stereon::MakeBSplineSurface(2, 2, knotsU, knotsV, poles, weights);
+    REQUIRE(made.has_value());
+    return *made;
+}
+
+/// A plane in the placement's local coordinates: n . x = Offset for
+/// n = (sin Tilt, 0, cos Tilt), so z = Offset when Tilt is zero.
+struct Cut {
+    double Tilt;
+    double Offset;
+};
+
+/// The square of side 4 in the cut's plane about the foot of the origin,
+/// bilinear, its sides along (cos Tilt, 0, -sin Tilt) and y.
+BSplineSurface Square(const Cut& cut, const Placement& at)
+{
+    const double c = std::cos(cut.Tilt);
+    const double s = std::sin(cut.Tilt);
+    const auto corner = [&](const double x, const double y) {
+        return Placed(at, x * c + cut.Offset * s, y, cut.Offset * c - x * s);
+    };
+    const std::vector<Point3> poles{corner(-2.0, -2.0), corner(-2.0, 2.0), corner(2.0, -2.0),
+                                    corner(2.0, 2.0)};
+    const std::vector<double> knots{0.0, 0.0, 1.0, 1.0};
+    const auto made = Stereon::MakeBSplineSurface(1, 1, knots, knots, poles, {});
+    REQUIRE(made.has_value());
+    return *made;
+}
+
+/// What a result must show of the cut's section of the unit sphere, the
+/// circle of radius sqrt(1 - Offset^2) about Offset n: every sampled point
+/// of every branch on the circle within the tolerance, and the branches
+/// together going `turn` round it, so that no arc is missing.
+void CheckSection(const Stereon::SurfaceSurfaceIntersection& r, const Cut& cut, const Placement& at,
+                  const double tolerance, const double turn)
+{
+    const double c = std::cos(cut.Tilt);
+    const double s = std::sin(cut.Tilt);
+    const double radius = std::sqrt(1.0 - cut.Offset * cut.Offset);
+    REQUIRE(r.Points.empty());
+    REQUIRE(r.Overlaps.empty());
+    REQUIRE(IntersectTest::ConnectivityOf(r, 2.0 * tolerance).Curves == 1);
+    double turned = 0.0;
+    for (const Stereon::IntersectionBranch& branch : r.Branches) {
+        REQUIRE(branch.Contact == Stereon::ContactType::Crossing);
+        REQUIRE(branch.IsCertified());
+        REQUIRE(branch.Bound <= ctx.GetResolution());
+        double previous = 0.0;
+        bool first = true;
+        for (const double t : IntersectTest::SamplesOf(branch.Range, 200)) {
+            const Stereon::Vec3 p = Local(at, Eval(branch.Curve3d, t));
+            const double across = p.X * c - p.Z * s;
+            REQUIRE(std::abs(std::hypot(across, p.Y) - radius) <= tolerance);
+            REQUIRE(std::abs(p.X * s + p.Z * c - cut.Offset) <= tolerance);
+            const double angle = std::atan2(p.Y, across);
+            if (!first) {
+                turned += std::abs(std::remainder(angle - previous, 2.0 * std::numbers::pi));
+            }
+            previous = angle;
+            first = false;
+        }
+    }
+    // An arc's ends are placed within the resolution, an angle of that over
+    // the radius each.
+    REQUIRE(std::abs(turned - turn) <= 1e-6 + 2.0 * ctx.GetResolution() / radius);
+}
+
+} // namespace
+
+// The plane z = 0.999 meets the unit sphere in the circle of radius
+// sqrt(1 - 0.999^2) = 0.0447 about the north pole, transverse everywhere at
+// acos(0.999) = 2.56 degrees, along the latitude v* = 0.98433 of the Bezier
+// patch that ends at the collapsed pole row. The partials of the sphere's
+// rational patches, enclosed by the quotient rule about the origin, were
+// widened by the patch's distance from it, one unit, times the width of the
+// weight's derivative: S_u . z, zero on the sphere, enclosed as +-0.04 on a
+// cell 0.002 wide, where the normals' 2.56 degrees part only by 0.045. No
+// advance direction and no boundary root was proved near the circle, and the
+// search cut pairs down to the tolerance and refused them as a tangential
+// contact (corpus/nurbs-ssi/sphere-plane/near-pole-*). Tilted off the world
+// axes, the boxes of the partials wrapped them further and the search ran
+// out of its budget. MR: the same pair under the corpus's rigid tilt, and
+// with the operands exchanged.
+TEST_CASE("a plane a thousandth below a rational sphere's pole cuts its small circle",
+          "[intersect][generic][nurbs][regression]")
+{
+    constexpr Cut cut{0.0, 1.0 - 1e-3};
+    constexpr double tolerance = 1e-5;
+    for (const Placement* at : {&atOrigin, &tilted}) {
+        const Surface sphere{UnitSphere(*at)};
+        const Surface flat{Square(cut, *at)};
+        for (const bool swapped : {false, true}) {
+            INFO((at == &tilted ? "tilted, " : "at the origin, ")
+                 << (swapped ? "plane first" : "sphere first"));
+            const auto result = swapped ? Intersect(flat, Box2::Everything(), sphere,
+                                                    Box2::Everything(), tolerance, ctx)
+                                        : Intersect(sphere, Box2::Everything(), flat,
+                                                    Box2::Everything(), tolerance, ctx);
+            INFO(IntersectTest::ErrorText(result));
+            REQUIRE(result.has_value());
+            CheckSection(*result, cut, *at, tolerance, 2.0 * std::numbers::pi);
+        }
+    }
+}
+
+TEST_CASE("a plane a thousandth above a rational sphere's pole is proved apart",
+          "[intersect][generic][nurbs][regression]")
+{
+    const Surface sphere{UnitSphere(atOrigin)};
+    const Surface flat{Square({0.0, 1.0 + 1e-3}, atOrigin)};
+    const auto result = Intersect(sphere, Box2::Everything(), flat, Box2::Everything(), 1e-5, ctx);
+    INFO(IntersectTest::ErrorText(result));
+    REQUIRE(result.has_value());
+    REQUIRE(result->Branches.empty());
+    REQUIRE(result->Points.empty());
+}
+
+// The whole sphere, not only the fixture's latitude: both caps, both
+// hemispheres, a circle a thousandth off the equator's knot line and one in
+// a plane a radian off the axis, which crosses every patch obliquely. The
+// two a thousandth from the poles are refused without the enclosures about
+// the patch; the others were answered before and must stay so.
+TEST_CASE("planes cut a rational sphere in circles from pole to pole",
+          "[intersect][generic][nurbs]")
+{
+    constexpr double tolerance = 1e-5;
+    const Surface sphere{UnitSphere(atOrigin)};
+    for (const Cut& cut :
+         {Cut{0.0, -1.0 + 1e-3}, Cut{0.0, -0.9}, Cut{0.0, -0.5}, Cut{0.0, 1e-3}, Cut{0.0, 0.25},
+          Cut{0.0, 0.5}, Cut{0.0, 0.9}, Cut{0.0, 0.99}, Cut{1.0, 0.2}}) {
+        INFO("tilt " << cut.Tilt << ", offset " << cut.Offset);
+        const Surface flat{Square(cut, atOrigin)};
+        const auto result =
+            Intersect(sphere, Box2::Everything(), flat, Box2::Everything(), tolerance, ctx);
+        INFO(IntersectTest::ErrorText(result));
+        REQUIRE(result.has_value());
+        CheckSection(*result, cut, atOrigin, tolerance, 2.0 * std::numbers::pi);
+    }
+}
+
+// Sections the search does not resolve yet, each a transverse circle: three
+// nearer the pole than the fixture (radii 0.0141, 0.0045 and 0.00045, where
+// the sphere's partial along u is as short), the equator, along a knot line,
+// a circle through the corner of four patches at (1, 0, 0), one through the
+// pole, where the chart is singular, and the fixture's circle tipped 0.05
+// radians, which passes 0.0053 from the pole.
+// Whatever is answered is the circle, whole; anything else is refused.
+TEST_CASE("a sphere's section that is not resolved is refused, never answered in part",
+          "[intersect][generic][nurbs][safety]")
+{
+    constexpr double tolerance = 1e-5;
+    const double third = std::numbers::pi / 6.0;
+    const Surface sphere{UnitSphere(atOrigin)};
+    for (const Cut& cut :
+         {Cut{0.0, 1.0 - 1e-4}, Cut{0.0, 1.0 - 1e-5}, Cut{0.0, 1.0 - 1e-7}, Cut{0.0, 0.0},
+          Cut{third, 0.5}, Cut{third, std::cos(third)}, Cut{0.05, 0.999}}) {
+        INFO("tilt " << cut.Tilt << ", offset " << cut.Offset);
+        const Surface flat{Square(cut, atOrigin)};
+        const auto result =
+            Intersect(sphere, Box2::Everything(), flat, Box2::Everything(), tolerance, ctx);
+        if (result) {
+            CheckSection(*result, cut, atOrigin, tolerance, 2.0 * std::numbers::pi);
+        } else {
+            REQUIRE(result.error().GetCode() == ErrorCode::IntersectionFailed);
+        }
+    }
+}
+
+// The requested domain decides how much of the small circle there is: half
+// the sphere's turn, u from 0.1 to 0.6, holds half of it, between two
+// antipodal points on the domain's edges (each quarter turn of u is
+// parameterized alike), and the sphere below the latitude v = 0.9
+// (z = 0.956) none. The bounds are off the sphere's knots: a domain that
+// ends on a knot is searched with the whole Bezier patch beyond it
+// (Clipped in BezierPatch.hpp keeps a patch that meets the domain in an
+// edge), which is not this test's subject.
+TEST_CASE("the small circle near the pole follows the sphere's requested domain",
+          "[intersect][generic][nurbs]")
+{
+    constexpr Cut cut{0.0, 1.0 - 1e-3};
+    constexpr double tolerance = 1e-5;
+    const Surface sphere{UnitSphere(atOrigin)};
+    const Surface flat{Square(cut, atOrigin)};
+    const Box2 half{Interval{0.1, 0.6}, Interval{0.0, 1.0}};
+    const auto arc = Intersect(sphere, half, flat, Box2::Everything(), tolerance, ctx);
+    INFO(IntersectTest::ErrorText(arc));
+    REQUIRE(arc.has_value());
+    CheckSection(*arc, cut, atOrigin, tolerance, std::numbers::pi);
+    const Box2 below{Interval{0.0, 1.0}, Interval{0.0, 0.9}};
+    const auto none = Intersect(sphere, below, flat, Box2::Everything(), tolerance, ctx);
+    INFO(IntersectTest::ErrorText(none));
+    REQUIRE(none.has_value());
+    REQUIRE(none->Branches.empty());
+    REQUIRE(none->Points.empty());
 }

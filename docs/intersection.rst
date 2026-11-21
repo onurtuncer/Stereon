@@ -1650,6 +1650,29 @@ curves against the other patch, isolated by Krawczyk's operator, are then all
 the branch ends: none proves that the pair holds no branch, two are one arc,
 and more need a smaller pair.
 
+The partials of a rational patch come from the quotient rule,
+:math:`\partial S = (D - P\,\partial w) / w`, on hulls of the homogeneous
+derivative :math:`D`, the weight's derivative :math:`\partial w` and the box
+:math:`P` of the patch's points. Those hulls are enclosed independently, so
+the product widens the partial by :math:`\lvert P \rvert` times the width of
+:math:`\partial w`. The poles are therefore first moved to the middle of
+:math:`P`, in interval arithmetic, which changes no partial and leaves
+:math:`\lvert P \rvert` the patch's own size. Where no direction is proved in
+world axes, the pair is also tried in a frame :math:`M = (e_1, e_2, n)` about
+either patch's middle normal, its poles mapped in interval arithmetic and
+:math:`\det M > 0` proved: boxes of the partials wrap two nearly parallel
+patches less in axes that follow them. There
+:math:`\mathbf{n}'_A \times \mathbf{n}'_B = \det(M)\, M\, (\mathbf{n}_A \times
+\mathbf{n}_B)`, so a direction :math:`L'` proved in the frame is
+:math:`M^{\mathsf T} L'` in world axes; the rounded direction returned is
+proved positive against both cones. Boundary roots not settled in world axes
+are isolated in the same frames; a root is a set of parameters, the same in
+any frame. A pair is still settled only by one of these proofs and is cut or
+fails closed otherwise. A plane a thousandth of the radius below the pole of
+a rational sphere, which meets it at 2.56 degrees in a circle of radius
+0.0447, is resolved this way; at a ten-thousandth (0.81 degrees, radius
+0.0141) the search still fails closed.
+
 *An isolated touch*, for polynomial surfaces. Every tangential contact solves
 
 .. math::

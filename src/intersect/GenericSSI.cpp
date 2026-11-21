@@ -195,6 +195,13 @@ struct PatchPair {
 
 // --- Normal cones ----------------------------------------------------------
 
+/// The cone of the pair's intersection tangents, n_A x n_B enclosed, n the
+/// cross of each patch's partials.
+[[nodiscard]] Bounds TangentCone(const Hulls& a, const Hulls& b)
+{
+    return CrossOf(CrossOf(a.Du, a.Dv), CrossOf(b.Du, b.Dv));
+}
+
 /// A direction along which every intersection curve of the pair advances:
 /// L . (n_A x n_B) > 0 over the whole pair, n the cross of each patch's
 /// partials. The curves are then transverse, and each is monotone along L,
@@ -202,7 +209,7 @@ struct PatchPair {
 /// the cones of normals). Nothing when no such direction is proved.
 [[nodiscard]] std::optional<Vec3> AdvanceDirection(const Hulls& a, const Hulls& b)
 {
-    const Bounds tangent = CrossOf(CrossOf(a.Du, a.Dv), CrossOf(b.Du, b.Dv));
+    const Bounds tangent = TangentCone(a, b);
     if (!AllBounded(tangent)) {
         return std::nullopt;
     }
@@ -302,6 +309,56 @@ void AddSeed(std::vector<Seed>& seeds, const Seed& seed, const double join)
             carrierIsA ? onOther : onCarrier};
 }
 
+// --- Partials enclosed about the patch -------------------------------------
+
+/// The net with every homogeneous pole moved by -c, x - c w in each
+/// coordinate: the same patch in coordinates about c, enclosed.
+[[nodiscard]] Net MovedNet(const Net& net, const Point3& c)
+{
+    Net moved = net;
+    for (HPoint& h : moved.Poles) {
+        h = {h.X - Interval{c.X} * h.W, h.Y - Interval{c.Y} * h.W, h.Z - Interval{c.Z} * h.W, h.W};
+    }
+    return moved;
+}
+
+[[nodiscard]] Bounds MovedBounds(const Bounds& b, const Point3& c)
+{
+    return {b[0] - Interval{c.X}, b[1] - Interval{c.Y}, b[2] - Interval{c.Z}};
+}
+
+/// A partial's enclosure by the quotient rule, (D - P dW) / W from hulls of
+/// a net's derivative D and weight W and the box P of its points, taken
+/// about the middle of P. The hulls of D and dW are enclosed independently,
+/// so P dW widens the result by |P| times dW's width: about the origin a
+/// patch a thousandth below a unit sphere's pole would have its z partial
+/// widened by the whole of that width (S_u . z = 0 enclosed as +-0.04 on a
+/// cell 0.002 wide), about its own middle only by the patch's size times it.
+/// Moving the poles changes no partial.
+[[nodiscard]] Bounds PartialAbout(const Net& net, const bool alongU, const Interval& width,
+                                  const Bounds& extent, const Interval& weight)
+{
+    if (!AllBounded(extent)) {
+        return QuotientOf(HullOf(DerivativeNet(net, alongU, width)), extent, weight);
+    }
+    const Point3 c = Middle(extent);
+    return QuotientOf(HullOf(DerivativeNet(MovedNet(net, c), alongU, width)),
+                      MovedBounds(extent, c), weight);
+}
+
+/// HullsOf, its partials enclosed about the patch's middle (PartialAbout).
+[[nodiscard]] Hulls LocalHullsOf(const Patch& patch)
+{
+    const HPoint h = HullOf(patch.Poles);
+    const Interval widthU = WidthOf(patch.Parameters.X);
+    const Interval widthV = WidthOf(patch.Parameters.Y);
+    if (!(h.W.GetLower() > 0.0 && widthU.GetLower() > 0.0 && widthV.GetLower() > 0.0)) {
+        return {Unbounded(), Unbounded(), Unbounded()};
+    }
+    return {patch.Extent, PartialAbout(patch.Poles, true, widthU, patch.Extent, h.W),
+            PartialAbout(patch.Poles, false, widthV, patch.Extent, h.W)};
+}
+
 /// The box of a line of poles, as ExtentOf boxes a net: the convex hull of
 /// the edge it controls.
 [[nodiscard]] Bounds ExtentOfLine(const std::vector<HPoint>& line)
@@ -310,7 +367,7 @@ void AddSeed(std::vector<Seed>& seeds, const Seed& seed, const double join)
 }
 
 /// An edge's derivative along itself, enclosed from its own pole line as
-/// HullsOf encloses a patch's, met with the patch's: the patch's alone can
+/// LocalHullsOf encloses a patch's, met with the patch's: the patch's alone can
 /// hold zero, across a tangency inside it, where the edge's does not.
 [[nodiscard]] Bounds EdgeDerivative(const std::vector<HPoint>& line, const Interval& width,
                                     const Bounds& patchWide)
@@ -320,7 +377,7 @@ void AddSeed(std::vector<Seed>& seeds, const Seed& seed, const double join)
     if (!(h.W.GetLower() > 0.0 && width.GetLower() > 0.0)) {
         return patchWide;
     }
-    const Bounds own = QuotientOf(HullOf(DerivativeNet(net, true, width)), ExtentOf(net), h.W);
+    const Bounds own = PartialAbout(net, true, width, ExtentOf(net), h.W);
     Bounds met;
     for (std::size_t i = 0; i < met.size(); ++i) {
         met[i] = Intersection(own[i], patchWide[i]);
@@ -380,8 +437,8 @@ struct EdgePiece {
     const Patch& other = carrierIsA ? v.Pair.B : v.Pair.A;
     const Hulls& theirs = carrierIsA ? v.OnB : v.OnA;
     const Edge edge{e.Carrier, e.AlongU, e.Fixed};
-    const Isolated<3> root =
-        RootOnEdge(edge, EdgeLine(e.Carrier, e.AlongU, e.Upper), HullsOf(e.Carrier), other, theirs);
+    const Isolated<3> root = RootOnEdge(edge, EdgeLine(e.Carrier, e.AlongU, e.Upper),
+                                        LocalHullsOf(e.Carrier), other, theirs);
     if (root.Outcome == Isolation::Unique) {
         AddSeed(seeds, SeedOfRoot(edge, root, other, carrierIsA), v.Join);
     }
@@ -689,11 +746,10 @@ enum class Settled : std::uint8_t { Done, Cut };
 /// through the boundary, so no seed means none, and one, a pair whose cells
 /// meet only in that point, holds no arc longer than the join; two are one
 /// arc; more need a smaller pair.
-[[nodiscard]] Settled SettleTransverse(const PatchPair& pair, const Hulls& a, const Hulls& b,
-                                       const Vec3& direction, const SearchSettings& s,
-                                       Findings& found)
+[[nodiscard]] Settled SettleTransverse(const PatchPair& pair,
+                                       const std::optional<std::vector<Seed>>& seeds,
+                                       const Vec3& direction, Findings& found)
 {
-    const std::optional<std::vector<Seed>> seeds = SeedsOf({pair, a, b, s.Join});
     if (!seeds || seeds->size() > 2) {
         return Settled::Cut;
     }
@@ -1197,7 +1253,8 @@ struct NodeEdge {
         return Isolation::None;
     }
     const Edge edge{*carrier, e.AlongU, e.Fixed};
-    const Isolated<3> root = RootOnEdge(edge, line, HullsOf(*carrier), *part, HullsOf(*part));
+    const Isolated<3> root =
+        RootOnEdge(edge, line, LocalHullsOf(*carrier), *part, LocalHullsOf(*part));
     if (root.Outcome == Isolation::Unique) {
         AddSeed(seeds, SeedOfRoot(edge, root, *part, true), join);
     }
@@ -1571,13 +1628,131 @@ struct Placed {
     return (a - b).GetLower() > threshold.GetUpper() || (b - a).GetLower() > threshold.GetUpper();
 }
 
+/// The patch in the frame's coordinates: each homogeneous pole's (X, Y, Z)
+/// taken to (e1 . X, e2 . X, n . X), enclosed.
+[[nodiscard]] Patch InFrame(const Patch& p, const NodeFrame& f)
+{
+    Net net = p.Poles;
+    for (HPoint& h : net.Poles) {
+        const Bounds xyz{h.X, h.Y, h.Z};
+        h = {DotOf(f.E1, xyz), DotOf(f.E2, xyz), DotOf(f.N, xyz), h.W};
+    }
+    return MakePatch(p.Parameters, std::move(net));
+}
+
+/// A frame about a patch's middle normal, its matrix (rows e1, e2, n) proved
+/// of positive determinant, so invertible and orientation-preserving.
+[[nodiscard]] std::optional<NodeFrame> FrameOfPatch(const Hulls& h)
+{
+    const Bounds n = CrossOf(h.Du, h.Dv);
+    const std::optional<NodeFrame> f = AllBounded(n) ? FrameAbout(MiddleVec(n)) : std::nullopt;
+    if (!f || !(DotOf(f->N, CrossOf(f->E1, f->E2)).GetLower() > 0.0)) {
+        return std::nullopt;
+    }
+    return f;
+}
+
+/// A direction L' proved in the frame (AdvanceDirection on the pair in its
+/// coordinates), taken back to world axes. For the frame's matrix M, rows
+/// e1, e2 and n, the partials become M S_u and M S_v, their normals cof(M) n,
+/// and the cross of those t' = det(M) M t for t = n_A x n_B, so
+/// (M^T L') . t = (L' . t') / det(M). The double d returned is M^T L' scaled
+/// by s and rounded, d = s M^T L' + r, so d . t = s (L' . t') / det(M) + r . t:
+/// both terms enclosed, the frame's cone t' and the world's t, and the sum
+/// proved positive, or nothing.
+[[nodiscard]] std::optional<Vec3> WorldDirection(const NodeFrame& f, const Vec3& l,
+                                                 const Bounds& inFrame, const Bounds& world)
+{
+    const Vec3 back = l.X * MiddleVec(f.E1) + l.Y * MiddleVec(f.E2) + l.Z * MiddleVec(f.N);
+    const double length = Length(back);
+    if (!(length > 0.0) || !std::isfinite(length) || !AllBounded(world)) {
+        return std::nullopt;
+    }
+    const Vec3 d = back / length;
+    const Interval s{1.0 / length};
+    const Bounds exact = Exactly(d);
+    const Interval lx{l.X};
+    const Interval ly{l.Y};
+    const Interval lz{l.Z};
+    Bounds rounding;
+    for (std::size_t i = 0; i < rounding.size(); ++i) {
+        rounding[i] = exact[i] - s * (lx * f.E1[i] + ly * f.E2[i] + lz * f.N[i]);
+    }
+    const Interval det = DotOf(f.N, CrossOf(f.E1, f.E2));
+    const Interval along = s * DotOf(Exactly(l), inFrame) / det + DotOf(rounding, world);
+    if (!(det.GetLower() > 0.0 && along.GetLower() > 0.0)) {
+        return std::nullopt;
+    }
+    return d;
+}
+
+/// An advance direction (AdvanceDirection) in world axes, else in a frame
+/// about either patch's middle normal (WorldDirection). Boxes of the
+/// partials wrap their vectors less when the axes follow the surfaces: two
+/// patches nearly parallel, a plane a few degrees off a sphere's tangent
+/// plane near its pole, are told transverse on cells several times larger
+/// once tilted off the world axes.
+[[nodiscard]] std::optional<Vec3> Advance(const PatchPair& pair, const Hulls& a, const Hulls& b)
+{
+    if (const std::optional<Vec3> l = AdvanceDirection(a, b)) {
+        return l;
+    }
+    for (const Hulls* h : {&b, &a}) {
+        const std::optional<NodeFrame> f = FrameOfPatch(*h);
+        if (!f) {
+            continue;
+        }
+        const Hulls fa = LocalHullsOf(InFrame(pair.A, *f));
+        const Hulls fb = LocalHullsOf(InFrame(pair.B, *f));
+        if (const std::optional<Vec3> l = AdvanceDirection(fa, fb)) {
+            if (const std::optional<Vec3> d =
+                    WorldDirection(*f, *l, TangentCone(fa, fb), TangentCone(a, b))) {
+                return d;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+/// The pair's seeds (SeedsOf) found on the pair in a frame about either
+/// patch's middle normal, when they are not settled in world axes: a
+/// boundary root at a grazing angle needs a tight Jacobian, and boxes of the
+/// partials in world axes wrap a tilted patch's. Roots are parameters, the
+/// same in any frame; positions are evaluated back on A in world axes.
+[[nodiscard]] std::optional<std::vector<Seed>> SeedsInFrame(const PatchPair& pair, const Hulls& a,
+                                                            const Hulls& b, const double join)
+{
+    for (const Hulls* h : {&b, &a}) {
+        const std::optional<NodeFrame> f = FrameOfPatch(*h);
+        if (!f) {
+            continue;
+        }
+        const PatchPair turned{InFrame(pair.A, *f), InFrame(pair.B, *f)};
+        std::optional<std::vector<Seed>> seeds =
+            SeedsOf({turned, LocalHullsOf(turned.A), LocalHullsOf(turned.B), join});
+        if (!seeds) {
+            continue;
+        }
+        for (Seed& seed : *seeds) {
+            seed.Position = Middle(CartesianOf(ValueOf(
+                pair.A.Poles, pair.A.Parameters, Interval{seed.OnA.X}, Interval{seed.OnA.Y})));
+        }
+        return seeds;
+    }
+    return std::nullopt;
+}
+
 [[nodiscard]] Settled Settle(const PatchPair& pair, const SearchSettings& s, Findings& found,
                              std::vector<PatchPair>& stack)
 {
-    const Hulls a = HullsOf(pair.A);
-    const Hulls b = HullsOf(pair.B);
-    if (const std::optional<Vec3> direction = AdvanceDirection(a, b)) {
-        return SettleTransverse(pair, a, b, *direction, s, found);
+    const Hulls a = LocalHullsOf(pair.A);
+    const Hulls b = LocalHullsOf(pair.B);
+    if (const std::optional<Vec3> direction = Advance(pair, a, b)) {
+        std::optional<std::vector<Seed>> seeds = SeedsOf({pair, a, b, s.Join});
+        if (!seeds) {
+            seeds = SeedsInFrame(pair, a, b, s.Join);
+        }
+        return SettleTransverse(pair, seeds, *direction, found);
     }
     if (ApartAlongNormal(pair, a, s.Tolerance) || ApartAlongNormal(pair, b, s.Tolerance)) {
         return Settled::Done;

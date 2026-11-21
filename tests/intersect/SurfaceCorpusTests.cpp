@@ -310,16 +310,12 @@ TEST_CASE("far-placed rational SSI branches certify against the input surfaces",
     }
 }
 
-// [!mayfail] until the generic SSI answers what the corpus asks (2026-11-10):
-// six tilted cases are refused, never answered wrongly. The small loop
-// (bump-plane/loop-1e-3) as a possible tangency; simple circles on the
-// rational cylinder and sphere (cylinder-plane/circle,
-// cylinder-cylinder/two-loops, sphere-plane/circle, sphere-plane/near-pole)
-// by CertifyDeviation, a deviation of at least 1, likely at the seam; and
-// planes ten tolerances apart (plane-plane/apart-10tol) by the search
-// budget. Remove the tag once they pass.
+// Every tilted configuration is answered, or refused as its fixture
+// documents (may_fail_closed). The tag [!mayfail] stood here while tilted
+// cases were refused without one; the last, sphere-plane/near-pole, is
+// answered since the search encloses a patch's partials about the patch.
 TEST_CASE("only documented nurbs-ssi configurations are refused",
-          "[intersect][surface-surface][corpus][nurbs][!mayfail]")
+          "[intersect][surface-surface][corpus][nurbs]")
 {
     std::size_t count = 0;
     for (const std::filesystem::path& file : CaseFiles("nurbs-ssi")) {
@@ -343,15 +339,10 @@ TEST_CASE("every curved-ssi corpus case is answered as its closed form says",
     }
 }
 
-// [!mayfail] for the reason the tilted completeness gate above is: the
-// same configurations are refused at every placement and scale (the weekly
-// Robustness run of 2026-11-16: cylinder-plane/circle and two-lines,
-// cylinder-cylinder/two-loops, sphere-plane/circle and near-pole,
-// plane-plane/apart-10tol, both ways). A wrong answer is caught by
-// "no nurbs-ssi corpus case is answered wrongly, both ways", which is
-// never tagged. Remove the tag once they pass.
+// Every placement and scale, both ways: a refusal only where the fixture
+// documents one (may_fail_closed), and no wrong answer.
 TEST_CASE("every nurbs-ssi corpus case is answered as its closed form says",
-          "[.][exhaustive][surface-surface][corpus][nurbs][!mayfail]")
+          "[.][exhaustive][surface-surface][corpus][nurbs]")
 {
     const std::vector<std::filesystem::path> files = CaseFiles("nurbs-ssi");
     REQUIRE(files.size() >= 90);
