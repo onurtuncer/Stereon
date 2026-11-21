@@ -288,6 +288,17 @@ Clipped(Patch patch, const bool alongU, const Interval& wanted)
     return std::optional<Patch>{std::move(patch)};
 }
 
+/// A positive-area overlap, not merely a shared knot edge. An adjacent
+/// patch with only a boundary in the request must not enlarge its search.
+[[maybe_unused]] [[nodiscard]] inline bool HasInteriorOverlap(const Box2& patch,
+                                                               const Box2& requested)
+{
+    const Interval u = Intersection(patch.X, requested.X);
+    const Interval v = Intersection(patch.Y, requested.Y);
+    return !u.IsEmpty() && !v.IsEmpty() && u.GetLower() < u.GetUpper() &&
+           v.GetLower() < v.GetUpper();
+}
+
 /// The surface's patches over a requested domain.
 [[maybe_unused]] [[nodiscard]] inline Result<std::vector<Patch>>
 PatchesOver(const BSplineSurface& s, const Box2& domain)
@@ -305,13 +316,7 @@ PatchesOver(const BSplineSurface& s, const Box2& domain)
     STEREON_TRY(const std::vector<Patch> patches, PatchesOf(s));
     std::vector<Patch> kept;
     for (const Patch& patch : patches) {
-        const Interval uOver = Intersection(patch.Parameters.X, requested.X);
-        const Interval vOver = Intersection(patch.Parameters.Y, requested.Y);
-        // A patch meeting a positive-width request only along a knot edge
-        // contributes no interior: the adjacent, continuous patch on the
-        // requested side covers that edge. Never search the entire outside patch.
-        if (uOver.IsEmpty() || vOver.IsEmpty() || uOver.GetLower() == uOver.GetUpper() ||
-            vOver.GetLower() == vOver.GetUpper()) {
+        if (!HasInteriorOverlap(patch.Parameters, requested)) {
             continue;
         }
         STEREON_TRY(std::optional<Patch> u, Clipped(patch, true, requested.X));
