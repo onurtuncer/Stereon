@@ -714,3 +714,32 @@ TEST_CASE("a face contains no parameters beyond its surface's domain", "[boolean
     REQUIRE(middle.has_value());
     REQUIRE(*middle == std::optional<bool>{true});
 }
+
+
+// Issue #160: a shell's orientation probe was based on the entire operands'
+// extent. For cylinders separated by a large distance the tilted rays from
+// the end-cap probe missed the small cap, leaving its three-face shell
+// unclassified although the cylinders do not touch at all.
+TEST_CASE("widely separated cylinders union as independent closed solids",
+          "[boolean][assemble][regression][issue160]")
+{
+    const Vec3 ex{1.0, 0.0, 0.0};
+    const Vec3 ey{0.0, 1.0, 0.0};
+    const auto left = Stereon::MakeCylinderSolid(Point3{5.0, 5.0, -5.0}, ex, ey, 2.0, 20.0, ctx);
+    const auto right =
+        Stereon::MakeCylinderSolid(Point3{1005.0, 5.0, -5.0}, ex, ey, 2.0, 20.0, ctx);
+    REQUIRE(left.has_value());
+    REQUIRE(right.has_value());
+    for (const bool swapped : {false, true}) {
+        INFO(swapped ? "right first" : "left first");
+        const OperationResult united = Run(swapped ? right->Shape : left->Shape,
+                                           swapped ? left->Shape : right->Shape,
+                                           BooleanOperation::Union);
+        REQUIRE(CountOf<EntityKind::Solid>(united.Shape) == 2);
+        REQUIRE(CountOf<EntityKind::Face>(united.Shape) == 6);
+        RequireClosed(united.Shape);
+        REQUIRE(Inside(united.Shape, Point3{5.0, 5.0, 5.0}));
+        REQUIRE(Inside(united.Shape, Point3{1005.0, 5.0, 5.0}));
+        REQUIRE_FALSE(Inside(united.Shape, Point3{500.0, 5.0, 5.0}));
+    }
+}
