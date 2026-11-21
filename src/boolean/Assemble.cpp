@@ -383,22 +383,31 @@ struct Carried {
     bool Flip = false;
 };
 
-/// Map a paired pcurve onto its representative's parameter after the
-/// affine map has been calculated. Unsupported geometries remain fail-closed.
-[[nodiscard]] Result<Carried> CarryMapped(const Work& w, const std::uint8_t body,
-                                          const EdgeId edge, const Curve2d& pcurve,
-                                          const Interval rep, const double bias, const double k,
-                                          const bool along)
+/// Parameters of a paired pcurve written on the representative edge.
+struct CarryMapping {
+    const Work& WorkRef;
+    std::uint8_t Body;
+    EdgeId Edge;
+    const Curve2d& PCurve;
+    Interval Rep;
+    double Bias;
+    double Scale;
+    bool Along;
+};
+
+/// The affine map is already settled; unsupported curves remain fail-closed.
+[[nodiscard]] Result<Carried> CarryMapped(const CarryMapping& m)
 {
-    if (const Line2d* line = pcurve.Target<Line2d>()) {
-        const Point2 origin = line->Origin + bias * line->Direction;
-        return Carried{Curve2d(Line2d{origin, k * line->Direction}), !along};
+    if (const Line2d* line = m.PCurve.Target<Line2d>()) {
+        const Point2 origin = line->Origin + m.Bias * line->Direction;
+        return Carried{Curve2d(Line2d{origin, m.Scale * line->Direction}), !m.Along};
     }
-    if (const Circle2d* circle = pcurve.Target<Circle2d>()) {
-        return Carried{Curve2d(AffineOf(*circle, rep, bias, k)), !along};
+    if (const Circle2d* circle = m.PCurve.Target<Circle2d>()) {
+        return Carried{Curve2d(AffineOf(*circle, m.Rep, m.Bias, m.Scale)), !m.Along};
     }
     return Fail(ErrorCode::NotSupported,
-                "Boolean: a curved use of " + std::string(Describe(w.ShapeOf(body), edge)) +
+                "Boolean: a curved use of " +
+                    std::string(Describe(m.WorkRef.ShapeOf(m.Body), m.Edge)) +
                     " on another parameter than the edge it is identified with");
 }
 
@@ -422,7 +431,7 @@ struct Carried {
     const double k = (pair.Along ? 1.0 : -1.0) * Width(own) / Width(rep);
     const double s0 = pair.Along ? own.GetLower() : own.GetUpper();
     const double bias = s0 - rep.GetLower() * k;
-    return CarryMapped(w, body, edge, pcurve, rep, bias, k, pair.Along);
+    return CarryMapped({w, body, edge, pcurve, rep, bias, k, pair.Along});
 }
 
 // --- Vertices and edges ------------------------------------------------------------
