@@ -595,3 +595,127 @@ TEST_CASE("skew cylinders clip wide sectors at either angular boundary",
         }
     }
 }
+
+TEST_CASE("skew B seam isolates both generator crossings near a fold",
+          "[intersect][cylinder][skew][regression][issue195]")
+{
+    // B's positive chart seam is its generator through
+    // (x, 4 - 2 cos(e), 2 sin(e)). Its two intersections with A are
+    // (±sqrt(9 - y²), y, z); this is an independent quadratic oracle,
+    // not a reference to the implementation's track/seam samples.
+    // e=0 touches a fold; e=1e-10 and e=1e-7 approach it; e=0.02
+    // places crossings between nodes of the historical 256-step scan.
+    for (const double e : {0.0, 1e-10, 1e-7, 0.02}) {
+        const double co = std::cos(e);
+        const double si = std::sin(e);
+        const double y = 4.0 - 2.0 * co;
+        const double z = 2.0 * si;
+        const double x = std::sqrt(9.0 - y * y);
+        const Point3 forward{x, y, z};
+        const Point3 backward{-x, y, z};
+        const double bound = 2.0 * ctx.GetResolution();
+        for (const bool rightHanded : {false, true}) {
+            const Point3 origin{0.0, 4.0, 0.0};
+            const Vec3 bx{0.0, -co, si};
+            const Vec3 by{0.0, -si, -co};
+            const Surface b{Cylinder{origin, 2.0, bx, by, rightHanded}};
+            for (const bool swapped : {false, true}) {
+                INFO("offset " << e << ", handedness " << rightHanded << ", swap " << swapped);
+                const Surface& first = swapped ? b : a;
+                const Surface& second = swapped ? a : b;
+                const auto result = Intersect(first, second, ctx);
+                INFO(IntersectTest::ErrorText(result));
+                if (!result) {
+                    // An unresolvable grazing root must fail, never silently
+                    // return a plausible but incomplete set of branches.
+                    REQUIRE(e <= 1e-7);
+                    REQUIRE((result.error().GetCode() == ErrorCode::IntersectionFailed ||
+                             result.error().GetCode() == ErrorCode::CertificationFailed));
+                    continue;
+                }
+                RequireBranchesOn(*result, first, second);
+                bool positive = false;
+                bool negative = false;
+                for (const auto& branch : result->Branches) {
+                    for (const double t : {branch.Range.GetLower(), branch.Range.GetUpper()}) {
+                        const Point3 p = Eval(branch.Curve3d, t);
+                        positive = positive || Distance(p, forward) <= bound;
+                        negative = negative || Distance(p, backward) <= bound;
+                    }
+                    // A branch must stay within one B chart except at its
+                    // endpoints. A discontinuous pcurve would not be a valid
+                    // description of a single certified intersection arc.
+                    const auto& onB = swapped ? branch.OnA : branch.OnB;
+                    double previous = Eval(onB, branch.Range.GetLower()).X;
+                    for (const double t : IntersectTest::SamplesOf(branch.Range, 128)) {
+                        const double angle = Eval(onB, t).X;
+                        REQUIRE(std::abs(angle - previous) < pi);
+                        previous = angle;
+                    }
+                }
+                REQUIRE(positive);
+                REQUIRE(negative);
+            }
+        }
+    }
+}
+
+TEST_CASE("two B seam crossings inside a former scan cell are both isolated",
+          "[intersect][cylinder][skew][regression][issue195]")
+{
+    // The seam ruling of B runs in x through y=3-delta. Its two
+    // intersections with A are x=±sqrt(9-(3-delta)^2), at fixed y,z.
+    // Restrict A to a deliberately asymmetric angular window: its
+    // fold-loop track is clipped around t=[0.2,2.3]. At delta=1e-7
+    // the two roots are separated by ~0.000614 in t and both lie in
+    // one historical scan cell (~0.0082 wide); a fixed sign-change scan
+    // misses both. The two spatial solutions are the independent oracle.
+    for (const double delta : {1e-4, 1e-7}) {
+        const double q = (1.0 + delta) / 2.0;
+        const double s = std::sqrt(1.0 - q * q);
+        const double y = 4.0 - 2.0 * q;
+        const double z = 2.0 * s;
+        const double x = std::sqrt(9.0 - y * y);
+        const Point3 positive{x, y, z};
+        const Point3 negative{-x, y, z};
+        const Point3 origin{0.0, 4.0, 0.0};
+        const Vec3 bx{0.0, -q, s};
+        const Vec3 by{0.0, -s, -q};
+        const double half = std::acos(2.0 / 3.0);
+        const double phi = pi / 2.0;
+        const Interval cut{phi - half * std::cos(0.2), phi - half * std::cos(2.3)};
+        const Box2 window{cut, Interval::Everything()};
+        for (const bool rightHanded : {false, true}) {
+            const Surface b{Cylinder{origin, 2.0, bx, by, rightHanded}};
+            for (const bool swap : {false, true}) {
+                INFO("delta " << delta << ", handedness " << rightHanded << ", swap " << swap);
+                const Surface& first = swap ? b : a;
+                const Surface& second = swap ? a : b;
+                const Box2 firstBox = swap ? Domain(b) : window;
+                const Box2 secondBox = swap ? window : Domain(b);
+                const auto result = Intersect(first, firstBox, second, secondBox, ctx);
+                INFO(IntersectTest::ErrorText(result));
+                if (!result) {
+                    // The smaller separation may exhaust certification;
+                    // a refusal is permitted, a missing branch is not.
+                    REQUIRE(delta < 1e-6);
+                    REQUIRE((result.error().GetCode() == ErrorCode::IntersectionFailed ||
+                             result.error().GetCode() == ErrorCode::CertificationFailed));
+                    continue;
+                }
+                RequireBranchesOn(*result, first, second);
+                bool plus = false;
+                bool minus = false;
+                for (const auto& branch : result->Branches) {
+                    for (const double t : {branch.Range.GetLower(), branch.Range.GetUpper()}) {
+                        const Point3 point = Eval(branch.Curve3d, t);
+                        plus = plus || Distance(point, positive) <= 2.0 * ctx.GetResolution();
+                        minus = minus || Distance(point, negative) <= 2.0 * ctx.GetResolution();
+                    }
+                }
+                REQUIRE(plus);
+                REQUIRE(minus);
+            }
+        }
+    }
+}
