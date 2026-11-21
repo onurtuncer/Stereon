@@ -135,6 +135,28 @@ TEST_CASE("issue 160: staggered cylinder caps have a closed imprint network",
     }
 }
 
+// The first and last columns of the original n=20 grid sit around
+// x=195 and x=196. Reconstruct just that pair, including the far corner,
+// to distinguish world-coordinate loss from many-body topology behavior.
+TEST_CASE("issue 160: offset-cap overlap at the last grid column",
+          "[boolean][regression][issue160][offset-caps][translated]")
+{
+    for (const Stereon::Vec3& offset :
+         {Stereon::Vec3{190.0, 0.0, 0.0}, Stereon::Vec3{190.0, 190.0, 0.0}}) {
+        INFO("x 195, y " << offset.Y + 5.0);
+        const Shape a = Drills(1, offset);
+        const Shape b = Drills(1, offset + Stereon::Vec3{1.0, 0.0, 1.0});
+        const auto imprinted = ImprintBodies(a, b, serial);
+        INFO((imprinted ? "" : std::string(imprinted.error().GetMessage())));
+        REQUIRE(imprinted.has_value());
+        const auto result = Boolean(a, b, BooleanOperation::Union, serial);
+        INFO((result ? "" : std::string(result.error().GetMessage())));
+        REQUIRE(result.has_value());
+        CHECK(CountOf<EntityKind::Solid>(result->Shape) == 1);
+        CHECK(ValidateTopology(result->Shape).IsValid());
+    }
+}
+
 // Full original grid in #160 (2), excluded from ordinary CI due to its
 // 800-cylinder setup. Invoke by name in a dedicated large-fixture run.
 TEST_CASE("issue 160: staggered 20 by 20 drill grids unite",
