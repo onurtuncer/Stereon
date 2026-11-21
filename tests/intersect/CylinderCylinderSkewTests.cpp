@@ -595,3 +595,65 @@ TEST_CASE("skew cylinders clip wide sectors at either angular boundary",
         }
     }
 }
+
+
+TEST_CASE("skew B seam isolates both generator crossings near a fold",
+          "[intersect][cylinder][skew][regression][issue195]")
+{
+    // B's positive chart seam is its generator through
+    // (x, 4 - 2 cos(e), 2 sin(e)). Its two intersections with A are
+    // (±sqrt(9 - y²), y, z); this is an independent quadratic oracle,
+    // not a reference to the implementation's track/seam samples.
+    // e=0 touches a fold; e=1e-10 and e=1e-7 approach it; e=0.02
+    // places crossings between nodes of the historical 256-step scan.
+    for (const double e : {0.0, 1e-10, 1e-7, 0.02}) {
+        const double co = std::cos(e);
+        const double si = std::sin(e);
+        const double y = 4.0 - 2.0 * co;
+        const double z = 2.0 * si;
+        const double x = std::sqrt(9.0 - y * y);
+        for (const bool rightHanded : {false, true}) {
+            const Surface b{Cylinder{Point3{0.0, 4.0, 0.0}, 2.0,
+                                     Vec3{0.0, -co, si}, Vec3{0.0, -si, -co}, rightHanded}};
+            for (const bool swapped : {false, true}) {
+                INFO("offset " << e << ", handedness " << rightHanded << ", swap " << swapped);
+                const Surface& first = swapped ? b : a;
+                const Surface& second = swapped ? a : b;
+                const auto result = Intersect(first, second, ctx);
+                INFO(IntersectTest::ErrorText(result));
+                if (!result) {
+                    // An unresolvable grazing root must fail, never silently
+                    // return a plausible but incomplete set of branches.
+                    REQUIRE(e <= 1e-7);
+                    REQUIRE((result.error().GetCode() == ErrorCode::IntersectionFailed ||
+                             result.error().GetCode() == ErrorCode::CertificationFailed));
+                    continue;
+                }
+                RequireBranchesOn(*result, first, second);
+                bool positive = false;
+                bool negative = false;
+                for (const auto& branch : result->Branches) {
+                    for (const double t : {branch.Range.GetLower(), branch.Range.GetUpper()}) {
+                        const Point3 p = Eval(branch.Curve3d, t);
+                        positive = positive ||
+                                   Distance(p, Point3{x, y, z}) <= 2.0 * ctx.GetResolution();
+                        negative = negative ||
+                                   Distance(p, Point3{-x, y, z}) <= 2.0 * ctx.GetResolution();
+                    }
+                    // A branch must stay within one B chart except at its
+                    // endpoints. A discontinuous pcurve would not be a valid
+                    // description of a single certified intersection arc.
+                    const auto& onB = swapped ? branch.OnA : branch.OnB;
+                    double previous = Eval(onB, branch.Range.GetLower()).X;
+                    for (const double t : IntersectTest::SamplesOf(branch.Range, 128)) {
+                        const double angle = Eval(onB, t).X;
+                        REQUIRE(std::abs(angle - previous) < pi);
+                        previous = angle;
+                    }
+                }
+                REQUIRE(positive);
+                REQUIRE(negative);
+            }
+        }
+    }
+}
