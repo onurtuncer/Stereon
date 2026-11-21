@@ -994,9 +994,23 @@ struct SeamSites {
     return true;
 }
 
+/// At machine parameter spacing there is no interior representable cut.
+/// Resolve an endpoint contact only if the independently counted seam
+/// sites prove that no second interior crossing was lost.
+[[nodiscard]] Result<void> ResolveSeamEndpoint(const Pair& p, const Configuration& c,
+                                               const Track& k, const Interval& cell,
+                                               const SeamSites& sites)
+{
+    if (BoundarySitesOnly(p, c, k, cell, sites)) {
+        return {};
+    }
+    return Fail(ErrorCode::IntersectionFailed,
+                "CylinderCylinder: B seam cannot be isolated to a representable parameter");
+}
+
 [[nodiscard]] Result<void> IsolateSeamOnB(const Pair& p, const Configuration& c, const Track& k,
-                                          const Interval& range, std::vector<double>& cuts,
-                                          std::size_t& evaluations)
+                                          const Interval& range, const SeamSites& sites,
+                                          std::vector<double>& cuts, std::size_t& evaluations)
 {
     if (++evaluations > SeamIsolationBudget) {
         return Fail(ErrorCode::IntersectionFailed,
@@ -1018,11 +1032,10 @@ struct SeamSites {
     }
     const double middle = lo + (hi - lo) * 0.5;
     if (!(lo < middle && middle < hi)) {
-        return Fail(ErrorCode::IntersectionFailed,
-                    "CylinderCylinder: B seam cannot be isolated to a representable parameter");
+        return ResolveSeamEndpoint(p, c, k, range, sites);
     }
-    STEREON_TRY_VOID(IsolateSeamOnB(p, c, k, Interval{lo, middle}, cuts, evaluations));
-    return IsolateSeamOnB(p, c, k, Interval{middle, hi}, cuts, evaluations);
+    STEREON_TRY_VOID(IsolateSeamOnB(p, c, k, Interval{lo, middle}, sites, cuts, evaluations));
+    return IsolateSeamOnB(p, c, k, Interval{middle, hi}, sites, cuts, evaluations);
 }
 
 /// Complete or fail-closed list of B seam cuts over this span. The interval
@@ -1030,8 +1043,12 @@ struct SeamSites {
 [[nodiscard]] Result<void> SeamCutsOnB(const Pair& p, const Configuration& c, const Track& k,
                                        const Interval& span, std::vector<double>& cuts)
 {
+    STEREON_TRY(const SeamSites sites, SeamSitesOf(p));
+    if (sites.Count == 0) {
+        return {};
+    }
     std::size_t evaluations = 0;
-    return IsolateSeamOnB(p, c, k, span, cuts, evaluations);
+    return IsolateSeamOnB(p, c, k, span, sites, cuts, evaluations);
 }
 
 /// The farthest the track gets from its point at lo, over hi and three
