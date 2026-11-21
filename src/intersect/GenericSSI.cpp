@@ -1215,7 +1215,8 @@ struct NodeEdge {
 /// The part of C that can hold a root on a piece of the edge, by the mean
 /// value theorem: q(c) - q(c*) = M (c - c*) with M in Dq's enclosure, so
 /// c lies in c* + Dq^-1 (p(piece) - p(s*)), as p(s*) = q(c*) exactly.
-[[nodiscard]] std::optional<Patch> CoverReach(const NodeEdge& e, const std::vector<HPoint>& line)
+[[nodiscard]] Result<std::optional<Patch>> CoverReach(const NodeEdge& e,
+                                                      const std::vector<HPoint>& line)
 {
     const Patch& cover = e.Sys.Pair.B;
     const Matrix2& inverse = e.At.Inverse;
@@ -1226,13 +1227,13 @@ struct NodeEdge {
     const Interval v =
         Intersection(e.At.Box[3] + inverse[1][0] * px + inverse[1][1] * py, cover.Parameters.Y);
     if (u.IsEmpty() || v.IsEmpty()) {
-        return std::nullopt;
+        return std::optional<Patch>{};
     }
-    std::optional<Patch> part = Clipped(cover, true, u);
-    if (part) {
-        part = Clipped(*part, false, v);
+    STEREON_TRY(std::optional<Patch> part, Clipped(cover, true, u));
+    if (!part) {
+        return std::optional<Patch>{};
     }
-    return part;
+    return Clipped(std::move(*part), false, v);
 }
 
 /// The root on one piece of the edge: none when the height keeps off zero
@@ -1243,20 +1244,26 @@ struct NodeEdge {
     if (HeightApart(e, piece)) {
         return Isolation::None;
     }
-    const std::optional<Patch> carrier = Clipped(e.Sys.Pair.A, e.AlongU, piece);
+    const Result<std::optional<Patch>> carrier = Clipped(e.Sys.Pair.A, e.AlongU, piece);
     if (!carrier) {
+        return Isolation::Unsettled; // A failed cut cannot prove an edge root absent.
+    }
+    if (!*carrier) {
         return Isolation::None;
     }
-    const std::vector<HPoint> line = EdgeLine(*carrier, e.AlongU, e.Upper);
-    const std::optional<Patch> part = CoverReach(e, line);
+    const std::vector<HPoint> line = EdgeLine(**carrier, e.AlongU, e.Upper);
+    const Result<std::optional<Patch>> part = CoverReach(e, line);
     if (!part) {
+        return Isolation::Unsettled;
+    }
+    if (!*part) {
         return Isolation::None;
     }
-    const Edge edge{*carrier, e.AlongU, e.Fixed};
+    const Edge edge{**carrier, e.AlongU, e.Fixed};
     const Isolated<3> root =
-        RootOnEdge(edge, line, LocalHullsOf(*carrier), *part, LocalHullsOf(*part));
+        RootOnEdge(edge, line, LocalHullsOf(**carrier), **part, LocalHullsOf(**part));
     if (root.Outcome == Isolation::Unique) {
-        AddSeed(seeds, SeedOfRoot(edge, root, *part, true), join);
+        AddSeed(seeds, SeedOfRoot(edge, root, **part, true), join);
     }
     return root.Outcome;
 }

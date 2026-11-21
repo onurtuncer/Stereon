@@ -254,35 +254,71 @@ Split(const Patch& patch, const bool alongU, const double at)
     return std::pair{std::move(first), std::move(second)};
 }
 
-/// The patch cut down to `wanted` along one direction; nothing when they
-/// are disjoint. A cut too narrow to enclose is skipped: a larger patch
-/// only makes a proof harder, never wrong.
-[[maybe_unused]] [[nodiscard]] inline std::optional<Patch> Clipped(Patch patch, const bool alongU,
-                                                                   const Interval& wanted)
+/// Enclose only the requested part of a patch. Disjoint means no patch;
+/// a nonempty cut that cannot be represented must fail, not search a wider
+/// parameter domain and return an out-of-domain intersection.
+[[maybe_unused]] [[nodiscard]] inline Result<std::optional<Patch>>
+Clipped(Patch patch, const bool alongU, const Interval& wanted)
 {
     const Interval stretch = alongU ? patch.Parameters.X : patch.Parameters.Y;
     const Interval kept = Intersection(stretch, wanted);
     if (kept.IsEmpty()) {
-        return std::nullopt;
+        return std::optional<Patch>{};
     }
-    if (auto cut = Split(patch, alongU, kept.GetLower())) {
+    if (kept.GetLower() == kept.GetUpper()) {
+        return Fail(ErrorCode::IntersectionFailed,
+                    "BezierPatch: a boundary-only parameter cut cannot be enclosed");
+    }
+    if (kept.GetLower() > stretch.GetLower()) {
+        auto cut = Split(patch, alongU, kept.GetLower());
+        if (!cut) {
+            return Fail(ErrorCode::IntersectionFailed,
+                        "BezierPatch: lower parameter cut cannot be enclosed");
+        }
         patch = std::move(cut->second);
     }
-    if (auto cut = Split(patch, alongU, kept.GetUpper())) {
+    if (kept.GetUpper() < stretch.GetUpper()) {
+        auto cut = Split(patch, alongU, kept.GetUpper());
+        if (!cut) {
+            return Fail(ErrorCode::IntersectionFailed,
+                        "BezierPatch: upper parameter cut cannot be enclosed");
+        }
         patch = std::move(cut->first);
     }
-    return patch;
+    return std::optional<Patch>{std::move(patch)};
 }
 
 /// The surface's patches over a requested domain.
 [[maybe_unused]] [[nodiscard]] inline Result<std::vector<Patch>>
 PatchesOver(const BSplineSurface& s, const Box2& domain)
 {
+    const Box2 own = Domain(s);
+    const Box2 requested{Intersection(own.X, domain.X), Intersection(own.Y, domain.Y)};
+    if (requested.X.IsEmpty() || requested.Y.IsEmpty()) {
+        return std::vector<Patch>{};
+    }
+    if (requested.X.GetLower() == requested.X.GetUpper() ||
+        requested.Y.GetLower() == requested.Y.GetUpper()) {
+        return Fail(ErrorCode::IntersectionFailed,
+                    "BezierPatch: a singleton requested surface domain cannot be enclosed");
+    }
     STEREON_TRY(const std::vector<Patch> patches, PatchesOf(s));
     std::vector<Patch> kept;
     for (const Patch& patch : patches) {
-        if (const auto u = Clipped(patch, true, domain.X)) {
-            if (auto uv = Clipped(*u, false, domain.Y)) {
+        const Interval uOver = Intersection(patch.Parameters.X, requested.X);
+        const Interval vOver = Intersection(patch.Parameters.Y, requested.Y);
+        // A patch meeting a positive-width request only along a knot edge
+        // contributes no interior: the adjacent, continuous patch on the
+        // requested side covers that edge. Never search the entire outside patch.
+        if (uOver.IsEmpty() || vOver.IsEmpty() ||
+            uOver.GetLower() == uOver.GetUpper() ||
+            vOver.GetLower() == vOver.GetUpper()) {
+            continue;
+        }
+        STEREON_TRY(std::optional<Patch> u, Clipped(patch, true, requested.X));
+        if (u) {
+            STEREON_TRY(std::optional<Patch> uv, Clipped(std::move(*u), false, requested.Y));
+            if (uv) {
                 kept.push_back(std::move(*uv));
             }
         }
