@@ -966,7 +966,8 @@ struct SeamSites {
                                      const Interval& cell, const SeamSites& sites)
 {
     using I = IntervalScalar;
-    const auto box = PlaceOf(p, c, k, I{cell}).Point;
+    const Place<I> placed = PlaceOf(p, c, k, I{cell});
+    const auto& box = placed.Point;
     const Point3 first = PlaceOf(p, c, k, cell.GetLower()).Point;
     const Point3 last = PlaceOf(p, c, k, cell.GetUpper()).Point;
     const double scale = std::max({1.0, p.A.Radius, p.B.Radius, Distance(first, last)});
@@ -974,6 +975,15 @@ struct SeamSites {
     int previousEndpoint = -1;
     for (std::size_t i = 0; i < sites.Count; ++i) {
         const Point3 site = sites.Points[i];
+        // The interval enclosure of a fold can cover both height sheets
+        // even at machine parameter spacing. Its A-angle is nonetheless
+        // narrow; a seam site at another angle cannot belong to this cell.
+        const Vec3 radial = site - p.A.Origin;
+        const double angle = WrappedAngle(Dot(radial, p.A.YAxis), Dot(radial, p.A.XAxis));
+        const Interval siteAngle{angle - 1e-6, angle + 1e-6};
+        if (!MeetsAngles(siteAngle, placed.U.Value)) {
+            continue;
+        }
         const auto misses = [slack](const double value, const Interval& range) {
             return value < range.GetLower() - slack || value > range.GetUpper() + slack;
         };
