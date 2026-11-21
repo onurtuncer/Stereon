@@ -281,31 +281,46 @@ void Record(Work& w, const EntityKind kind, const std::uint32_t target, const st
     return {};
 }
 
-/// A circle under the affine map from the representative edge's parameter
-/// t to the source edge's s: s = Bias + Scale * t. This preserves the circle's
-/// exact geometric locus and parameter derivatives even when two otherwise
-/// identical cap edges have different angular origins or ranges (issue #160).
-/// The range belongs to the representative; the basis can be evaluated at
-/// any angle because a circle is periodic.
+/// A circle carried from the source edge's angle s = bias + k*t onto
+/// the representative edge's t. The phase shift is folded into RadiusAtZero
+/// and the source circle's clockwise/counterclockwise sense into AngularRate:
+/// Center + cos(AngularRate*t)*RadiusAtZero
+///        + sin(AngularRate*t)*Perpendicular(RadiusAtZero).
+/// This compact POD fits the inline Curve2d buffer (ADR-0003); a large
+/// erased wrapper formerly triggered an MSYS2 GCC 16 multiple-definition
+/// error in std::_Sp_make_shared_tag while linking Boolean clients.
 struct AffineCirclePCurve {
-    Circle2d Basis;
+    Point2 Center;
+    Vec2 RadiusAtZero;
     Interval Range;
-    double Bias;
-    double Scale;
+    double AngularRate;
 };
+
+[[nodiscard]] AffineCirclePCurve CarryCircle(const Circle2d& c, const Interval range,
+                                              const double bias, const double k)
+{
+    const Vec2 radial = c.Radius * (Cos(bias) * c.XAxis + Sin(bias) * c.YAxis);
+    const double sense = Cross(c.XAxis, c.YAxis) < 0.0 ? -1.0 : 1.0;
+    return {c.Center, radial, range, sense * k};
+}
 
 [[nodiscard]] Point2 Eval(const AffineCirclePCurve& c, const double t)
 {
-    return Eval(c.Basis, c.Bias + c.Scale * t);
+    const double theta = c.AngularRate * t;
+    return c.Center + Cos(theta) * c.RadiusAtZero +
+           Sin(theta) * Perpendicular(c.RadiusAtZero);
 }
 
 [[nodiscard]] Vec2 Deriv(const AffineCirclePCurve& c, const double t, const int order)
 {
-    double scale = 1.0;
+    const double theta = c.AngularRate * t;
+    const BasicCosSin<double> turned = QuarterTurned(Cos(theta), Sin(theta), order);
+    double rate = 1.0;
     for (int i = 0; i < order; ++i) {
-        scale *= c.Scale;
+        rate *= c.AngularRate;
     }
-    return scale * Deriv(c.Basis, c.Bias + c.Scale * t, order);
+    return rate * (turned.Cos * c.RadiusAtZero +
+                   turned.Sin * Perpendicular(c.RadiusAtZero));
 }
 
 [[nodiscard]] Interval Domain(const AffineCirclePCurve& c)
@@ -313,23 +328,31 @@ struct AffineCirclePCurve {
     return c.Range;
 }
 
-[[nodiscard]] Box2 BoundingBox(const AffineCirclePCurve& c)
+[[nodiscard]] Circle2d CircleOf(const AffineCirclePCurve& c)
 {
-    return BoundingBox(c.Basis); // Conservative for a partial circle.
+    const double radius = Length(c.RadiusAtZero);
+    const Vec2 axis = c.RadiusAtZero / radius;
+    return {c.Center, radius, axis, Perpendicular(axis)};
 }
 
-/// A circular arc's closest point is its radial projection when in range,
-/// otherwise an endpoint. The periodic basis projection is brought into
-/// the source range before mapping back to the representative's parameter.
+[[nodiscard]] Box2 BoundingBox(const AffineCirclePCurve& c)
+{
+    return BoundingBox(CircleOf(c)); // Conservative for a partial circle.
+}
+
+/// Project on the circular arc in the source angle, carrying one full
+/// revolution's period into the representative parameter and comparing the
+/// endpoints as well.
 [[nodiscard]] double Project(const AffineCirclePCurve& c, const Point2& point)
 {
     const double lo = c.Range.GetLower();
     const double hi = c.Range.GetUpper();
-    const double a = c.Bias + c.Scale * lo;
-    const double b = c.Bias + c.Scale * hi;
+    const double a = c.AngularRate * lo;
+    const double b = c.AngularRate * hi;
     const Interval source{std::min(a, b), std::max(a, b)};
-    const double projected = NearestInRange(Project(c.Basis, point), source, CirclePeriod);
-    const double onRep = std::clamp((projected - c.Bias) / c.Scale, lo, hi);
+    const double projected =
+        NearestInRange(Project(CircleOf(c), point), source, CirclePeriod);
+    const double onRep = std::clamp(projected / c.AngularRate, lo, hi);
     double closest = lo;
     double distance = DistanceSquared(Eval(c, lo), point);
     for (const double t : {onRep, hi}) {
@@ -344,11 +367,14 @@ struct AffineCirclePCurve {
 
 [[nodiscard]] AffineCirclePCurve Reversed(const AffineCirclePCurve& c)
 {
-    return {c.Basis, c.Range,
-            c.Bias + c.Scale * (c.Range.GetLower() + c.Range.GetUpper()), -c.Scale};
+    const double theta = c.AngularRate * (c.Range.GetLower() + c.Range.GetUpper());
+    const Vec2 radial = Cos(theta) * c.RadiusAtZero +
+                        Sin(theta) * Perpendicular(c.RadiusAtZero);
+    return {c.Center, radial, c.Range, -c.AngularRate};
 }
 
 static_assert(Curve2dGeometry<AffineCirclePCurve>);
+static_assert(Detail::FitsInline<AffineCirclePCurve, Curve2dBufferSize>);
 
 /// A body's use of an edge carried onto the result's edge: its pcurve is
 /// expressed on the representative's parameter (ADR-0009), and its sense
@@ -386,7 +412,7 @@ struct Carried {
         return Carried{Curve2d(Line2d{origin, k * line->Direction}), !pair.Along};
     }
     if (const Circle2d* circle = pcurve.Target<Circle2d>()) {
-        return Carried{Curve2d(AffineCirclePCurve{*circle, rep, bias, k}), !pair.Along};
+        return Carried{Curve2d(CarryCircle(*circle, rep, bias, k)), !pair.Along};
     }
     return Fail(ErrorCode::NotSupported,
                 "Boolean: a curved use of " + std::string(Describe(w.ShapeOf(body), edge)) +
