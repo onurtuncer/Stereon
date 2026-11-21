@@ -898,7 +898,8 @@ struct Enclosure {
         // A shell with a collapsed vertex/edge hull keeps the old probe
         // distance. Ordinary shells are probed at their own scale, which is
         // independent of the number and spacing of other disconnected solids.
-        const double reachScale = ownExtent > 0.0 ? ownExtent : fallbackExtent; // STEREON-LINT-ALLOW(epsilon): empty-width scale guard
+        const bool hasExtent = ownExtent > 0.0; // STEREON-LINT-ALLOW(epsilon): exact zero
+        const double reachScale = hasExtent ? ownExtent : fallbackExtent;
         STEREON_TRY(Placed placed, PlacementOf(w, std::move(component), reachScale));
         (placed.Void ? voids : lumps).push_back(std::move(placed));
     }
