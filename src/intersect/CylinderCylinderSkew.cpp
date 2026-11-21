@@ -869,6 +869,22 @@ void SeamCutsOnA(const Pair& p, const Track& k, const Interval& span, std::vecto
 /// including a close pair of crossings that a fixed sampling grid misses.
 /// If interval rounding or a tangent prevents isolation within the budget,
 /// return an explicit refusal instead of emitting an incomplete branch.
+/// An interval proves that B's positive seam ray is unreachable.
+[[nodiscard]] bool ExcludesBSeam(const Interval& x, const Interval& y)
+{
+    return x.GetUpper() <= 0.0 || y.GetLower() > 0.0 || y.GetUpper() < 0.0;
+}
+
+/// A positive-ray bracket with opposite signs holds one crossing because
+/// the seam ruling intersects the other skew cylinder at most twice.
+[[nodiscard]] bool HasSeamSignChange(const Pair& p, const Configuration& c, const Track& k,
+                                     const double lo, const double hi)
+{
+    const double left = SeamSideOnB(p, c, k, lo);
+    const double right = SeamSideOnB(p, c, k, hi);
+    return (left < 0.0 && right > 0.0) || (left > 0.0 && right < 0.0);
+}
+
 [[nodiscard]] Result<void> IsolateSeamOnB(const Pair& p, const Configuration& c, const Track& k,
                                           const Interval& range, std::vector<double>& cuts,
                                           std::size_t& evaluations)
@@ -882,18 +898,14 @@ void SeamCutsOnA(const Pair& p, const Track& k, const Interval& span, std::vecto
     const BasicVec3<I> offset = placed.Point - Wide<I>(p.B.Origin);
     const Interval x = Dot(offset, Wide<I>(p.B.XAxis)).Value;
     const Interval y = Dot(offset, Wide<I>(p.B.YAxis)).Value;
-    if (x.GetUpper() <= 0.0 || y.GetLower() > 0.0 || y.GetUpper() < 0.0) {
+    if (ExcludesBSeam(x, y)) {
         return {};
     }
     const double lo = range.GetLower();
     const double hi = range.GetUpper();
-    if (x.GetLower() > 0.0) {
-        const double left = SeamSideOnB(p, c, k, lo);
-        const double right = SeamSideOnB(p, c, k, hi);
-        if ((left < 0.0 && right > 0.0) || (left > 0.0 && right < 0.0)) {
-            AddCut(range, BisectSeam(p, c, k, lo, hi), cuts);
-            return {};
-        }
+    if (x.GetLower() > 0.0 && HasSeamSignChange(p, c, k, lo, hi)) {
+        AddCut(range, BisectSeam(p, c, k, lo, hi), cuts);
+        return {};
     }
     const double middle = lo + (hi - lo) * 0.5;
     if (!(lo < middle && middle < hi)) {
