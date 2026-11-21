@@ -296,19 +296,18 @@ struct AffineCirclePCurve {
     double AngularRate;
 };
 
-[[nodiscard]] AffineCirclePCurve CarryCircle(const Circle2d& c, const Interval range,
-                                              const double bias, const double k)
+[[nodiscard]] AffineCirclePCurve AffineOf(const Circle2d& c, Interval range, double bias, double k)
 {
     const Vec2 radial = c.Radius * (Cos(bias) * c.XAxis + Sin(bias) * c.YAxis);
-    const double sense = Cross(c.XAxis, c.YAxis) < 0.0 ? -1.0 : 1.0; // STEREON-LINT-ALLOW(epsilon): orientation sign
+    // The frame's handedness is a sign test, not a comparison with a tolerance.
+    const double sense = Cross(c.XAxis, c.YAxis) < 0.0 ? -1.0 : 1.0; // STEREON-LINT-ALLOW(epsilon)
     return {c.Center, radial, range, sense * k};
 }
 
 [[nodiscard]] Point2 Eval(const AffineCirclePCurve& c, const double t)
 {
     const double theta = c.AngularRate * t;
-    return c.Center + Cos(theta) * c.RadiusAtZero +
-           Sin(theta) * Perpendicular(c.RadiusAtZero);
+    return c.Center + Cos(theta) * c.RadiusAtZero + Sin(theta) * Perpendicular(c.RadiusAtZero);
 }
 
 [[nodiscard]] Vec2 Deriv(const AffineCirclePCurve& c, const double t, const int order)
@@ -319,8 +318,7 @@ struct AffineCirclePCurve {
     for (int i = 0; i < order; ++i) {
         rate *= c.AngularRate;
     }
-    return rate * (turned.Cos * c.RadiusAtZero +
-                   turned.Sin * Perpendicular(c.RadiusAtZero));
+    return rate * (turned.Cos * c.RadiusAtZero + turned.Sin * Perpendicular(c.RadiusAtZero));
 }
 
 [[nodiscard]] Interval Domain(const AffineCirclePCurve& c)
@@ -350,8 +348,7 @@ struct AffineCirclePCurve {
     const double a = c.AngularRate * lo;
     const double b = c.AngularRate * hi;
     const Interval source{std::min(a, b), std::max(a, b)};
-    const double projected =
-        NearestInRange(Project(CircleOf(c), point), source, CirclePeriod);
+    const double projected = NearestInRange(Project(CircleOf(c), point), source, CirclePeriod);
     const double onRep = std::clamp(projected / c.AngularRate, lo, hi);
     double closest = lo;
     double distance = DistanceSquared(Eval(c, lo), point);
@@ -368,8 +365,7 @@ struct AffineCirclePCurve {
 [[nodiscard]] AffineCirclePCurve Reversed(const AffineCirclePCurve& c)
 {
     const double theta = c.AngularRate * (c.Range.GetLower() + c.Range.GetUpper());
-    const Vec2 radial = Cos(theta) * c.RadiusAtZero +
-                        Sin(theta) * Perpendicular(c.RadiusAtZero);
+    const Vec2 radial = Cos(theta) * c.RadiusAtZero + Sin(theta) * Perpendicular(c.RadiusAtZero);
     return {c.Center, radial, c.Range, -c.AngularRate};
 }
 
@@ -412,7 +408,7 @@ struct Carried {
         return Carried{Curve2d(Line2d{origin, k * line->Direction}), !pair.Along};
     }
     if (const Circle2d* circle = pcurve.Target<Circle2d>()) {
-        return Carried{Curve2d(CarryCircle(*circle, rep, bias, k)), !pair.Along};
+        return Carried{Curve2d(AffineOf(*circle, rep, bias, k)), !pair.Along};
     }
     return Fail(ErrorCode::NotSupported,
                 "Boolean: a curved use of " + std::string(Describe(w.ShapeOf(body), edge)) +
