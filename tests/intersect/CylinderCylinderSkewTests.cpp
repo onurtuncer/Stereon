@@ -596,7 +596,6 @@ TEST_CASE("skew cylinders clip wide sectors at either angular boundary",
     }
 }
 
-
 TEST_CASE("skew B seam isolates both generator crossings near a fold",
           "[intersect][cylinder][skew][regression][issue195]")
 {
@@ -612,9 +611,14 @@ TEST_CASE("skew B seam isolates both generator crossings near a fold",
         const double y = 4.0 - 2.0 * co;
         const double z = 2.0 * si;
         const double x = std::sqrt(9.0 - y * y);
+        const Point3 forward{x, y, z};
+        const Point3 backward{-x, y, z};
+        const double bound = 2.0 * ctx.GetResolution();
         for (const bool rightHanded : {false, true}) {
-            const Surface b{Cylinder{Point3{0.0, 4.0, 0.0}, 2.0,
-                                     Vec3{0.0, -co, si}, Vec3{0.0, -si, -co}, rightHanded}};
+            const Point3 origin{0.0, 4.0, 0.0};
+            const Vec3 bx{0.0, -co, si};
+            const Vec3 by{0.0, -si, -co};
+            const Surface b{Cylinder{origin, 2.0, bx, by, rightHanded}};
             for (const bool swapped : {false, true}) {
                 INFO("offset " << e << ", handedness " << rightHanded << ", swap " << swapped);
                 const Surface& first = swapped ? b : a;
@@ -635,10 +639,8 @@ TEST_CASE("skew B seam isolates both generator crossings near a fold",
                 for (const auto& branch : result->Branches) {
                     for (const double t : {branch.Range.GetLower(), branch.Range.GetUpper()}) {
                         const Point3 p = Eval(branch.Curve3d, t);
-                        positive = positive ||
-                                   Distance(p, Point3{x, y, z}) <= 2.0 * ctx.GetResolution();
-                        negative = negative ||
-                                   Distance(p, Point3{-x, y, z}) <= 2.0 * ctx.GetResolution();
+                        positive = positive || Distance(p, forward) <= bound;
+                        negative = negative || Distance(p, backward) <= bound;
                     }
                     // A branch must stay within one B chart except at its
                     // endpoints. A discontinuous pcurve would not be a valid
