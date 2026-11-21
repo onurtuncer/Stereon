@@ -730,7 +730,7 @@ TEST_CASE("widely separated cylinders union as independent closed solids",
     REQUIRE(left.has_value());
     REQUIRE(right.has_value());
     for (const bool swapped : {false, true}) {
-        INFO(swapped ? "right first" : "left first");
+        INFO((swapped ? "right first" : "left first"));
         const Shape& first = swapped ? right->Shape : left->Shape;
         const Shape& second = swapped ? left->Shape : right->Shape;
         const OperationResult united = Run(first, second, BooleanOperation::Union);
