@@ -781,12 +781,16 @@ struct ActiveSpans {
 /// of the poles by the computed basis functions, which are rounded doubles:
 /// A2.2 reaches each through one recurrence step per degree, of at most six
 /// rounded operations on non-negative numbers, so a product of two is
-/// within 6 (p + q) units of 2^-53 of the exact one, relatively, and the sum
-/// of a component within that much of the largest magnitude that component
-/// has among the poles it combines. Each component is widened by a margin
-/// of the form of EnclosedPoint's on that magnitude, which is larger. It is
-/// the spline's own: a partial's poles are a degree over a knot span times
-/// the differences of the surface's, and may be far larger than those.
+/// within 6 (p + q) units of 2^-53 of the exact one, relatively and to
+/// first order, and the sum of a component within that much of the largest
+/// magnitude that component has among the poles it combines, the exact
+/// basis functions being non-negative and summing to 1. Each component is
+/// widened by a margin of the form of EnclosedPoint's on that magnitude,
+/// 8 (p + q + 2)^2 units: at least 32 more than 6 (p + q), which covers the
+/// second-order terms and the rounding of the margin and of the widening,
+/// under a unit each. The magnitude is the spline's own: a partial's poles
+/// are a degree over a knot span times the differences of the surface's,
+/// and may be far larger than those.
 [[nodiscard]] Homogeneous4 ValueAt(const TensorSpline& s, const double u, const double v)
 {
     const auto p = static_cast<std::size_t>(s.DegreeU);
@@ -1473,8 +1477,8 @@ Result<DeviationCertificate> CertifyDeviation(const Curve& curve, const Surface&
 
 namespace Detail {
 
-std::optional<HomogeneousJet> HomogeneousJetAt(const Surface& surface, const double u,
-                                               const double v)
+std::optional<EnclosedHomogeneousJet> HomogeneousJetAt(const Surface& surface, const double u,
+                                                       const double v)
 {
     const BSplineSurface* spline = surface.Target<BSplineSurface>();
     if (spline == nullptr) {
@@ -1484,7 +1488,7 @@ std::optional<HomogeneousJet> HomogeneousJetAt(const Surface& surface, const dou
     if (!e) {
         return std::nullopt;
     }
-    return HomogeneousJet{ValueAt(e->S, u, v), ValueAt(e->Su, u, v), ValueAt(e->Sv, u, v)};
+    return EnclosedHomogeneousJet{ValueAt(e->S, u, v), ValueAt(e->Su, u, v), ValueAt(e->Sv, u, v)};
 }
 
 } // namespace Detail

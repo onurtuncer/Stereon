@@ -125,7 +125,7 @@ export namespace Stereon::Detail {
 /// A B-spline surface's homogeneous value (w x, w y, w z, w) and its first
 /// partials at one parameter, each as the certificate encloses it there:
 /// the sum over the active poles, widened by the rounding margin.
-struct HomogeneousJet {
+struct EnclosedHomogeneousJet {
     std::array<Interval, 4> Value;
     std::array<Interval, 4> AlongU;
     std::array<Interval, 4> AlongV;
@@ -134,7 +134,7 @@ struct HomogeneousJet {
 /// For tests: the enclosures CertifyDeviation's mean-value forms start from
 /// on a B-spline surface, at (u, v). Nothing for any other surface, or for
 /// one a partial of which the certificate cannot form.
-[[nodiscard]] std::optional<HomogeneousJet> HomogeneousJetAt(const Surface& surface, double u,
-                                                             double v);
+[[nodiscard]] std::optional<EnclosedHomogeneousJet> HomogeneousJetAt(const Surface& surface,
+                                                                     double u, double v);
 
 } // namespace Stereon::Detail
