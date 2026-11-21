@@ -665,9 +665,11 @@ TEST_CASE("two B seam crossings inside a former scan cell are both isolated",
 {
     // The seam ruling of B runs in x through y=3-delta. Its two
     // intersections with A are x=±sqrt(9-(3-delta)^2), at fixed y,z.
-    // delta=1e-7 produces two roots much closer than 2*pi/256 in the
-    // track parameter. A sign-change scan of only the cell endpoints
-    // misses both; a certified enclosing isolator may not.
+    // Restrict A to a deliberately asymmetric angular window: its
+    // fold-loop track is clipped around t=[0.2,2.3]. At delta=1e-7
+    // the two roots are separated by ~0.000614 in t and both lie in
+    // one historical scan cell (~0.0082 wide); a fixed sign-change scan
+    // misses both. The two spatial solutions are the independent oracle.
     for (const double delta : {1e-4, 1e-7}) {
         const double q = (1.0 + delta) / 2.0;
         const double s = std::sqrt(1.0 - q * q);
@@ -679,13 +681,19 @@ TEST_CASE("two B seam crossings inside a former scan cell are both isolated",
         const Point3 origin{0.0, 4.0, 0.0};
         const Vec3 bx{0.0, -q, s};
         const Vec3 by{0.0, -s, -q};
+        const double half = std::acos(2.0 / 3.0);
+        const double phi = pi / 2.0;
+        const Interval cut{phi - half * std::cos(0.2), phi - half * std::cos(2.3)};
+        const Box2 window{cut, Interval::Everything()};
         for (const bool rightHanded : {false, true}) {
             const Surface b{Cylinder{origin, 2.0, bx, by, rightHanded}};
             for (const bool swap : {false, true}) {
                 INFO("delta " << delta << ", handedness " << rightHanded << ", swap " << swap);
                 const Surface& first = swap ? b : a;
                 const Surface& second = swap ? a : b;
-                const auto result = Intersect(first, second, ctx);
+                const Box2 firstBox = swap ? Domain(b) : window;
+                const Box2 secondBox = swap ? window : Domain(b);
+                const auto result = Intersect(first, firstBox, second, secondBox, ctx);
                 INFO(IntersectTest::ErrorText(result));
                 if (!result) {
                     // The smaller separation may exhaust certification;
