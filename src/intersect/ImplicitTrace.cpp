@@ -172,14 +172,17 @@ struct TraceCarrier {
         return {point, QuotientOf(NetAt(piece.Du, b, u, v), point, h.W),
                 QuotientOf(NetAt(piece.Dv, b, u, v), point, h.W)};
     }
-    std::optional<Patch> cut = Clipped(piece.Cell, true, u);
-    if (cut) {
-        cut = Clipped(*cut, false, v);
-    }
-    if (!cut) {
+    const Result<std::optional<Patch>> cutU = Clipped(piece.Cell, true, u);
+    if (!cutU || !*cutU) {
+        // An unrepresentable cut supplies no finite proof, never an
+        // enclosure from the wider, uncut patch under a narrower domain.
         return {Everywhere(), Everywhere(), Everywhere()};
     }
-    const Hulls hulls = HullsOf(*cut);
+    const Result<std::optional<Patch>> cut = Clipped(**cutU, false, v);
+    if (!cut || !*cut) {
+        return {Everywhere(), Everywhere(), Everywhere()};
+    }
+    const Hulls hulls = HullsOf(**cut);
     return {hulls.Point, hulls.Du, hulls.Dv};
 }
 
