@@ -908,9 +908,9 @@ void SeamCutsOnA(const Pair& p, const Track& k, const Interval& span, std::vecto
             normExact = Sum(normExact, Product(v, v));
         }
         const DynamicExpansion radius{p.A.Radius};
-        return Difference(Product(shift, shift),
-                          Product(Product(radius, radius), normExact))
-            .GetSign();
+        const DynamicExpansion offsetSquared = Product(shift, shift);
+        const DynamicExpansion radiusSquared = Product(radius, radius);
+        return Difference(offsetSquared, Product(radiusSquared, normExact)).GetSign();
     });
 }
 
@@ -974,18 +974,17 @@ struct SeamSites {
     int previousEndpoint = -1;
     for (std::size_t i = 0; i < sites.Count; ++i) {
         const Point3 site = sites.Points[i];
-        const bool outside = site.X < box.X.Value.GetLower() - slack ||
-                             site.X > box.X.Value.GetUpper() + slack ||
-                             site.Y < box.Y.Value.GetLower() - slack ||
-                             site.Y > box.Y.Value.GetUpper() + slack ||
-                             site.Z < box.Z.Value.GetLower() - slack ||
-                             site.Z > box.Z.Value.GetUpper() + slack;
+        const auto misses = [slack](const double value, const Interval& range) {
+            return value < range.GetLower() - slack || value > range.GetUpper() + slack;
+        };
+        const bool outside = misses(site.X, box.X.Value) || misses(site.Y, box.Y.Value) ||
+                             misses(site.Z, box.Z.Value);
         if (outside) {
             continue;
         }
-        const int endpoint = Distance(site, first) <= slack
-                                 ? 0
-                                 : (Distance(site, last) <= slack ? 1 : -1);
+        const bool atFirst = Distance(site, first) <= slack;
+        const bool atLast = Distance(site, last) <= slack;
+        const int endpoint = atFirst ? 0 : (atLast ? 1 : -1);
         if (endpoint < 0 || endpoint == previousEndpoint) {
             return false;
         }
