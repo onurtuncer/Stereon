@@ -1086,11 +1086,11 @@ struct SeamSites {
                                                  const Track& k, const Interval& span,
                                                  const double resolution)
 {
+    std::vector<double> seamCuts;
+    SeamCutsOnA(p, k, span, seamCuts);
+    STEREON_TRY_VOID(SeamCutsOnB(p, c, k, span, seamCuts));
     std::vector<double> cuts{span.GetLower(), span.GetUpper()};
-    SeamCutsOnA(p, k, span, cuts);
-    std::vector<double> seamB;
-    STEREON_TRY_VOID(SeamCutsOnB(p, c, k, span, seamB));
-    cuts.insert(cuts.end(), seamB.begin(), seamB.end());
+    cuts.insert(cuts.end(), seamCuts.begin(), seamCuts.end());
     std::ranges::sort(cuts);
     std::vector<double> distinct{cuts.front()};
     for (std::size_t i = 1; i < cuts.size(); ++i) {
@@ -1103,12 +1103,13 @@ struct SeamSites {
     if (distinct.size() == 1) {
         distinct.push_back(cuts.back());
     }
-    // A distinct B-seam cut may not be discarded by the sliver coalescing
-    // rule: this could reconnect branches across an unreported chart seam.
-    for (const double root : seamB) {
+    // Neither cylinder's distinct chart seam cut may disappear when
+    // coalescing a sub-resolution sliver; otherwise a published branch
+    // could cross an unreported periodic chart boundary.
+    for (const double root : seamCuts) {
         if (!std::ranges::binary_search(distinct, root)) {
             return Fail(ErrorCode::IntersectionFailed,
-                        "CylinderCylinder: a distinct B seam cut is below the fit resolution");
+                        "CylinderCylinder: a distinct chart seam cut is below the fit resolution");
         }
     }
     return distinct;
