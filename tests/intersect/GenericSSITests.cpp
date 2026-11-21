@@ -691,10 +691,8 @@ TEST_CASE("a sphere's section that is not resolved is refused, never answered in
 // the sphere's turn, u from 0.1 to 0.6, holds half of it, between two
 // antipodal points on the domain's edges (each quarter turn of u is
 // parameterized alike), and the sphere below the latitude v = 0.9
-// (z = 0.956) none. The bounds are off the sphere's knots: a domain that
-// ends on a knot is searched with the whole Bezier patch beyond it
-// (Clipped in BezierPatch.hpp keeps a patch that meets the domain in an
-// edge), which is not this test's subject.
+// (z = 0.956) none. This exercises cuts away from the interior knots;
+// the exact-knot boundary regression below exercises those separately.
 TEST_CASE("the small circle near the pole follows the sphere's requested domain",
           "[intersect][generic][nurbs]")
 {
@@ -713,4 +711,40 @@ TEST_CASE("the small circle near the pole follows the sphere's requested domain"
     REQUIRE(none.has_value());
     REQUIRE(none->Branches.empty());
     REQUIRE(none->Points.empty());
+}
+
+// The old PatchesOver treated the right-hand patch touching u=0.5 as an
+// entire searched patch, so a requested hemisphere answered up to u=0.75.
+// Every successful result must stay in its own requested chart box, under
+// both operand orders. The closed-form circle must still be half complete.
+TEST_CASE("a rational sphere's exact interior knot bounds the searched SSI domain",
+          "[intersect][generic][nurbs][regression][metamorphic]")
+{
+    constexpr Cut cut{0.0, 1.0 - 1e-3};
+    constexpr double tolerance = 1e-5;
+    const Surface sphere{UnitSphere(atOrigin)};
+    const Surface flat{Square(cut, atOrigin)};
+    for (const Interval u : {Interval{0.0, 0.5}, Interval{0.5, 1.0}}) {
+        const Box2 wanted{u, Interval{0.0, 1.0}};
+        for (const bool swapped : {false, true}) {
+            INFO("requested u [" << u.GetLower() << ", " << u.GetUpper() << "]"
+                                 << (swapped ? " plane first" : " sphere first"));
+            const auto result =
+                swapped ? Intersect(flat, Box2::Everything(), sphere, wanted, tolerance, ctx)
+                        : Intersect(sphere, wanted, flat, Box2::Everything(), tolerance, ctx);
+            INFO(IntersectTest::ErrorText(result));
+            REQUIRE(result.has_value());
+            CheckSection(*result, cut, atOrigin, tolerance, std::numbers::pi);
+            for (const Stereon::IntersectionBranch& branch : result->Branches) {
+                for (const double t : IntersectTest::SamplesOf(branch.Range, 64)) {
+                    const Stereon::Point2 uv = Eval(swapped ? branch.OnB : branch.OnA, t);
+                    CHECK(uv.X >= u.GetLower() - 1e-10);
+                    CHECK(uv.X <= u.GetUpper() + 1e-10);
+                    CHECK(uv.Y >= -1e-10);
+                    CHECK(uv.Y <= 1.0 + 1e-10);
+                    CHECK(Distance(Eval(branch.Curve3d, t), Eval(sphere, uv)) <= tolerance);
+                }
+            }
+        }
+    }
 }
