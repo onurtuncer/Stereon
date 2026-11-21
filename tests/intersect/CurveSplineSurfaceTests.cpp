@@ -309,3 +309,40 @@ TEST_CASE("a crossing at a closed surface's seam is one point at the domain's en
     REQUIRE_FALSE(part.has_value());
     CHECK(part.error().GetCode() == ErrorCode::IntersectionFailed);
 }
+
+// A degree-1 spline plane has a real u knot at 1/2. Its right-hand patch
+// touches a request ending at that knot, but does not belong to the requested
+// half. The original clipping kept all of it, including the crossing at 3/4.
+TEST_CASE("a requested B-spline surface knot excludes curve crossings beyond it",
+          "[intersect][curve-surface][spline-surface][regression]")
+{
+    const std::vector<double> knotsU{0.0, 0.0, 0.5, 1.0, 1.0};
+    const std::vector<double> knotsV{0.0, 0.0, 1.0, 1.0};
+    const std::vector<Point3> poles{{0.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.5, 0.0, 0.0},
+                                    {0.5, 1.0, 0.0}, {1.0, 0.0, 0.0}, {1.0, 1.0, 0.0}};
+    const auto built = Stereon::MakeBSplineSurface(1, 1, knotsU, knotsV, poles, {});
+    REQUIRE(built.has_value());
+    const Surface spline{*built};
+    const Box2 left{Interval{0.0, 0.5}, Interval{0.0, 1.0}};
+    const Box2 right{Interval{0.5, 1.0}, Interval{0.0, 1.0}};
+    for (const double x : {0.25, 0.75}) {
+        const Curve line{Line{Point3{x, 0.5, -1.0}, Vec3{0.0, 0.0, 1.0}}};
+        const auto full = Intersect(line, Interval{0.0, 2.0}, spline, Box2::Everything(), ctx);
+        INFO(IntersectTest::ErrorText(full));
+        REQUIRE(full.has_value());
+        REQUIRE(full->Points.size() == 1);
+        const auto within =
+            Intersect(line, Interval{0.0, 2.0}, spline, x < 0.5 ? left : right, ctx);
+        INFO(IntersectTest::ErrorText(within));
+        REQUIRE(within.has_value());
+        REQUIRE(within->Points.size() == 1);
+        CHECK(within->Points.front().OnSurface.X >= (x < 0.5 ? 0.0 : 0.5));
+        CHECK(within->Points.front().OnSurface.X <= (x < 0.5 ? 0.5 : 1.0));
+        const auto outside =
+            Intersect(line, Interval{0.0, 2.0}, spline, x < 0.5 ? right : left, ctx);
+        INFO(IntersectTest::ErrorText(outside));
+        REQUIRE(outside.has_value());
+        CHECK(outside->Points.empty());
+        CHECK(outside->Overlaps.empty());
+    }
+}
