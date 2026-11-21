@@ -281,17 +281,135 @@ void Record(Work& w, const EntityKind kind, const std::uint32_t target, const st
     return {};
 }
 
-/// A body's use of an edge carried onto the result's edge: when the edge is
-/// the other half of a pair, its sense turned round where the two run
-/// against each other, and its pcurve put on the representative's parameter
-/// (ADR-0009: every use of an edge on one parameter). Two edges over one
-/// range running the same way need nothing; otherwise the pcurve must be a
-/// line, which an affine change of parameter keeps one. NotSupported for a
-/// curved pcurve on another parameter.
+/// A circle carried from the source edge's angle s = bias + k*t onto
+/// the representative edge's t. The phase shift is folded into RadiusAtZero
+/// and the source circle's clockwise/counterclockwise sense into AngularRate:
+/// Center + cos(AngularRate*t)*RadiusAtZero
+///        + sin(AngularRate*t)*Perpendicular(RadiusAtZero).
+/// This compact POD fits the inline Curve2d buffer (ADR-0003); a large
+/// erased wrapper formerly triggered an MSYS2 GCC 16 multiple-definition
+/// error in std::_Sp_make_shared_tag while linking Boolean clients.
+struct AffineCirclePCurve {
+    Point2 Center;
+    Vec2 RadiusAtZero;
+    Interval Range;
+    double AngularRate;
+};
+
+[[nodiscard]] AffineCirclePCurve AffineOf(const Circle2d& c, Interval range, double bias, double k)
+{
+    const Vec2 radial = c.Radius * (Cos(bias) * c.XAxis + Sin(bias) * c.YAxis);
+    // The frame's handedness is a sign test, not a comparison with a tolerance.
+    const double sense = Cross(c.XAxis, c.YAxis) < 0.0 ? -1.0 : 1.0; // STEREON-LINT-ALLOW(epsilon)
+    return {c.Center, radial, range, sense * k};
+}
+
+[[nodiscard]] Point2 Eval(const AffineCirclePCurve& c, const double t)
+{
+    const double theta = c.AngularRate * t;
+    return c.Center + Cos(theta) * c.RadiusAtZero + Sin(theta) * Perpendicular(c.RadiusAtZero);
+}
+
+[[nodiscard]] Vec2 Deriv(const AffineCirclePCurve& c, const double t, const int order)
+{
+    const double theta = c.AngularRate * t;
+    const BasicCosSin<double> turned = QuarterTurned(Cos(theta), Sin(theta), order);
+    double rate = 1.0;
+    for (int i = 0; i < order; ++i) {
+        rate *= c.AngularRate;
+    }
+    return rate * (turned.Cos * c.RadiusAtZero + turned.Sin * Perpendicular(c.RadiusAtZero));
+}
+
+[[nodiscard]] Interval Domain(const AffineCirclePCurve& c)
+{
+    return c.Range;
+}
+
+[[nodiscard]] Circle2d CircleOf(const AffineCirclePCurve& c)
+{
+    const double radius = Length(c.RadiusAtZero);
+    const Vec2 axis = c.RadiusAtZero / radius;
+    return {c.Center, radius, axis, Perpendicular(axis)};
+}
+
+[[nodiscard]] Box2 BoundingBox(const AffineCirclePCurve& c)
+{
+    return BoundingBox(CircleOf(c)); // Conservative for a partial circle.
+}
+
+/// Project on the circular arc in the source angle, carrying one full
+/// revolution's period into the representative parameter and comparing the
+/// endpoints as well.
+[[nodiscard]] double Project(const AffineCirclePCurve& c, const Point2& point)
+{
+    const double lo = c.Range.GetLower();
+    const double hi = c.Range.GetUpper();
+    const double a = c.AngularRate * lo;
+    const double b = c.AngularRate * hi;
+    const Interval source{std::min(a, b), std::max(a, b)};
+    const double projected = NearestInRange(Project(CircleOf(c), point), source, CirclePeriod);
+    const double onRep = std::clamp(projected / c.AngularRate, lo, hi);
+    double closest = lo;
+    double distance = DistanceSquared(Eval(c, lo), point);
+    for (const double t : {onRep, hi}) {
+        const double candidate = DistanceSquared(Eval(c, t), point);
+        if (candidate < distance) {
+            distance = candidate;
+            closest = t;
+        }
+    }
+    return closest;
+}
+
+[[nodiscard]] AffineCirclePCurve Reversed(const AffineCirclePCurve& c)
+{
+    const double theta = c.AngularRate * (c.Range.GetLower() + c.Range.GetUpper());
+    const Vec2 radial = Cos(theta) * c.RadiusAtZero + Sin(theta) * Perpendicular(c.RadiusAtZero);
+    return {c.Center, radial, c.Range, -c.AngularRate};
+}
+
+static_assert(Curve2dGeometry<AffineCirclePCurve>);
+static_assert(Detail::FitsInline<AffineCirclePCurve, Curve2dBufferSize>);
+
+/// A body's use of an edge carried onto the result's edge: its pcurve is
+/// expressed on the representative's parameter (ADR-0009), and its sense
+/// reversed when the two edges run against each other. Lines admit direct
+/// affine reparameterization. Circles use an affine parameter wrapper:
+/// a simple Circle2d has a fixed angular speed and would change geometry
+/// if the source and representative parameter widths differ.
 struct Carried {
     Curve2d PCurve;
     bool Flip = false;
 };
+
+/// Parameters of a paired pcurve written on the representative edge.
+struct CarryMapping {
+    const Work& WorkRef;
+    std::uint8_t Body;
+    EdgeId Edge;
+    const Curve2d& PCurve;
+    Interval Rep;
+    double Bias;
+    double Scale;
+    bool Along;
+};
+
+/// The affine map is already settled; unsupported curves remain fail-closed.
+[[nodiscard]] Result<Carried> CarryMapped(const CarryMapping& m)
+{
+    if (const Line2d* line = m.PCurve.Target<Line2d>()) {
+        const Point2 origin = line->Origin + m.Bias * line->Direction;
+        return Carried{Curve2d(Line2d{origin, m.Scale * line->Direction}), !m.Along};
+    }
+    if (const Circle2d* circle = m.PCurve.Target<Circle2d>()) {
+        return Carried{Curve2d(AffineOf(*circle, m.Rep, m.Bias, m.Scale)), !m.Along};
+    }
+    return Fail(ErrorCode::NotSupported,
+                "Boolean: a curved use of " +
+                    std::string(Describe(m.WorkRef.ShapeOf(m.Body), m.Edge)) +
+                    " on another parameter than the edge it is identified with");
+}
 
 [[nodiscard]] Result<Carried> Carry(const Work& w, const std::uint8_t body, const EdgeId edge,
                                     const Curve2d& pcurve)
@@ -306,17 +424,14 @@ struct Carried {
     if (pair.Along && own == rep) {
         return Carried{pcurve, false};
     }
-    const Line2d* line = pcurve.Target<Line2d>();
-    if (line == nullptr) {
-        return Fail(ErrorCode::NotSupported,
-                    "Boolean: a curved use of " + std::string(Describe(w.ShapeOf(body), edge)) +
-                        " on another parameter than the edge it is identified with");
+    if (!(Width(own) > 0.0 && Width(rep) > 0.0)) { // STEREON-LINT-ALLOW(epsilon): division guard
+        return Fail(ErrorCode::InvalidResult, "Boolean: a paired edge has a zero parameter width");
     }
-    // s(t) = s0 + (t - t0) k, the use's own parameter at the representative's t.
+    // s(t) = s0 + (t - t0) k, the source's parameter at the representative's t.
     const double k = (pair.Along ? 1.0 : -1.0) * Width(own) / Width(rep);
     const double s0 = pair.Along ? own.GetLower() : own.GetUpper();
-    const Point2 origin = line->Origin + (s0 - rep.GetLower() * k) * line->Direction;
-    return Carried{Curve2d(Line2d{origin, k * line->Direction}), !pair.Along};
+    const double bias = s0 - rep.GetLower() * k;
+    return CarryMapped({w, body, edge, pcurve, rep, bias, k, pair.Along});
 }
 
 // --- Vertices and edges ------------------------------------------------------------
