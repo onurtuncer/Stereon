@@ -111,3 +111,41 @@ TEST_CASE("the drilled slab's speed-up, stage by stage", "[.][boolean][speedup]"
         }
     }
 }
+
+// Issue #160 (2): two parallel, equal-radius cylinder grids overlap in
+// one column, with each cap a unit higher on the shifted operand. This
+// checks the imprint before the complete Boolean so the failure stage is
+// observable without misdiagnosing it as broad-phase or assembly.
+TEST_CASE("issue 160: staggered cylinder caps have a closed imprint network",
+          "[boolean][bodies][regression][issue160][offset-caps]")
+{
+    for (const int n : {1, 3}) {
+        INFO("grid " << n << " x " << n << ", cap delta 1");
+        const Shape a = Drills(n);
+        const Shape b = Drills(n, Stereon::Vec3{10.0 * n - 9.0, 0.0, 1.0});
+        const auto imprinted = ImprintBodies(a, b, serial);
+        INFO(imprinted ? "" : std::string(imprinted.error().GetMessage()));
+        REQUIRE(imprinted.has_value());
+        const auto result = Boolean(a, b, BooleanOperation::Union, serial);
+        INFO(result ? "" : std::string(result.error().GetMessage()));
+        REQUIRE(result.has_value());
+        CHECK(CountOf<EntityKind::Solid>(result->Shape) ==
+              static_cast<std::size_t>(2 * n * n - n));
+        CHECK(ValidateTopology(result->Shape).IsValid());
+    }
+}
+
+// Full original grid in #160 (2), excluded from ordinary CI due to its
+// 800-cylinder setup. Invoke by name in a dedicated large-fixture run.
+TEST_CASE("issue 160: staggered 20 by 20 drill grids unite",
+          "[.][boolean][regression][issue160][offset-caps][large]")
+{
+    constexpr int n = 20;
+    const Shape a = Drills(n);
+    const Shape b = Drills(n, Stereon::Vec3{191.0, 0.0, 1.0});
+    const auto result = Boolean(a, b, BooleanOperation::Union, serial);
+    INFO(result ? "" : std::string(result.error().GetMessage()));
+    REQUIRE(result.has_value());
+    CHECK(CountOf<EntityKind::Solid>(result->Shape) == 2 * n * n - n);
+    CHECK(ValidateTopology(result->Shape).IsValid());
+}

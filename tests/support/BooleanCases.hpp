@@ -56,7 +56,9 @@ inline Stereon::Shape Slab(const int n)
 /// n x n cylinders of radius 2 at the centres of the slab's 10 x 10 cells,
 /// from z = -5 to 15, as one operand of n^2 solids: united pairwise, a
 /// balanced tree of unions, so that making it costs n^2 log n, not n^4.
-inline Stereon::Shape Drills(const int n)
+/// The optional translation reconstructs the geometry at the same parameters
+/// and is used by issue #160's overlapping-grid fixtures.
+inline Stereon::Shape Drills(const int n, const Stereon::Vec3 offset = {})
 {
     if (n < 1) {
         throw std::runtime_error("Drills: a grid needs at least one hole");
@@ -65,7 +67,8 @@ inline Stereon::Shape Drills(const int n)
     for (int k = 0; k < n * n; ++k) {
         level.push_back(
             Must(MakeCylinderSolid(
-                     Stereon::Point3{10.0 * (k % n) + 5.0, 10.0 * (k / n) + 5.0, -5.0},
+                     Stereon::Point3{10.0 * (k % n) + 5.0 + offset.X,
+                                     10.0 * (k / n) + 5.0 + offset.Y, -5.0 + offset.Z},
                      Stereon::Vec3{1.0, 0.0, 0.0}, Stereon::Vec3{0.0, 1.0, 0.0}, 2.0, 20.0, serial),
                  "a drill")
                 .Shape);
