@@ -690,14 +690,15 @@ void RecordShell(Work& w, const std::vector<std::size_t>& faces, const BuilderSh
 }
 
 /// How far off a face a component is probed from, as a share of the
-/// operands' extent: an irrational-looking share, so that the point does
+/// connected shell's extent: an irrational-looking share, so that the point does
 /// not land on another face of a body laid out in round numbers.
 constexpr double ProbeReachShare = 0.37;
 /// How far a probe's ray is tilted off the way back to its face when that
 /// way is ambiguous, as a share of the classifier's direction added.
 constexpr double RayTilt = 0.1;
 
-/// The diagonal of both operands' vertices' bounding box.
+/// The diagonal of both operands' vertices' bounding box, used only when
+/// a shell's own boundary has no measurable extent.
 [[nodiscard]] Result<double> ExtentOf(const Work& w)
 {
     Box3 box = Box3::Empty();
@@ -706,6 +707,35 @@ constexpr double RayTilt = 0.1;
         STEREON_TRY(const auto vertices, AllEntities<EntityKind::Vertex>(shape));
         for (const VertexId vertex : vertices) {
             box = Hull(box, PositionOf(shape, vertex));
+        }
+    }
+    return Length(Diagonal(box));
+}
+
+/// The characteristic size of one *connected shell*, not of the entire
+/// collection of disjoint solids. A distant cylinder must not push another
+/// cylinder's orientation probe hundreds of radii away: the perturbed rays
+/// then miss its caps (issue #160). Endpoints and curve midpoints also cover
+/// circular edges whose only vertex is the seam.
+[[nodiscard]] Result<double> ShellExtentOf(const Work& w, const std::vector<std::size_t>& component)
+{
+    Box3 box = Box3::Empty();
+    for (const std::size_t f : component) {
+        const auto [body, face] = w.Copied[f];
+        const Shape& shape = w.ShapeOf(body);
+        STEREON_TRY(const LoopRange loops, LoopsOf(shape, face));
+        for (const LoopId loop : loops) {
+            STEREON_TRY(const CoedgeRange coedges, CoedgesOf(shape, loop));
+            for (const CoedgeId coedge : coedges) {
+                const EdgeId edge = EdgeOf(shape, coedge);
+                box = Hull(box, PositionOf(shape, StartOf(shape, edge)));
+                box = Hull(box, PositionOf(shape, EndOf(shape, edge)));
+                const Interval range = RangeOf(shape, edge);
+                if (const std::optional<Curve> curve = CurveOf(shape, edge);
+                    curve && range.IsBounded()) {
+                    box = Hull(box, Eval(*curve, Midpoint(range)));
+                }
+            }
         }
     }
     return Length(Diagonal(box));
@@ -934,11 +964,17 @@ struct Enclosure {
 /// becomes one.
 [[nodiscard]] Result<void> MakeShells(Work& w)
 {
-    STEREON_TRY(const double extent, ExtentOf(w));
+    STEREON_TRY(const double fallbackExtent, ExtentOf(w));
     std::vector<Placed> lumps;
     std::vector<Placed> voids;
     for (std::vector<std::size_t>& component : Components(w)) {
-        STEREON_TRY(Placed placed, PlacementOf(w, std::move(component), extent));
+        STEREON_TRY(const double ownExtent, ShellExtentOf(w, component));
+        // A shell with a collapsed vertex/edge hull keeps the old probe
+        // distance. Ordinary shells are probed at their own scale, which is
+        // independent of the number and spacing of other disconnected solids.
+        const bool hasExtent = ownExtent > 0.0; // STEREON-LINT-ALLOW(epsilon): exact zero
+        const double reachScale = hasExtent ? ownExtent : fallbackExtent;
+        STEREON_TRY(Placed placed, PlacementOf(w, std::move(component), reachScale));
         (placed.Void ? voids : lumps).push_back(std::move(placed));
     }
     std::vector<BuilderSolidId> solids;

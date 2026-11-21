@@ -112,6 +112,25 @@ TEST_CASE("the drilled slab's speed-up, stage by stage", "[.][boolean][speedup]"
     }
 }
 
+// Full issue #160 scale. Hidden from the routine CI matrix because building
+// 900 drill solids is deliberately expensive; run by exact test name in the
+// Boolean large-fixture qualification job. The result must have one solid
+// and one closed three-face shell per drill, without exhausting orientation
+// rays simply because the grid is large.
+TEST_CASE("issue 160: a disjoint 30 by 30 drill grid is buildable",
+          "[.][boolean][regression][issue160][large]")
+{
+    const Shape drills = Drills(30);
+    REQUIRE(CountOf<EntityKind::Solid>(drills) == 900);
+    REQUIRE(CountOf<EntityKind::Face>(drills) == 2700);
+    const Stereon::ValidityReport report =
+        ValidateTopology(drills, Stereon::ValidityLevel::Solid, serial);
+    for (const Stereon::ValidityFinding& finding : report.GetFindings()) {
+        INFO(finding.Message);
+        CHECK(finding.Rule == Stereon::TopologyRule::SelfIntersectionUnchecked);
+    }
+}
+
 // Issue #160 (3): parallel cylinders with coplanar top and bottom caps.
 // The imprint must be valid before assembly, and the union's final Freeze
 // must produce a structurally valid solid, not a silently repaired topology.
