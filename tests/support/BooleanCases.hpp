@@ -65,11 +65,10 @@ inline Stereon::Shape Drills(const int n, const Stereon::Vec3 offset = {})
     }
     std::vector<Stereon::Shape> level;
     for (int k = 0; k < n * n; ++k) {
+        const Stereon::Point3 centre{10.0 * (k % n) + 5.0, 10.0 * (k / n) + 5.0, -5.0};
         level.push_back(
-            Must(MakeCylinderSolid(
-                     Stereon::Point3{10.0 * (k % n) + 5.0 + offset.X,
-                                     10.0 * (k / n) + 5.0 + offset.Y, -5.0 + offset.Z},
-                     Stereon::Vec3{1.0, 0.0, 0.0}, Stereon::Vec3{0.0, 1.0, 0.0}, 2.0, 20.0, serial),
+            Must(MakeCylinderSolid(centre + offset, Stereon::Vec3{1.0, 0.0, 0.0},
+                                   Stereon::Vec3{0.0, 1.0, 0.0}, 2.0, 20.0, serial),
                  "a drill")
                 .Shape);
     }
