@@ -715,7 +715,6 @@ TEST_CASE("a face contains no parameters beyond its surface's domain", "[boolean
     REQUIRE(*middle == std::optional<bool>{true});
 }
 
-
 // Issue #160: a shell's orientation probe was based on the entire operands'
 // extent. For cylinders separated by a large distance the tilted rays from
 // the end-cap probe missed the small cap, leaving its three-face shell
@@ -732,9 +731,9 @@ TEST_CASE("widely separated cylinders union as independent closed solids",
     REQUIRE(right.has_value());
     for (const bool swapped : {false, true}) {
         INFO(swapped ? "right first" : "left first");
-        const OperationResult united = Run(swapped ? right->Shape : left->Shape,
-                                           swapped ? left->Shape : right->Shape,
-                                           BooleanOperation::Union);
+        const Shape& first = swapped ? right->Shape : left->Shape;
+        const Shape& second = swapped ? left->Shape : right->Shape;
+        const OperationResult united = Run(first, second, BooleanOperation::Union);
         REQUIRE(CountOf<EntityKind::Solid>(united.Shape) == 2);
         REQUIRE(CountOf<EntityKind::Face>(united.Shape) == 6);
         RequireClosed(united.Shape);

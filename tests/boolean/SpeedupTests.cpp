@@ -112,7 +112,6 @@ TEST_CASE("the drilled slab's speed-up, stage by stage", "[.][boolean][speedup]"
     }
 }
 
-
 // Full issue #160 scale. Hidden from the routine CI matrix because building
 // 900 drill solids is deliberately expensive; run by exact test name in the
 // Boolean large-fixture qualification job. The result must have one solid

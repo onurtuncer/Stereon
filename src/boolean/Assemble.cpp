@@ -643,8 +643,7 @@ constexpr double RayTilt = 0.1;
 /// cylinder's orientation probe hundreds of radii away: the perturbed rays
 /// then miss its caps (issue #160). Endpoints and curve midpoints also cover
 /// circular edges whose only vertex is the seam.
-[[nodiscard]] Result<double> ShellExtentOf(const Work& w,
-                                           const std::vector<std::size_t>& component)
+[[nodiscard]] Result<double> ShellExtentOf(const Work& w, const std::vector<std::size_t>& component)
 {
     Box3 box = Box3::Empty();
     for (const std::size_t f : component) {
