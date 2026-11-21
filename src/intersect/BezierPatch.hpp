@@ -290,8 +290,7 @@ Clipped(Patch patch, const bool alongU, const Interval& wanted)
 
 /// A positive-area overlap, not merely a shared knot edge. An adjacent
 /// patch with only a boundary in the request must not enlarge its search.
-[[maybe_unused]] [[nodiscard]] inline bool
-HasInteriorOverlap(const Box2& patch, const Box2& requested)
+[[maybe_unused]] [[nodiscard]] inline bool HasAreaOverlap(const Box2& patch, const Box2& requested)
 {
     const Interval u = Intersection(patch.X, requested.X);
     const Interval v = Intersection(patch.Y, requested.Y);
@@ -316,7 +315,7 @@ PatchesOver(const BSplineSurface& s, const Box2& domain)
     STEREON_TRY(const std::vector<Patch> patches, PatchesOf(s));
     std::vector<Patch> kept;
     for (const Patch& patch : patches) {
-        if (!HasInteriorOverlap(patch.Parameters, requested)) {
+        if (!HasAreaOverlap(patch.Parameters, requested)) {
             continue;
         }
         STEREON_TRY(std::optional<Patch> u, Clipped(patch, true, requested.X));
