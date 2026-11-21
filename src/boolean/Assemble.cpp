@@ -616,7 +616,7 @@ void RecordShell(Work& w, const std::vector<std::size_t>& faces, const BuilderSh
 }
 
 /// How far off a face a component is probed from, as a share of the
-/// operands' extent: an irrational-looking share, so that the point does
+/// connected shell's extent: an irrational-looking share, so that the point does
 /// not land on another face of a body laid out in round numbers.
 constexpr double ProbeReachShare = 0.37;
 /// How far a probe's ray is tilted off the way back to its face when that
