@@ -81,19 +81,13 @@ constexpr double Pi = std::numbers::pi;
 /// certifies. The budget bounds the work, not the geometry (ADR-0010).
 constexpr std::size_t InitialSamples = 32;
 constexpr std::size_t SampleBudget = std::size_t{1} << 14;
-/// How often a track's range is bisected at most when clipping it to the
-/// requested boxes, and how many enclosures the clip evaluates at most:
-/// the bisection follows the boxes' boundaries, so the depth costs a few
-/// evaluations per boundary, and the budget keeps a loose enclosure from
-/// turning it into a sweep. Then how many samples scan a piece for B's
-/// seam.
+/// The clip follows requested boxes' boundaries; independent budgets
+/// guard clipping and interval-certified seam isolation. Seam isolation
+/// must refuse when a zero cannot be separated, never return a partial
+/// list of cuts.
 constexpr int ClipDepth = 40;
 constexpr std::size_t ClipBudget = std::size_t{1} << 16;
-constexpr std::size_t SeamScan = 256;
-/// A seam that comes within this of a fold's extreme angle only touches
-/// the loop there: one cut, not the two that acos would amplify rounding
-/// into.
-constexpr double FoldTouch = 1e-9;
+constexpr std::size_t SeamIsolationBudget = std::size_t{1} << 16;
 
 [[nodiscard]] ExactVector<4> ExactAxisOf(const Cylinder& c)
 {
@@ -765,7 +759,9 @@ using Parameters = std::inplace_vector<double, 6>;
     if (!(std::abs(x) <= 1.0)) {
         return {};
     }
-    const bool touches = std::abs(x) >= 1.0 - FoldTouch;
+    // Do not merge distinct preimages merely because x is close to a
+    // fold. Their separation may be far below 1e-9 yet topologically real.
+    const bool touches = x == -1.0 || x == 1.0;
     const double t0 = touches ? (x > 0.0 ? 0.0 : Pi) : std::acos(x);
     Parameters roots;
     for (const double shift : {-CirclePeriod, 0.0, CirclePeriod}) {
@@ -785,7 +781,7 @@ using Parameters = std::inplace_vector<double, 6>;
     if (!(squared >= 0.0 && squared <= 1.0)) {
         return {};
     }
-    if (squared <= FoldTouch) {
+    if (squared == 0.0) {
         return {0.0};
     }
     return {-std::sqrt(squared), std::sqrt(squared)};
@@ -862,26 +858,60 @@ void SeamCutsOnA(const Pair& p, const Track& k, const Interval& span, std::vecto
     return 0.5 * (lo + hi);
 }
 
-/// Where B's angle crosses its seam inside the span: scanned at SeamScan
-/// samples, a jump of more than half a turn between neighbours marks a
-/// crossing, which is then bisected.
-void SeamCutsOnB(const Pair& p, const Configuration& c, const Track& k, const Interval& span,
-                 std::vector<double>& cuts)
+/// B's chart seam is the *positive* ruling O_B + r_B X_B + h Axis_B.
+/// Its intersection with A's skew cylinder is a nondegenerate quadratic
+/// in h, hence there are at most two distinct seam points, counting a
+/// tangency twice. This bound means that a positive-ray enclosure with
+/// opposite signs of Y_B at its ends contains exactly one transverse
+/// crossing: two simple crossings would have the same end sign. An
+/// enclosure whose Y_B excludes zero or whose X_B excludes positivity
+/// provably contains no seam crossing. Every other enclosure subdivides,
+/// including a close pair of crossings that a fixed sampling grid misses.
+/// If interval rounding or a tangent prevents isolation within the budget,
+/// return an explicit refusal instead of emitting an incomplete branch.
+[[nodiscard]] Result<void> IsolateSeamOnB(const Pair& p, const Configuration& c, const Track& k,
+                                          const Interval& range, std::vector<double>& cuts,
+                                          std::size_t& evaluations)
 {
-    const double width = Width(span);
-    const auto at = [&](const std::size_t i) {
-        return span.GetLower() + width * static_cast<double>(i) / static_cast<double>(SeamScan);
-    };
-    double previous = OnB(p, PlaceOf(p, c, k, span.GetLower()).Point).X;
-    for (std::size_t i = 1; i <= SeamScan; ++i) {
-        const double t = at(i);
-        const double angle = OnB(p, PlaceOf(p, c, k, t).Point).X;
-        if (std::abs(angle - previous) > Pi) {
-            const double before = at(i - 1);
-            AddCut(span, BisectSeam(p, c, k, before, t), cuts);
-        }
-        previous = angle;
+    if (++evaluations > SeamIsolationBudget) {
+        return Fail(ErrorCode::IntersectionFailed,
+                    "CylinderCylinder: B seam isolation exhausted its interval budget");
     }
+    using I = IntervalScalar;
+    const Place<I> placed = PlaceOf(p, c, k, I{range});
+    const BasicVec3<I> offset = placed.Point - Wide<I>(p.B.Origin);
+    const Interval x = Dot(offset, Wide<I>(p.B.XAxis)).Value;
+    const Interval y = Dot(offset, Wide<I>(p.B.YAxis)).Value;
+    if (x.GetUpper() <= 0.0 || y.GetLower() > 0.0 || y.GetUpper() < 0.0) {
+        return {};
+    }
+    const double lo = range.GetLower();
+    const double hi = range.GetUpper();
+    if (x.GetLower() > 0.0) {
+        const double left = SeamSideOnB(p, c, k, lo);
+        const double right = SeamSideOnB(p, c, k, hi);
+        if ((left < 0.0 && right > 0.0) || (left > 0.0 && right < 0.0)) {
+            AddCut(range, BisectSeam(p, c, k, lo, hi), cuts);
+            return {};
+        }
+    }
+    const double middle = lo + (hi - lo) * 0.5;
+    if (!(lo < middle && middle < hi)) {
+        return Fail(ErrorCode::IntersectionFailed,
+                    "CylinderCylinder: B seam cannot be isolated to a representable parameter");
+    }
+    STEREON_TRY_VOID(
+        IsolateSeamOnB(p, c, k, Interval{lo, middle}, cuts, evaluations));
+    return IsolateSeamOnB(p, c, k, Interval{middle, hi}, cuts, evaluations);
+}
+
+/// Complete or fail-closed list of B seam cuts over this span. The interval
+/// enclosures are on the closed-form intersection itself, not an interpolant.
+[[nodiscard]] Result<void> SeamCutsOnB(const Pair& p, const Configuration& c, const Track& k,
+                                       const Interval& span, std::vector<double>& cuts)
+{
+    std::size_t evaluations = 0;
+    return IsolateSeamOnB(p, c, k, span, cuts, evaluations);
 }
 
 /// The farthest the track gets from its point at lo, over hi and three
@@ -902,12 +932,15 @@ void SeamCutsOnB(const Pair& p, const Configuration& c, const Track& k, const In
 /// seam found a hair inside a fold that lies on it: it joins its neighbour
 /// rather than being fitted on its own, which no chart could hold. The
 /// span's own ends are kept, so the pieces still cover it.
-[[nodiscard]] std::vector<double> CutsOf(const Pair& p, const Configuration& c, const Track& k,
-                                         const Interval& span, const double resolution)
+[[nodiscard]] Result<std::vector<double>> CutsOf(const Pair& p, const Configuration& c,
+                                                 const Track& k, const Interval& span,
+                                                 const double resolution)
 {
     std::vector<double> cuts{span.GetLower(), span.GetUpper()};
     SeamCutsOnA(p, k, span, cuts);
-    SeamCutsOnB(p, c, k, span, cuts);
+    std::vector<double> seamB;
+    STEREON_TRY_VOID(SeamCutsOnB(p, c, k, span, seamB));
+    cuts.insert(cuts.end(), seamB.begin(), seamB.end());
     std::ranges::sort(cuts);
     std::vector<double> distinct{cuts.front()};
     for (std::size_t i = 1; i < cuts.size(); ++i) {
@@ -919,6 +952,14 @@ void SeamCutsOnB(const Pair& p, const Configuration& c, const Track& k, const In
     }
     if (distinct.size() == 1) {
         distinct.push_back(cuts.back());
+    }
+    // A distinct B-seam cut may not be discarded by the sliver coalescing
+    // rule: this could reconnect branches across an unreported chart seam.
+    for (const double root : seamB) {
+        if (!std::ranges::binary_search(distinct, root)) {
+            return Fail(ErrorCode::IntersectionFailed,
+                        "CylinderCylinder: a distinct B seam cut is below the fit resolution");
+        }
     }
     return distinct;
 }
@@ -1074,7 +1115,7 @@ void ChartOnB(std::vector<Point2>& onB)
                                     const Box2& boxB, const Context& ctx)
 {
     for (const Interval& span : ClipTrack(p, c, k, boxA, boxB)) {
-        const std::vector<double> cuts = CutsOf(p, c, k, span, ctx.GetResolution());
+        STEREON_TRY(const std::vector<double> cuts, CutsOf(p, c, k, span, ctx.GetResolution()));
         for (std::size_t i = 1; i < cuts.size(); ++i) {
             STEREON_TRY_VOID(AddPiece(result, p, c, k, Interval{cuts[i - 1], cuts[i]}, ctx));
         }
