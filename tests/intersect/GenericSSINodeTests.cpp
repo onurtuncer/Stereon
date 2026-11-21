@@ -293,12 +293,21 @@ void CheckNode(const Stereon::SurfaceSurfaceIntersection& r, const Surface& a, c
     REQUIRE(r.Branches.size() == 4);
     REQUIRE(IntersectTest::ConnectivityOf(r, 1e-9 * motion.Scale).Curves == 1);
     const double reach = 4.0 * resolution / motion.Scale; // In the input's own space.
+    // The samples are evaluated in doubles at the placed coordinates, each
+    // point rounded to their spacing: 9.1e-13 near x = -4096, where the
+    // measured gap of a branch certified to 2.7e-13 is 1.37e-12, a gap of
+    // one and a half spacings. Four spacings of the largest coordinate,
+    // beyond the 1e-12 kept for the evaluation itself.
+    const double largest =
+        std::max({std::abs(motion.Shift.X), std::abs(motion.Shift.Y), std::abs(motion.Shift.Z)}) +
+        2.0 * motion.Scale;
+    const double rounding = 4.0 * std::numeric_limits<double>::epsilon() * largest;
     std::array<bool, 4> matched{};
     for (const Stereon::IntersectionBranch& branch : r.Branches) {
         REQUIRE(branch.IsCertified());
         REQUIRE(branch.Bound <= resolution);
         REQUIRE(IntersectTest::PcurveDeviation(branch, a, b, 64) <=
-                branch.Bound + 1e-12 * motion.Scale);
+                branch.Bound + 1e-12 * motion.Scale + rounding);
         Point3 first = motion.Back(Eval(branch.Curve3d, branch.Range.GetLower()));
         Point3 last = motion.Back(Eval(branch.Curve3d, branch.Range.GetUpper()));
         if (Distance(last, e.Node) < Distance(first, e.Node)) {
