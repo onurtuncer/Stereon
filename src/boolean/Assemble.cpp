@@ -300,7 +300,7 @@ struct AffineCirclePCurve {
                                               const double bias, const double k)
 {
     const Vec2 radial = c.Radius * (Cos(bias) * c.XAxis + Sin(bias) * c.YAxis);
-    const double sense = Cross(c.XAxis, c.YAxis) < 0.0 ? -1.0 : 1.0;
+    const double sense = Cross(c.XAxis, c.YAxis) < 0.0 ? -1.0 : 1.0; // STEREON-LINT-ALLOW(epsilon): orientation sign
     return {c.Center, radial, range, sense * k};
 }
 
