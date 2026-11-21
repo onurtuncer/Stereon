@@ -128,8 +128,8 @@ TEST_CASE("issue 160: overlapping level-cap cylinder grids publish valid topolog
         const auto result = Boolean(a, b, BooleanOperation::Union, serial);
         INFO(result ? "" : std::string(result.error().GetMessage()));
         REQUIRE(result.has_value());
-        CHECK(CountOf<EntityKind::Solid>(result->Shape) ==
-              static_cast<std::size_t>(2 * n * n - n));
+        const std::size_t expected = static_cast<std::size_t>(2 * n * n - n);
+        CHECK(CountOf<EntityKind::Solid>(result->Shape) == expected);
         CHECK(ValidateTopology(result->Shape).IsValid());
     }
 }
