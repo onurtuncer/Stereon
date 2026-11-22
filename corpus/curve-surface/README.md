@@ -10,7 +10,7 @@ Each family pairs a curve kind (line, circle, ellipse, parabola, hyperbola, a cu
 | `oblique` | 20 degrees |
 | `grazing` | 1 degree |
 
-Inputs are rounded to 1e-14, so a crossing moves by about that over the sine of its angle.
+Inputs are rounded to 1e-12, so a crossing moves by about that over the sine of its angle (6e-11 at 1 degree).
 
 The claim of a case is local. The result has a decided crossing within 1e-9 (per unit of scale) of `expected.point`, at the curve parameter `expected.parameter`. The pair may also meet elsewhere. Every point the result reports must lie on the curve, in the requested domain, and on the surface at its reported parameters.
 

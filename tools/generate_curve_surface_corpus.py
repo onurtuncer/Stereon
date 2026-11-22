@@ -259,7 +259,7 @@ def round_all(v):
     # Rounded to a grid far below the claims' reach: the last digits of a
     # platform's cos and cosh would otherwise change the files between
     # machines.
-    return [round(c, 14) for c in v]
+    return [round(c, 12) for c in v]
 
 
 def describe(kind, origin, x, y):

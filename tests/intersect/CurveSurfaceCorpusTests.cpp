@@ -40,7 +40,7 @@ using StereonTest::JsonValue;
 namespace {
 
 /// How far the crossing may be from P, and its parameter from the case's,
-/// per unit of scale: the inputs are rounded to 1e-14, and a grazing
+/// per unit of scale: the inputs are rounded to 1e-12, and a grazing
 /// crossing moves by that over the sine of its angle.
 constexpr double Reach = 1e-9;
 
