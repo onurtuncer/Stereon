@@ -34,7 +34,8 @@
 //   resolution and the tolerance ceiling scaled;
 // - MR-04: each operand in turn in an equivalent chart: an analytic
 //   surface's frame turned half about its own axis (X and Y negated, so
-//   u' = u - pi, or (u, v)' = -(u, v) on a plane, its box mapped alike); a
+//   u' = u - pi modulo a turn, or (u, v)' = -(u, v) on a plane, its box
+//   mapped alike within the base turn); a
 //   B-spline's u reversed (knots u' = a + b - u, rows of poles and weights
 //   reversed). The pcurves must lie on the recharted surface.
 
@@ -468,6 +469,22 @@ Spec Moved(Spec s, const Motion& m)
     return s;
 }
 
+/// A requested angle range in the chart turned half, u' = u - pi modulo a
+/// turn, kept within the base turn [0, 2 pi]: a whole turn is the same
+/// request in either chart. A box outside the base turn is a separate
+/// question (AUDIT-20261122-plane-cylinder-periodic-box in the inventory).
+Interval TurnedHalf(const Interval& u)
+{
+    if (u.GetLower() == 0.0 && u.GetUpper() == 2.0 * pi) {
+        return u;
+    }
+    if (u.GetLower() >= pi) {
+        return Interval{u.GetLower() - pi, u.GetUpper() - pi};
+    }
+    REQUIRE(u.GetUpper() <= pi);
+    return Interval{u.GetLower() + pi, u.GetUpper() + pi};
+}
+
 /// The same surface in an equivalent chart (see the file's comment).
 Spec Recharted(Spec s)
 {
@@ -506,7 +523,7 @@ Spec Recharted(Spec s)
             s.Box = Box2{Interval{-s.Box->X.GetUpper(), -s.Box->X.GetLower()},
                          Interval{-s.Box->Y.GetUpper(), -s.Box->Y.GetLower()}};
         } else {
-            s.Box = Box2{Interval{s.Box->X.GetLower() - pi, s.Box->X.GetUpper() - pi}, s.Box->Y};
+            s.Box = Box2{TurnedHalf(s.Box->X), s.Box->Y};
         }
     }
     return s;

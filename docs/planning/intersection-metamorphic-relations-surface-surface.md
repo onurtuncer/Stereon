@@ -63,7 +63,7 @@ The four tests are in `tests/intersect/SurfaceRelationTests.cpp`. Every claim is
 - **MR-01:** "MR-01: surface-surface answers move with exact rigid motions". Three exact rotations: the two cyclic permutations of the axes and a quarter turn about z. The first and last are composed with the translation (8, -4, 2). Points and centres move, unit frames turn, and the witnesses move with them. The translation rounds a few non-dyadic origins by about 10^-15, which is far inside every claim's margin for these transverse configurations.
 - **MR-03:** "MR-03: surface-surface answers scale with the geometry and its tolerances". Scales 1/4 and 4, exact. All lengths are scaled: radii, a plane's box and a cylinder's or a cone's heights. Angles are not. The pair tolerance, the Context's resolution and its tolerance ceiling are scaled too (ADR-0053: the policy is transformed separately from the geometry).
 - **MR-04:** "MR-04: surface-surface answers keep their place in equivalent surface charts". Each operand in turn is put in an equivalent chart, in both orders:
-  - an analytic surface's frame is turned half about its own axis, X and Y negated, which leaves the point set and its normal unchanged. The chart becomes u' = u - pi (on a plane, (u, v)' = -(u, v)), and a requested box is mapped the same way. A whole turn [0, 2 pi] becomes [-pi, pi], exactly;
+  - an analytic surface's frame is turned half about its own axis, X and Y negated, which leaves the point set and its normal unchanged. The chart becomes u' = u - pi modulo a turn (on a plane, (u, v)' = -(u, v)). A requested box is mapped the same way and kept within the base turn [0, 2 pi]; a whole turn stays [0, 2 pi]. A box outside the base turn is excluded from these cells, because of the finding below;
   - a B-spline's u is reversed: knots u' = a + b - u, rows of poles and weights reversed.
 
   The pcurves must lie on the recharted surface, so the reported parameters must be the remapped ones.
@@ -77,3 +77,13 @@ build/gcc16-debug/tests/stereon_intersect_tests "MR-0?: surface-surface*"
 ```
 
 Every fixture is a committed corpus file or a literal in the test; there is no random seed. The tests are tagged `[intersect][surface-surface][metamorphic]`, not hidden, so they run in every pull request's CTest on Linux, Windows and macOS.
+
+#### Finding: plane-cylinder boxes outside the base turn
+
+The first CI run of this branch mapped a whole-turn box [0, 2 pi] to [-pi, pi] under MR-04. In all three runs (macOS and Windows `gcc16-debug`, Windows `gcc16-windows`: [macOS job](https://github.com/onurtuncer/Stereon/actions/runs/45059668981/job/137322549137), [Windows job](https://github.com/onurtuncer/Stereon/actions/runs/45059669001/job/137322549521)), every pair answered correctly except one: plane–cylinder, in both orders, **succeeded with half the ellipse**. The witness (0, 1, 11/6) lay 1.94 from the result.
+
+- **Reproduction:** the plane through (0, 0, 1/2) with axes x and (0, 3/5, 4/5), box [-4, 4]^2. Take the unit cylinder about z with its frame turned half, X = (-1, 0, 0), Y = (0, -1, 0), and box u in [-pi, pi], v in [-4, 4]. Pass tolerance 1e-5 and the default Context. The answer is an ellipse arc over u in [0, pi] only. The closed form is the whole ellipse z = 1/2 + 4y/3, because [-pi, pi] is a whole turn of the same cylinder.
+- **Cause, from reading the code:** `EllipseSection` in `src/intersect/PlaneCylinder.cpp` intersects the requested u range with the base turn [0, 2 pi) (`Intersection(Interval{-u0, CirclePeriod - u0}, ...)`) and drops the rest of the request without failing. `CircleSection` does the same (`Intersection(Domain(circle), boxB.X)`) and presumably has the same fault for a plane across the axis. This was not run.
+- **Why it is a defect:** the request is a whole turn of the cylinder, and the answer is a successful, incomplete result: a wrong answer, not a refusal. Other handlers either answer such boxes (every other pair in this test did) or document a refusal: the ellipsoid's `NotImplemented` for a box outside its base turn (`docs/intersection.rst`).
+- **Not repaired here:** this pull request changes no library code. The inventory records it as `AUDIT-20261122-plane-cylinder-periodic-box`, `fixture captured`. Its repair belongs to the SSI owner, and the owner decides whether such boxes are supported or refused.
+- **Effect on the cells:** Plane:Cylinder/MR-04 and Cylinder:Plane/MR-04 stay `MR implemented` until that record is closed. The MR-04 test now keeps boxes within the base turn, so it no longer exercises this fault.

@@ -516,6 +516,12 @@
         "MR-03",
         "MR-04"
       ]
+    },
+    {
+      "id": "AUDIT-20261122-plane-cylinder-periodic-box",
+      "source": "https://github.com/onurtuncer/Stereon/actions/runs/45059668981/job/137322549137",
+      "state": "fixture captured",
+      "fixture": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Finding: plane-cylinder boxes outside the base turn"
     }
   ],
   "handlers": {
