@@ -17,11 +17,17 @@
 // transverse direction d = cos(b) n + sin(b) e (b = 0.4, e across n):
 //
 // - a line from P - 2d along d: t* = 2;
-// - a circle, an ellipse and a hyperbola with their vertex at P, centre
-//   P - a x, x across d, y = d: t* = 0;
-// - a parabola with its vertex at P, x across d, y = d: t* = 0;
-// - a cubic Bezier, polynomial and rational, symmetric about P along d:
-//   u* = 1/2.
+// - a circle and an ellipse through P at the angle 0.6, their frames turned
+//   for it;
+// - a hyperbola with axes x (across d) and d, through P at t* = 0.6:
+//   centre P - a cosh(t*) x - b sinh(t*) d;
+// - a parabola with axes x and d, through P at t* = 0.6 times the scale
+//   (its parameter is a length): vertex P - t*^2 / (4 f) x - t* d;
+// - a cubic B-spline, polynomial and rational, through P at u* = 3/8.
+//
+// The hyperbola and the parabola pass through P away from their vertex,
+// t* = 0, which an equivalent chart t' = -t leaves where it is: there the
+// chart's parameter map would go unchecked at the crossing.
 //
 // The claim: the result has a point within the resolution of P whose curve
 // parameter is t*, and every point reported lies on the curve and on the
@@ -31,7 +37,7 @@
 // - MR-01: cyclic axis permutations and a quarter turn about z, exact, with
 //   and without the translation (8, -4, 2);
 // - MR-03: scales 1/4 and 4, the resolution and tolerance ceiling scaled;
-//   a parabola's parameter is a length and scales (t* = 0 is fixed);
+//   a parabola's parameter is a length and scales with it;
 // - MR-04: the curve in an equivalent chart: a line's origin moved two
 //   directions on with its direction doubled (t' = (t - 2) / 2), a
 //   circle's frame turned a quarter (t' = t - pi/2), an ellipse's turned
@@ -254,6 +260,10 @@ const char* NameOf(const Kind k)
 constexpr double ConicAngle = 0.6;
 /// The same for the B-splines' parameter: off the dyadic subdivision.
 constexpr double SplineAt = 0.375;
+/// The parameter at which a hyperbola passes through P, and a parabola's per
+/// unit of scale: off the vertex, off the hyperbola's unit stretches and
+/// their dyadic subdivision, and off the parabola's.
+constexpr double OpenAt = 0.6;
 
 /// The cubic B-spline through P along d at u = SplineAt: exactly the
 /// quadratic c(u) = P + L (u - s) d + h (u - s)^2 x in cubic Bernstein
@@ -342,12 +352,19 @@ CurveFixture CurveThrough(const Kind kind, const Point3& p, const Vec3& d, const
         }
         return {Curve{Ellipse{centre, r, minor, fx, fy}}, Interval{-pi, pi}, ConicAngle};
     }
-    case Kind::Hyperbola:
-        return {Curve{Hyperbola{p - r * x, r, minor, x, recharted ? -d : d}}, Interval{-2.0, 2.0},
-                0.0};
-    case Kind::Parabola:
-        return {Curve{Parabola{p, scale, x, recharted ? -d : d}},
-                Interval{-4.0 * scale, 4.0 * scale}, 0.0};
+    case Kind::Hyperbola: {
+        // h(t) = C + a cosh(t) x + b sinh(t) y; with y = -d, h'(t) = h(-t).
+        const Point3 centre = p - r * std::cosh(OpenAt) * x - minor * std::sinh(OpenAt) * d;
+        return {Curve{Hyperbola{centre, r, minor, x, recharted ? -d : d}}, Interval{-2.0, 2.0},
+                recharted ? -OpenAt : OpenAt};
+    }
+    case Kind::Parabola: {
+        // p(t) = V + t^2 / (4 f) x + t y, f = scale; with y = -d, p'(t) = p(-t).
+        const double at = OpenAt * scale;
+        const Point3 vertex = p - (at * at / (4.0 * scale)) * x - at * d;
+        return {Curve{Parabola{vertex, scale, x, recharted ? -d : d}},
+                Interval{-4.0 * scale, 4.0 * scale}, recharted ? -at : at};
+    }
     case Kind::Spline:
     case Kind::Rational:
         return {Curve{Cubic(p, d, x, scale, kind == Kind::Rational, recharted)},

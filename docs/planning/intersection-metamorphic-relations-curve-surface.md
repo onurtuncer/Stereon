@@ -12,7 +12,7 @@ There are 42 ordered pairs: `Line`, `Circle`, `Ellipse`, `BSplineCurve`, `Hyperb
 | --- | --- | --- |
 | MR-01, MR-03, MR-04 on the 28 pairs with a handler (line, circle, ellipse, B-spline curve against every surface) | 84 | verified, new tests |
 | MR-02 on all 42 pairs | 42 | exception reviewed: no exposed exchanged operation |
-| MR-01, MR-03, MR-04 on hyperbola and parabola against every surface | 42 | left open: no handler (`NotImplemented`) |
+| MR-01, MR-03, MR-04 on hyperbola and parabola against every surface | 42 | left open at first (no handler); handlers since #292, qualified in the 2026-11-22 addendum below |
 
 There was no curve–surface corpus to cite. The oracle is a closed-form fixture in `tests/intersect/CurveSurfaceRelationTests.cpp`.
 
@@ -30,16 +30,17 @@ There was no curve–surface corpus to cite. The oracle is a closed-form fixture
   - a line from P - 2d: t* = 2;
   - a circle (radius 3) and an ellipse (3 by 2) through P at angle 0.6, their frames turned for it;
   - a cubic B-spline, polynomial and rational, that is exactly c(u) = P + L (u - 3/8) d + h (u - 3/8)^2 x: u* = 3/8. The rational one carries the linear weight 1 + u in numerator and weights, so it is the same curve.
+  - a hyperbola (semi-axes 3 and 2) and a parabola (focal length 1), added in the 2026-11-22 addendum: axes x and d, through P at t* = 0.6 (the parabola's times the scale).
 
   The crossings are deliberately off the kernel's piece boundaries (quarter-turn arcs, the dyadic subdivision); see the observation below.
 - **Claim:** a reported point within four resolutions of P with curve parameter t*, no overlap, and every reported point on the curve and on the surface. The surface distance is closed-form: |z| for the planes; |rho - R| for the cylinder; ||rho - |R + z tan a|| cos a for the cone, both nappes; ||p - c| - R| for the sphere; the tube distance for the torus; and the algebraic value times the least semi-axis over two for the ellipsoid, an estimate near it.
 - **3D rational curves:** included. The rational cubic is exercised against every surface.
-- **Out of scope:** tangencies and overlaps (exercised by the handler tests themselves), unbounded domains, periodic B-splines, and hyperbolas and parabolas, which have no handler.
+- **Out of scope:** tangencies and overlaps (exercised by the handler tests themselves), unbounded domains, periodic B-splines, and unbounded hyperbola and parabola domains (`NotSupported`). Hyperbolas and parabolas had no handler until #292.
 
 #### Relations
 
 - **MR-01:** "MR-01: curve-surface crossings move with exact rigid motions". The identity, the two cyclic axis permutations and a quarter turn about z, each with and without the translation (8, -4, 2).
-- **MR-03:** "MR-03: curve-surface crossings scale with the geometry and its resolution". Scales 1/4, 1 and 4, with the resolution and tolerance ceiling scaled. A parabola's parameter is a length, but its t* = 0 is fixed.
+- **MR-03:** "MR-03: curve-surface crossings scale with the geometry and its resolution". Scales 1/4, 1 and 4, with the resolution and tolerance ceiling scaled. A parabola's parameter is a length and scales: t* = 0.6 times the scale.
 - **MR-04:** "MR-04: curve-surface crossings keep their place in an equivalent curve chart". Under each rotation, the curve in its original chart and in an equivalent one:
   - a line's origin at P with its direction doubled, t' = (t - 2) / 2;
   - a circle's frame turned a quarter, t' = t - pi/2;
@@ -119,3 +120,24 @@ answer. The 36 hyperbola/parabola cells against analytic surfaces have
 therefore been exercised, but they have not been reclassified here. With the
 six against the B-spline surface, they await the same review as the 84 cells
 above before the table at the top changes.
+
+## Hyperbola and parabola cells, 2026-11-22
+
+- **Branch:** `verify/relations-open-conics`, on `main` 898ed69
+- **Reviewer:** the v0.2 verification agent (Agent E), as above; the owner's review is pending.
+- **Cells:** MR-01, MR-03 and MR-04 of `Hyperbola` and `Parabola` against all seven surfaces, 42 cells. Their MR-02 cells stay exception reviewed, as for every curve–surface pair.
+
+#### Fixture change
+
+Until this branch the hyperbola and the parabola passed through P at their vertex, t* = 0. MR-04's chart for both negates the y axis, t' = -t, which leaves t* = 0 where it is. So the relation's parameter map was never checked at the crossing: a handler that reported the crossing's parameter with the wrong sign would have passed. The curves now pass through P away from the vertex:
+
+- the hyperbola, semi-axes 3 and 2, axes x (across d) and d, centre P - 3 cosh(0.6) x - 2 sinh(0.6) d: t* = 0.6, and -0.6 in the equivalent chart;
+- the parabola, focal length f equal to the scale, axes x and d, vertex P - t*^2/(4f) x - t* d with t* = 0.6 times the scale: t* and -t* in the equivalent chart.
+
+The tangent at P is 3 sinh(0.6) x + 2 cosh(0.6) d, or t*/(2f) x + d = 0.3 x + d. Its component along the surface normal is at least 2.37 cos 0.4 - 1.91 sin 0.4 > 1.4 for the hyperbola and cos 0.4 - 0.3 sin 0.4 > 0.8 for the parabola, so each crossing is transverse. t* = 0.6 is off the hyperbola's unit stretches (cut at -1, 0 and 1 over [-2, 2]) and off their dyadic subdivision, and off the parabola's single piece [-4, 4] and its subdivision. Every other claim and tolerance of the test is unchanged.
+
+#### Evidence
+
+- **Tests:** the three cited tests, which run in every pull request (`[intersect][curve-surface][metamorphic]`, not hidden). Since the audit hardening of 2026-11-12 and #292, every fixture must answer: a refusal or `NotImplemented` fails the test.
+- **Oracle:** the closed form above; the kernel is used only for the answer under test.
+- **Green:** see "Green, hyperbolas and parabolas" below.
