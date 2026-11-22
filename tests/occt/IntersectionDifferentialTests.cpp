@@ -423,6 +423,13 @@ TEST_CASE("skew cylinder-cylinder intersections agree with OCCT", "[occt][inters
     for (const Cylinder& other : others) {
         for (const auto& [first, second] : {std::pair{a, other}, std::pair{other, a}}) {
             const auto result = Intersect(Surface(first), Surface(second), ctx);
+            INFO("first radius " << first.Radius << ", second radius " << second.Radius);
+            INFO("second origin x " << second.Origin.X);
+            INFO("second origin y " << second.Origin.Y);
+            INFO("second origin z " << second.Origin.Z);
+            if (!result) {
+                INFO(result.error().GetMessage());
+            }
             REQUIRE(result.has_value());
             REQUIRE_FALSE(result->Branches.empty());
             // Stereon's samples lie within a sample gap of OCCT's traces,

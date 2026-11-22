@@ -403,6 +403,51 @@ TEST_CASE("nearly parallel cylinders are the quartic within bounded heights and 
     REQUIRE(upper < bounded->Branches.size());
 }
 
+TEST_CASE("nearly parallel cylinders leave the size box whichever way their seams point",
+          "[intersect][cylinder][skew][regression][issue195]")
+{
+    // The pair above with B's frame turned so that its seam lies in the
+    // plane of the two axes, on either side: the seam then meets A twice,
+    // some 1e9 mm away, where the ellipses are. The refusal is still the
+    // size box's (ADR-0001), in both orders, not one of the seam
+    // isolation, which has nothing to decide out there.
+    const Vec3 axis = Normalized(Vec3{1e-9, 0.0, 1.0});
+    for (const double side : {1.0, -1.0}) {
+        const Vec3 y{0.0, side, 0.0};
+        const Surface nearly{Cylinder{Point3{5.0, 0.0, 0.0}, 3.0, Cross(y, axis), y, true}};
+        for (const bool swapped : {false, true}) {
+            INFO("side " << side << ", swap " << swapped);
+            const auto result = swapped ? Intersect(nearly, a, ctx) : Intersect(a, nearly, ctx);
+            INFO(IntersectTest::ErrorText(result));
+            REQUIRE_FALSE(result.has_value());
+            REQUIRE(result.error().GetCode() == ErrorCode::CertificationFailed);
+            REQUIRE(std::string(result.error().GetMessage()).find("size box") != std::string::npos);
+        }
+    }
+}
+
+TEST_CASE("an oblique cylinder crossing another partly is one loop in both orders",
+          "[intersect][cylinder][skew][regression][issue195]")
+{
+    // The oblique pair of the OCCT differential (tests/occt), which only
+    // that job ran: B of radius 2.5 along x through (1, 2, 0.5), its frame
+    // turned about its axis so that neither seam lies at a fold. The axes
+    // are 2 apart, between |3 - 2.5| and 3 + 2.5: one loop.
+    const Surface b{
+        Cylinder{Point3{1.0, 2.0, 0.5}, 2.5, Vec3{0.0, 0.6, 0.8}, Vec3{0.0, -0.8, 0.6}, true}};
+    for (const bool swapped : {false, true}) {
+        INFO("swap " << swapped);
+        const Surface& first = swapped ? b : a;
+        const Surface& second = swapped ? a : b;
+        const auto result = Intersect(first, second, ctx);
+        INFO(IntersectTest::ErrorText(result));
+        REQUIRE(result.has_value());
+        RequireBranchesOn(*result, first, second);
+        REQUIRE(ConnectivityOf(*result).Curves == 1);
+        REQUIRE(ConnectivityOf(*result).Nodes == 0);
+    }
+}
+
 TEST_CASE("skew cylinder angular clipping respects both operands",
           "[intersect][cylinder][skew][regression]")
 {
@@ -592,6 +637,129 @@ TEST_CASE("skew cylinders clip wide sectors at either angular boundary",
             // Both patches contain u=pi+0.5, including the side that a
             // mistaken intersection of the half-planes would discard.
             REQUIRE(retainedBeyondPi);
+        }
+    }
+}
+
+TEST_CASE("skew B seam isolates both generator crossings near a fold",
+          "[intersect][cylinder][skew][regression][issue195]")
+{
+    // B's positive chart seam is its generator through
+    // (x, 4 - 2 cos(e), 2 sin(e)). Its two intersections with A are
+    // (±sqrt(9 - y²), y, z); this is an independent quadratic oracle,
+    // not a reference to the implementation's track/seam samples.
+    // e=0 touches a fold; e=1e-10 and e=1e-7 approach it; e=0.02
+    // places crossings between nodes of the historical 256-step scan.
+    for (const double e : {0.0, 1e-10, 1e-7, 0.02}) {
+        const double co = std::cos(e);
+        const double si = std::sin(e);
+        const double y = 4.0 - 2.0 * co;
+        const double z = 2.0 * si;
+        const double x = std::sqrt(9.0 - y * y);
+        const Point3 forward{x, y, z};
+        const Point3 backward{-x, y, z};
+        const double bound = 2.0 * ctx.GetResolution();
+        for (const bool rightHanded : {false, true}) {
+            const Point3 origin{0.0, 4.0, 0.0};
+            const Vec3 bx{0.0, -co, si};
+            const Vec3 by{0.0, -si, -co};
+            const Surface b{Cylinder{origin, 2.0, bx, by, rightHanded}};
+            for (const bool swapped : {false, true}) {
+                INFO("offset " << e << ", handedness " << rightHanded << ", swap " << swapped);
+                const Surface& first = swapped ? b : a;
+                const Surface& second = swapped ? a : b;
+                const auto result = Intersect(first, second, ctx);
+                INFO(IntersectTest::ErrorText(result));
+                if (!result) {
+                    // An unresolvable grazing root must fail, never silently
+                    // return a plausible but incomplete set of branches. The
+                    // seam exactly on the folds is no such root: it is the
+                    // ordinary aligned pair, and is answered.
+                    REQUIRE(e > 0.0);
+                    REQUIRE(e <= 1e-7);
+                    REQUIRE((result.error().GetCode() == ErrorCode::IntersectionFailed ||
+                             result.error().GetCode() == ErrorCode::CertificationFailed));
+                    continue;
+                }
+                RequireBranchesOn(*result, first, second);
+                bool positive = false;
+                bool negative = false;
+                for (const auto& branch : result->Branches) {
+                    for (const double t : {branch.Range.GetLower(), branch.Range.GetUpper()}) {
+                        const Point3 p = Eval(branch.Curve3d, t);
+                        positive = positive || Distance(p, forward) <= bound;
+                        negative = negative || Distance(p, backward) <= bound;
+                    }
+                    // A branch must stay within one B chart except at its
+                    // endpoints. A discontinuous pcurve would not be a valid
+                    // description of a single certified intersection arc.
+                    const auto& onB = swapped ? branch.OnA : branch.OnB;
+                    double previous = Eval(onB, branch.Range.GetLower()).X;
+                    for (const double t : IntersectTest::SamplesOf(branch.Range, 128)) {
+                        const double angle = Eval(onB, t).X;
+                        REQUIRE(std::abs(angle - previous) < pi);
+                        previous = angle;
+                    }
+                }
+                REQUIRE(positive);
+                REQUIRE(negative);
+            }
+        }
+    }
+}
+
+TEST_CASE("two B seam crossings inside a former scan cell are both isolated",
+          "[intersect][cylinder][skew][regression][issue195]")
+{
+    // The seam ruling of B runs in x through y=3-delta. Its two
+    // intersections with A are x=±sqrt(9-(3-delta)^2), at fixed y,z.
+    // Restrict A to a deliberately asymmetric angular window: its
+    // fold-loop track is clipped around t=[0.2,2.3]. At delta=1e-7
+    // the two roots are separated by ~0.000614 in t and both lie in
+    // one historical scan cell (~0.0082 wide); a fixed sign-change scan
+    // misses both. The two spatial solutions are the independent oracle.
+    for (const double delta : {1e-4, 1e-7}) {
+        const double q = (1.0 + delta) / 2.0;
+        const double s = std::sqrt(1.0 - q * q);
+        const double y = 4.0 - 2.0 * q;
+        const double z = 2.0 * s;
+        const double x = std::sqrt(9.0 - y * y);
+        const Point3 positive{x, y, z};
+        const Point3 negative{-x, y, z};
+        const Point3 origin{0.0, 4.0, 0.0};
+        const Vec3 bx{0.0, -q, s};
+        const Vec3 by{0.0, -s, -q};
+        const double half = std::acos(2.0 / 3.0);
+        const double phi = pi / 2.0;
+        const Interval cut{phi - half * std::cos(0.2), phi - half * std::cos(2.3)};
+        const Box2 window{cut, Interval::Everything()};
+        for (const bool rightHanded : {false, true}) {
+            const Surface b{Cylinder{origin, 2.0, bx, by, rightHanded}};
+            for (const bool swap : {false, true}) {
+                INFO("delta " << delta << ", handedness " << rightHanded << ", swap " << swap);
+                const Surface& first = swap ? b : a;
+                const Surface& second = swap ? a : b;
+                const Box2 firstBox = swap ? Domain(b) : window;
+                const Box2 secondBox = swap ? window : Domain(b);
+                const auto result = Intersect(first, firstBox, second, secondBox, ctx);
+                INFO(IntersectTest::ErrorText(result));
+                // Both separations are far above the resolution in space,
+                // some 1e-3 at the smaller: the piece between the crossings
+                // is fitted on its own, and neither case is refused.
+                REQUIRE(result.has_value());
+                RequireBranchesOn(*result, first, second);
+                bool plus = false;
+                bool minus = false;
+                for (const auto& branch : result->Branches) {
+                    for (const double t : {branch.Range.GetLower(), branch.Range.GetUpper()}) {
+                        const Point3 point = Eval(branch.Curve3d, t);
+                        plus = plus || Distance(point, positive) <= 2.0 * ctx.GetResolution();
+                        minus = minus || Distance(point, negative) <= 2.0 * ctx.GetResolution();
+                    }
+                }
+                REQUIRE(plus);
+                REQUIRE(minus);
+            }
         }
     }
 }
