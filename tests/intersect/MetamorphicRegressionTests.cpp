@@ -708,6 +708,20 @@ TEST_CASE("MR PR-159 skew cylinders tangent on both seams meet at a node",
     // each axis. Since #289 a refused parametrisation falls back to the
     // other cylinder's, which would hide the fault: the canonical one, by
     // the larger radius, must answer on its own, the meeting logged once.
+    //
+    // The fault was a seam crossing found a hair inside a branch's end: the
+    // piece cut off there, far shorter than the resolution, was refused, or
+    // would have been published as a branch of its own. Since #322 the seam
+    // isolation puts the exact tangency's crossing on the end itself, where
+    // nothing is cut, so the smaller cylinder's frame is also turned about
+    // its axis by a power of two, either way. That leaves the tangency as
+    // it is, exactly (the axis stays square to the common normal, the
+    // offset and the radii keep their values), and moves its seam off the
+    // node by 3 * turn * scale, 9e-8 and 7.2e-7 of a millimetre at scale 1
+    // and under the resolution at every scale. The seam then crosses two
+    // branches that far inside their ends, and the answer must not change:
+    // the same node and four ends, and no branch that stays within the
+    // resolution of its start.
     for (const auto& p : Placements()) {
         if (!Untranslated(p)) {
             continue;
@@ -717,39 +731,47 @@ TEST_CASE("MR PR-159 skew cylinders tangent on both seams meet at a node",
         const Vec3 z = Cross(p.X, p.Y);
         const Vec3 tilted = 0.6 * p.Y + 0.8 * z;
         const Surface larger{Cylinder{p.Point(0, 0, 0), 5 * p.Scale, p.X, p.Y, true}};
-        const Surface smaller{Cylinder{p.Point(2, 0, 0), 3 * p.Scale, p.X, tilted, true}};
         const Point3 node = p.Point(5, 0, 0);
         const double reach = 1e-7 * p.Scale;
-        for (const bool swapped : {false, true}) {
-            CAPTURE(swapped);
-            std::vector<std::string> log;
-            const Context policy = p.Policy().WithLogSink(
-                [&log](const LogRecord& record) { log.emplace_back(record.Message); });
-            const auto result =
-                swapped ? Intersect(smaller, larger, policy) : Intersect(larger, smaller, policy);
-            INFO(IntersectTest::ErrorText(result));
-            REQUIRE(result.has_value());
-            const auto meetings = std::ranges::count_if(log, [](const std::string& line) {
-                return line.find("internally tangent") != std::string::npos;
-            });
-            CHECK(meetings == 1);
-            CHECK(IntersectTest::ConnectivityOf(*result, reach).Nodes == 1);
-            std::size_t ends = 0;
-            for (const IntersectionBranch& branch : result->Branches) {
-                for (const double t : {branch.Range.GetLower(), branch.Range.GetUpper()}) {
-                    if (Distance(Eval(branch.Curve3d, t), node) <= reach) {
-                        ++ends;
+        for (const double turn : {0.0, 0x1p-22, -0x1p-22, 0x1p-25, -0x1p-25}) {
+            CAPTURE(turn);
+            const Surface smaller{Cylinder{p.Point(2, 0, 0), 3 * p.Scale, p.X + turn * tilted,
+                                           tilted - turn * p.X, true}};
+            for (const bool swapped : {false, true}) {
+                CAPTURE(swapped);
+                std::vector<std::string> log;
+                const Context policy = p.Policy().WithLogSink(
+                    [&log](const LogRecord& record) { log.emplace_back(record.Message); });
+                const auto result = swapped ? Intersect(smaller, larger, policy)
+                                            : Intersect(larger, smaller, policy);
+                INFO(IntersectTest::ErrorText(result));
+                REQUIRE(result.has_value());
+                const auto meetings = std::ranges::count_if(log, [](const std::string& line) {
+                    return line.find("internally tangent") != std::string::npos;
+                });
+                CHECK(meetings == 1);
+                CHECK(IntersectTest::ConnectivityOf(*result, reach).Nodes == 1);
+                std::size_t ends = 0;
+                for (const IntersectionBranch& branch : result->Branches) {
+                    for (const double t : {branch.Range.GetLower(), branch.Range.GetUpper()}) {
+                        if (Distance(Eval(branch.Curve3d, t), node) <= reach) {
+                            ++ends;
+                        }
                     }
+                    const Point3 start = Eval(branch.Curve3d, branch.Range.GetLower());
+                    double extent = 0.0;
+                    for (const double t : IntersectTest::SamplesOf(branch.Range, 16)) {
+                        const Point3 q = Eval(branch.Curve3d, t);
+                        extent = std::max(extent, Distance(q, start));
+                        const double slack = branch.Bound + p.Policy().GetResolution();
+                        CHECK(OffCylinder(q, p.Point(0, 0, 0), z, 5 * p.Scale) <= slack);
+                        CHECK(OffCylinder(q, p.Point(2, 0, 0), Cross(p.X, tilted), 3 * p.Scale) <=
+                              slack);
+                    }
+                    CHECK(extent > p.Policy().GetResolution());
                 }
-                for (const double t : IntersectTest::SamplesOf(branch.Range, 16)) {
-                    const Point3 q = Eval(branch.Curve3d, t);
-                    const double slack = branch.Bound + p.Policy().GetResolution();
-                    CHECK(OffCylinder(q, p.Point(0, 0, 0), z, 5 * p.Scale) <= slack);
-                    CHECK(OffCylinder(q, p.Point(2, 0, 0), Cross(p.X, tilted), 3 * p.Scale) <=
-                          slack);
-                }
+                CHECK(ends == 4);
             }
-            CHECK(ends == 4);
         }
     }
 }
