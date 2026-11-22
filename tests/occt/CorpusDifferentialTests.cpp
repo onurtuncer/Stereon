@@ -421,7 +421,9 @@ std::size_t ConnectedCurves(const OcctResult& r, const double join)
     }
     std::size_t roots = 0;
     for (std::size_t i = 0; i < clusters.size(); ++i) {
-        roots += find(i) == i ? 1 : 0;
+        if (find(i) == i) {
+            ++roots;
+        }
     }
     return roots;
 }
