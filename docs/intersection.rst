@@ -174,6 +174,25 @@ parallel meet in loops of the order of :math:`r / \sin\gamma` along the
 axes, which a face's bounded heights cut down to the two nearly straight
 pieces inside them.
 
+A clipped span is then cut where the branch crosses either cylinder's chart
+seam, its ruling at angle zero. A seam is a line, so it meets the other
+cylinder at two points, at one where it is tangent, or at none; which is
+decided exactly on the input doubles. The first cylinder's seam is crossed
+at parameters known in closed form. At a fold they are the fold alone where
+the seam is tangent there, and two parameters otherwise, however close. The
+second cylinder's seam is isolated by interval evaluation of the closed
+form. A span of the parameter is bisected until each cell is either proved
+off the seam or enclosed as narrowly as the closed form's own rounding
+allows, and a run of adjacent cells of the second kind is one cut. No
+crossing is therefore stepped over between samples, two crossings close
+together included. The list of cuts is complete or the intersection fails
+with ``IntersectionFailed``: when both of the seam's two points may lie in
+one such run, when two seam cuts lie within the resolution of each other,
+so that the piece between them could not be fitted, and when the budget of
+2^16 enclosures runs out. A seam cut within the resolution of a span's end
+is not a second cut: the end stands for it. That is the case of a fold or a
+node on the seam, and of a requested box that ends there.
+
 Coincident cylinders intersect the requested height domains through the
 parameter map and intersect angular domains modulo the period. An overlap
 crossing a chart seam is returned as separate regions. Disjoint requested

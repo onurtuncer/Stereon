@@ -403,6 +403,51 @@ TEST_CASE("nearly parallel cylinders are the quartic within bounded heights and 
     REQUIRE(upper < bounded->Branches.size());
 }
 
+TEST_CASE("nearly parallel cylinders leave the size box whichever way their seams point",
+          "[intersect][cylinder][skew][regression][issue195]")
+{
+    // The pair above with B's frame turned so that its seam lies in the
+    // plane of the two axes, on either side: the seam then meets A twice,
+    // some 1e9 mm away, where the ellipses are. The refusal is still the
+    // size box's (ADR-0001), in both orders, not one of the seam
+    // isolation, which has nothing to decide out there.
+    const Vec3 axis = Normalized(Vec3{1e-9, 0.0, 1.0});
+    for (const double side : {1.0, -1.0}) {
+        const Vec3 y{0.0, side, 0.0};
+        const Surface nearly{Cylinder{Point3{5.0, 0.0, 0.0}, 3.0, Cross(y, axis), y, true}};
+        for (const bool swapped : {false, true}) {
+            INFO("side " << side << ", swap " << swapped);
+            const auto result = swapped ? Intersect(nearly, a, ctx) : Intersect(a, nearly, ctx);
+            INFO(IntersectTest::ErrorText(result));
+            REQUIRE_FALSE(result.has_value());
+            REQUIRE(result.error().GetCode() == ErrorCode::CertificationFailed);
+            REQUIRE(std::string(result.error().GetMessage()).find("size box") != std::string::npos);
+        }
+    }
+}
+
+TEST_CASE("an oblique cylinder crossing another partly is one loop in both orders",
+          "[intersect][cylinder][skew][regression][issue195]")
+{
+    // The oblique pair of the OCCT differential (tests/occt), which only
+    // that job ran: B of radius 2.5 along x through (1, 2, 0.5), its frame
+    // turned about its axis so that neither seam lies at a fold. The axes
+    // are 2 apart, between |3 - 2.5| and 3 + 2.5: one loop.
+    const Surface b{
+        Cylinder{Point3{1.0, 2.0, 0.5}, 2.5, Vec3{0.0, 0.6, 0.8}, Vec3{0.0, -0.8, 0.6}, true}};
+    for (const bool swapped : {false, true}) {
+        INFO("swap " << swapped);
+        const Surface& first = swapped ? b : a;
+        const Surface& second = swapped ? a : b;
+        const auto result = Intersect(first, second, ctx);
+        INFO(IntersectTest::ErrorText(result));
+        REQUIRE(result.has_value());
+        RequireBranchesOn(*result, first, second);
+        REQUIRE(ConnectivityOf(*result).Curves == 1);
+        REQUIRE(ConnectivityOf(*result).Nodes == 0);
+    }
+}
+
 TEST_CASE("skew cylinder angular clipping respects both operands",
           "[intersect][cylinder][skew][regression]")
 {
@@ -627,7 +672,10 @@ TEST_CASE("skew B seam isolates both generator crossings near a fold",
                 INFO(IntersectTest::ErrorText(result));
                 if (!result) {
                     // An unresolvable grazing root must fail, never silently
-                    // return a plausible but incomplete set of branches.
+                    // return a plausible but incomplete set of branches. The
+                    // seam exactly on the folds is no such root: it is the
+                    // ordinary aligned pair, and is answered.
+                    REQUIRE(e > 0.0);
                     REQUIRE(e <= 1e-7);
                     REQUIRE((result.error().GetCode() == ErrorCode::IntersectionFailed ||
                              result.error().GetCode() == ErrorCode::CertificationFailed));
@@ -695,14 +743,10 @@ TEST_CASE("two B seam crossings inside a former scan cell are both isolated",
                 const Box2 secondBox = swap ? window : Domain(b);
                 const auto result = Intersect(first, firstBox, second, secondBox, ctx);
                 INFO(IntersectTest::ErrorText(result));
-                if (!result) {
-                    // The smaller separation may exhaust certification;
-                    // a refusal is permitted, a missing branch is not.
-                    REQUIRE(delta < 1e-6);
-                    REQUIRE((result.error().GetCode() == ErrorCode::IntersectionFailed ||
-                             result.error().GetCode() == ErrorCode::CertificationFailed));
-                    continue;
-                }
+                // Both separations are far above the resolution in space,
+                // some 1e-3 at the smaller: the piece between the crossings
+                // is fitted on its own, and neither case is refused.
+                REQUIRE(result.has_value());
                 RequireBranchesOn(*result, first, second);
                 bool plus = false;
                 bool minus = false;

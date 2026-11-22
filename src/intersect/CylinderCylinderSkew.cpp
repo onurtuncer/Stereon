@@ -88,6 +88,23 @@ constexpr std::size_t SampleBudget = std::size_t{1} << 14;
 constexpr int ClipDepth = 40;
 constexpr std::size_t ClipBudget = std::size_t{1} << 16;
 constexpr std::size_t SeamIsolationBudget = std::size_t{1} << 16;
+/// Where the isolation stops subdividing a cell it cannot exclude: where
+/// the enclosure of the seam side over the cell is no wider than this many
+/// times its width at the cell's ends, the rounding of the closed form
+/// itself, which no narrower cell improves on. The floor, a fraction of
+/// B's radius, stands for that rounding where an end evaluates exactly.
+constexpr double SeamNoiseFactor = 4.0;
+constexpr double SeamNoiseFloor = 0x1p-48;
+/// Two runs of such cells are one contact where the seam side stays
+/// within this many times its rounding of zero over the gap between them.
+constexpr double SeamMergeFactor = 16.0;
+/// Two seam points are apart from one unresolved cell when they are this
+/// many of its diameters apart: the margin over the enclosures' rounding.
+constexpr double SeamSeparationMargin = 2.0;
+/// How near its extreme angle a fold's rounded seam equation counts as at
+/// the fold. It only says which track the seam's exactly decided points
+/// belong to, a tangency or a pair; it never merges a pair by itself.
+constexpr double FoldTouch = 1e-9;
 
 [[nodiscard]] ExactVector<4> ExactAxisOf(const Cylinder& c)
 {
@@ -133,13 +150,59 @@ struct ExactNormal {
     });
 }
 
+/// A cylinder's chart seam is its ruling at angle zero, O + r X + h axis.
+/// Against the other cylinder of a skew pair it is a nondegenerate
+/// quadratic in h, so the seam meets the other cylinder in two points, in
+/// one where it is tangent, or in none: by the sign of
+/// ((O - O' + r X) . n)² - r'² |n|², n the cross product of the axes, the
+/// seam's squared distance from the other axis against the other radius.
+/// Decided exactly on the input doubles, it tells a true tangency from a
+/// pair of near points, which no rounded root can.
+[[nodiscard]] Sign SeamDiscriminantSign(const Cylinder& owner, const Cylinder& other)
+{
+    const ExactVector<64> n = ExactCross(ExactAxisOf(other), ExactAxisOf(owner));
+    const auto fromOrigins = ExactDot(ExactOffset(owner.Origin, other.Origin), n);
+    const auto fromRadius = ExactDot(Exactly(owner.XAxis), n);
+    const Interval offset = fromOrigins.Hull + Interval{owner.Radius} * fromRadius.Hull;
+    const Interval norm = Squared(n.Hull[0]) + Squared(n.Hull[1]) + Squared(n.Hull[2]);
+    const Interval residual = Squared(offset) - Squared(Interval{other.Radius}) * norm;
+    return FilteredSign(residual, [&] {
+        const DynamicExpansion shift =
+            Sum(DynamicExpansion{fromOrigins.Value()},
+                Scaled(DynamicExpansion{fromRadius.Value()}, owner.Radius));
+        DynamicExpansion normExact;
+        for (const auto& component : n.Value) {
+            const DynamicExpansion v{component()};
+            normExact = Sum(normExact, Product(v, v));
+        }
+        const DynamicExpansion radius{other.Radius};
+        const DynamicExpansion offsetSquared = Product(shift, shift);
+        const DynamicExpansion radiusSquared = Product(radius, radius);
+        return Difference(offsetSquared, Product(radiusSquared, normExact)).GetSign();
+    });
+}
+
+/// The number of points at which `owner`'s seam meets `other`.
+[[nodiscard]] std::size_t SeamSiteCount(const Cylinder& owner, const Cylinder& other)
+{
+    switch (SeamDiscriminantSign(owner, other)) {
+    case Sign::Positive:
+        return 0;
+    case Sign::Zero:
+        return 1;
+    default:
+        return 2;
+    }
+}
+
 // --- The nominal pair ---------------------------------------------------
 
 /// What the closed form needs of the pair, in doubles: the unit axes, the
 /// unit common normal from A's axis towards B's (either way when they
 /// meet), its angle on A, the distance between the axes, the cosine of the
 /// angle between the axes with its sine squared as |â x b̂|², and that sine
-/// times r_A, the scale of the discriminant's root.
+/// times r_A, the scale of the discriminant's root. Then the exact number
+/// of points at which each cylinder's seam meets the other cylinder.
 struct Pair {
     const Surface& ErasedA;
     const Surface& ErasedB;
@@ -154,6 +217,8 @@ struct Pair {
     double Cosine;
     double SineSquared;
     double RootScale;
+    std::size_t SeamSitesA;
+    std::size_t SeamSitesB;
 };
 
 [[nodiscard]] Pair PairOf(const Surface& erasedA, const Surface& erasedB, const Cylinder& a,
@@ -177,7 +242,9 @@ struct Pair {
             distance,
             Dot(axisA, axisB),
             sineSquared,
-            std::sqrt(sineSquared) * a.Radius};
+            std::sqrt(sineSquared) * a.Radius,
+            SeamSiteCount(a, b),
+            SeamSiteCount(b, a)};
 }
 
 template <Scalar T>
@@ -750,18 +817,50 @@ void ClipSpan(const Pair& p, const Configuration& c, const Track& k, const Inter
 /// two per period over three periods.
 using Parameters = std::inplace_vector<double, 6>;
 
+/// How a fold track's rounded seam equation stands against the exact number
+/// of the seam's points: no parameter, the fold alone, two parameters, or
+/// two points that the rounded equation cannot tell apart.
+enum class FoldRoots : std::uint8_t { None, Touch, Two, Unresolved };
+
+/// `inside` says the rounded equation has two roots on the track, `atFold`
+/// that it lies within FoldTouch of the fold. A tangent seam touches at
+/// the fold. A seam through two points gives two parameters however near
+/// the fold they are, and is refused where rounding has taken them off the
+/// track: they are distinct, and nothing places them.
+[[nodiscard]] FoldRoots FoldRootsOf(const std::size_t sites, const bool inside, const bool atFold)
+{
+    if (sites == 0 || (!inside && !atFold)) {
+        return FoldRoots::None;
+    }
+    if (sites == 1 && atFold) {
+        return FoldRoots::Touch;
+    }
+    return inside ? FoldRoots::Two : FoldRoots::Unresolved;
+}
+
+[[nodiscard]] std::unexpected<KernelError> UnresolvedFold()
+{
+    return Fail(ErrorCode::IntersectionFailed,
+                "CylinderCylinder: A's seam crosses within rounding of a fold, at two points "
+                "that the track's parameter cannot tell apart");
+}
+
 /// The parameters of a fold-to-fold loop at which σ takes the value
 /// `target`, over a period of t on either side of the range: where
-/// cos t = x, or at the fold alone where the loop only touches the value.
-[[nodiscard]] Parameters LoopParametersAt(const Track& k, const double target)
+/// cos t = x, or at the fold alone where the seam is tangent there.
+[[nodiscard]] Result<Parameters> LoopParametersAt(const Track& k, const double target,
+                                                  const std::size_t sites)
 {
     const double x = (k.Center - k.Mirror * target) / k.Half;
-    if (!(std::abs(x) <= 1.0)) {
-        return {};
+    const FoldRoots kind =
+        FoldRootsOf(sites, std::abs(x) < 1.0, std::abs(std::abs(x) - 1.0) <= FoldTouch);
+    if (kind == FoldRoots::None) {
+        return Parameters{};
     }
-    // Do not merge distinct preimages merely because x is close to a
-    // fold. Their separation may be far below 1e-9 yet topologically real.
-    const bool touches = x == -1.0 || x == 1.0;
+    if (kind == FoldRoots::Unresolved) {
+        return UnresolvedFold();
+    }
+    const bool touches = kind == FoldRoots::Touch;
     const double t0 = touches ? (x > 0.0 ? 0.0 : Pi) : std::acos(x);
     Parameters roots;
     for (const double shift : {-CirclePeriod, 0.0, CirclePeriod}) {
@@ -774,30 +873,39 @@ using Parameters = std::inplace_vector<double, 6>;
 }
 
 /// The parameters of a lobe at which σ takes the value `target`: where
-/// 1 - t² = target / (Mirror Fold), or the fold alone where it is touched.
-[[nodiscard]] Parameters LobeParametersAt(const Track& k, const double target)
+/// 1 - t² = target / (Mirror Fold), or the fold alone where the seam is
+/// tangent there. A seam tangent at the node meets the lobe at its ends.
+[[nodiscard]] Result<Parameters> LobeParametersAt(const Track& k, const double target,
+                                                  const std::size_t sites)
 {
     const double squared = 1.0 - target / (k.Mirror * k.Fold);
-    if (!(squared >= 0.0 && squared <= 1.0)) {
-        return {};
+    const FoldRoots kind =
+        FoldRootsOf(sites, squared > 0.0 && squared <= 1.0, std::abs(squared) <= FoldTouch);
+    switch (kind) {
+    case FoldRoots::None:
+        return Parameters{};
+    case FoldRoots::Unresolved:
+        return UnresolvedFold();
+    case FoldRoots::Touch:
+        return Parameters{0.0};
+    default:
+        return Parameters{-std::sqrt(squared), std::sqrt(squared)};
     }
-    if (squared == 0.0) {
-        return {0.0};
-    }
-    return {-std::sqrt(squared), std::sqrt(squared)};
 }
 
-/// The parameters at which σ(t) takes the value `target`; a turn's are its
-/// caller's, since there t is the angle itself.
-[[nodiscard]] Parameters ParametersAt(const Track& k, const double target)
+/// The parameters at which σ(t) takes the value `target`, given the exact
+/// number of points of A's seam; a turn's are its caller's, since there t
+/// is the angle itself.
+[[nodiscard]] Result<Parameters> ParametersAt(const Track& k, const double target,
+                                              const std::size_t sites)
 {
     switch (k.Kind) {
     case Track::Shape::FoldLoop:
-        return LoopParametersAt(k, target);
+        return LoopParametersAt(k, target, sites);
     case Track::Shape::FoldLobe:
-        return LobeParametersAt(k, target);
+        return LobeParametersAt(k, target, sites);
     default:
-        return {};
+        return Parameters{};
     }
 }
 
@@ -811,7 +919,8 @@ void AddCut(const Interval& span, const double t, std::vector<double>& cuts)
 
 /// Where A's angle u = Phi + σ crosses a multiple of the period inside the
 /// span: for a turn, at the multiples themselves.
-void SeamCutsOnA(const Pair& p, const Track& k, const Interval& span, std::vector<double>& cuts)
+[[nodiscard]] Result<void> SeamCutsOnA(const Pair& p, const Track& k, const Interval& span,
+                                       std::vector<double>& cuts)
 {
     const double first = std::ceil(span.GetLower() / CirclePeriod - 1.0);
     const double last = std::floor(span.GetUpper() / CirclePeriod + 1.0);
@@ -820,10 +929,13 @@ void SeamCutsOnA(const Pair& p, const Track& k, const Interval& span, std::vecto
             AddCut(span, n * CirclePeriod, cuts);
             continue;
         }
-        for (const double t : ParametersAt(k, n * CirclePeriod - p.Phi)) {
+        STEREON_TRY(const Parameters roots,
+                    ParametersAt(k, n * CirclePeriod - p.Phi, p.SeamSitesA));
+        for (const double t : roots) {
             AddCut(span, t, cuts);
         }
     }
+    return {};
 }
 
 /// (P(t) - O_B) . Y_B: zero with (P(t) - O_B) . X_B positive where B's
@@ -858,197 +970,188 @@ void SeamCutsOnA(const Pair& p, const Track& k, const Interval& span, std::vecto
     return 0.5 * (lo + hi);
 }
 
-/// B's chart seam is the *positive* ruling O_B + r_B X_B + h Axis_B.
-/// Its intersection with A's skew cylinder is a nondegenerate quadratic
-/// in h, hence there are at most two distinct seam points, counting a
-/// tangency twice. This bound means that a positive-ray enclosure with
-/// opposite signs of Y_B at its ends contains exactly one transverse
-/// crossing: two simple crossings would have the same end sign. An
-/// enclosure whose Y_B excludes zero or whose X_B excludes positivity
-/// provably contains no seam crossing. Every other enclosure subdivides,
-/// including a close pair of crossings that a fixed sampling grid misses.
-/// If interval rounding or a tangent prevents isolation within the budget,
-/// return an explicit refusal instead of emitting an incomplete branch.
-/// An interval proves that B's positive seam ray is unreachable.
-[[nodiscard]] bool ExcludesBSeam(const Interval& x, const Interval& y)
-{
-    return x.GetUpper() <= 0.0 || y.GetLower() > 0.0 || y.GetUpper() < 0.0;
-}
-
-/// A positive-ray bracket with opposite signs holds one crossing because
-/// the seam ruling intersects the other skew cylinder at most twice.
-[[nodiscard]] bool HasSeamSignChange(const Pair& p, const Configuration& c, const Track& k,
-                                     const double lo, const double hi)
-{
-    const double left = SeamSideOnB(p, c, k, lo);
-    const double right = SeamSideOnB(p, c, k, hi);
-    return (left < 0.0 && right > 0.0) || (left > 0.0 && right < 0.0);
-}
-
-/// Exact count of intersections between B's positive seam ruling and A's
-/// cylinder. In raw (not normalised) axis coordinates the squared distance
-/// between their axes is
-/// ((O_B - O_A + r_B X_B) . (axis_A x axis_B))^2 / |axis_A x axis_B|^2.
-/// This predicate distinguishes true tangency from a pair of near roots.
-[[nodiscard]] Sign SeamDiscriminantSign(const Pair& p)
-{
-    const ExactVector<64> n = ExactCross(ExactAxisOf(p.A), ExactAxisOf(p.B));
-    const auto fromOrigins = ExactDot(ExactOffset(p.B.Origin, p.A.Origin), n);
-    const auto fromRadius = ExactDot(Exactly(p.B.XAxis), n);
-    const Interval offset = fromOrigins.Hull + Interval{p.B.Radius} * fromRadius.Hull;
-    const Interval norm = Squared(n.Hull[0]) + Squared(n.Hull[1]) + Squared(n.Hull[2]);
-    const Interval residual = Squared(offset) - Squared(Interval{p.A.Radius}) * norm;
-    return FilteredSign(residual, [&] {
-        const DynamicExpansion shift =
-            Sum(DynamicExpansion{fromOrigins.Value()},
-                Scaled(DynamicExpansion{fromRadius.Value()}, p.B.Radius));
-        DynamicExpansion normExact;
-        for (const auto& component : n.Value) {
-            const DynamicExpansion v{component()};
-            normExact = Sum(normExact, Product(v, v));
-        }
-        const DynamicExpansion radius{p.A.Radius};
-        const DynamicExpansion offsetSquared = Product(shift, shift);
-        const DynamicExpansion radiusSquared = Product(radius, radius);
-        return Difference(offsetSquared, Product(radiusSquared, normExact)).GetSign();
-    });
-}
-
-/// The positive B seam ruling intersects the A cylinder at zero, one, or
-/// two geometric sites. Compute their approximate positions only after
-/// deciding their exact number from the input doubles.
-struct SeamSites {
-    std::array<Point3, 2> Points;
-    std::size_t Count = 0;
+/// B's chart seam is the *positive* ruling O_B + r_B X_B + h Axis_B: the
+/// track is on it where Y_B = (P - O_B) . Y_B vanishes with X_B positive.
+/// The isolation encloses both over cells of the track's parameter by
+/// interval evaluation of the closed form. A cell whose Y_B excludes zero
+/// or whose X_B excludes positivity provably holds no seam point, and
+/// every other cell is bisected until its enclosure of Y_B is as narrow
+/// as the closed form's own rounding at its ends: there the track is on
+/// the seam to rounding throughout the cell, and no narrower cell would
+/// say more. Adjacent cells of that kind form a cluster. Every seam point
+/// of the span therefore lies in a cluster, whatever the sampling: two
+/// crossings that a fixed grid would step over end in two clusters.
+///
+/// A cluster is one cut. The seam meets A at SeamSitesB points, decided
+/// exactly, so a cluster holds one crossing unless both of two points lie
+/// in it; they cannot where they are farther apart than the cluster's
+/// enclosure is wide, and otherwise the pair is refused rather than
+/// collapsed into one cut. Running out of the budget is a refusal too:
+/// the list of cuts is complete or there is none.
+struct SeamView {
+    Interval X;
+    Interval Y;
+    Box3 Hull;
 };
 
-[[nodiscard]] Result<SeamSites> SeamSitesOf(const Pair& p)
-{
-    const Sign outside = SeamDiscriminantSign(p);
-    SeamSites sites;
-    if (outside == Sign::Positive) {
-        return sites;
-    }
-    const Point3 origin = p.B.Origin + p.B.Radius * p.B.XAxis;
-    const Vec3 offset = origin - p.A.Origin;
-    const Vec3 direction = p.AxisB - Dot(p.AxisB, p.AxisA) * p.AxisA;
-    const Vec3 radial = offset - Dot(offset, p.AxisA) * p.AxisA;
-    const double a = Dot(direction, direction);
-    if (!(a > 0.0)) {
-        return Fail(ErrorCode::IntersectionFailed,
-                    "CylinderCylinder: the skew B seam has no resolvable ruling");
-    }
-    const double b = Dot(radial, direction);
-    const double c = Dot(radial, radial) - p.A.Radius * p.A.Radius;
-    const double middle = -b / a;
-    if (outside == Sign::Zero) {
-        sites.Points[0] = origin + middle * p.AxisB;
-        sites.Count = 1;
-        return sites;
-    }
-    const double discriminant = std::fma(-a, c, b * b);
-    if (!(discriminant > 0.0)) {
-        return Fail(ErrorCode::IntersectionFailed,
-                    "CylinderCylinder: the B seam has two roots unresolved in double precision");
-    }
-    const double half = std::sqrt(discriminant) / a;
-    sites.Points[0] = origin + (middle - half) * p.AxisB;
-    sites.Points[1] = origin + (middle + half) * p.AxisB;
-    sites.Count = 2;
-    return sites;
-}
-
-/// An unresolved cell can be discarded only when every *exactly counted*
-/// B-seam site is either on the cell's existing endpoint or provably away
-/// from the closed-form point enclosure. A pair collapsed onto the same
-/// endpoint is ambiguous and must be refused, not silently coalesced.
-/// Rule out another seam site without relying on the fold's height
-/// enclosure: its A-angle remains tight even when both height sheets
-/// are conservatively enclosed.
-[[nodiscard]] bool SiteOutsideSpan(const Pair& p, const Place<IntervalScalar>& placed,
-                                   const Point3& site, const double slack)
-{
-    const Vec3 radial = site - p.A.Origin;
-    const double angle = WrappedAngle(Dot(radial, p.A.YAxis), Dot(radial, p.A.XAxis));
-    const Interval siteAngle{angle - 1e-6, angle + 1e-6};
-    if (!MeetsAngles(siteAngle, placed.U.Value)) {
-        return true;
-    }
-    const auto misses = [slack](const double value, const Interval& range) {
-        return value < range.GetLower() - slack || value > range.GetUpper() + slack;
-    };
-    return misses(site.X, placed.Point.X.Value) || misses(site.Y, placed.Point.Y.Value) ||
-           misses(site.Z, placed.Point.Z.Value);
-}
-
-[[nodiscard]] bool BoundarySitesOnly(const Pair& p, const Configuration& c, const Track& k,
-                                     const Interval& cell, const SeamSites& sites)
+[[nodiscard]] SeamView SeamViewOf(const Pair& p, const Configuration& c, const Track& k,
+                                  const Interval& cell)
 {
     using I = IntervalScalar;
     const Place<I> placed = PlaceOf(p, c, k, I{cell});
-    const Point3 first = PlaceOf(p, c, k, cell.GetLower()).Point;
-    const Point3 last = PlaceOf(p, c, k, cell.GetUpper()).Point;
-    const double scale = std::max({1.0, p.A.Radius, p.B.Radius, Distance(first, last)});
-    const double slack = 1e-8 * scale;
-    int previousEndpoint = -1;
-    for (std::size_t i = 0; i < sites.Count; ++i) {
-        const Point3 site = sites.Points[i];
-        if (SiteOutsideSpan(p, placed, site, slack)) {
+    const BasicVec3<I> offset = placed.Point - Wide<I>(p.B.Origin);
+    return {Dot(offset, Wide<I>(p.B.XAxis)).Value, Dot(offset, Wide<I>(p.B.YAxis)).Value,
+            Box3{placed.Point.X.Value, placed.Point.Y.Value, placed.Point.Z.Value}};
+}
+
+/// An enclosure proves that B's positive seam ray is unreachable.
+[[nodiscard]] bool ExcludesBSeam(const SeamView& view)
+{
+    return view.X.GetUpper() <= 0.0 || view.Y.GetLower() > 0.0 || view.Y.GetUpper() < 0.0;
+}
+
+/// The rounding of the closed form's seam side about a cell: the width of
+/// its enclosure at the cell's ends, each a single parameter.
+[[nodiscard]] double SeamNoiseOf(const Pair& p, const Configuration& c, const Track& k,
+                                 const Interval& cell)
+{
+    const Interval atLower = SeamViewOf(p, c, k, Interval{cell.GetLower()}).Y;
+    const Interval atUpper = SeamViewOf(p, c, k, Interval{cell.GetUpper()}).Y;
+    return std::max({atLower.GetUpper() - atLower.GetLower(),
+                     atUpper.GetUpper() - atUpper.GetLower(), SeamNoiseFloor * p.B.Radius});
+}
+
+/// Whether the enclosure of the seam side over the cell is down to the
+/// rounding of the closed form at the cell's ends.
+[[nodiscard]] bool AtSeamNoise(const Pair& p, const Configuration& c, const Track& k,
+                               const Interval& cell, const SeamView& view)
+{
+    return view.Y.GetUpper() - view.Y.GetLower() <= SeamNoiseFactor * SeamNoiseOf(p, c, k, cell);
+}
+
+/// A run of adjacent cells that could not be excluded: its range of the
+/// parameter and an enclosure of the track over it.
+struct SeamCluster {
+    Interval Range;
+    Box3 Hull;
+};
+
+void AddToClusters(std::vector<SeamCluster>& clusters, const Interval& cell, const Box3& hull)
+{
+    if (!clusters.empty() && clusters.back().Range.GetUpper() == cell.GetLower()) {
+        SeamCluster& last = clusters.back();
+        last = {Interval{last.Range.GetLower(), cell.GetUpper()}, Hull(last.Hull, hull)};
+        return;
+    }
+    clusters.push_back({cell, hull});
+}
+
+/// The clusters of the span in order of the parameter, or a refusal where
+/// the budget of enclosures runs out. The cells wait on a stack of their
+/// own, the upper half below the lower, so the depth of the bisection
+/// costs no call stack.
+[[nodiscard]] Result<std::vector<SeamCluster>>
+SeamClustersOnB(const Pair& p, const Configuration& c, const Track& k, const Interval& span)
+{
+    std::vector<SeamCluster> clusters;
+    std::vector<Interval> pending{span};
+    for (std::size_t evaluations = 0; !pending.empty();) {
+        if (++evaluations > SeamIsolationBudget) {
+            return Fail(ErrorCode::IntersectionFailed,
+                        "CylinderCylinder: B seam isolation exhausted its interval budget");
+        }
+        const Interval cell = pending.back();
+        pending.pop_back();
+        const SeamView view = SeamViewOf(p, c, k, cell);
+        if (ExcludesBSeam(view)) {
             continue;
         }
-        const bool atFirst = Distance(site, first) <= slack;
-        const bool atLast = Distance(site, last) <= slack;
-        const int endpoint = atFirst ? 0 : (atLast ? 1 : -1);
-        if (endpoint < 0 || endpoint == previousEndpoint) {
-            return false;
+        const double lo = cell.GetLower();
+        const double hi = cell.GetUpper();
+        const double middle = lo + (hi - lo) * 0.5;
+        if (!(lo < middle && middle < hi) || AtSeamNoise(p, c, k, cell, view)) {
+            AddToClusters(clusters, cell, view.Hull);
+            continue;
         }
-        previousEndpoint = endpoint;
+        pending.emplace_back(middle, hi);
+        pending.emplace_back(lo, middle);
     }
-    return true;
+    return clusters;
 }
 
-/// At machine parameter spacing there is no interior representable cut.
-/// Resolve an endpoint contact only if the independently counted seam
-/// sites prove that no second interior crossing was lost.
-[[nodiscard]] Result<void> ResolveSeamEndpoint(const Pair& p, const Configuration& c,
-                                               const Track& k, const Interval& cell,
-                                               const SeamSites& sites)
+/// Joins the clusters that the same seam point left. Between two of them
+/// lie cells that were excluded one by one, yet where the seam side stays
+/// within SeamMergeFactor times its rounding of zero over the whole gap,
+/// the gap is as much on the seam as the clusters are: they are one
+/// contact, and the gap's enclosure joins theirs. Two crossings that the
+/// closed form does tell apart keep a gap where the seam side leaves that
+/// band, and stay two clusters.
+[[nodiscard]] std::vector<SeamCluster> JoinedClusters(const Pair& p, const Configuration& c,
+                                                      const Track& k,
+                                                      const std::vector<SeamCluster>& clusters)
 {
-    if (BoundarySitesOnly(p, c, k, cell, sites)) {
-        return {};
+    std::vector<SeamCluster> joined;
+    for (const SeamCluster& next : clusters) {
+        if (joined.empty()) {
+            joined.push_back(next);
+            continue;
+        }
+        SeamCluster& last = joined.back();
+        const Interval gap{last.Range.GetUpper(), next.Range.GetLower()};
+        const SeamView view = SeamViewOf(p, c, k, gap);
+        const double reach = std::max(std::abs(view.Y.GetLower()), std::abs(view.Y.GetUpper()));
+        if (reach <= SeamMergeFactor * SeamNoiseOf(p, c, k, gap)) {
+            last = {Interval{last.Range.GetLower(), next.Range.GetUpper()},
+                    Hull(Hull(last.Hull, view.Hull), next.Hull)};
+        } else {
+            joined.push_back(next);
+        }
     }
-    return Fail(ErrorCode::IntersectionFailed,
-                "CylinderCylinder: B seam cannot be isolated to a representable parameter");
+    return joined;
 }
 
-[[nodiscard]] Result<void> IsolateSeamOnB(const Pair& p, const Configuration& c, const Track& k,
-                                          const Interval& range, const SeamSites& sites,
-                                          std::vector<double>& cuts, std::size_t& evaluations)
+/// A proved lower bound on the distance between the two points at which
+/// B's seam meets A, by interval evaluation of the seam's quadratic
+/// a h² + 2 b h + c against A; zero where the enclosures do not separate
+/// them.
+[[nodiscard]] double SeamSiteSeparation(const Pair& p)
 {
-    if (++evaluations > SeamIsolationBudget) {
-        return Fail(ErrorCode::IntersectionFailed,
-                    "CylinderCylinder: B seam isolation exhausted its interval budget");
-    }
     using I = IntervalScalar;
-    const Place<I> placed = PlaceOf(p, c, k, I{range});
-    const BasicVec3<I> offset = placed.Point - Wide<I>(p.B.Origin);
-    const Interval x = Dot(offset, Wide<I>(p.B.XAxis)).Value;
-    const Interval y = Dot(offset, Wide<I>(p.B.YAxis)).Value;
-    if (ExcludesBSeam(x, y)) {
-        return {};
+    const BasicVec3<I> axisA = Wide<I>(p.AxisA);
+    const BasicVec3<I> axisB = Wide<I>(p.AxisB);
+    const BasicVec3<I> offset =
+        Wide<I>(p.B.Origin) - Wide<I>(p.A.Origin) + I{p.B.Radius} * Wide<I>(p.B.XAxis);
+    const BasicVec3<I> direction = axisB - Dot(axisB, axisA) * axisA;
+    const BasicVec3<I> radial = offset - Dot(offset, axisA) * axisA;
+    const I a = Dot(direction, direction);
+    const I b = Dot(radial, direction);
+    const I cc = Dot(radial, radial) - I{p.A.Radius} * I{p.A.Radius};
+    const Interval discriminant = (b * b - a * cc).Value;
+    if (!(discriminant.GetLower() > 0.0 && a.Value.GetLower() > 0.0)) {
+        return 0.0;
     }
-    const double lo = range.GetLower();
-    const double hi = range.GetUpper();
-    if (x.GetLower() > 0.0 && HasSeamSignChange(p, c, k, lo, hi)) {
-        AddCut(range, BisectSeam(p, c, k, lo, hi), cuts);
-        return {};
+    const I apart = I{2.0} * SqrtOf(I{discriminant}) / a * SqrtOf(Dot(axisB, axisB));
+    return std::max(apart.Value.GetLower(), 0.0);
+}
+
+/// An upper bound on the distance between two points of the box.
+[[nodiscard]] double DiameterOf(const Box3& box)
+{
+    return std::hypot(box.X.GetUpper() - box.X.GetLower(), box.Y.GetUpper() - box.Y.GetLower(),
+                      box.Z.GetUpper() - box.Z.GetLower());
+}
+
+/// The cut of a cluster. A cut of A's seam already inside it stands for
+/// both seams, which cross there together to rounding; otherwise the cut
+/// is where the seam side changes sign, or the end nearer the seam.
+void AddClusterCut(const Pair& p, const Configuration& c, const Track& k, const Interval& span,
+                   const Interval& cluster, std::vector<double>& cuts)
+{
+    const bool shared =
+        std::ranges::any_of(cuts, [&](const double cut) { return Contains(cluster, cut); });
+    if (!shared) {
+        AddCut(span, BisectSeam(p, c, k, cluster.GetLower(), cluster.GetUpper()), cuts);
     }
-    const double middle = lo + (hi - lo) * 0.5;
-    if (!(lo < middle && middle < hi)) {
-        return ResolveSeamEndpoint(p, c, k, range, sites);
-    }
-    STEREON_TRY_VOID(IsolateSeamOnB(p, c, k, Interval{lo, middle}, sites, cuts, evaluations));
-    return IsolateSeamOnB(p, c, k, Interval{middle, hi}, sites, cuts, evaluations);
 }
 
 /// Complete or fail-closed list of B seam cuts over this span. The interval
@@ -1056,12 +1159,21 @@ struct SeamSites {
 [[nodiscard]] Result<void> SeamCutsOnB(const Pair& p, const Configuration& c, const Track& k,
                                        const Interval& span, std::vector<double>& cuts)
 {
-    STEREON_TRY(const SeamSites sites, SeamSitesOf(p));
-    if (sites.Count == 0) {
+    if (p.SeamSitesB == 0) {
         return {};
     }
-    std::size_t evaluations = 0;
-    return IsolateSeamOnB(p, c, k, span, sites, cuts, evaluations);
+    STEREON_TRY(const std::vector<SeamCluster> cells, SeamClustersOnB(p, c, k, span));
+    const std::vector<SeamCluster> clusters = JoinedClusters(p, c, k, cells);
+    const double apart = p.SeamSitesB == 2 && !clusters.empty() ? SeamSiteSeparation(p) : 0.0;
+    for (const SeamCluster& cluster : clusters) {
+        if (p.SeamSitesB == 2 && !(apart > SeamSeparationMargin * DiameterOf(cluster.Hull))) {
+            return Fail(ErrorCode::IntersectionFailed,
+                        "CylinderCylinder: two points of B's seam cannot be told apart within "
+                        "one unresolved cell of the track");
+        }
+        AddClusterCut(p, c, k, span, cluster.Range, cuts);
+    }
+    return {};
 }
 
 /// The farthest the track gets from its point at lo, over hi and three
@@ -1077,40 +1189,65 @@ struct SeamSites {
     return extent;
 }
 
+/// The span's end closes the list: in place of a cut within the resolution
+/// of it, or after the start where the whole span is that short.
+void JoinEnd(std::vector<double>& distinct, const double end)
+{
+    if (distinct.size() > 1) {
+        distinct.back() = end;
+    } else {
+        distinct.push_back(end);
+    }
+}
+
+/// The cuts of both seams inside the span, in order and without repeats.
+[[nodiscard]] Result<std::vector<double>> SeamCutsOf(const Pair& p, const Configuration& c,
+                                                     const Track& k, const Interval& span)
+{
+    std::vector<double> cuts;
+    STEREON_TRY_VOID(SeamCutsOnA(p, k, span, cuts));
+    STEREON_TRY_VOID(SeamCutsOnB(p, c, k, span, cuts));
+    std::ranges::sort(cuts);
+    const auto repeats = std::ranges::unique(cuts);
+    cuts.erase(repeats.begin(), repeats.end());
+    return cuts;
+}
+
 /// The span's ends and the cuts inside it, in order. A piece that stays
-/// within the resolution of its start is a sliver of rounding, such as a
-/// seam found a hair inside a fold that lies on it: it joins its neighbour
-/// rather than being fitted on its own, which no chart could hold. The
-/// span's own ends are kept, so the pieces still cover it.
+/// within the resolution of its start is a sliver, which no chart could
+/// hold on its own. Between an end of the span and a seam cut it is the
+/// seam found a hair inside that end, such as at a fold or a node that
+/// lies on the seam, or at a requested box that ends there: the end stands
+/// for the cut, and the sliver joins its neighbour. Between two seam cuts
+/// it is two distinct crossings within the resolution of each other, and
+/// joining them would publish a branch across a chart seam it does not
+/// report: that is refused, as is a second cut within the resolution of
+/// the span's start. The span's own ends are kept, so the pieces still
+/// cover it.
 [[nodiscard]] Result<std::vector<double>> CutsOf(const Pair& p, const Configuration& c,
                                                  const Track& k, const Interval& span,
                                                  const double resolution)
 {
-    std::vector<double> seamCuts;
-    SeamCutsOnA(p, k, span, seamCuts);
-    STEREON_TRY_VOID(SeamCutsOnB(p, c, k, span, seamCuts));
-    std::vector<double> cuts{span.GetLower(), span.GetUpper()};
+    STEREON_TRY(const std::vector<double> seamCuts, SeamCutsOf(p, c, k, span));
+    std::vector<double> cuts{span.GetLower()};
     cuts.insert(cuts.end(), seamCuts.begin(), seamCuts.end());
-    std::ranges::sort(cuts);
+    cuts.push_back(span.GetUpper());
     std::vector<double> distinct{cuts.front()};
+    std::size_t joinedToStart = 0;
+    bool lost = false;
     for (std::size_t i = 1; i < cuts.size(); ++i) {
         if (cuts[i] > distinct.back() && ExtentOf(p, c, k, distinct.back(), cuts[i]) > resolution) {
             distinct.push_back(cuts[i]);
-        } else if (i + 1 == cuts.size() && distinct.size() > 1) {
-            distinct.back() = cuts[i];
+        } else if (i + 1 < cuts.size()) {
+            lost = lost || distinct.size() > 1 || ++joinedToStart > 1;
+        } else {
+            JoinEnd(distinct, cuts[i]);
         }
     }
-    if (distinct.size() == 1) {
-        distinct.push_back(cuts.back());
-    }
-    // Neither cylinder's distinct chart seam cut may disappear when
-    // coalescing a sub-resolution sliver; otherwise a published branch
-    // could cross an unreported periodic chart boundary.
-    for (const double root : seamCuts) {
-        if (!std::ranges::binary_search(distinct, root)) {
-            return Fail(ErrorCode::IntersectionFailed,
-                        "CylinderCylinder: a distinct chart seam cut is below the fit resolution");
-        }
+    if (lost) {
+        return Fail(ErrorCode::IntersectionFailed,
+                    "CylinderCylinder: distinct chart seam cuts lie within the fit resolution of "
+                    "each other");
     }
     return distinct;
 }
