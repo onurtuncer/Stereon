@@ -323,6 +323,29 @@ std::pair<Vec3, Vec3> ConicFrame(const Vec3& d, const Vec3& x)
     return {c * x - s * d, s * x + c * d};
 }
 
+/// A hyperbola (semi-axes 3 and 2 times the scale) or a parabola (focal
+/// length the scale) with axes x and d through P at t* = OpenAt (the
+/// parabola's times the scale); with y = -d the curve is the same one
+/// reversed, t' = -t.
+CurveFixture OpenConicThrough(const Kind kind, const Point3& p, const Vec3& d, const Vec3& x,
+                              const double scale, const bool recharted)
+{
+    const Vec3 y = recharted ? -d : d;
+    if (kind == Kind::Hyperbola) {
+        // h(t) = C + a cosh(t) x + b sinh(t) d.
+        const double r = 3.0 * scale;
+        const double minor = 2.0 * scale;
+        const Point3 centre = p - r * std::cosh(OpenAt) * x - minor * std::sinh(OpenAt) * d;
+        return {Curve{Hyperbola{centre, r, minor, x, y}}, Interval{-2.0, 2.0},
+                recharted ? -OpenAt : OpenAt};
+    }
+    // p(t) = V + t^2 / (4 f) x + t d, f = scale.
+    const double at = OpenAt * scale;
+    const Point3 vertex = p - (at * at / (4.0 * scale)) * x - at * d;
+    return {Curve{Parabola{vertex, scale, x, y}}, Interval{-4.0 * scale, 4.0 * scale},
+            recharted ? -at : at};
+}
+
 CurveFixture CurveThrough(const Kind kind, const Point3& p, const Vec3& d, const Vec3& x,
                           const double scale, const bool recharted)
 {
@@ -352,19 +375,9 @@ CurveFixture CurveThrough(const Kind kind, const Point3& p, const Vec3& d, const
         }
         return {Curve{Ellipse{centre, r, minor, fx, fy}}, Interval{-pi, pi}, ConicAngle};
     }
-    case Kind::Hyperbola: {
-        // h(t) = C + a cosh(t) x + b sinh(t) y; with y = -d, h'(t) = h(-t).
-        const Point3 centre = p - r * std::cosh(OpenAt) * x - minor * std::sinh(OpenAt) * d;
-        return {Curve{Hyperbola{centre, r, minor, x, recharted ? -d : d}}, Interval{-2.0, 2.0},
-                recharted ? -OpenAt : OpenAt};
-    }
-    case Kind::Parabola: {
-        // p(t) = V + t^2 / (4 f) x + t y, f = scale; with y = -d, p'(t) = p(-t).
-        const double at = OpenAt * scale;
-        const Point3 vertex = p - (at * at / (4.0 * scale)) * x - at * d;
-        return {Curve{Parabola{vertex, scale, x, recharted ? -d : d}},
-                Interval{-4.0 * scale, 4.0 * scale}, recharted ? -at : at};
-    }
+    case Kind::Hyperbola:
+    case Kind::Parabola:
+        return OpenConicThrough(kind, p, d, x, scale, recharted);
     case Kind::Spline:
     case Kind::Rational:
         return {Curve{Cubic(p, d, x, scale, kind == Kind::Rational, recharted)},
