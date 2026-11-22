@@ -32,6 +32,7 @@ The case ID is the path below `corpus/` without the extension, e.g. `analytic-ss
 | [`nurbs-ssi/`](nurbs-ssi/) | Pairs of B-spline surfaces: exact NURBS planes, cylinders and spheres, a saddle and a bump, with closed-form topology | ADR-0010, ADR-0029 |
 | [`curve-curve/`](curve-curve/) | Pairs of 3D curves with a known closest approach around the resolution | ADR-0001, ADR-0029 |
 | [`planar-curves/`](planar-curves/) | Pairs of plane curves, every built-in kind against every other: crossings, tangencies of order two and four, 3·2⁻⁴⁰ either side, overlaps, with closed-form answers | ADR-0029, ADR-0053 |
+| [`curve-surface/`](curve-surface/) | Every built-in curve kind crossing every built-in surface kind, B-splines included, at a known point at 90, 20 and 1 degrees | ADR-0029, ADR-0053 |
 
 ## Case format `stereon-corpus-case/1`
 

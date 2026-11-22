@@ -6,8 +6,9 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 // The cases of corpus/curve-curve/ (tools/generate_curve_corpus.py), read
-// as kernel curves. Shared by the kernel's own runner and the OCCT
-// comparison. Include Json.hpp, <algorithm>, <filesystem>, <string> and
+// as kernel curves, and the curves of corpus/curve-surface/
+// (tools/generate_curve_surface_corpus.py), rational ones included. Shared by the kernel's own
+// runner and the OCCT comparison. Include Json.hpp, <algorithm>, <filesystem>, <string> and
 // <vector> before `import Stereon.Intersect;`, and this after it.
 
 #pragma once
@@ -41,8 +42,14 @@ inline Stereon::BSplineCurve SplineFrom(const CurveJson& c)
     for (const CurveJson& p : c["poles"].AsArray()) {
         poles.push_back(PointFrom(p));
     }
-    return Stereon::BSplineCurve{
-        static_cast<int>(c["degree"].AsNumber()), std::move(knots), std::move(poles), {}};
+    std::vector<double> weights;
+    if (c.Has("weights")) {
+        for (const CurveJson& w : c["weights"].AsArray()) {
+            weights.push_back(w.AsNumber());
+        }
+    }
+    return Stereon::BSplineCurve{static_cast<int>(c["degree"].AsNumber()), std::move(knots),
+                                 std::move(poles), std::move(weights)};
 }
 
 inline Stereon::Curve CurveFrom(const CurveJson& c)
