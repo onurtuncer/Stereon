@@ -253,6 +253,48 @@
       "tests": "^intersect:\\ MR\\ PR\\-194\\ rotated\\ bounded\\ plane\\ coincidence$",
       "diagnostic": "intersect: MR PR-194 rotated bounded plane coincidence",
       "repair_commit": "b74d6e23ff00b2994222bdc611ab09161e256282"
+    },
+    {
+      "id": "AUDIT-20261112-cone-polish",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: far line origin keeps cone crossings (cone polishing without fma)",
+      "file": "src/intersect/SplineSurface.cpp",
+      "find": "    const Point3 point{std::fma(t, line.Direction.X, line.Origin.X),\n                       std::fma(t, line.Direction.Y, line.Origin.Y),\n                       std::fma(t, line.Direction.Z, line.Origin.Z)};",
+      "replace": "    const Point3 point = Eval(line, t);",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ AUDIT\\-20261112\\-cone\\-polish\\ far\\ line\\ origin\\ keeps\\ cone\\ crossings$",
+      "diagnostic": "intersect: MR AUDIT-20261112-cone-polish far line origin keeps cone crossings",
+      "repair_commit": "76eb218f62b8828fc4dfe4ce50ed335491d91ac5"
+    },
+    {
+      "id": "AUDIT-20261113-narrow-sphere-seam",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: seam excursions found by the fitting samples split the traced branch",
+      "file": "src/intersect/ImplicitTrace.cpp",
+      "find": "        if (!cuts.empty()) {\n            return PieceFit{std::nullopt, std::move(cuts)};\n        }",
+      "replace": "        if (false && !cuts.empty()) {\n            return PieceFit{std::nullopt, std::move(cuts)};\n        }",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ AUDIT\\-20261113\\-narrow\\-sphere\\-seam\\ plane\\ section\\ stays\\ one\\ whole\\ circle$",
+      "diagnostic": "intersect: MR AUDIT-20261113-narrow-sphere-seam plane section stays one whole circle",
+      "repair_commit": "76eb218f62b8828fc4dfe4ce50ed335491d91ac5"
+    },
+    {
+      "id": "CI-272-ellipse-plane",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: a conic's crossing on a quarter-turn cut or the seam is searched again",
+      "file": "src/intersect/SplineSurface.cpp",
+      "find": "    if (!AllDecided(found)) {\n        if (chart.Period > 0.0 && upper - lower == chart.Period) {",
+      "replace": "    if (false && !AllDecided(found)) {\n        if (chart.Period > 0.0 && upper - lower == chart.Period) {",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ CI\\-272\\-ellipse\\-plane\\ crossings\\ on\\ the\\ seam\\ and\\ a\\ cut\\ are\\ decided$",
+      "diagnostic": "intersect: MR CI-272-ellipse-plane crossings on the seam and a cut are decided",
+      "repair_commit": "e8080c8aeb5490f6622f11ab52c68b885916fafd"
     }
   ]
 }

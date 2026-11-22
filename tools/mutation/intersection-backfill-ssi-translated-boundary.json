@@ -1,0 +1,35 @@
+{
+  "description": "SSI-translated-boundary's two root causes in #279 (0965d8a), one fault each, under the single SSI-translated-boundary ledger obligation: the search on the surfaces moved about the origin, and the halving of an undecided edge. CI replays every intersection-backfill*.json together (tools/mutate.py --catalogue tools/mutation/intersection-backfill*.json).",
+  "defect": "SSI-translated-boundary",
+  "preset": "gcc16-debug",
+  "mutants": [
+    {
+      "id": "SSI-translated-boundary-search-shift",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: SSI-translated-boundary: the search runs on the surfaces moved about the origin",
+      "file": "src/intersect/GenericSSI.cpp",
+      "find": "        shift[i] = std::isfinite(middle) && MovesExactly(sa, sb, i, middle) ? middle : 0.0;",
+      "replace": "        shift[i] = std::isfinite(middle) && MovesExactly(sa, sb, i, middle) ? 0.0 : 0.0;",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ SSI\\-translated\\-boundary\\ far\\ hyperbola\\ branches\\ end\\ on\\ the\\ domain's\\ sides$",
+      "diagnostic": "intersect: MR SSI-translated-boundary far hyperbola branches end on the domain's sides",
+      "repair_commit": "0965d8aa4335210199404d6d01f2412bac218e5b"
+    },
+    {
+      "id": "SSI-translated-boundary-edge-halving",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: SSI-translated-boundary: an undecided edge is halved until its root is settled",
+      "file": "src/intersect/GenericSSI.cpp",
+      "find": "constexpr int EdgeHalvings = 8;",
+      "replace": "constexpr int EdgeHalvings = 0;",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ SSI\\-translated\\-boundary\\ far\\ hyperbola\\ branches\\ end\\ on\\ the\\ domain's\\ sides$",
+      "diagnostic": "intersect: MR SSI-translated-boundary far hyperbola branches end on the domain's sides",
+      "repair_commit": "0965d8aa4335210199404d6d01f2412bac218e5b"
+    }
+  ]
+}
