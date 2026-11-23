@@ -1125,7 +1125,8 @@ branch to its loops (ADR-0009; the Boolean prototype's M6). A
 curve's parameter, each with its parameter on both curves, its position,
 the ``ContactType`` there (``Crossing``, or ``Tangential`` for a touch
 that does not cross, including a non-smooth touch at a spline's corner,
-see *Algorithm K*) and whether the count and the contact were *decided* exactly on the input doubles; and
+see *Algorithm K*) and whether the count and the contact were *decided*
+exactly on the input doubles; and
 ``PlanarOverlap`` stretches where coincident curves share their domains,
 with the parameter correspondence. A point is kept when both parameters
 lie in the requested domains, a periodic curve's taken modulo its period
@@ -1500,8 +1501,8 @@ agree and a touch that does not cross (``Tangential``, ``Decided``) when
 they differ. For plane curves ``Tangential`` means a touch, a meeting
 that does not cross. At a smooth point the curves then share a tangent,
 but a corner has two, so a corner touch is ``Tangential`` without a
-common tangent (owner's decision of 2026-11-23). A root on one arm only, or at a corner of both splines, stays
-undecided, and a root no box proves at all is reported with ``Decided``
+common tangent (owner's decision of 2026-11-23). A root on one arm only,
+or at a corner of both splines, stays undecided, and a root no box proves at all is reported with ``Decided``
 false, never dropped.
 
 Two brackets that meet on both curves are one root only *by proof*: when
