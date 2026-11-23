@@ -14,6 +14,8 @@
 - [v0.1 release audit of 2026-10-30](v0.1-audit-2026-10-30.md): the read-only audit of `fb7366a` that held the tag, its two numerical defects and their disposition
 - [Boolean prototype plan](boolean-prototype-plan.md): the last Phase 0 gate (ADR-0001, ADR-0007), its milestones and the decisions of 2026-10-20
 - [Curved Booleans](curved-booleans.md): design of cones, spheres, tori and ellipsoids in Union, Common and Cut, and of coincident curved faces, in slices (after v0.2, owner's decision of 2026-11-23)
+- [v0.2 acceptance ledger](v0.2-acceptance-ledger.md): the v0.2 release obligations, evidence and open gates
+- [v0.2 supported domain (draft)](v0.2-supported-domain.md): a proposed declaration of what each intersection family supports, refuses by design and leaves out of v0.2, for the owner's decision
 - [Placement and follow-up checklist](capability-matrix-checklist.md)
 - [Existing benchmark specification](../benchmarks.md)
 - [Architecture decision records](../adr/README.md)
