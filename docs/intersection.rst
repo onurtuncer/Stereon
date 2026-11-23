@@ -178,8 +178,14 @@ A clipped span is then cut where the branch crosses either cylinder's chart
 seam, its ruling at angle zero. A seam is a line, so it meets the other
 cylinder at two points, at one where it is tangent, or at none; which is
 decided exactly on the input doubles. The first cylinder's seam is crossed
-at parameters known in closed form. At a fold they are the fold alone where
-the seam is tangent there, and two parameters otherwise, however close. The
+at parameters known in closed form, and the rounded closed form is held to
+the exact count rather than to a threshold on its distance from a fold.
+With no point there is no cut. With one, the seam is tangent at a fold, and
+the cut is the fold that the closed form puts nearest the seam, alone. With
+two, the cuts are the two parameters, however close to a fold; where
+rounding puts the seam past the fold, so that the closed form places
+neither, the intersection fails with ``IntersectionFailed`` instead of
+being answered without them. The
 second cylinder's seam is isolated by interval evaluation of the closed
 form. A span of the parameter is bisected until each cell is either proved
 off the seam or enclosed as narrowly as the closed form's own rounding

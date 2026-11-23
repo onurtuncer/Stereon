@@ -448,6 +448,51 @@ TEST_CASE("skew cylinder-cylinder intersections agree with OCCT", "[occt][inters
     }
 }
 
+TEST_CASE("skew cylinders with a seam at or beside a fold agree with OCCT", "[occt][intersect]")
+{
+    // Issue #195. B of radius 2 along x through (0, 2, 0) reaches past A in
+    // one loop whose folds are A's rulings in the plane y = 0. The frames
+    // turn about the axes, which moves the chart seams and nothing else:
+    // A's seam tangent at the fold, a little inside it and a little
+    // outside, with B's seam clear of the curve; then B's seam, the x axis
+    // or a line beside it, through or beside both folds. OCCT's trace of
+    // the same quartic does not depend on the seams, and each answer must
+    // be that curve, all of it, in both orders.
+    const auto frameOfA = [](const double e) {
+        return Cylinder{Point3{}, 3.0, Vec3{std::cos(e), std::sin(e), 0.0},
+                        Vec3{-std::sin(e), std::cos(e), 0.0}, true};
+    };
+    const auto frameOfB = [](const double cosine, const double sine) {
+        return Cylinder{Point3{0.0, 2.0, 0.0}, 2.0, Vec3{0.0, cosine, sine},
+                        Vec3{0.0, -sine, cosine}, true};
+    };
+    std::vector<std::pair<Cylinder, Cylinder>> pairs;
+    for (const double e : {0.0, 0x1p-20, -0x1p-20, 0x1p-10}) {
+        pairs.emplace_back(frameOfA(e), frameOfB(1.0, 0.0));
+        pairs.emplace_back(frameOfA(0.3), frameOfB(-std::cos(e), -std::sin(e)));
+    }
+    for (const auto& [a, b] : pairs) {
+        for (const auto& [first, second] : {std::pair{a, b}, std::pair{b, a}}) {
+            INFO("A's seam at (" << a.XAxis.X << ", " << a.XAxis.Y << "), B's at (" << b.XAxis.Y
+                                 << ", " << b.XAxis.Z << "), first radius " << first.Radius);
+            const auto result = Intersect(Surface(first), Surface(second), ctx);
+            if (!result) {
+                INFO(result.error().GetMessage());
+            }
+            REQUIRE(result.has_value());
+            REQUIRE_FALSE(result->Branches.empty());
+            const OcctTrace occt = RefinedOcctQuarticSamples(first, second);
+            REQUIRE(occt.Gap < 0.1);
+            for (const Point3& p : SamplesOf(*result, 40)) {
+                REQUIRE(DistanceToNearest(occt.Points, p) <= occt.Gap + 1e-6);
+            }
+            for (std::size_t i = 0; i < occt.Points.size(); i += 50) {
+                REQUIRE(DistanceToBranches(*result, occt.Points[i]) <= 1e-4);
+            }
+        }
+    }
+}
+
 TEST_CASE("the tangent point and the two ellipses of skew cylinders agree with OCCT",
           "[occt][intersect]")
 {
