@@ -1,0 +1,49 @@
+{
+  "format": "stereon-corpus-case/1",
+  "id": "boolean/drill-grids/disjoint-30x30-build",
+  "kind": "regression",
+  "summary": "A 30 by 30 grid of disjoint drills, built as a balanced tree of unions; no face of one drill meets another's.",
+  "added": "2026-11-23",
+  "source": "Issue #160, found building a large-against-large fixture for the Boolean broad phase",
+  "licence": "MPL-2.0",
+  "references": [
+    "ADR-0007",
+    "ADR-0029"
+  ],
+  "tags": [
+    "issue160",
+    "disjoint",
+    "large"
+  ],
+  "inputs": {
+    "operands": [
+      {
+        "name": "A",
+        "type": "drill-grid",
+        "n": 30,
+        "offset": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    ]
+  },
+  "operation": {
+    "name": "build",
+    "operands": [
+      "A"
+    ]
+  },
+  "expected": {
+    "solids": 900,
+    "faces": 2700,
+    "valid": true
+  },
+  "found": {
+    "commit": "6177bc0",
+    "issue": 160,
+    "observed": "Boolean: whether the shell of 3 faces bounds a solid or a void is not settled from any of them",
+    "fixed_by": "#319"
+  }
+}

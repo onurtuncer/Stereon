@@ -131,6 +131,23 @@ TEST_CASE("issue 160: a disjoint 30 by 30 drill grid is buildable",
     }
 }
 
+// Issue #160 (1), its second reproducer: two disjoint 20 by 20 grids side
+// by side, the second moved by (200, 0, 0). No face of one meets a face of
+// the other, so the union is the 800 drills, each its own closed solid.
+TEST_CASE("issue 160: disjoint 20 by 20 drill grids side by side unite",
+          "[.][boolean][regression][issue160][disjoint][large]")
+{
+    constexpr int n = 20;
+    const Shape a = Drills(n);
+    const Shape b = Drills(n, Stereon::Vec3{200.0, 0.0, 0.0});
+    const auto result = Boolean(a, b, BooleanOperation::Union, serial);
+    INFO((result ? "" : std::string(result.error().GetMessage())));
+    REQUIRE(result.has_value());
+    CHECK(CountOf<EntityKind::Solid>(result->Shape) == 2 * n * n);
+    CHECK(CountOf<EntityKind::Face>(result->Shape) == 3 * 2 * n * n);
+    CHECK(ValidateTopology(result->Shape).IsValid());
+}
+
 // Issue #160 (2): two parallel, equal-radius cylinder grids overlap in
 // one column, with each cap a unit higher on the shifted operand. This
 // checks the imprint before the complete Boolean so the failure stage is
