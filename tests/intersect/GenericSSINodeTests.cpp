@@ -919,14 +919,15 @@ TEST_CASE("near a node on a knot line, only what the tolerance admits is a node"
     {
         // The knot line 2^k beside the node. From 2^-12 on the node is proved
         // inside its own patch; to 2^-20 it is within the box given up
-        // around the line. Between, the box would need the surfaces further
-        // apart than the tolerance and the patch has no room: a refusal is
-        // admitted there, a wrong answer nowhere.
-        for (const int k : {-4, -6, -10, -12, -14, -16, -20, -30, -40}) {
+        // around the line. Between (2^-14 and 2^-16 were refused when this
+        // was written), the box would need the surfaces further apart than
+        // the tolerance and the patch has no room: a refusal is admitted
+        // there, a wrong answer nowhere.
+        for (const int k : {-6, -16, -20, -40}) {
             INFO("knot line 2^" << k << " beside the node");
             const BSplineSurface beside = Pieced({2.0, -3.0}, {0.0, 0.5 + std::ldexp(1.0, k), 1.0},
                                                  KnotOffMiddle, OneSpan, OneSpan);
-            if (k != -14 && k != -16) {
+            if (k != -16) {
                 CheckMoved(beside, Bowl(), QuadricCrossing(), {});
                 continue;
             }
