@@ -111,3 +111,122 @@ TEST_CASE("the drilled slab's speed-up, stage by stage", "[.][boolean][speedup]"
         }
     }
 }
+
+// Issue #160 (2): two parallel, equal-radius cylinder grids overlap in
+// one column, with each cap a unit higher on the shifted operand. This
+// checks the imprint before the complete Boolean so the failure stage is
+// observable without misdiagnosing it as broad-phase or assembly.
+TEST_CASE("issue 160: staggered cylinder caps have a closed imprint network",
+          "[boolean][bodies][regression][issue160][offset-caps]")
+{
+    for (const int n : {1, 3}) {
+        INFO("grid " << n << " x " << n << ", cap delta 1");
+        const Shape a = Drills(n);
+        const Shape b = Drills(n, Stereon::Vec3{10.0 * n - 9.0, 0.0, 1.0});
+        const auto imprinted = ImprintBodies(a, b, serial);
+        INFO((imprinted ? "" : std::string(imprinted.error().GetMessage())));
+        REQUIRE(imprinted.has_value());
+        const auto result = Boolean(a, b, BooleanOperation::Union, serial);
+        INFO((result ? "" : std::string(result.error().GetMessage())));
+        REQUIRE(result.has_value());
+        const std::size_t expected = static_cast<std::size_t>(2 * n * n - n);
+        CHECK(CountOf<EntityKind::Solid>(result->Shape) == expected);
+        CHECK(ValidateTopology(result->Shape).IsValid());
+    }
+}
+
+// The first and last columns of the original n=20 grid sit around
+// x=195 and x=196. Reconstruct just that pair, including the far corner,
+// to distinguish world-coordinate loss from many-body topology behavior.
+TEST_CASE("issue 160: offset-cap overlap at the last grid column",
+          "[boolean][regression][issue160][offset-caps][translated]")
+{
+    for (const Stereon::Vec3& offset :
+         {Stereon::Vec3{190.0, 0.0, 0.0}, Stereon::Vec3{190.0, 190.0, 0.0}}) {
+        INFO("x 195, y " << offset.Y + 5.0);
+        const Shape a = Drills(1, offset);
+        const Shape b = Drills(1, offset + Stereon::Vec3{1.0, 0.0, 1.0});
+        const auto imprinted = ImprintBodies(a, b, serial);
+        INFO((imprinted ? "" : std::string(imprinted.error().GetMessage())));
+        REQUIRE(imprinted.has_value());
+        const auto result = Boolean(a, b, BooleanOperation::Union, serial);
+        INFO((result ? "" : std::string(result.error().GetMessage())));
+        REQUIRE(result.has_value());
+        CHECK(CountOf<EntityKind::Solid>(result->Shape) == 1);
+        CHECK(ValidateTopology(result->Shape).IsValid());
+    }
+}
+
+// Full original grid in #160 (2), excluded from ordinary CI due to its
+// 800-cylinder setup. Invoke by name in a dedicated large-fixture run.
+TEST_CASE("issue 160: staggered 20 by 20 drill grids unite",
+          "[.][boolean][regression][issue160][offset-caps][large]")
+{
+    constexpr int n = 20;
+    const Shape a = Drills(n);
+    const Shape b = Drills(n, Stereon::Vec3{191.0, 0.0, 1.0});
+    const auto result = Boolean(a, b, BooleanOperation::Union, serial);
+    INFO((result ? "" : std::string(result.error().GetMessage())));
+    REQUIRE(result.has_value());
+    CHECK(CountOf<EntityKind::Solid>(result->Shape) == 2 * n * n - n);
+    CHECK(ValidateTopology(result->Shape).IsValid());
+}
+
+// Issue #160 (3): parallel cylinders with coplanar top and bottom caps.
+// The imprint must be valid before assembly, and the union's final Freeze
+// must produce a structurally valid solid, not a silently repaired topology.
+TEST_CASE("issue 160: overlapping level-cap cylinder grids publish valid topology",
+          "[boolean][regression][issue160][level-caps]")
+{
+    for (const int n : {1, 3}) {
+        INFO("grid " << n << " x " << n << ", level caps");
+        const Shape a = Drills(n);
+        const Shape b = Drills(n, Stereon::Vec3{10.0 * n - 9.0, 0.0, 0.0});
+        const auto imprinted = ImprintBodies(a, b, serial);
+        INFO((imprinted ? "" : std::string(imprinted.error().GetMessage())));
+        REQUIRE(imprinted.has_value());
+        const auto result = Boolean(a, b, BooleanOperation::Union, serial);
+        INFO((result ? "" : std::string(result.error().GetMessage())));
+        REQUIRE(result.has_value());
+        const std::size_t expected = static_cast<std::size_t>(2 * n * n - n);
+        CHECK(CountOf<EntityKind::Solid>(result->Shape) == expected);
+        CHECK(ValidateTopology(result->Shape).IsValid());
+    }
+}
+
+// The first and last columns of the original n=20 grid sit around
+// x=195 and x=196. Reconstruct just that pair, including the far corner,
+// to distinguish world-coordinate loss from many-body topology behavior.
+TEST_CASE("issue 160: level-cap overlap at the last grid column",
+          "[boolean][regression][issue160][level-caps][translated]")
+{
+    for (const Stereon::Vec3& offset :
+         {Stereon::Vec3{190.0, 0.0, 0.0}, Stereon::Vec3{190.0, 190.0, 0.0}}) {
+        INFO("x 195, y " << offset.Y + 5.0);
+        const Shape a = Drills(1, offset);
+        const Shape b = Drills(1, offset + Stereon::Vec3{1.0, 0.0, 0.0});
+        const auto imprinted = ImprintBodies(a, b, serial);
+        INFO((imprinted ? "" : std::string(imprinted.error().GetMessage())));
+        REQUIRE(imprinted.has_value());
+        const auto result = Boolean(a, b, BooleanOperation::Union, serial);
+        INFO((result ? "" : std::string(result.error().GetMessage())));
+        REQUIRE(result.has_value());
+        CHECK(CountOf<EntityKind::Solid>(result->Shape) == 1);
+        CHECK(ValidateTopology(result->Shape).IsValid());
+    }
+}
+
+// Full original grid in #160 (3), hidden from ordinary CI. This is
+// deliberately separate from the staggered-cap failure.
+TEST_CASE("issue 160: level-cap 20 by 20 drill grids unite",
+          "[.][boolean][regression][issue160][level-caps][large]")
+{
+    constexpr int n = 20;
+    const Shape a = Drills(n);
+    const Shape b = Drills(n, Stereon::Vec3{191.0, 0.0, 0.0});
+    const auto result = Boolean(a, b, BooleanOperation::Union, serial);
+    INFO((result ? "" : std::string(result.error().GetMessage())));
+    REQUIRE(result.has_value());
+    CHECK(CountOf<EntityKind::Solid>(result->Shape) == 2 * n * n - n);
+    CHECK(ValidateTopology(result->Shape).IsValid());
+}
