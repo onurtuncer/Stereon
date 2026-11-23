@@ -34,6 +34,7 @@
 #include <filesystem>
 #include <limits>
 #include <map>
+#include <numbers>
 #include <optional>
 #include <stdexcept>
 #include <string>

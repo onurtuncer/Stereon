@@ -29,7 +29,7 @@
 // design.
 //
 // Include after Json.hpp, <algorithm>, <cmath>, <cstddef>, <filesystem>,
-// <limits>, <map>, <optional>, <stdexcept>, <string>, <utility>, <vector>
+// <limits>, <map>, <numbers>, <optional>, <stdexcept>, <string>, <utility>, <vector>
 // and `import Stereon.Intersect;`.
 
 #pragma once
@@ -285,6 +285,8 @@ inline Stereon::BSplineSurface CorpusSpline(const std::string& id, const std::si
 }
 
 inline constexpr int LineCount = 64;
+/// The golden angle, 2 pi (2 - phi): successive directions spread evenly.
+inline constexpr double GoldenAngle = 2.0 * std::numbers::pi * (2.0 - std::numbers::phi);
 
 /// A unit vector across `d`.
 inline Vec3 Across(const Vec3& d)
@@ -296,7 +298,7 @@ inline Vec3 Across(const Vec3& d)
 /// offsets in [0, 1).
 inline double Spread(const int k)
 {
-    const double golden = 0.6180339887498949;
+    const double golden = std::numbers::phi - 1.0;
     return k * golden - std::floor(k * golden);
 }
 
@@ -310,7 +312,7 @@ inline std::vector<LineCase> LinesThroughSphere()
     std::vector<LineCase> lines;
     for (int k = 0; k < LineCount; ++k) {
         const double z = 1.0 - (2.0 * k + 1.0) / LineCount;
-        const double phi = 2.399963229728653 * k;
+        const double phi = GoldenAngle * k;
         const double rho = std::sqrt(1.0 - z * z);
         const Vec3 d{rho * std::cos(phi), rho * std::sin(phi), z};
         const bool hits = k % 4 != 3;
@@ -334,7 +336,7 @@ inline std::vector<LineCase> LinesThroughCylinder()
 {
     std::vector<LineCase> lines;
     for (int k = 0; k < LineCount; ++k) {
-        const double phi = 2.399963229728653 * k;
+        const double phi = GoldenAngle * k;
         const double rise = 0.6 * (2.0 * Spread(k + 7) - 1.0);
         const double level = 2.0 * Spread(k + 3) - 1.0;
         const double flat = std::sqrt(1.0 - rise * rise);
