@@ -46,10 +46,13 @@ using Stereon::Vec2;
 using Stereon::Vec3;
 using StereonTest::JsonValue;
 
-/// Samples per curve of a result, and the reach of a witness or a sample,
-/// and of joined curve ends, per unit of a case's scale: the reach of
-/// tests/intersect/SurfaceCorpusTests.cpp and tests/occt/CorpusDifferentialTests.cpp.
-inline constexpr int CurveSamples = 64;
+/// Samples per curve of a result, as many as tests/intersect/SurfaceCorpusTests.cpp
+/// takes so that a polyline's sagitta stays far below the witness reach, and the
+/// reach of a witness or a sample, and of joined curve ends, per unit of a case's
+/// scale: the reach of SurfaceCorpusTests.cpp and tests/occt/CorpusDifferentialTests.cpp.
+inline constexpr int CurveSamples = 2048;
+/// Every DeviationStride-th sample is measured against the surfaces.
+inline constexpr std::size_t DeviationStride = 32;
 inline constexpr double WitnessReach = 1e-3;
 inline constexpr double JoinReach = 1e-4;
 /// An unbounded line is sampled this far either side of the case's anchor,
@@ -698,7 +701,10 @@ inline double DeviationOf(const SsiCase& c, const Found& found)
     };
     std::ranges::for_each(found.Points, measure);
     for (const std::vector<Point3>& curve : found.Curves) {
-        std::ranges::for_each(curve, measure);
+        for (std::size_t k = 0; k < curve.size(); k += DeviationStride) {
+            measure(curve[k]);
+        }
+        measure(curve.back());
     }
     return worst;
 }
