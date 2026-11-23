@@ -87,3 +87,11 @@ The first CI run of this branch mapped a whole-turn box [0, 2 pi] to [-pi, pi] u
 - **Why it is a defect:** the request is a whole turn of the cylinder, and the answer is a successful, incomplete result: a wrong answer, not a refusal. Other handlers either answer such boxes (every other pair in this test did) or document a refusal: the ellipsoid's `NotImplemented` for a box outside its base turn (`docs/intersection.rst`).
 - **Not repaired here:** this pull request changes no library code. The inventory records it as `AUDIT-20261122-plane-cylinder-periodic-box`, `fixture captured`. Its repair belongs to the SSI owner, and the owner decides whether such boxes are supported or refused.
 - **Effect on the cells:** Plane:Cylinder/MR-04 and Cylinder:Plane/MR-04 stay `MR implemented` until that record is closed. The MR-04 test now keeps boxes within the base turn, so it no longer exercises this fault.
+
+#### Green
+
+At this branch's head `bbec12a` (main 898ed69 with test-only changes), the four tests passed in every native CTest job of #329: [Linux `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45065020641/job/137339209208), [Linux `gcc16-asan`](https://github.com/onurtuncer/Stereon/actions/runs/45065020641/job/137339209139), [Windows `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45065020649/job/137339207223), [Windows `gcc16-windows`](https://github.com/onurtuncer/Stereon/actions/runs/45065020649/job/137339207144), [macOS `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45065020688/job/137339132173) and [coverage](https://github.com/onurtuncer/Stereon/actions/runs/45065020698/job/137339134895). A refusal fails each test, so every configuration answered under every relation, in both orders.
+
+The first run, at `c766f89`, was red only on the plane–cylinder MR-04 runs described in the finding above. MR-01, MR-02 and MR-03 were green there too.
+
+**Review.** 194 of the 196 cells are `verified` on this agent's review of the fixtures, oracles and these runs, within the domain stated above. Plane:Cylinder/MR-04 and Cylinder:Plane/MR-04 stay `MR implemented` until AUDIT-20261122-plane-cylinder-periodic-box is closed. No fault spot-check was run for these cells, because the disk was full and nothing could be built locally. The owner's review is pending.
