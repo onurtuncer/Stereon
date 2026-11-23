@@ -41,7 +41,7 @@
 
 #include "Json.hpp"
 #include <GeomAPI_ProjectPointOnCurve.hxx>
-#include <GeomEval_EllipsoidSurface.hxx>
+#include <GeomConvert.hxx>
 #include <GeomInt_IntSS.hxx>
 #include <Geom_BSplineCurve.hxx>
 #include <Geom_BSplineSurface.hxx>
@@ -178,6 +178,27 @@ Stereon::BSplineSurface SplineOf(const JsonValue& s)
     return *std::move(made);
 }
 
+/// An ellipsoid as OCCT's exact rational B-spline: the unit sphere's
+/// (GeomConvert), its poles mapped by the ellipsoid's affine map, which keeps
+/// a rational surface exact. OCCT 8's GeomEval_EllipsoidSurface is not
+/// accepted by GeomAdaptor_Surface, so GeomAPI_IntSS throws on it.
+occ::handle<Geom_Surface> EllipsoidOf(const Point3& centre, const double a, const double b,
+                                      const double c, const Vec3& x, const Vec3& y)
+{
+    const occ::handle<Geom_BSplineSurface> unit =
+        GeomConvert::SurfaceToBSplineSurface(new Geom_SphericalSurface(
+            gp_Ax3(gp_Pnt(0.0, 0.0, 0.0), gp_Dir(0.0, 0.0, 1.0), gp_Dir(1.0, 0.0, 0.0)), 1.0));
+    const Vec3 z = Cross(x, y);
+    for (int i = 1; i <= unit->NbUPoles(); ++i) {
+        for (int j = 1; j <= unit->NbVPoles(); ++j) {
+            const gp_Pnt p = unit->Pole(i, j);
+            unit->SetPole(i, j,
+                          ToOcct(centre + (a * p.X()) * x + (b * p.Y()) * y + (c * p.Z()) * z));
+        }
+    }
+    return unit;
+}
+
 /// A surface of curved-ssi or nurbs-ssi (corpus/curved-ssi/README.md, Inputs).
 /// Stereon's frames and parametrisations of the analytic surfaces are
 /// OCCT's (STEP's), so a box carries over as it is.
@@ -219,7 +240,7 @@ CaseSurface FramedSurfaceOf(const JsonValue& s)
         const double b = s["b"].AsNumber();
         const double c = s["c"].AsNumber();
         made.Stereon = Surface{Stereon::Ellipsoid{at, a, b, c, x, y, true}};
-        made.Occt = new GeomEval_EllipsoidSurface(frame, a, b, c);
+        made.Occt = EllipsoidOf(at, a, b, c, x, y);
     }
     if (s.Has("box")) {
         const JsonValue& box = s["box"];
@@ -570,15 +591,15 @@ struct Shape {
     bool Counted = true;
 };
 
-/// Why OCCT's result is not the shape, or "".
+/// Why OCCT's result is not the shape, or "": its curves and points, and
+/// every point of it within `reach` of both surfaces.
 std::string Mismatch(const OcctResult& r, const Shape& want, const CaseSurface& a,
-                     const CaseSurface& b, const double scale)
+                     const CaseSurface& b, const double scale, const double reach)
 {
     if (want.Overlap) {
         return r.Curves.empty() && r.Points.empty() ? ""
                                                     : "curves or points on coincident surfaces";
     }
-    const double reach = WitnessReach * scale;
     std::string why;
     const std::size_t curves = ConnectedCurves(r, JoinReach * scale);
     if (want.Counted ? curves != want.Curves : curves == 0) {
@@ -777,11 +798,11 @@ void CompareFramedCase(const JsonValue& c, Tally& tally)
                      static_cast<std::size_t>(expected["points"].AsNumber()),
                      expected["overlap"].AsBool()};
     if (want.Overlap) {
-        const std::string why = Mismatch(occt, want, a, b, scale);
+        const std::string why = Mismatch(occt, want, a, b, scale, WitnessReach * scale);
         tally.Add(id, why.empty() ? Outcome::NotCompared : Outcome::OcctDiscrepancy, why);
         return;
     }
-    const std::string why = Mismatch(occt, want, a, b, scale) +
+    const std::string why = Mismatch(occt, want, a, b, scale, WitnessReach * scale) +
                             MissedWitnesses(occt, expected["witnesses"], a.Anchor, scale);
     if (!why.empty()) {
         tally.Add(id, Outcome::OcctDiscrepancy, why);
@@ -863,6 +884,61 @@ std::string RequiredOf(const JsonValue& expected, const JsonValue& surfaces)
     return expected["nominal"]["configuration"].AsString();
 }
 
+/// Where Stereon's answer to an analytic-ssi pair leaves either surface by
+/// more than `reach`: its first such point, or "".
+std::string OffSurfaces(const Stereon::SurfaceSurfaceIntersection& ours, const CaseSurface& a,
+                        const CaseSurface& b, const double reach)
+{
+    std::vector<Point3> points;
+    for (const Stereon::IntersectionPoint& point : ours.Points) {
+        points.push_back(point.Position);
+    }
+    for (const Stereon::IntersectionBranch& branch : ours.Branches) {
+        for (const double t : ParametersOf(branch, a.Anchor, 1.0, BranchSamples)) {
+            points.push_back(Eval(branch.Curve3d, t));
+        }
+    }
+    for (const Point3& p : points) {
+        const double d = std::max(DistanceToSurface(a.Stereon, p), DistanceToSurface(b.Stereon, p));
+        if (d > reach) {
+            return "Stereon's point " + Format(p) + " is " + Format(d) +
+                   " from a surface, beyond " + Format(reach) + "; ";
+        }
+    }
+    return "";
+}
+
+/// The closed-form readings of an analytic-ssi case that OCCT's result
+/// matches, or none and why. A configuration snapped to a degeneracy (the
+/// tolerant reading, where it differs from the nominal one) may lie anywhere
+/// within the pair tolerance of either surface (ADR-0029 section 6).
+struct Readings {
+    std::vector<std::string> Names;
+    std::string Why;
+};
+
+Readings ReadingsOf(const OcctResult& occt, const std::string& nominal, const std::string& tolerant,
+                    const CaseSurface& a, const CaseSurface& b, const double tolerance)
+{
+    Readings out;
+    const std::string whyNominal = Mismatch(occt, *ShapeOf(nominal), a, b, 1.0, WitnessReach);
+    if (whyNominal.empty()) {
+        out.Names.push_back(nominal);
+    }
+    out.Why = "nominal " + nominal + ": " + whyNominal;
+    const std::optional<Shape> snapped = ShapeOf(tolerant);
+    if (tolerant == nominal || !snapped) {
+        return out;
+    }
+    const std::string whyTolerant =
+        Mismatch(occt, *snapped, a, b, 1.0, std::max(WitnessReach, tolerance));
+    if (whyTolerant.empty()) {
+        out.Names.push_back(tolerant);
+    }
+    out.Why += "tolerant " + tolerant + ": " + whyTolerant;
+    return out;
+}
+
 void ComparePairCase(const JsonValue& c, Tally& tally)
 {
     const std::string& id = c["id"].AsString();
@@ -883,29 +959,15 @@ void ComparePairCase(const JsonValue& c, Tally& tally)
         tally.Add(id, Outcome::NotCompared);
         return;
     }
-    const std::optional<Shape> tolerantShape = ShapeOf(tolerant);
-
     const OcctResult occt = IntersectWithOcct(a.Occt, b.Occt, tolerance);
     if (!occt.Done) {
         tally.Add(id, Outcome::OcctFailed, occt.Failure);
         return;
     }
-    const std::string whyNominal = Mismatch(occt, *nominalShape, a, b, 1.0);
-    const std::string whyTolerant =
-        tolerantShape ? Mismatch(occt, *tolerantShape, a, b, 1.0) : whyNominal;
-    std::vector<std::string> readings;
-    if (whyNominal.empty()) {
-        readings.push_back(nominal);
-    }
-    if (whyTolerant.empty()) {
-        readings.push_back(tolerant);
-    }
+    const Readings found = ReadingsOf(occt, nominal, tolerant, a, b, tolerance);
+    const std::vector<std::string>& readings = found.Names;
     if (readings.empty()) {
-        std::string why = "nominal " + nominal + ": " + whyNominal;
-        if (tolerant != nominal) {
-            why += "tolerant " + tolerant + ": " + whyTolerant;
-        }
-        tally.Add(id, Outcome::OcctDiscrepancy, why);
+        tally.Add(id, Outcome::OcctDiscrepancy, found.Why);
         return;
     }
     if (expected.Has("kernel")) {
@@ -929,7 +991,13 @@ void ComparePairCase(const JsonValue& c, Tally& tally)
         tally.Add(id, Outcome::KernelFailure, IntersectTest::ErrorText(ours));
         return;
     }
-    const std::string difference = Difference(*ours, occt, a.Anchor, 1.0, WitnessReach);
+    // Two snapped answers may each lie within the tolerance, on either side.
+    const bool snapped = required != nominal;
+    const double snapReach = std::max(WitnessReach, tolerance);
+    const std::string difference =
+        OffSurfaces(*ours, a, b, snapped ? snapReach : WitnessReach) +
+        Difference(*ours, occt, a.Anchor, 1.0,
+                   snapped ? std::max(WitnessReach, 2.0 * tolerance) : WitnessReach);
     INFO(difference);
     CHECK(difference.empty());
     tally.Add(id, difference.empty() ? Outcome::Agree : Outcome::KernelFailure, difference);
