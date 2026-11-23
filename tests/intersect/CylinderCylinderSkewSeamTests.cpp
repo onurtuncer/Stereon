@@ -266,8 +266,11 @@ void AddSeamCrossings(const Reference& r, const std::size_t loop, const Cylinder
 
 [[nodiscard]] std::size_t SeamPointsOfB(const World& w, const Cylinder& b)
 {
-    const double y = w.Offset + w.RadiusB * b.XAxis.Y;
-    return CountOf((radiusA - y) * (radiusA + y));
+    // 3 - y and 3 + y, each from the gap of the axes first: exact where the
+    // seam is within rounding of A's top.
+    const double below = (radiusA - w.Offset) - w.RadiusB * b.XAxis.Y;
+    const double above = (radiusA + w.Offset) + w.RadiusB * b.XAxis.Y;
+    return CountOf(below * above);
 }
 
 /// A, its seam at the world's angle whose cosine and sine are given.
@@ -421,9 +424,9 @@ void RequireContract(const Stereon::SurfaceSurfaceIntersection& result, const Re
 /// One pair of frames in one order: the independent count of each seam's
 /// crossings, then the answer's contract, or a refusal, which names its
 /// limit and which only crossings within a few resolutions of each other
-/// excuse. Whether it was answered.
+/// excuse, or the one limit that the caller names. Whether it was answered.
 bool Check(const Reference& r, const Cylinder& a, const Cylinder& b, const bool swapped,
-           const std::size_t nodes = 0)
+           const std::size_t nodes = 0, const std::string_view excuse = {})
 {
     const std::vector<Point3> onSeamA = SeamCrossingsOf(r, a);
     const std::vector<Point3> onSeamB = SeamCrossingsOf(r, b);
@@ -443,7 +446,12 @@ bool Check(const Reference& r, const Cylinder& a, const Cylinder& b, const bool 
         REQUIRE(IsNamedRefusal(result.error().GetMessage()));
         REQUIRE((result.error().GetCode() == ErrorCode::IntersectionFailed ||
                  result.error().GetCode() == ErrorCode::CertificationFailed));
-        REQUIRE(ClosestPair(crossings) <= 4.0 * ctx.GetResolution());
+        if (excuse.empty()) {
+            REQUIRE(ClosestPair(crossings) <= 4.0 * ctx.GetResolution());
+        } else {
+            REQUIRE(std::string_view(result.error().GetMessage()).find(excuse) !=
+                    std::string_view::npos);
+        }
         return false;
     }
     RequireContract(*result, r, a, b, swapped, crossings, nodes);
@@ -632,4 +640,59 @@ TEST_CASE("the seams of internally tangent cylinders beside a lobe's fold are cu
             }
         }
     }
+}
+
+TEST_CASE("a seam that passes the curve within rounding and does not meet it cuts nothing",
+          "[intersect][cylinder][skew][regression][issue195]")
+{
+    // B's seam is the line along x at y = 3 + g, a few units of rounding
+    // above the top of the loop, which it does not meet: the curve comes
+    // within g of the seam there, where a sample's angle on B rounds to
+    // either side of zero. A's seam crosses at an ordinary place, is
+    // tangent at a fold, or passes a fold as closely outside. No seam is
+    // crossed by more than rounding: one closed curve, cut only where A's
+    // seam crosses it, and nothing excuses a refusal. The branch that held
+    // a sample wrapped to the far side of B's chart would not certify.
+    const Reference r = ReferenceOf(oneLoop);
+    std::size_t index = 0;
+    for (const double g : {0x1p-52, 0x1p-51, 0x1p-48}) {
+        const double cosine = (1.0 + g) / 2.0;
+        for (const double sheet : {1.0, -1.0}) {
+            const double sine = sheet * std::sqrt((1.0 - cosine) * (1.0 + cosine));
+            for (const double e : {0.3, 0.0, -0x1p-53}) {
+                for (const double mirror : {1.0, -1.0}) {
+                    const bool rightHanded = ++index % 2 == 0;
+                    const bool swapped = index % 4 < 2;
+                    const Cylinder a = FrameOfA(mirror * std::cos(e), std::sin(e), rightHanded);
+                    const Cylinder b = FrameOfB(oneLoop, cosine, sine, !rightHanded);
+                    REQUIRE(SeamPointsOfB(oneLoop, b) == 0);
+                    INFO("gap " << g << ", sheet " << sheet << ", A offset " << e << ", mirror "
+                                << mirror << ", right-handed " << rightHanded << ", swapped "
+                                << swapped);
+                    REQUIRE(Check(r, a, b, swapped));
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("both seams tangent to the other cylinder are answered or refused by the budget",
+          "[intersect][cylinder][skew][regression][issue195]")
+{
+    // A's seam tangent to B at a fold and B's tangent to A at the top of
+    // the loop, both exactly: neither crosses the curve. In A's
+    // parametrisation B's seam touches the track over a stretch that the
+    // enclosures cannot shorten below the square root of their rounding,
+    // and in B's the same holds of A's seam, so the isolation may run out
+    // of its budget in both. That is the explicit refusal of the budget,
+    // never an answer that left the touch out of account; an answer is
+    // held to the whole contract.
+    const Reference r = ReferenceOf(oneLoop);
+    const Cylinder a = FrameOfA(1.0, 0.0, true);
+    const Cylinder b = FrameOfB(oneLoop, 0.5, std::sqrt(0.75), true);
+    REQUIRE(SeamPointsOfA(oneLoop, a) == 1);
+    REQUIRE(SeamPointsOfB(oneLoop, b) == 1);
+    const bool swapped = false;
+    INFO("both tangent, swapped " << swapped);
+    static_cast<void>(Check(r, a, b, swapped, 0, "exhausted its interval budget"));
 }

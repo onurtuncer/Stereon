@@ -199,6 +199,20 @@ so that the piece between them could not be fitted, and when the budget of
 is not a second cut: the end stands for it. That is the case of a fold or a
 node on the seam, and of a requested box that ends there.
 
+A seam that the curve only touches, or passes within rounding of without
+meeting, cuts nothing, and a sample there may round to either side of it.
+A piece's angles on each cylinder are therefore brought into one chart from
+the sample farthest from the seam: the first cylinder's by that sample's
+whole number of turns, and the second's, which are wrapped one by one, each
+joining its neighbour's side in turn. What rounding leaves past the seam is
+clamped onto it. The
+second cylinder's seam, where it is tangent to the first, touches the track
+over a stretch that the enclosures cannot shorten below the square root of
+their rounding, and the isolation may run out of its budget there. The
+other parametrisation then answers, in which that seam is the first
+cylinder's and its touch is the fold itself; where both seams are tangent
+the intersection may fail with the budget's ``IntersectionFailed``.
+
 Coincident cylinders intersect the requested height domains through the
 parameter map and intersect angular domains modulo the period. An overlap
 crossing a chart seam is returned as separate regions. Disjoint requested

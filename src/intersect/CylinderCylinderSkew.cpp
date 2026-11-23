@@ -1318,19 +1318,35 @@ void ChartOnA(std::vector<Point2>& onA)
 }
 
 /// B's angles, each wrapped into [0, 2 pi) on its own, into one chart: the
-/// piece crosses no seam inside, so only an end sample at the seam can have
-/// wrapped to the other side of it; it joins its neighbour's side.
+/// piece crosses no seam inside, so only a sample on the seam to rounding
+/// can have wrapped to the other side of it: an end, or a point where the
+/// curve comes within rounding of a seam that it does not cross. From the
+/// sample farthest from the seam, each joins its neighbour's side in turn,
+/// and what rounding leaves past the seam is clamped onto it.
 void ChartOnB(std::vector<Point2>& onB)
 {
-    const auto join = [](Point2& end, const Point2& neighbour) {
-        if (end.X - neighbour.X > Pi) {
-            end.X -= CirclePeriod;
-        } else if (neighbour.X - end.X > Pi) {
-            end.X += CirclePeriod;
+    std::size_t anchor = 0;
+    double clear = -1.0;
+    for (std::size_t i = 0; i < onB.size(); ++i) {
+        const double fromSeam = std::min(onB[i].X, CirclePeriod - onB[i].X);
+        if (fromSeam > clear) {
+            clear = fromSeam;
+            anchor = i;
+        }
+    }
+    const auto join = [](Point2& sample, const Point2& neighbour) {
+        if (sample.X - neighbour.X > Pi) {
+            sample.X -= CirclePeriod;
+        } else if (neighbour.X - sample.X > Pi) {
+            sample.X += CirclePeriod;
         }
     };
-    join(onB.front(), onB[1]);
-    join(onB.back(), onB[onB.size() - 2]);
+    for (std::size_t i = anchor; i-- > 0;) {
+        join(onB[i], onB[i + 1]);
+    }
+    for (std::size_t i = anchor + 1; i < onB.size(); ++i) {
+        join(onB[i], onB[i - 1]);
+    }
     for (Point2& uv : onB) {
         uv.X = std::clamp(uv.X, 0.0, CirclePeriod);
     }
