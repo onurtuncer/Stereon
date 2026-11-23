@@ -290,4 +290,15 @@ At #305 the ledger held four open defect records: `SSI-translated-boundary` (`un
 #### Batch 3 fault replay
 
 - **Command (CI):** `python3 tools/mutate.py --catalogue tools/mutation/intersection-backfill*.json --work build/metamorphic`. This is the *Intersection metamorphic evidence* workflow on this pull request.
-- **Result:** recorded below once CI has run. A fault that survives is reported as such. It is never removed to make the replay green.
+- **Run:** [#330's *Eight historical faults (GCC 16)* job](https://github.com/onurtuncer/Stereon/actions/runs/45064572675/job/137337734813), at `07780ba` (main 898ed69 with test-only changes), `gcc:16.2` container, `gcc16-debug`.
+- **Baseline:** green; every selected test passed before any fault was applied.
+- **Red:** killed in both runs by the named MR test, with the declared diagnostic found:
+  - `AUDIT-20261112-cone-polish`;
+  - `AUDIT-20261113-narrow-sphere-seam`;
+  - `CI-272-ellipse-plane`;
+  - `SSI-translated-boundary-search-shift`.
+
+  The 24 earlier faults were killed in the same run too (score 28 / 29).
+- **Survived:** `SSI-translated-boundary-edge-halving` (`EdgeHalvings` = 0). The MR test still passes without the halving, as long as the shift is kept. Like PR-159's `BisectSeam` candidate, this root cause is not observable alone with these fixtures. It was removed from the catalogue, so that the workflow tests only faults some test detects, and it is recorded here. No test was loosened. So the record stays `MR implemented`: its second root cause has no red evidence. Closing it needs a fixture that needs the halving with the shift in place (owner or SSI agent).
+- **Green:** the same tests passed in every CTest job of #330: [Linux `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45064572641/job/137337734757), [Linux `gcc16-asan`](https://github.com/onurtuncer/Stereon/actions/runs/45064572641/job/137337735042), [Windows `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45064572891/job/137337735813), [Windows `gcc16-windows`](https://github.com/onurtuncer/Stereon/actions/runs/45064572891/job/137337735659), [macOS `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45064572663/job/137337734763) and [coverage](https://github.com/onurtuncer/Stereon/actions/runs/45064572648/job/137337734570).
+- **Review:** this agent's review of the fixtures, oracles and runs above. On it, `AUDIT-20261112-cone-polish`, `AUDIT-20261113-narrow-sphere-seam` and `CI-272-ellipse-plane` are `verified`. The owner's review is pending.
