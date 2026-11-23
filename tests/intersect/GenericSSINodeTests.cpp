@@ -12,8 +12,12 @@
 // the curve every sample of every branch must lie on. The same answer, moved
 // accordingly, under exchange of the surfaces, reversal and transposition of
 // parameters, a far translation and scaling by powers of two (ADR-0053,
-// MR-01 to MR-04). Higher-order singularities, nodes on knot lines or seams and
-// a node the tolerance cannot admit fail closed.
+// MR-01 to MR-04). A node on a knot line of either surface, on a crossing of
+// two, or on the seam of a closed chart is answered the same way, the Bezier
+// patches around it settled together; a crease there within the tolerance is
+// not told apart from a smooth surface. Higher-order singularities, a crease
+// beyond the tolerance, a seam not closed in the doubles and a node the
+// tolerance cannot admit fail closed.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -267,6 +271,161 @@ Expected QuadricCrossing()
             const double y = p.Y - 0.5;
             return std::max(std::abs(p.Z - 5.0 * y * y), std::abs(std::abs(x) - 2.0 * std::abs(y)));
         }};
+}
+
+// --- Surfaces with knot lines and seams through the node --------------------
+
+/// The Bernstein coefficients of x and of x'^2, x' = x - 1/2, over the
+/// spans between the breaks: three per span, the ends shared.
+struct Pieces {
+    std::vector<double> Points;
+    std::vector<double> Squares;
+};
+
+Pieces PiecesOver(const std::vector<double>& breaks)
+{
+    Pieces p{{breaks.front()}, {(breaks.front() - 0.5) * (breaks.front() - 0.5)}};
+    for (std::size_t k = 1; k < breaks.size(); ++k) {
+        const double a = breaks[k - 1] - 0.5;
+        const double b = breaks[k] - 0.5;
+        p.Points.insert(p.Points.end(), {0.5 * (breaks[k - 1] + breaks[k]), breaks[k]});
+        p.Squares.insert(p.Squares.end(), {a * b, b * b});
+    }
+    return p;
+}
+
+/// Quadratic knots with a double knot at each inner value.
+std::vector<double> DoubleKnots(const std::vector<double>& values)
+{
+    std::vector<double> knots{values.front()};
+    for (const double v : values) {
+        knots.insert(knots.end(), {v, v});
+    }
+    knots.push_back(values.back());
+    return knots;
+}
+
+/// z = alpha x'^2 + beta y'^2 + kink |x - breaksX[1]| over [0, 1]^2, in
+/// Bezier pieces between the breaks along x and y, joined at double knots at
+/// the given parameters: the same paraboloid as Quadric's when the kink is
+/// zero, however its parameters run. The kink is a crease along the first
+/// inner break in x, the slope jumping by twice it.
+BSplineSurface Pieced(const std::array<double, 2>& form, const std::vector<double>& breaksX,
+                      const std::vector<double>& knotsX, const std::vector<double>& breaksY,
+                      const std::vector<double>& knotsY, const double kink = 0.0)
+{
+    const Pieces x = PiecesOver(breaksX);
+    const Pieces y = PiecesOver(breaksY);
+    std::vector<Point3> poles;
+    for (std::size_t i = 0; i < x.Points.size(); ++i) {
+        for (std::size_t j = 0; j < y.Points.size(); ++j) {
+            const double crease =
+                breaksX.size() > 2 ? kink * std::abs(x.Points[i] - breaksX[1]) : 0.0;
+            poles.push_back({x.Points[i], y.Points[j],
+                             form[0] * x.Squares[i] + form[1] * y.Squares[j] + crease});
+        }
+    }
+    const auto made =
+        Stereon::MakeBSplineSurface(2, 2, DoubleKnots(knotsX), DoubleKnots(knotsY), poles, {});
+    REQUIRE(made.has_value());
+    return *made;
+}
+
+const std::vector<double> OneSpan{0.0, 1.0};
+/// A break through the node's x or y, at a parameter that is not its
+/// middle: the two sides run at different speeds.
+const std::vector<double> BreakAtNode{0.0, 0.5, 1.0};
+const std::vector<double> KnotOffMiddle{0.0, 0.375, 1.0};
+
+/// The crossing quadric of QuadricCrossing with a knot line along x = 1/2,
+/// through the node; with `both`, another along y = 1/2, crossing it there.
+BSplineSurface KnottedQuadric(const bool both, const double kink = 0.0)
+{
+    return Pieced({2.0, -3.0}, BreakAtNode, KnotOffMiddle, both ? BreakAtNode : OneSpan,
+                  both ? KnotOffMiddle : OneSpan, kink);
+}
+
+/// The unit cylinder over several arcs joined at double knots, as Cylinder
+/// builds one.
+BSplineSurface CylinderOf(const std::vector<CircleArc>& arcs, const bool aboutX)
+{
+    std::vector<Point3> poles;
+    std::vector<double> weights;
+    std::vector<double> values{0.0};
+    for (std::size_t a = 0; a < arcs.size(); ++a) {
+        for (std::size_t i = a == 0 ? 0 : 1; i < 3; ++i) {
+            for (const double along : {-1.0, 1.0}) {
+                const auto [c, s] = arcs[a].Poles.at(i);
+                poles.push_back(aboutX ? Point3{along, c, s} : Point3{c, s, along});
+                weights.push_back(arcs[a].Weights.at(i));
+            }
+        }
+        values.push_back(static_cast<double>(a + 1) / static_cast<double>(arcs.size()));
+    }
+    const std::vector<double> knotsV{0.0, 0.0, 1.0, 1.0};
+    const auto made =
+        Stereon::MakeBSplineSurface(2, 1, DoubleKnots(values), knotsV, poles, weights);
+    REQUIRE(made.has_value());
+    return *made;
+}
+
+/// Upright and Lying, each in two arcs meeting at (0, 1, 0)'s parameter.
+BSplineSurface UprightInTwo()
+{
+    return CylinderOf({ArcOf(Pi / 4.0, Pi / 2.0), ArcOf(Pi / 2.0, 3.0 * Pi / 4.0)}, false);
+}
+
+BSplineSurface LyingInTwo()
+{
+    return CylinderOf({ArcOf(-Pi / 3.0, 0.0), ArcOf(0.0, Pi / 3.0)}, true);
+}
+
+/// A full turn of the unit cylinder, the nine-pole rational circle with its
+/// middle weights rounded as a file would hold them: about z from (1, 0),
+/// or about x from (y, z) = (1, 0), over [-3, 3] along the axis. Its chart
+/// closes on the seam at angle zero, the first and last poles the same.
+BSplineSurface FullTurn(const bool aboutX)
+{
+    const std::array<std::array<double, 2>, 9> circle{{{1.0, 0.0},
+                                                       {1.0, 1.0},
+                                                       {0.0, 1.0},
+                                                       {-1.0, 1.0},
+                                                       {-1.0, 0.0},
+                                                       {-1.0, -1.0},
+                                                       {0.0, -1.0},
+                                                       {1.0, -1.0},
+                                                       {1.0, 0.0}}};
+    // sqrt(1/2) to fifteen decimals, as tools/generate_nurbs_corpus.py writes it.
+    const double rounded = std::round(0.5 * std::numbers::sqrt2 * 1e15) / 1e15;
+    std::vector<Point3> poles;
+    std::vector<double> weights;
+    for (std::size_t i = 0; i < circle.size(); ++i) {
+        for (const double along : {-3.0, 3.0}) {
+            const auto [c, s] = circle.at(i);
+            poles.push_back(aboutX ? Point3{along, c, s} : Point3{c, s, along});
+            weights.push_back(i % 2 == 0 ? 1.0 : rounded);
+        }
+    }
+    const std::vector<double> knotsV{0.0, 0.0, 1.0, 1.0};
+    const auto made = Stereon::MakeBSplineSurface(2, 1, DoubleKnots({0.0, 0.25, 0.5, 0.75, 1.0}),
+                                                  knotsV, poles, weights);
+    REQUIRE(made.has_value());
+    return *made;
+}
+
+/// The length of the ellipse x = z on x^2 + y^2 = 1, (cos, sin, cos): the
+/// integral of sqrt(1 + sin^2) over a turn, by Simpson's rule.
+double EllipseLength()
+{
+    constexpr std::size_t n = 4096;
+    const double step = 2.0 * Pi / static_cast<double>(n);
+    double sum = 0.0;
+    for (std::size_t k = 0; k <= n; ++k) {
+        const double s = std::sin(static_cast<double>(k) * step);
+        const double weight = k == 0 || k == n ? 1.0 : (k % 2 == 1 ? 4.0 : 2.0);
+        sum += weight * std::sqrt(1.0 + s * s);
+    }
+    return sum * step / 3.0;
 }
 
 /// A rigid motion and a scale applied to space, and its inverse.
@@ -558,5 +717,257 @@ TEST_CASE("rational node answers move with the surfaces",
         CheckMoved(ReversedU(a), b, CylinderCrossing(), {});
         CheckMoved(a, Transposed(b), CylinderCrossing(), {});
         CheckMoved(ReversedU(Saddle({1.0, 2.0, 2.0, 4.0})), Flat(0.0), SaddleLines(), {});
+    }
+}
+
+// --- Nodes on knot lines and seams -----------------------------------------
+
+namespace {
+
+/// Two full turns of unit cylinders, about z and about x: the ellipses
+/// x = z and x = -z, crossing at (0, 1, 0) and (0, -1, 0). The result is
+/// the whole of both and nothing twice (its length is theirs), every sample
+/// on both cylinders, in one connected curve whose branches end, four each,
+/// at the two nodes.
+void CheckFullTurns(const Stereon::SurfaceSurfaceIntersection& r, const Surface& a,
+                    const Surface& b, const Motion& motion, const double resolution)
+{
+    REQUIRE(r.Overlaps.empty());
+    REQUIRE(r.Points.empty());
+    const IntersectTest::Connectivity shape = IntersectTest::ConnectivityOf(r, 1e-9 * motion.Scale);
+    REQUIRE(shape.Curves == 1);
+    REQUIRE(shape.Nodes == 2);
+    const double reach = 4.0 * resolution / motion.Scale;
+    double length = 0.0;
+    std::array<std::size_t, 2> endsAt{};
+    for (const Stereon::IntersectionBranch& branch : r.Branches) {
+        REQUIRE(branch.IsCertified());
+        REQUIRE(branch.Bound <= resolution);
+        REQUIRE(IntersectTest::PcurveDeviation(branch, a, b, 64) <=
+                branch.Bound + 1e-12 * motion.Scale);
+        const std::vector<double> t = IntersectTest::SamplesOf(branch.Range, 1024);
+        Point3 previous = motion.Back(Eval(branch.Curve3d, t.front()));
+        for (std::size_t k = 1; k < t.size(); ++k) {
+            const Point3 p = motion.Back(Eval(branch.Curve3d, t[k]));
+            REQUIRE(std::abs(p.X * p.X + p.Y * p.Y - 1.0) <= reach);
+            REQUIRE(std::abs(p.Y * p.Y + p.Z * p.Z - 1.0) <= reach);
+            length += Distance(previous, p);
+            previous = p;
+        }
+        for (const double end : {t.front(), t.back()}) {
+            const Point3 p = motion.Back(Eval(branch.Curve3d, end));
+            endsAt.at(0) += Distance(p, Point3{0.0, 1.0, 0.0}) <= reach ? 1U : 0U;
+            endsAt.at(1) += Distance(p, Point3{0.0, -1.0, 0.0}) <= reach ? 1U : 0U;
+        }
+    }
+    REQUIRE(endsAt.at(0) == 4);
+    REQUIRE(endsAt.at(1) == 4);
+    REQUIRE(std::abs(length - 2.0 * EllipseLength()) <= 1e-4);
+}
+
+void CheckFullTurnsMoved(const BSplineSurface& sa, const BSplineSurface& sb, const Motion& motion)
+{
+    const auto move = [&](const Point3& p) { return motion.Forward(p); };
+    const Surface a{Mapped(sa, move)};
+    const Surface b{Mapped(sb, move)};
+    const Context scaled = Scaled(motion.Scale);
+    for (const bool swapped : {false, true}) {
+        INFO("scale " << motion.Scale << " shift (" << motion.Shift.X << ", " << motion.Shift.Y
+                      << ", " << motion.Shift.Z << ")" << (swapped ? " swapped" : ""));
+        const auto result = swapped ? Intersect(b, Box2::Everything(), a, Box2::Everything(),
+                                                tolerance * motion.Scale, scaled)
+                                    : Intersect(a, Box2::Everything(), b, Box2::Everything(),
+                                                tolerance * motion.Scale, scaled);
+        INFO(IntersectTest::ErrorText(result));
+        REQUIRE(result.has_value());
+        CheckFullTurns(*result, swapped ? b : a, swapped ? a : b, motion, scaled.GetResolution());
+    }
+}
+
+void RequireFailsClosed(const Surface& a, const Surface& b, const double within)
+{
+    for (const bool swapped : {false, true}) {
+        INFO("swapped " << swapped);
+        const auto result =
+            swapped ? Intersect(b, Box2::Everything(), a, Box2::Everything(), within, ctx)
+                    : Intersect(a, Box2::Everything(), b, Box2::Everything(), within, ctx);
+        REQUIRE_FALSE(result.has_value());
+        REQUIRE(result.error().GetCode() == ErrorCode::IntersectionFailed);
+    }
+}
+
+} // namespace
+
+TEST_CASE("a node on a knot line is split there as one inside a patch is",
+          "[intersect][generic][node][knot]")
+{
+    // Before the patches around such a node were settled together, each of
+    // these failed closed: no single patch holds the node inside it.
+    SECTION("polynomial: a knot line of one surface through the node")
+    {
+        CheckMoved(KnottedQuadric(false), Bowl(), QuadricCrossing(), {});
+    }
+    SECTION("polynomial: two knot lines crossing at the node")
+    {
+        CheckMoved(KnottedQuadric(true), Bowl(), QuadricCrossing(), {});
+    }
+    SECTION("polynomial: knot lines of both surfaces through the node")
+    {
+        // The bowl over [-1/2, 3/2]^2 in four pieces meeting above the node.
+        const std::vector<double> wide{-0.5, 0.5, 1.5};
+        const std::vector<double> knots{0.0, 0.625, 1.0};
+        CheckMoved(KnottedQuadric(true), Pieced({1.0, 1.0}, wide, knots, wide, knots),
+                   QuadricCrossing(), {});
+    }
+    SECTION("rational: exact cylinders in two arcs each")
+    {
+        CheckMoved(UprightInTwo(), Lying(), CylinderCrossing(), {});
+        CheckMoved(Upright(), LyingInTwo(), CylinderCrossing(), {});
+        CheckMoved(UprightInTwo(), LyingInTwo(), CylinderCrossing(), {});
+    }
+}
+
+TEST_CASE("nodes on a knot line and on a seam of two full cylinders are both split",
+          "[intersect][generic][node][knot][seam]")
+{
+    // (0, 1, 0) is on a knot line of the cylinder about z and on the seam of
+    // the one about x; (0, -1, 0) on a knot line of each. This is
+    // corpus/nurbs-ssi/cylinder-cylinder/node-origin-x1.
+    CheckFullTurnsMoved(FullTurn(false), FullTurn(true), {});
+}
+
+TEST_CASE("answers at nodes on knot lines and seams move with the surfaces",
+          "[intersect][generic][node][knot][seam][metamorphic]")
+{
+    const BSplineSurface a = KnottedQuadric(true);
+    const BSplineSurface b = Bowl();
+    SECTION("MR-01: translations, exact in binary")
+    {
+        for (const Point3 shift : {Point3{16.0, -32.0, 8.0}, Point3{-4096.0, 256.0, 1024.0}}) {
+            CheckMoved(a, b, QuadricCrossing(), {1.0, shift});
+            CheckMoved(UprightInTwo(), LyingInTwo(), CylinderCrossing(), {1.0, shift});
+        }
+        CheckFullTurnsMoved(FullTurn(false), FullTurn(true), {1.0, Point3{16.0, -32.0, 8.0}});
+    }
+    SECTION("MR-03: scaling by powers of two, with the tolerance and resolution")
+    {
+        for (const int k : {-6, 10}) {
+            const Motion scaled{std::ldexp(1.0, k), Point3{0.0, 0.0, 0.0}};
+            CheckMoved(a, b, QuadricCrossing(), scaled);
+            CheckMoved(UprightInTwo(), LyingInTwo(), CylinderCrossing(), scaled);
+        }
+        CheckFullTurnsMoved(FullTurn(false), FullTurn(true),
+                            {std::ldexp(1.0, 5), Point3{0.0, 0.0, 0.0}});
+    }
+    SECTION("MR-04: reversed and transposed parameters leave the curves in place")
+    {
+        CheckMoved(ReversedU(a), b, QuadricCrossing(), {});
+        CheckMoved(Transposed(a), Transposed(b), QuadricCrossing(), {});
+        CheckMoved(Transposed(ReversedU(UprightInTwo())), ReversedU(LyingInTwo()),
+                   CylinderCrossing(), {});
+        CheckFullTurnsMoved(ReversedU(FullTurn(false)), Transposed(FullTurn(true)), {});
+    }
+    // MR-02, the exchange of the surfaces, is in every CheckMoved.
+}
+
+TEST_CASE("near a node on a knot line, only what the tolerance admits is a node",
+          "[intersect][generic][node][knot][near-event]")
+{
+    const Surface bowl{Bowl()};
+    SECTION("a crease along the knot line, within the tolerance: a node")
+    {
+        // The slope jumps by 2^-39 across x = 1/2: the branches bend within
+        // 2^-40 of the smooth surface's, far inside the resolution.
+        CheckMoved(KnottedQuadric(false, 0x1p-40), Bowl(), QuadricCrossing(), {});
+    }
+    SECTION("a crease beyond the tolerance: two branches touching on it, not a node")
+    {
+        // x'^2 + |x'| / 128 = 4 y'^2: a parabola on each side of the crease,
+        // tangent to it at the centre. Not a transverse node; fails closed.
+        RequireFailsClosed(Surface{KnottedQuadric(false, 0x1p-7)}, bowl, tolerance);
+    }
+    SECTION("a gap within the tolerance is a node; beyond it, two branches")
+    {
+        for (const double height : {0x1p-30, 0x1p-6}) {
+            INFO("height " << height);
+            const auto lift = [&](const Point3& p) { return Point3{p.X, p.Y, p.Z + height}; };
+            const Surface lifted{Mapped(Bowl(), lift)};
+            const Surface knotted{KnottedQuadric(true)};
+            const auto result =
+                Intersect(knotted, Box2::Everything(), lifted, Box2::Everything(), tolerance, ctx);
+            INFO(IntersectTest::ErrorText(result));
+            REQUIRE(result.has_value());
+            REQUIRE(result->Points.empty());
+            const std::size_t curves = height < tolerance ? 1 : 2;
+            REQUIRE(result->Branches.size() == (curves == 1 ? 4U : 2U));
+            REQUIRE(IntersectTest::ConnectivityOf(*result, 1e-9).Curves == curves);
+            for (const Stereon::IntersectionBranch& branch : result->Branches) {
+                REQUIRE(branch.IsCertified());
+                REQUIRE(branch.Bound <= ctx.GetResolution());
+                for (const double t : IntersectTest::SamplesOf(branch.Range, 64)) {
+                    // x'^2 - 4 y'^2 = height, on the lifted bowl.
+                    const Point3 p = Eval(branch.Curve3d, t);
+                    const double x = p.X - 0.5;
+                    const double y = p.Y - 0.5;
+                    REQUIRE(std::abs(p.Z - (x * x + y * y + height)) <= 4.0 * ctx.GetResolution());
+                    REQUIRE(std::abs(x * x - 4.0 * y * y - height) <= 4.0 * ctx.GetResolution());
+                }
+            }
+        }
+    }
+    SECTION("a node beside the knot line is split, or refused where neither proof reaches")
+    {
+        // The knot line 2^k beside the node. From 2^-12 on the node is proved
+        // inside its own patch; to 2^-20 it is within the box given up
+        // around the line. Between, the box would need the surfaces further
+        // apart than the tolerance and the patch has no room: a refusal is
+        // admitted there, a wrong answer nowhere.
+        for (const int k : {-4, -6, -10, -12, -14, -16, -20, -30, -40}) {
+            INFO("knot line 2^" << k << " beside the node");
+            const BSplineSurface beside = Pieced({2.0, -3.0}, {0.0, 0.5 + std::ldexp(1.0, k), 1.0},
+                                                 KnotOffMiddle, OneSpan, OneSpan);
+            if (k != -14 && k != -16) {
+                CheckMoved(beside, Bowl(), QuadricCrossing(), {});
+                continue;
+            }
+            const Surface a{beside};
+            const auto result =
+                Intersect(a, Box2::Everything(), bowl, Box2::Everything(), tolerance, ctx);
+            if (result) {
+                CheckNode(*result, a, bowl, QuadricCrossing(), {}, ctx.GetResolution());
+            } else {
+                REQUIRE(result.error().GetCode() == ErrorCode::IntersectionFailed);
+            }
+        }
+    }
+}
+
+TEST_CASE("what is not a proved transverse node on a knot line or seam fails closed",
+          "[intersect][generic][node][knot][seam][special]")
+{
+    SECTION("no tolerance admits the node")
+    {
+        RequireFailsClosed(Surface{KnottedQuadric(true)}, Surface{Bowl()}, 0.0);
+    }
+    SECTION("a tangency along a curve through the knot line: a degenerate form")
+    {
+        // x'^2 - 3 y'^2 = x'^2 + y'^2: the line y' = 0, doubled.
+        RequireFailsClosed(
+            Surface{Pieced({1.0, -3.0}, BreakAtNode, KnotOffMiddle, OneSpan, OneSpan)},
+            Surface{Bowl()}, tolerance);
+    }
+    SECTION("a definite touch on the knot line")
+    {
+        RequireFailsClosed(
+            Surface{Pieced({3.0, 2.0}, BreakAtNode, KnotOffMiddle, OneSpan, OneSpan)},
+            Surface{Bowl()}, tolerance);
+    }
+    SECTION("a seam whose two ends differ in the doubles is not a closed chart")
+    {
+        BSplineSurface open = FullTurn(true);
+        for (std::size_t k = open.Poles.size() - 2; k < open.Poles.size(); ++k) {
+            open.Poles[k].Z = std::numeric_limits<double>::denorm_min();
+        }
+        RequireFailsClosed(Surface{FullTurn(false)}, Surface{open}, tolerance);
     }
 }
