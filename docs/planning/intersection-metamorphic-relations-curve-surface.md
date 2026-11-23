@@ -141,3 +141,9 @@ The tangent at P is 3 sinh(0.6) x + 2 cosh(0.6) d, or t*/(2f) x + d = 0.3 x + d.
 - **Tests:** the three cited tests, which run in every pull request (`[intersect][curve-surface][metamorphic]`, not hidden). Since the audit hardening of 2026-11-12 and #292, every fixture must answer: a refusal or `NotImplemented` fails the test.
 - **Oracle:** the closed form above; the kernel is used only for the answer under test.
 - **Green:** see "Green, hyperbolas and parabolas" below.
+
+#### Green, hyperbolas and parabolas
+
+At this branch's head `8df63a0` (main 898ed69 with this test change), the three cited tests passed in every native CTest job of the pull request (#324): [Linux `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45064765243/job/137338360038), [Linux `gcc16-asan`](https://github.com/onurtuncer/Stereon/actions/runs/45064765243/job/137338360152), [Windows `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45064765179/job/137338337967), [Windows `gcc16-windows`](https://github.com/onurtuncer/Stereon/actions/runs/45064765179/job/137338338354), [macOS `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45064765367/job/137338338048) and [coverage](https://github.com/onurtuncer/Stereon/actions/runs/45064765262/job/137338362846). Every fixture must answer, so each green run means every hyperbola and parabola pair answered with the crossing at t* (or -t* in the equivalent chart) under every motion, scale and chart.
+
+**Review.** The 42 cells are `verified` on this agent's review of the fixture, the oracle and these runs. The limits are those of the curve–surface domain above: transverse crossings away from piece boundaries, bounded domains. No fault spot-check was run for these cells, because the disk was full and nothing could be built locally. The owner's review is pending.
