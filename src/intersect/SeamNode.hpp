@@ -27,8 +27,9 @@
 // of the two sides' speeds).
 //
 // 1. Coordinates. In a frame (e1, e2, n), C's projection q onto the plane is
-//    continuous on its box (across a seam because the chart is proved
-//    closed, ClosesAlong), and its Jacobian, enclosed over every piece, is
+//    continuous on its box (across a knot line because an inner knot is
+//    repeated at most the degree's times, ValidNet; across a seam because
+//    the chart is proved closed, ClosesAlong), and its Jacobian, enclosed over every piece, is
 //    regular in the hull of those enclosures. By the mean value theorem
 //    along a segment, piece by piece, no two parameters share a projection:
 //    C is a graph over the plane.
