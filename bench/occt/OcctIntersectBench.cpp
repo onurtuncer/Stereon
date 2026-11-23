@@ -17,7 +17,8 @@
 //         arguments (GeomAPI_IntSS.lxx), which also returns the isolated
 //         points GeomAPI_IntSS does not expose, at the case's tolerance; a
 //         cone's or cylinder's box is a Geom_RectangularTrimmedSurface and an
-//         ellipsoid a GeomEval_EllipsoidSurface;
+//         ellipsoid the unit sphere's exact rational B-spline under its affine
+//         map (GeomAPI_IntSS throws on OCCT 8's GeomEval_EllipsoidSurface);
 //   B2.3  IntAna_QuadQuadGeo, the analytic service, at the case's tolerance
 //         (an angular tolerance of Precision::Angular() where it takes one).
 //
@@ -38,7 +39,7 @@
 #include <Geom2d_Parabola.hxx>
 #include <Geom2d_TrimmedCurve.hxx>
 #include <GeomAPI_IntCS.hxx>
-#include <GeomEval_EllipsoidSurface.hxx>
+#include <GeomConvert.hxx>
 #include <GeomInt_IntSS.hxx>
 #include <Geom_BSplineCurve.hxx>
 #include <Geom_BSplineSurface.hxx>
@@ -174,6 +175,25 @@ occ::handle<Geom2d_Curve> PlanarCurveOf(const Stereon::Curve2d& curve,
     return new Geom2d_TrimmedCurve(made, domain.GetLower() * scale, domain.GetUpper() * scale);
 }
 
+/// An ellipsoid as OCCT's exact rational B-spline: the unit sphere's
+/// (GeomConvert), its poles mapped by the ellipsoid's affine map.
+occ::handle<Geom_Surface> EllipsoidOf(const Stereon::Ellipsoid& e)
+{
+    const occ::handle<Geom_BSplineSurface> unit =
+        GeomConvert::SurfaceToBSplineSurface(new Geom_SphericalSurface(
+            gp_Ax3(gp_Pnt(0.0, 0.0, 0.0), gp_Dir(0.0, 0.0, 1.0), gp_Dir(1.0, 0.0, 0.0)), 1.0));
+    const Vec3 z = Cross(e.XAxis, e.YAxis);
+    for (int i = 1; i <= unit->NbUPoles(); ++i) {
+        for (int j = 1; j <= unit->NbVPoles(); ++j) {
+            const gp_Pnt p = unit->Pole(i, j);
+            unit->SetPole(i, j,
+                          ToOcct(e.Center + (e.A * p.X()) * e.XAxis + (e.B * p.Y()) * e.YAxis +
+                                 (e.C * p.Z()) * z));
+        }
+    }
+    return unit;
+}
+
 /// A surface as OCCT's, trimmed to its box when the box is bounded.
 occ::handle<Geom_Surface> SurfaceOf(const Stereon::Surface& s, const Stereon::Box2& box)
 {
@@ -191,8 +211,7 @@ occ::handle<Geom_Surface> SurfaceOf(const Stereon::Surface& s, const Stereon::Bo
         made = new Geom_ToroidalSurface(FrameOf(t->Center, t->XAxis, t->YAxis), t->MajorRadius,
                                         t->MinorRadius);
     } else if (const auto* e = s.Target<Stereon::Ellipsoid>()) {
-        made =
-            new GeomEval_EllipsoidSurface(FrameOf(e->Center, e->XAxis, e->YAxis), e->A, e->B, e->C);
+        made = EllipsoidOf(*e);
     } else {
         const auto* spline = s.Target<Stereon::BSplineSurface>();
         if (spline == nullptr) {
