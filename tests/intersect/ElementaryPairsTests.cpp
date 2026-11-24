@@ -225,6 +225,44 @@ TEST_CASE("spheres meet in a circle, touch at a point, or coincide", "[intersect
     REQUIRE(same->Overlaps.front().Distance == 0.0);
 }
 
+TEST_CASE("spheres touching within the tolerance touch between their surfaces",
+          "[intersect][elementary][regression]")
+{
+    // The OCCT corpus run of #326: a sphere of radius 1.5 inside one of
+    // radius 2, 0.005 from touching, with the pair tolerance 0.01, was
+    // declared tangent at the radical axis's point, (2.0152, 0, 0), outside
+    // both spheres by more than the tolerance. The point of contact lies
+    // between the surfaces, within half the gap of each: inside and outside
+    // by half the tolerance, internally and externally, in both orders.
+    const auto off = [](const Point3& p, const Point3& centre, const double radius) {
+        return std::abs(Distance(p, centre) - radius);
+    };
+    constexpr double tolerance = 0.01;
+    for (const double gap : {-0.5 * tolerance, 0.5 * tolerance}) {
+        for (const bool internal : {true, false}) {
+            CAPTURE(gap, internal);
+            const Vec3 axis = Vec3{0.0, 0.6, 0.8};
+            const double along = internal ? 0.5 - gap : 3.5 + gap;
+            const Point3 centre = Point3{} + along * axis;
+            const Surface a{Sphere{Point3{}, 2.0, X, Y, true}};
+            const Surface b{Sphere{centre, 1.5, X, Y, true}};
+            for (const bool swapped : {false, true}) {
+                CAPTURE(swapped);
+                const auto result =
+                    swapped
+                        ? Intersect(b, Box2::Everything(), a, Box2::Everything(), tolerance, ctx)
+                        : Intersect(a, Box2::Everything(), b, Box2::Everything(), tolerance, ctx);
+                INFO(IntersectTest::ErrorText(result));
+                REQUIRE(result.has_value());
+                REQUIRE(result->Points.size() == 1);
+                const Point3 p = result->Points.front().Position;
+                CHECK(off(p, Point3{}, 2.0) <= 0.5 * std::abs(gap) + 1e-12);
+                CHECK(off(p, centre, 1.5) <= 0.5 * std::abs(gap) + 1e-12);
+            }
+        }
+    }
+}
+
 TEST_CASE("a tangent circle declared within the tolerance is certified within it",
           "[intersect][elementary]")
 {

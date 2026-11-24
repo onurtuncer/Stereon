@@ -471,19 +471,27 @@ def _series(name: str, per_item_ns: float, count: int, **counters: float) -> lis
 
 
 def _passing_run() -> dict:
-    """Every required row at a comfortable pass, with the protocol's repetitions."""
+    """Every required row at a comfortable pass, with the protocol's repetitions. A row with
+    both a time and a counter gate (B2) carries its counters on its time series."""
     entries: list[dict] = []
-    for key in required_time_keys():
+    gated: dict[str, dict[str, float]] = {}
+    for key, name, _, _, check in br.COUNTER_ROWS:
+        if check is not None:
+            kind, bound = check
+            gated.setdefault(key, {})[name] = bound * 0.5 * (1000.0 if kind == "ratio below" else 1.0)
+    required = required_time_keys()
+    for key in required:
         reps = expected_repetitions(key)
         threshold = br.MIN_RATIO.get(key, 1.0 if key in br.MUST_LEAD else PARITY_FLOOR)
         fit = {"fit_residual": 1e-12} if key in FIT_CHECKED else {}
-        entries += _series(f"{key}/Stereon", 10.0, reps, **fit)
+        stereon = fit | gated.get(key, {})
+        entries += _series(f"{key}/Stereon", 10.0, reps, **stereon)
         entries += _series(f"{key}/OCCT", 10.0 * threshold * 1.5, reps, **fit)
     for curve in br.DISPATCH_CURVES:
         for path, ns in (("Direct", 10.0), ("DispatchCopy", 12.0), ("Dispatch", 12.0), ("Virtual", 13.0)):
             entries += _series(f"B0.2/{path}/{curve}/Stereon", ns, CURVE_REPETITIONS)
     for key, name, _, _, check in br.COUNTER_ROWS:
-        if check is None:
+        if check is None or key in required:
             continue
         kind, bound = check
         stereon = bound * 0.5 * (1000.0 if kind == "ratio below" else 1.0)
