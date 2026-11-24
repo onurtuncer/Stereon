@@ -1142,3 +1142,373 @@ TEST_CASE("MR PR-194 NURBS hull applies the factory bounds",
         }
     }
 }
+
+namespace {
+
+/// The biquadratic z = alpha x'^2 + beta y'^2 + lift over [low, low +
+/// width]^2, x' = x - 1/2, y' = y - 1/2, its poles row by row (a row per u,
+/// along x): the Bernstein coefficients of (a + width t)^2, a = low - 1/2,
+/// are a^2, a^2 + a width and (a + width)^2. Placed by an exact turn of the
+/// axes, a power-of-two scale and a translation; u reversed when asked.
+BSplineSurface PlacedQuadric(const double alpha, const double beta, const double lift,
+                             const double low, const double width, const std::array<Vec3, 3>& turn,
+                             const double scale, const Point3& shift, const bool reversed)
+{
+    const double a = low - 0.5;
+    const std::array<double, 3> square{a * a, a * a + a * width, (a + width) * (a + width)};
+    std::vector<Point3> poles;
+    for (std::size_t r = 0; r < 3; ++r) {
+        const std::size_t i = reversed ? 2 - r : r;
+        for (std::size_t j = 0; j < 3; ++j) {
+            const Point3 local{low + static_cast<double>(i) * width / 2.0,
+                               low + static_cast<double>(j) * width / 2.0,
+                               lift + alpha * square.at(i) + beta * square.at(j)};
+            poles.push_back(shift + scale * Turned(turn, local - Point3{}));
+        }
+    }
+    const std::vector<double> knots{0.0, 0.0, 0.0, 1.0, 1.0, 1.0};
+    const auto made = MakeBSplineSurface(2, 2, knots, knots, poles, {});
+    REQUIRE(made.has_value());
+    return *made;
+}
+
+/// The local point of a placed one: the inverse of the turn, scale and shift.
+Point3 Unplaced(const std::array<Vec3, 3>& turn, const double scale, const Point3& shift,
+                const Point3& p)
+{
+    const Vec3 w = (p - shift) / scale;
+    return Point3{Dot(w, turn[0]), Dot(w, turn[1]), Dot(w, turn[2])};
+}
+
+} // namespace
+
+TEST_CASE("MR SSI-translated-boundary far hyperbola branches end on the domain's sides",
+          "[intersect][metamorphic][backfill][SSI-translated-boundary]")
+{
+    // Root causes (GenericSSI, repaired in #279): far from the origin the
+    // patches' interval poles widen with the coordinates while Krawczyk's
+    // acceptance is measured in parameters, and a root just outside the
+    // other patch's cell left an edge undecided; both refused a pair that is
+    // answered at the origin. The fixture of GenericSSITranslationTests:
+    // 2x'^2 - 3y'^2 against the bowl x'^2 + y'^2 + 1/100 over a wider
+    // square meet where x'^2 - 4y'^2 = 1/100: two branches across the unit
+    // square, x' = +-sqrt(1/100 + 4y'^2), each with both ends on one side,
+    // x = 0 or x = 1, at |y'| = sqrt(0.06). MR-01: translations far from the
+    // origin and cyclic turns of the axes, exact; MR-02: both orders; MR-03:
+    // a scale of 4 with the tolerance and the context; MR-04: the first
+    // surface's u reversed (u' = 1 - u).
+    struct Run {
+        Point3 Shift;
+        std::size_t Turn;
+        double Scale;
+        bool Reversed;
+    };
+    const std::array<Run, 6> runs{{
+        {Point3{64.0, 0.0, 0.0}, 0, 1.0, false},
+        {Point3{64.0, 0.0, 0.0}, 1, 1.0, false},
+        {Point3{480000.0, -300000.0, 210000.0}, 0, 1.0, false},
+        {Point3{480000.0, -300000.0, 210000.0}, 2, 1.0, false},
+        {Point3{256.0, 0.0, 0.0}, 0, 4.0, false},
+        {Point3{64.0, 0.0, 0.0}, 0, 1.0, true},
+    }};
+    const double half = std::sqrt(0.06);
+    for (const Run& run : runs) {
+        const auto& turn = Turns.at(run.Turn);
+        const Context policy =
+            Context::Default()
+                .WithResolution(Context::DefaultResolution * run.Scale)
+                .WithToleranceCeiling(Context::DefaultToleranceCeiling * run.Scale);
+        const double tolerance = 1e-6 * run.Scale;
+        const Surface a{
+            PlacedQuadric(2.0, -3.0, 0.0, 0.0, 1.0, turn, run.Scale, run.Shift, run.Reversed)};
+        const Surface b{
+            PlacedQuadric(1.0, 1.0, 0.01, -0.5, 2.0, turn, run.Scale, run.Shift, false)};
+        for (const bool swapped : {false, true}) {
+            INFO("SSI-translated-boundary shift ("
+                 << run.Shift.X << ", " << run.Shift.Y << ", " << run.Shift.Z << ") turn "
+                 << run.Turn << " scale " << run.Scale << " reversed " << run.Reversed
+                 << " swapped " << swapped);
+            const auto r =
+                swapped
+                    ? Intersect(b, Box2::Everything(), a, Box2::Everything(), tolerance, policy)
+                    : Intersect(a, Box2::Everything(), b, Box2::Everything(), tolerance, policy);
+            INFO(IntersectTest::ErrorText(r));
+            REQUIRE(r.has_value());
+            REQUIRE(r->Overlaps.empty());
+            REQUIRE(r->Points.empty());
+            REQUIRE(r->Branches.size() == 2);
+            REQUIRE(IntersectTest::ConnectivityOf(*r, 1e-9 * run.Scale).Curves == 2);
+            std::array<std::size_t, 2> sides{0, 0};
+            for (const IntersectionBranch& branch : r->Branches) {
+                REQUIRE(branch.IsCertified());
+                REQUIRE(branch.Range.IsBounded());
+                for (const double t : IntersectTest::SamplesOf(branch.Range, 64)) {
+                    const Point3 p = Unplaced(turn, run.Scale, run.Shift, Eval(branch.Curve3d, t));
+                    const double x = p.X - 0.5;
+                    const double y = p.Y - 0.5;
+                    CHECK(std::abs(x * x - 4.0 * y * y - 0.01) <= 8.0 * Context::DefaultResolution);
+                    CHECK(std::abs(p.Z - (2.0 * x * x - 3.0 * y * y)) <=
+                          4.0 * Context::DefaultResolution);
+                }
+                // Each branch runs across the square from one side back to
+                // the same side: both ends on x = 0, or both on x = 1.
+                for (const double t : {branch.Range.GetLower(), branch.Range.GetUpper()}) {
+                    const Point3 p = Unplaced(turn, run.Scale, run.Shift, Eval(branch.Curve3d, t));
+                    const double reach = 4.0 * Context::DefaultResolution;
+                    CHECK(std::abs(std::abs(p.Y - 0.5) - half) <= reach);
+                    if (std::abs(p.X) <= reach) {
+                        ++sides[0];
+                    } else if (std::abs(p.X - 1.0) <= reach) {
+                        ++sides[1];
+                    }
+                }
+            }
+            CHECK(sides[0] == 2);
+            CHECK(sides[1] == 2);
+        }
+    }
+}
+
+TEST_CASE("MR AUDIT-20261112-cone-polish far line origin keeps cone crossings",
+          "[intersect][metamorphic][backfill][AUDIT-20261112-cone-polish]")
+{
+    // Root cause (SplineSurface.cpp, repaired in #286): a crossing of a line
+    // and a cone was polished at origin + t direction rounded twice, which
+    // loses the small offset when a far origin cancels t direction; near a
+    // generator the root's correction magnifies it. CI seed
+    // 17298607298449989786, shrunk: the line through (-1/4, -1/4, 21/8)
+    // along (13, -23, 19)/8 and the right cone of semi-angle pi/4 about the
+    // y axis with its apex at (23/8, -17/8, 3/2). For the ideal cone the
+    // roots are t^2 + 382 t + 481 = 0, -191 +/- 60 sqrt(10), independently
+    // of the kernel. MR-04: the line's origin moved back 2^19 directions,
+    // t' = t + 2^19; MR-01: the three cyclic turns of the axes, exact, with
+    // and without the translation (8, -4, 2).
+    const Vec3 direction{13.0 / 8.0, -23.0 / 8.0, 19.0 / 8.0};
+    const double run = 0x1p19;
+    for (const auto& turn : Turns) {
+        const Vec3 axis = Turned(turn, Vec3{0, 1, 0});
+        const Vec3 across0 = Turned(turn, Vec3{0, 0, 1});
+        const Vec3 across1 = Turned(turn, Vec3{1, 0, 0});
+        const Vec3 d = Turned(turn, direction);
+        for (const Vec3 shift : {Vec3{}, Vec3{8.0, -4.0, 2.0}}) {
+            INFO("cone-polish turn (" << turn[0].X << ", " << turn[0].Y << ", " << turn[0].Z
+                                      << ") shift (" << shift.X << ", " << shift.Y << ", "
+                                      << shift.Z << ")");
+            const Line near{Turned(turn, Point3{-0.25, -0.25, 21.0 / 8.0}) + shift, d};
+            const Line far{near.Origin - run * d, d};
+            const Cone cone{Turned(turn, Point3{23.0 / 8.0, -17.0 / 8.0, 1.5}) + shift, 0.0,
+                            pi / 4.0, across0, across1};
+            const auto a = Intersect(Curve{near}, Surface{cone}, Context::Default());
+            const auto b = Intersect(Curve{far}, Surface{cone}, Context::Default());
+            INFO(IntersectTest::ErrorText(a));
+            INFO(IntersectTest::ErrorText(b));
+            REQUIRE(a.has_value());
+            REQUIRE(b.has_value());
+            REQUIRE(a->Points.size() == 2);
+            REQUIRE(b->Points.size() == 2);
+            const auto rounding = [&](const Line& line, const CurveSurfacePoint& point) {
+                return 512.0 * std::numeric_limits<double>::epsilon() *
+                       std::max({1.0, Length(point.Position - Point3{}),
+                                 std::abs(point.Parameter) * Length(line.Direction)});
+            };
+            for (std::size_t k = 0; k < 2; ++k) {
+                const CurveSurfacePoint& p = a->Points[k];
+                const CurveSurfacePoint& q = b->Points[k];
+                const double exact = -191.0 + (k == 0 ? -60.0 : 60.0) * std::sqrt(10.0);
+                const double within = rounding(near, p) + rounding(far, q);
+                // The cone's own support, in its frame: the distance from the
+                // axis times cos(a) against the height times sin(a).
+                for (const CurveSurfacePoint* point : {&p, &q}) {
+                    const Vec3 w = point->Position - cone.Origin;
+                    CHECK(std::abs(std::hypot(Dot(w, across0), Dot(w, across1)) *
+                                       std::cos(cone.SemiAngle) -
+                                   std::abs(Dot(w, axis)) * std::sin(cone.SemiAngle)) <= within);
+                }
+                CHECK(Distance(p.Position, Eval(near, p.Parameter)) <= rounding(near, p));
+                CHECK(Distance(q.Position, Eval(far, q.Parameter)) <= rounding(far, q));
+                CHECK(Distance(q.Position, Eval(near, exact)) <= within);
+                CHECK(Distance(p.Position, q.Position) <= within);
+                CHECK(std::abs(q.Parameter - p.Parameter - run) <= within / Length(direction));
+                CHECK(p.Contact == ContactType::Crossing);
+                CHECK(q.Contact == ContactType::Crossing);
+            }
+        }
+    }
+}
+
+namespace {
+
+/// The plane section of a sphere, in closed form: one closed curve, every
+/// sample on the plane and at the circle's radius from its centre, and its
+/// samples turning once about the centre.
+void CheckSectionCircle(const SurfaceSurfaceIntersection& result, const Plane& plane,
+                        const Sphere& sphere, const double resolution)
+{
+    CHECK(result.Points.empty());
+    CHECK(result.Overlaps.empty());
+    REQUIRE_FALSE(result.Branches.empty());
+    CHECK(IntersectTest::ConnectivityOf(result, 1e-7 * sphere.Radius).Curves == 1);
+    const Vec3 normal = Cross(plane.XAxis, plane.YAxis);
+    const Vec3 unit = normal / Length(normal);
+    const double height = Dot(sphere.Center - plane.Origin, unit);
+    const Point3 center = sphere.Center - height * unit;
+    const double radius = std::sqrt(sphere.Radius * sphere.Radius - height * height);
+    double sweep = 0.0;
+    for (const IntersectionBranch& branch : result.Branches) {
+        CHECK(branch.IsCertified());
+        CHECK(branch.Bound <= resolution);
+        CHECK(branch.Contact == ContactType::Crossing);
+        double previous = 0.0;
+        double turned = 0.0;
+        std::size_t index = 0;
+        for (const double t : IntersectTest::SamplesOf(branch.Range, 128)) {
+            const Point3 point = Eval(branch.Curve3d, t);
+            CHECK(std::abs(Dot(point - plane.Origin, unit)) <= resolution);
+            CHECK(std::abs(Distance(point, center) - radius) <= resolution);
+            const Vec3 delta = point - center;
+            const double angle = std::atan2(Dot(delta, plane.YAxis), Dot(delta, plane.XAxis));
+            if (index++ > 0) {
+                turned += std::remainder(angle - previous, 2.0 * pi);
+            }
+            previous = angle;
+        }
+        sweep += std::abs(turned);
+    }
+    CHECK(std::abs(sweep - 2.0 * pi) <=
+          8.0 * static_cast<double>(result.Branches.size()) * resolution / radius);
+}
+
+} // namespace
+
+TEST_CASE("MR AUDIT-20261113-narrow-sphere-seam plane section stays one whole circle",
+          "[intersect][metamorphic][backfill][AUDIT-20261113-narrow-sphere-seam]")
+{
+    // Root cause (ImplicitTrace.cpp, repaired in #286): the circle a plane
+    // cuts from a sphere crossed the sphere's seam twice between adjacent
+    // samples of the trace's first scan; the fit clamped that excursion to
+    // the seam and never certified, failing a supported section with the
+    // sample budget. Coverage seed 13593231413355092879, shrunk: centre
+    // (-5, -5, -5), radius 1, plane normal (-2.5, -4.875, -3) at the signed
+    // offset -5/8. The oracle is the section's closed form: the circle in
+    // the plane about the centre's foot, of radius sqrt(1 - (5/8)^2), whole.
+    // MR-01: a cyclic turn of the axes and the translation (8, -4, 2),
+    // exact; MR-02: both orders; MR-03: the scale 2 with the context;
+    // MR-04: the sphere's chart turned a quarter about its axis.
+    const Vec3 normal{-2.5, -4.875, -3.0};
+    const Vec3 ex{1, 0, 0};
+    const Vec3 ey{0, 1, 0};
+    for (const std::size_t t : {std::size_t{0}, std::size_t{1}}) {
+        const auto& turn = Turns.at(t);
+        for (const double scale : {1.0, 2.0}) {
+            for (const Vec3 shift : {Vec3{}, Vec3{8.0, -4.0, 2.0}}) {
+                if (scale != 1.0 && (t != 0 || shift.X != 0.0)) {
+                    continue;
+                }
+                const Context policy =
+                    Context::Default()
+                        .WithResolution(Context::DefaultResolution * scale)
+                        .WithToleranceCeiling(Context::DefaultToleranceCeiling * scale);
+                const Vec3 n = Turned(turn, normal);
+                const Point3 center =
+                    Point3{} + scale * Turned(turn, Vec3{-5.0, -5.0, -5.0}) + shift;
+                const Plane plane = IntersectTest::PlaneWithNormal(
+                    center + (-5.0 / 8.0 * scale) * (n / Length(n)), n);
+                const Vec3 x = Turned(turn, ex);
+                const Vec3 y = Turned(turn, ey);
+                for (const bool quarter : {false, true}) {
+                    const Sphere sphere{center, scale, quarter ? y : x, quarter ? -x : y};
+                    for (const bool exchanged : {false, true}) {
+                        INFO("narrow-sphere-seam turn " << t << " scale " << scale << " shift "
+                                                        << shift.X << " quarter " << quarter
+                                                        << " exchanged " << exchanged);
+                        const Surface a = exchanged ? Surface{sphere} : Surface{plane};
+                        const Surface b = exchanged ? Surface{plane} : Surface{sphere};
+                        const auto r = Intersect(a, b, policy);
+                        INFO(IntersectTest::ErrorText(r));
+                        REQUIRE(r.has_value());
+                        for (const IntersectionBranch& branch : r->Branches) {
+                            CHECK(IntersectTest::PcurveDeviation(branch, a, b, 200) <=
+                                  policy.GetResolution());
+                        }
+                        CheckSectionCircle(*r, plane, sphere, policy.GetResolution());
+                    }
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("MR CI-272-ellipse-plane crossings on the seam and a cut are decided",
+          "[intersect][metamorphic][backfill][CI-272-ellipse-plane]")
+{
+    // Root cause (SplineSurface.cpp, repaired in #300): a conic is searched
+    // in quarter-turn arcs, and a crossing exactly on a cut or on the seam
+    // was seen undecided from both arcs and refused ("unresolved root
+    // existence or multiplicity"). macOS run 43273260370, RapidCheck seed
+    // 17041817369036985825, shrunk: the ellipse of semi-axes 3/2 and 3/5
+    // about (-5/4, -5/4, -13/32), axes x and (0, cos phi, sin phi), phi the
+    // rounded -pi/2, against the plane through its centre with axes x and
+    // y. The plane's equation on the ellipse is b sin(phi) sin(t) = 0: two
+    // transverse crossings, centre -+ a x, at t = pi (a cut) and t = 0 (the
+    // seam), independently of the kernel. MR-01: the cyclic turns of the
+    // axes and the translation (8, -4, 2), exact; MR-03: scales 1/4 and 4
+    // with the context; MR-04: the ellipse reversed, and its frame turned
+    // half (t' = t - pi).
+    const double phi = -16.0 * (2.0 * pi) / 64.0;
+    for (const auto& turn : Turns) {
+        for (const double scale : {0.25, 1.0, 4.0}) {
+            for (const Vec3 shift : {Vec3{}, Vec3{8.0, -4.0, 2.0}}) {
+                const Context policy =
+                    Context::Default()
+                        .WithResolution(Context::DefaultResolution * scale)
+                        .WithToleranceCeiling(Context::DefaultToleranceCeiling * scale)
+                        .WithScheduler(Scheduler::Serial);
+                const double major = 1.5 * scale;
+                const double minor = scale * (1.5 * 4.0 / 10.0);
+                const Point3 center =
+                    Point3{} +
+                    scale * Turned(turn, Vec3{-40.0 / 32.0, -40.0 / 32.0, -13.0 / 32.0}) + shift;
+                const Vec3 x = Turned(turn, Vec3{1, 0, 0});
+                const Vec3 y = Turned(turn, Vec3{0, std::cos(phi), std::sin(phi)});
+                const Surface plane{Plane{center, x, Turned(turn, Vec3{0, 1, 0})}};
+                const Ellipse ellipse{center, major, minor, x, y};
+                const std::array<Curve, 3> charts{Curve{ellipse}, Curve{Reversed(ellipse)},
+                                                  Curve{Ellipse{center, major, minor, -x, -y}}};
+                for (std::size_t c = 0; c < charts.size(); ++c) {
+                    const Curve& curve = charts.at(c);
+                    INFO("CI-272 turn (" << turn[0].X << ", " << turn[0].Y << ", " << turn[0].Z
+                                         << ") scale " << scale << " shift " << shift.X << " chart "
+                                         << c);
+                    const auto r = Intersect(curve, plane, policy);
+                    INFO(IntersectTest::ErrorText(r));
+                    REQUIRE(r.has_value());
+                    CHECK(r->Overlaps.empty());
+                    // A closed turn may keep both representatives of the
+                    // seam; there are only two spatial roots.
+                    CHECK(r->Points.size() >= 2);
+                    CHECK(r->Points.size() <= 3);
+                    bool low = false;
+                    bool high = false;
+                    for (const CurveSurfacePoint& point : r->Points) {
+                        const bool atLow =
+                            Distance(point.Position, center - major * x) <= policy.GetResolution();
+                        const bool atHigh =
+                            Distance(point.Position, center + major * x) <= policy.GetResolution();
+                        CHECK((atLow || atHigh));
+                        low = low || atLow;
+                        high = high || atHigh;
+                        CHECK(point.Decided);
+                        CHECK(point.Contact == ContactType::Crossing);
+                        CHECK(Contains(Domain(curve), point.Parameter));
+                        CHECK(Distance(Eval(curve, point.Parameter), point.Position) <=
+                              policy.GetResolution());
+                        CHECK(Distance(Eval(plane, point.OnSurface), point.Position) <=
+                              policy.GetResolution());
+                    }
+                    CHECK(low);
+                    CHECK(high);
+                }
+            }
+        }
+    }
+}
