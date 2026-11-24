@@ -1030,8 +1030,14 @@ clipped to the box:
 
 Every overlap shares the one pcurve and restricts its range.
 
-Every other pair reports ``NotImplemented``; the generic path for curves
-against B-spline surfaces waits for Phase 2 with the surface–surface one.
+Every pair of a built-in curve (line, circle, ellipse, hyperbola, parabola,
+B-spline) and a built-in surface (plane, cylinder, cone, sphere, torus,
+ellipsoid, B-spline surface) has a handler, and none reports
+``NotImplemented``. Hyperbolas and parabolas meet the elementary surfaces
+and the ellipsoid through the conic handler over a bounded requested domain
+(an unbounded one is ``NotSupported``, never clipped); every curve meets a
+B-spline surface through *Curves against B-spline surfaces*. Only a curve or a surface type that is not built in
+reaches the stub, which reports ``NotImplemented``.
 
 *Verification.* Besides each handler's own tests,
 ``tests/intersect/AdversarialTests.cpp`` runs properties over the whole
