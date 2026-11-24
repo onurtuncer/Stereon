@@ -58,6 +58,14 @@ obligation (owner decision) and is verified with all six root causes' faults kil
   [#159](https://github.com/onurtuncer/Stereon/pull/159),
   [#194](https://github.com/onurtuncer/Stereon/pull/194).
 
+## Leads after #263
+
+The [inventory audit after #263](intersection-metamorphic-triage.md) adds:
+- untriaged confirmed-defect leads: [#271](https://github.com/onurtuncer/Stereon/pull/271), [#289](https://github.com/onurtuncer/Stereon/pull/289), [#301](https://github.com/onurtuncer/Stereon/pull/301), [#304](https://github.com/onurtuncer/Stereon/pull/304), [#312](https://github.com/onurtuncer/Stereon/pull/312), [#315](https://github.com/onurtuncer/Stereon/pull/315), [#316](https://github.com/onurtuncer/Stereon/pull/316), [#317](https://github.com/onurtuncer/Stereon/pull/317), [#318](https://github.com/onurtuncer/Stereon/pull/318), [#322](https://github.com/onurtuncer/Stereon/pull/322), [#323](https://github.com/onurtuncer/Stereon/pull/323);
+- leads that are not intersection defects: [#267](https://github.com/onurtuncer/Stereon/pull/267), [#281](https://github.com/onurtuncer/Stereon/pull/281), [#295](https://github.com/onurtuncer/Stereon/pull/295).
+
+Merged pull requests only were audited; issues and corpus failures since #263 were not.
+
 ## Exit criteria
 
 - All confirmed intersection defects in the audited history are identified.
