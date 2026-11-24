@@ -295,6 +295,23 @@ void MeetLineCircle(const ProfileLine& l, const ProfileCircle& c, const double t
     out.Points.push_back({footRho + half * l.B, footZ - half * l.A, false});
 }
 
+/// How far along the centre line from p, d away from q, two circles touch
+/// within the tolerance: the midpoint of their nearest points there, which
+/// lies within half the gap of both. Externally, p's point is R_p along and
+/// q's d - R_q; internally the larger one's far side meets the smaller's.
+/// The radical axis's (d^2 + R_p^2 - R_q^2) / 2d is the same point only at
+/// an exact tangency: near an internal one it lies gap (R_p + R_q) / 2d
+/// from it, for radii 2 and 1.5 0.005 apart 0.0177, outside both spheres
+/// by more than the tolerance (the OCCT corpus run of #326).
+[[nodiscard]] double TouchAlong(const ProfileCircle& p, const ProfileCircle& q, const double d,
+                                const double outer, const double inner)
+{
+    if (std::abs(outer) <= std::abs(inner)) {
+        return 0.5 * (p.R + d - q.R);
+    }
+    return 0.5 * (d + (p.R >= q.R ? p.R + q.R : -(p.R + q.R)));
+}
+
 void MeetCircles(const ProfileCircle& p, const ProfileCircle& q, const double tol, Meets& out)
 {
     const double dr = q.Rho - p.Rho;
@@ -313,14 +330,15 @@ void MeetCircles(const ProfileCircle& p, const ProfileCircle& q, const double to
     if (outer > tol || inner < -tol) {
         return;
     }
+    if (outer >= -tol || inner <= tol) {
+        const double along = TouchAlong(p, q, d, outer, inner);
+        out.Points.push_back({p.Rho + along * dr / d, p.Z + along * dz / d, true});
+        return;
+    }
     // Along the centre line from p, a; across it, h.
     const double a = (d * d + p.R * p.R - q.R * q.R) / (2.0 * d);
     const double baseRho = p.Rho + a * dr / d;
     const double baseZ = p.Z + a * dz / d;
-    if (outer >= -tol || inner <= tol) {
-        out.Points.push_back({baseRho, baseZ, true});
-        return;
-    }
     const double h = std::sqrt(std::max(0.0, p.R * p.R - a * a));
     out.Points.push_back({baseRho - h * dz / d, baseZ + h * dr / d, false});
     out.Points.push_back({baseRho + h * dz / d, baseZ - h * dr / d, false});

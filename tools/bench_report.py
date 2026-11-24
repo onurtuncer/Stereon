@@ -198,6 +198,42 @@ for _size, _faces in TOPOLOGY_SIZES.items():
 # indicative only (bench/reports/phase1-2026-10-15.md, Notes).
 NOT_LIKE_FOR_LIKE = {"B1.4/Approximation/1000"}
 
+# Phase 2, the intersections (bench/IntersectBench.cpp, bench/occt/OcctIntersectBench.cpp,
+# cases in bench/IntersectCases.hpp). An iteration intersects every case of the row once,
+# so the time per item is the time per case. Each row's correctness is scored once, outside
+# the timed loop, against the closed forms: roots or branches missed and spurious, cases
+# unresolved (a refusal, OCCT's IsDone() false or an exception), configurations not exact,
+# and the largest distance of a sampled point from either surface (max_deviation, mm).
+# docs/benchmarks.md's targets: B2.1 parity speed and no missed roots; B2.2 none missed,
+# none spurious and faster (the median over repetitions of the time per case); B2.3 exact
+# results and at least parity. The correctness gates are Stereon's; OCCT's counters are shown.
+B2_ROWS: dict[str, str] = {
+    "B2.1/CurveCurve/conics": "Plane curves, lines and conics (planar-curves)",
+    "B2.1/CurveCurve/splines": "Plane curves with a spline or rational arc (planar-curves)",
+    "B2.1/CurveSurface/line-nurbs-sphere": "64 lines against the rational NURBS sphere",
+    "B2.1/CurveSurface/line-nurbs-cylinder": "64 lines against the rational NURBS cylinder",
+}
+for _family in ("bump-plane", "cylinder-cylinder", "cylinder-plane", "plane-plane", "saddle-plane",
+                "sphere-plane"):
+    B2_ROWS[f"B2.2/SSI/nurbs-{_family}"] = f"SSI, nurbs-ssi {_family}"
+for _family in ("cone-cone", "cone-ellipsoid", "cone-torus", "cylinder-cone", "cylinder-ellipsoid",
+                "cylinder-torus", "ellipsoid-ellipsoid", "plane-cone", "plane-ellipsoid", "plane-torus",
+                "sphere-cone", "sphere-ellipsoid", "sphere-torus", "torus-ellipsoid", "torus-torus"):
+    B2_ROWS[f"B2.2/SSI/curved-{_family}"] = f"SSI, curved-ssi {_family}"
+for _pair in ("cylinder-cylinder", "cylinder-plane", "cylinder-sphere", "plane-plane", "plane-sphere",
+              "sphere-sphere"):
+    B2_ROWS[f"B2.3/AnalyticSSI/{_pair}"] = f"Analytic SSI, analytic-ssi Tier A {_pair}"
+for _key, _label in B2_ROWS.items():
+    ROWS[_key] = (f"{_label}, per case", "faster than OCCT" if _key.startswith("B2.2/") else "≥ parity")
+    if _key.startswith("B2.2/"):
+        MUST_LEAD.add(_key)
+    _checks = {"B2.1": ("missed",), "B2.2": ("missed", "spurious"), "B2.3": ("inexact",)}[_key[:4]]
+    for _name in ("missed", "spurious", "inexact", "unresolved", "max_deviation"):
+        _gate = _name in _checks
+        COUNTER_ROWS.append((_key, _name, f"{_label}: {_name.replace('_', ' ')}", "0" if _gate else "report",
+                             ("below", 0.5) if _gate else None))
+REPORTED_COUNTERS |= {"cases", "expected", "missed", "spurious", "unresolved", "inexact", "max_deviation"}
+
 # Rows quoted per iteration (one fit, one batch of insertions) rather than per
 # counted item, as docs/performance.rst and the earlier reports quote them. The
 # harness counts the points of a fit as items, which would give a time per point.
@@ -455,7 +491,8 @@ def render(rows: list[Row], machine: dict[str, str], title: str) -> str:
         "",
         "Median CPU time over the repetitions, both libraries interleaved: per evaluated parameter, projected "
         "point, property or length query; per fit (B1.4), per 100 insertions and per decomposition (B1.5); "
-        "per build, per query over the whole sheet or per edit (B0.3, B0.5, ADR-0004, ADR-0005). "
+        "per build, per query over the whole sheet or per edit (B0.3, B0.5, ADR-0004, ADR-0005); per "
+        "intersected case (B2). "
         "Ratio = OCCT / Stereon, so > 1 means Stereon is faster; within 10 % of 1 is parity, and a row with a "
         "ratio target of its own (B0.3: ≥ 5×) is met when it reaches it. A target of \"report\" is not a gate. "
         "Spread is the largest relative deviation of any repetition from its median, over both libraries.",
@@ -495,7 +532,9 @@ def render(rows: list[Row], machine: dict[str, str], title: str) -> str:
             "Median over the repetitions of each counter. Live heap is the bytes the sheet holds in live "
             "allocations with the shape alive, measured the same way for both libraries (bench/Memory.hpp); "
             "pages copied are the pages of the edited snapshot not shared with the body (ADR-0004, ADR-0005). "
-            "Stereon / OCCT below 100 % means Stereon uses less.",
+            "Stereon / OCCT below 100 % means Stereon uses less. The B2 rows' counters score each library "
+            "against the closed forms (bench/IntersectCases.hpp): missed, spurious, inexact and unresolved "
+            "cases, and max_deviation, the largest distance in mm of a sampled point from either surface.",
             "",
             "| ID | Measure | Stereon | OCCT | Stereon / OCCT | Target | Met |",
             "| --- | --- | --- | --- | --- | --- | --- |",
