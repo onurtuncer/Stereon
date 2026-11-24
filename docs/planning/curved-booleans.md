@@ -5,7 +5,7 @@
 **Opened:** 2026-11-13, on main at `6180e7e`
 **Status:** design, for review. No code changes with this note. Revised 2026-11-13 with the owner's answers to section 6: every case below is required for v0.2, none is an exclusion.
 **Ledger rows:** *Intersection to Boolean* (Remaining: cones, spheres, tori and ellipsoids in the Booleans; coincident curved faces) and *Native ellipsoid* (Remaining: Booleans on doubly curved faces).
-**Owner decision it implements:** curved Booleans stay in v0.2 (2026-11-10).
+**Owner decision it implements:** curved Booleans stay in v0.2 (2026-11-10), superseded: on 2026-11-23 the owner confirmed that curved Booleans do not belong in v0.2 (as decided on 2026-11-08 and recorded in the v0.2 acceptance ledger). This note stays as the design for a later release; nothing in it blocks v0.2.
 
 ## 1. Where the Boolean stands
 
