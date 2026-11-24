@@ -328,7 +328,7 @@ TEST_CASE("only documented nurbs-ssi configurations are refused",
 }
 
 TEST_CASE("every curved-ssi corpus case is answered as its closed form says",
-          "[.][exhaustive][surface-surface][corpus]")
+          "[.][exhaustive][surface-surface][corpus][ssi-corpus]")
 {
     const std::vector<std::filesystem::path> files = CaseFiles("curved-ssi");
     REQUIRE(files.size() >= 600);
@@ -342,7 +342,7 @@ TEST_CASE("every curved-ssi corpus case is answered as its closed form says",
 // Every placement and scale, both ways: a refusal only where the fixture
 // documents one (may_fail_closed), and no wrong answer.
 TEST_CASE("every nurbs-ssi corpus case is answered as its closed form says",
-          "[.][exhaustive][surface-surface][corpus][nurbs]")
+          "[.][exhaustive][surface-surface][corpus][nurbs][ssi-corpus]")
 {
     const std::vector<std::filesystem::path> files = CaseFiles("nurbs-ssi");
     REQUIRE(files.size() >= 90);
