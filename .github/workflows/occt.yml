@@ -65,8 +65,26 @@ jobs:
           -DSTEREON_WITH_OCCT=ON -DCMAKE_PREFIX_PATH="$OCCT_PREFIX"
       - name: Build
         run: cmake --build --preset gcc16-release --target stereon_occt_tests
+      # The SSI corpus against GeomAPI_IntSS (tests/occt/CorpusDifferentialTests.cpp)
+      # writes its tally and every case other than agreement there.
       - name: Differential tests
-        run: 'ctest --preset gcc16-release -R "^occt: "'
+        run: |
+          export STEREON_OCCT_CORPUS_REPORT="$PWD/build/occt-corpus.md"
+          ctest --preset gcc16-release -R "^occt: "
+      - name: SSI corpus against GeomAPI_IntSS
+        if: always()
+        run: |
+          if [ -f build/occt-corpus.md ]; then
+            { echo '## SSI corpus against GeomAPI_IntSS'; echo; cat build/occt-corpus.md; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload the corpus comparison
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: occt-corpus-${{ github.sha }}
+          path: build/occt-corpus.md
+          if-no-files-found: ignore
+          retention-days: 90
       # The Boolean prototype's M11: the comparison's table, each fixture's
       # volume, area and face count from both kernels, kept in the summary.
       - name: Boolean comparison table (M11)

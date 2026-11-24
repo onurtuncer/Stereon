@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 #
 # The reference run of the OpenCASCADE comparison benchmarks (docs/benchmarks.md,
-# B0.2–B0.5 and B1.1–B1.6): stereon_occt_bench on the reference image, the gcc:16.2 container
+# B0.2–B0.5, B1.1–B1.6 and B2.1–B2.3): stereon_occt_bench on the reference image, the gcc:16.2 container
 # on a GitHub-hosted ubuntu-24.04 runner, against the pinned OCCT that occt.yml
 # builds and caches. Development runs happen on whatever machine is to hand;
 # the report a release gate cites comes from here (docs/performance.rst, Method).
@@ -31,6 +31,8 @@ on:
       - bench/occt/**
       - bench/convergence/**
       - bench/TopoBench.cpp
+      - bench/IntersectBench.cpp
+      - bench/IntersectCases.hpp
       - bench/BooleanBench.cpp
       - bench/Memory.*
       - bench/CMakeLists.txt
@@ -45,7 +47,7 @@ on:
         type: number
         default: 15
       filter:
-        description: Google Benchmark regex of the curve and surface benchmarks (empty for B0.2 and B1)
+        description: Google Benchmark regex of the curve, surface and intersection benchmarks (empty for B0.2, B1 and B2)
         type: string
         default: ""
       topology_repetitions:
@@ -74,7 +76,7 @@ env:
 
 jobs:
   reference:
-    name: OCCT reference run (B0.2–B0.5, B1.1–B1.6)
+    name: OCCT reference run (B0.2–B0.5, B1.1–B1.6, B2.1–B2.3)
     runs-on: ubuntu-24.04
     container: gcc:16.2
     timeout-minutes: 240
@@ -130,7 +132,9 @@ jobs:
             echo "memory_measure=live heap, glibc mallinfo2 (bench/Memory.hpp)"
             sed 's/^/occt_/' "$OCCT_PREFIX/stereon-occt-build.txt"
           } | tee build/reference/machine.txt
-      - name: Run the curve and surface benchmarks (B0.2, B1)
+      # B2's rows intersect every case of a corpus family per iteration and
+      # score both libraries against the closed forms (bench/IntersectCases.hpp).
+      - name: Run the curve, surface and intersection benchmarks (B0.2, B1, B2)
         env:
           REPETITIONS: ${{ inputs.repetitions || 15 }}
           FILTER: ${{ inputs.filter }}
@@ -139,7 +143,7 @@ jobs:
           --benchmark_repetitions="$REPETITIONS"
           --benchmark_enable_random_interleaving=true
           --benchmark_display_aggregates_only=true
-          --benchmark_filter="${FILTER:-^(B0\.2|B1\.)}"
+          --benchmark_filter="${FILTER:-^(B0\.2|B1\.|B2\.)}"
           --benchmark_out=build/reference/results.json --benchmark_out_format=json
       - name: Run the topology benchmarks (B0.3–B0.5, ADR-0004, ADR-0005)
         env:
@@ -196,7 +200,7 @@ jobs:
       - name: Render the report
         run: |
           python3 tools/bench_report.py build/reference/results.json build/reference/results-topology.json \
-            --title "Benchmark reference run — dispatch (B0.2), topology (B0.3–B0.5), curves and surfaces (B1.1–B1.6)" \
+            --title "Benchmark reference run — dispatch (B0.2), topology (B0.3–B0.5), curves and surfaces (B1.1–B1.6), intersections (B2.1–B2.3)" \
             --machine build/reference/machine.txt --out build/reference/report.md
           cat build/reference/report.md >> "$GITHUB_STEP_SUMMARY"
       # The release gates, decided on full-precision medians
