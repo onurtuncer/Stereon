@@ -427,39 +427,63 @@
     {
       "id": "AUDIT-20261113-narrow-sphere-seam",
       "source": "https://github.com/onurtuncer/Stereon/actions/runs/43300991832/job/131471814362",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/ImplicitTraceTests.cpp#MR audit narrow sphere seam excursions remain complete certified circles",
       "direct": "tests/intersect/ImplicitTraceTests.cpp#MR audit narrow sphere seam excursions remain complete certified circles",
-      "metamorphic": "tests/intersect/ImplicitTraceTests.cpp#MR audit narrow sphere seam excursions remain complete certified circles",
-      "oracle": "docs/planning/audit-2026-11-12-numerics.md#Narrow seam excursion repair",
-      "replay": "docs/planning/audit-2026-11-12-numerics.md",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR AUDIT-20261113-narrow-sphere-seam plane section stays one whole circle",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### AUDIT-20261113-narrow-sphere-seam",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 3 fault replay",
       "relations": [
         "MR-01",
         "MR-02",
         "MR-03",
         "MR-04"
       ],
-      "evidence_kind": "resolved_geometry"
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#AUDIT-20261113-narrow-sphere-seam",
+      "repair_commit": "76eb218f62b8828fc4dfe4ce50ed335491d91ac5",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **Red:** killed in both runs",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Green:** the same tests passed in every CTest job of #330",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Review:** this agent's review of the fixtures, oracles and runs above"
     },
     {
       "id": "AUDIT-20261112-cone-polish",
       "source": "https://github.com/onurtuncer/Stereon/actions/runs/43251352135/job/131297678793",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/LineRevolutionTests.cpp#MR audit cone crossings retain their positions after an exact origin shift",
       "direct": "tests/intersect/LineRevolutionTests.cpp#MR audit cone crossings retain their positions after an exact origin shift",
-      "metamorphic": "tests/intersect/LineRevolutionTests.cpp#MR audit cone crossings retain their positions after an exact origin shift",
-      "oracle": "docs/planning/audit-2026-11-12-numerics.md#Cone polishing",
-      "replay": "docs/planning/audit-2026-11-12-numerics.md",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR AUDIT-20261112-cone-polish far line origin keeps cone crossings",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### AUDIT-20261112-cone-polish",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 3 fault replay",
       "relations": [
         "MR-01",
         "MR-04"
       ],
-      "evidence_kind": "resolved_geometry"
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#AUDIT-20261112-cone-polish",
+      "repair_commit": "76eb218f62b8828fc4dfe4ce50ed335491d91ac5",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **Red:** killed in both runs",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Green:** the same tests passed in every CTest job of #330",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Review:** this agent's review of the fixtures, oracles and runs above"
     },
     {
       "id": "SSI-translated-boundary",
       "source": "https://github.com/onurtuncer/Stereon/pull/279",
-      "state": "untriaged"
+      "state": "MR implemented",
+      "fixture": "tests/intersect/GenericSSITranslationTests.cpp#SSI-translated-boundary: far translations answer as at the origin",
+      "direct": "tests/intersect/GenericSSITranslationTests.cpp#SSI-translated-boundary: far translations answer as at the origin",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR SSI-translated-boundary far hyperbola branches end on the domain's sides",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### SSI-translated-boundary",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 3 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03",
+        "MR-04"
+      ],
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill-ssi-translated-boundary.json#SSI-translated-boundary",
+      "repair_commit": "0965d8aa4335210199404d6d01f2412bac218e5b"
     },
     {
       "id": "PR-112-budget",
@@ -506,16 +530,23 @@
     {
       "id": "CI-272-ellipse-plane",
       "source": "https://github.com/onurtuncer/Stereon/actions/runs/43273260370",
-      "state": "fixture captured",
-      "fixture": "tests/intersect/EllipsePlaneReplayTests.cpp",
-      "direct": "tests/intersect/EllipsePlaneReplayTests.cpp",
-      "metamorphic": "tests/intersect/EllipsePlaneReplayTests.cpp",
-      "replay": "docs/planning/ellipse-plane-ci-replay.md",
+      "state": "verified",
+      "fixture": "tests/intersect/EllipsePlaneReplayTests.cpp#MR macOS ellipse plane shrunk linearization fixture resolves",
+      "direct": "tests/intersect/EllipsePlaneReplayTests.cpp#MR macOS ellipse plane shrunk linearization fixture resolves",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR CI-272-ellipse-plane crossings on the seam and a cut are decided",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 3 fault replay",
       "relations": [
         "MR-01",
         "MR-03",
         "MR-04"
-      ]
+      ],
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### CI-272-ellipse-plane",
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#CI-272-ellipse-plane",
+      "repair_commit": "e8080c8aeb5490f6622f11ab52c68b885916fafd",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **Red:** killed in both runs",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Green:** the same tests passed in every CTest job of #330",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Review:** this agent's review of the fixtures, oracles and runs above"
     },
     {
       "id": "PR-271",

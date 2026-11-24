@@ -1,0 +1,21 @@
+{
+  "description": "SSI-translated-boundary's search-shift root cause in #279 (0965d8a): the search on the surfaces moved about the origin. The second root cause, the halving of an undecided edge (EdgeHalvings = 0), survived its first CI replay and is not catalogued; see the triage's Batch 3 fault replay. CI replays every intersection-backfill*.json together (tools/mutate.py --catalogue tools/mutation/intersection-backfill*.json).",
+  "defect": "SSI-translated-boundary",
+  "preset": "gcc16-debug",
+  "mutants": [
+    {
+      "id": "SSI-translated-boundary-search-shift",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: SSI-translated-boundary: the search runs on the surfaces moved about the origin",
+      "file": "src/intersect/GenericSSI.cpp",
+      "find": "        shift[i] = std::isfinite(middle) && MovesExactly(sa, sb, i, middle) ? middle : 0.0;",
+      "replace": "        shift[i] = std::isfinite(middle) && MovesExactly(sa, sb, i, middle) ? 0.0 : 0.0;",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ SSI\\-translated\\-boundary\\ far\\ hyperbola\\ branches\\ end\\ on\\ the\\ domain's\\ sides$",
+      "diagnostic": "intersect: MR SSI-translated-boundary far hyperbola branches end on the domain's sides",
+      "repair_commit": "0965d8aa4335210199404d6d01f2412bac218e5b"
+    }
+  ]
+}
