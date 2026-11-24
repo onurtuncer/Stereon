@@ -547,6 +547,82 @@
       "red": "docs/planning/intersection-metamorphic-triage.md#- **Red:** killed in both runs",
       "green": "docs/planning/intersection-metamorphic-triage.md#- **Green:** the same tests passed in every CTest job of #330",
       "review": "docs/planning/intersection-metamorphic-triage.md#- **Review:** this agent's review of the fixtures, oracles and runs above"
+    },
+    {
+      "id": "PR-271",
+      "source": "https://github.com/onurtuncer/Stereon/pull/271",
+      "state": "untriaged"
+    },
+    {
+      "id": "PR-289",
+      "source": "https://github.com/onurtuncer/Stereon/pull/289",
+      "state": "untriaged"
+    },
+    {
+      "id": "PR-301",
+      "source": "https://github.com/onurtuncer/Stereon/pull/301",
+      "state": "untriaged"
+    },
+    {
+      "id": "PR-304",
+      "source": "https://github.com/onurtuncer/Stereon/pull/304",
+      "state": "untriaged"
+    },
+    {
+      "id": "PR-312",
+      "source": "https://github.com/onurtuncer/Stereon/pull/312",
+      "state": "untriaged"
+    },
+    {
+      "id": "PR-315",
+      "source": "https://github.com/onurtuncer/Stereon/pull/315",
+      "state": "untriaged"
+    },
+    {
+      "id": "PR-316",
+      "source": "https://github.com/onurtuncer/Stereon/pull/316",
+      "state": "untriaged"
+    },
+    {
+      "id": "PR-317",
+      "source": "https://github.com/onurtuncer/Stereon/pull/317",
+      "state": "untriaged"
+    },
+    {
+      "id": "PR-318",
+      "source": "https://github.com/onurtuncer/Stereon/pull/318",
+      "state": "untriaged"
+    },
+    {
+      "id": "PR-322",
+      "source": "https://github.com/onurtuncer/Stereon/pull/322",
+      "state": "untriaged"
+    },
+    {
+      "id": "PR-323",
+      "source": "https://github.com/onurtuncer/Stereon/pull/323",
+      "state": "untriaged"
+    },
+    {
+      "id": "PR-267",
+      "source": "https://github.com/onurtuncer/Stereon/pull/267",
+      "state": "not a defect",
+      "rationale": "docs/planning/intersection-metamorphic-triage.md#- **PR-267**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#Inventory audit after #263"
+    },
+    {
+      "id": "PR-281",
+      "source": "https://github.com/onurtuncer/Stereon/pull/281",
+      "state": "not a defect",
+      "rationale": "docs/planning/intersection-metamorphic-triage.md#- **PR-281**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#Inventory audit after #263"
+    },
+    {
+      "id": "PR-295",
+      "source": "https://github.com/onurtuncer/Stereon/pull/295",
+      "state": "not a defect",
+      "rationale": "docs/planning/intersection-metamorphic-triage.md#- **PR-295**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#Inventory audit after #263"
     }
   ],
   "handlers": {

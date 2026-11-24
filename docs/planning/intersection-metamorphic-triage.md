@@ -302,3 +302,42 @@ At #305 the ledger held four open defect records: `SSI-translated-boundary` (`un
 - **Survived:** `SSI-translated-boundary-edge-halving` (`EdgeHalvings` = 0). The MR test still passes without the halving, as long as the shift is kept. Like PR-159's `BisectSeam` candidate, this root cause is not observable alone with these fixtures. It was removed from the catalogue, so that the workflow tests only faults some test detects, and it is recorded here. No test was loosened. So the record stays `MR implemented`: its second root cause has no red evidence. Closing it needs a fixture that needs the halving with the shift in place (owner or SSI agent).
 - **Green:** the same tests passed in every CTest job of #330: [Linux `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45064572641/job/137337734757), [Linux `gcc16-asan`](https://github.com/onurtuncer/Stereon/actions/runs/45064572641/job/137337735042), [Windows `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45064572891/job/137337735813), [Windows `gcc16-windows`](https://github.com/onurtuncer/Stereon/actions/runs/45064572891/job/137337735659), [macOS `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45064572663/job/137337734763) and [coverage](https://github.com/onurtuncer/Stereon/actions/runs/45064572648/job/137337734570).
 - **Review:** this agent's review of the fixtures, oracles and runs above. On it, `AUDIT-20261112-cone-polish`, `AUDIT-20261113-narrow-sphere-seam` and `CI-272-ellipse-plane` are `verified`. The owner's review is pending.
+
+## Inventory audit after #263
+
+- **Date:** 2026-11-22
+- **Branch:** `verify/metamorphic-inventory-audit`, on `main` 898ed69
+- **Reviewer:** the v0.2 verification agent (Agent E). This is the agent's triage, not the owner's `inventory_review`.
+- **Scope:** every merge after #263 (`cbeddfb`) that touches `src/intersect/` or the certification it relies on (`src/surface/Certify.cpp`), up to #323. Each was read from its merged description and diff summary. Those already in the inventory under another ID are SSI-translated-boundary (#279), the two AUDIT records (#286) and CI-272-ellipse-plane (#300).
+
+A lead is a **defect** when the kernel, inside its documented supported domain, answered wrongly, or refused what the ledger said it answers. That matches the precedent of PR-159 and CI-272, refusals that were counted. A lead is **not a defect** when the earlier outcome was a refusal or an undecided report that the ledger itself listed as a limitation, or when the PR changes no result.
+
+#### Confirmed defect leads, recorded untriaged
+
+Each needs a fixture, a metamorphic regression and a replayed fault before it can close. None has them yet.
+
+| Record | Merge | What was wrong before the repair |
+| --- | --- | --- |
+| PR-271 | `ca74138` | A B-spline's contact of order four with a line or conic was refused, although the ledger promised touches "reported bracketed, never dropped". Found by the planar corpus. |
+| PR-289 | `51906ee` | Skew cylinders were answered in one operand order and refused in the other: an MR-02 failure on `analytic-ssi/cylinder-cylinder/skew-tilted-non-unit`. |
+| PR-301 | `0b8f782` | A conic's crossing brought back across a full turn's seam could be placed at about -1e-17, outside the conic's domain: a wrong answer, about 2 % of property runs. |
+| PR-304 | `814391b` | `ClosestApproach` placed its free parameter off the rounding it should reach. |
+| PR-312 | `9438a7e` | `ClosestApproach` returned A 1.5e-7 short of its end when B landed on its own, a distance 1.4e-7 above an independent oracle (Nightly seed). |
+| PR-315 | `eeb3367` | Eight far-placed `nurbs-ssi` reference fixtures were refused by `CertifyDeviation`. |
+| PR-316 | `8a1a760` | Two B-spline curves: a proved crossing bracketed so that the JVP refused the primal point as not on both curves (seed 15971369584168069721). |
+| PR-317 | `776459d` | Six `sphere-plane/near-pole` reference fixtures were refused. |
+| PR-318 | `f0da86e` | A B-spline surface request ending on an interior knot answered branches outside the requested domain: a wrong answer. |
+| PR-322 | `898ed69` | Skew-cylinder B-seam isolation by a fixed 256-step scan could miss seam crossings (#195). Replaced by fail-closed interval isolation. |
+| PR-323 | `d9f9207` | `CertifyDeviation`'s B-spline partial enclosure had a rounding margin below the rounding it covers over short knot spans: an unproved certificate, though no wrong enclosure was observed. |
+
+#### Leads that are not intersection defects
+
+- **PR-267** (`3c0ee49`): two B-splines' crossings within rounding of a knot were reported undecided, never dropped. That was the ledger's listed limitation ("Remaining: ... undecided"). The PR decides them, a capability extension.
+- **PR-281** (`48b3fd9`): a tangency of two B-splines and exactly refined copies were corpus cases marked `may_fail_closed`, refused by contract. The PR answers them.
+- **PR-295** (`1b7b528`): the final diff has no kernel change. Its repair was dropped in favour of #300, whose defect is CI-272-ellipse-plane. It adds a replay fixture only.
+
+No record is needed for the features and refactors in the same range. They add capabilities, products or speed, and the outcome they replace was a documented `NotImplemented` or no result change: #269, #273, #277, #282, #287, #288, #292, #296, #305, and before #263 #249, #253, #255, #256, #257.
+
+#### What the audit does not establish
+
+It reads merged pull requests only. Closed issues, failing corpus entries and regression-test comments since #263 were not audited, so `inventory_complete` stays false. The owner decides whether the scope above, together with the earlier batches, is the complete historical audit.
