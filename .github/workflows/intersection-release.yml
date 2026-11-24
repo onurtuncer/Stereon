@@ -42,3 +42,25 @@ jobs:
         run: cmake --build --preset gcc16-release --target stereon_intersect_tests
       - name: Require complete results for the v0.2 NURBS SSI reference corpus
         run: ./build/gcc16-release/tests/stereon_intersect_tests "[nurbs-ssi-release]" --durations yes
+  ssi-corpus:
+    # ADR-0010's SSI corpus, its >= 500-case gate: every closed-form pair of
+    # analytic-ssi, curved-ssi and nurbs-ssi (both operand orders for the last
+    # two), with the count by suite (tests/intersect/SsiCorpusGateTests.cpp).
+    name: SSI corpus gate, ADR-0010 (GCC 16)
+    runs-on: ubuntu-24.04
+    container: gcc:16.2
+    timeout-minutes: 120
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: "4"
+    steps:
+      - name: Install CMake and Ninja
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends cmake ninja-build
+      - uses: actions/checkout@v7
+      - name: Configure
+        run: cmake --preset gcc16-release
+      - name: Build intersection tests
+        run: cmake --build --preset gcc16-release --target stereon_intersect_tests
+      - name: Run every closed-form case of the SSI corpus
+        run: ./build/gcc16-release/tests/stereon_intersect_tests "[ssi-corpus]" --durations yes

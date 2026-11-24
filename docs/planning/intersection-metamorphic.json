@@ -2862,7 +2862,12 @@
     },
     "curve-surface:Hyperbola:BSplineSurface": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
         "state": "exception reviewed",
@@ -2871,15 +2876,30 @@
         "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Hyperbola:Cone": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
         "state": "exception reviewed",
@@ -2888,15 +2908,30 @@
         "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Hyperbola:Cylinder": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
         "state": "exception reviewed",
@@ -2905,15 +2940,30 @@
         "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Hyperbola:Ellipsoid": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
         "state": "exception reviewed",
@@ -2922,15 +2972,30 @@
         "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Hyperbola:Plane": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
         "state": "exception reviewed",
@@ -2939,15 +3004,30 @@
         "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Hyperbola:Sphere": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
         "state": "exception reviewed",
@@ -2956,15 +3036,30 @@
         "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Hyperbola:Torus": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
         "state": "exception reviewed",
@@ -2973,10 +3068,20 @@
         "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Line:BSplineSurface": {
@@ -3247,7 +3352,12 @@
     },
     "curve-surface:Parabola:BSplineSurface": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
         "state": "exception reviewed",
@@ -3256,15 +3366,30 @@
         "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Parabola:Cone": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
         "state": "exception reviewed",
@@ -3273,15 +3398,30 @@
         "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Parabola:Cylinder": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
         "state": "exception reviewed",
@@ -3290,15 +3430,30 @@
         "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Parabola:Ellipsoid": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
         "state": "exception reviewed",
@@ -3307,15 +3462,30 @@
         "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Parabola:Plane": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
         "state": "exception reviewed",
@@ -3324,15 +3494,30 @@
         "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Parabola:Sphere": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
         "state": "exception reviewed",
@@ -3341,15 +3526,30 @@
         "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "curve-surface:Parabola:Torus": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-01: curve-surface crossings move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
         "state": "exception reviewed",
@@ -3358,10 +3558,20 @@
         "rationale": "docs/planning/intersection-metamorphic-relations-curve-surface.md#MR-02 applies only if reversing the operands is an exposed"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-03: curve-surface crossings scale with the geometry and its resolution",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "test": "tests/intersect/CurveSurfaceRelationTests.cpp#MR-04: curve-surface crossings keep their place in an equivalent curve chart",
+        "oracle": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Fixture change",
+        "replay": "docs/planning/intersection-metamorphic-relations-curve-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "planar:BSplineCurve2d:BSplineCurve2d": {
