@@ -192,7 +192,8 @@ if(STEREON_WITH_OCCT)
     add_executable(stereon_occt_tests occt/GeometryDifferentialTests.cpp
                                       occt/IntersectionDifferentialTests.cpp
                                       occt/OcctRobustnessTests.cpp occt/RobustnessHunt.cpp
-                                      occt/BooleanDifferentialTests.cpp occt/PlanarDifferentialTests.cpp)
+                                      occt/BooleanDifferentialTests.cpp occt/PlanarDifferentialTests.cpp
+                                      occt/CurveSurfaceDifferentialTests.cpp)
     target_link_libraries(stereon_occt_tests
         PRIVATE stereon::intersect stereon::boolean stereon_options Catch2::Catch2WithMain
                 TKernel TKMath TKG2d TKG3d TKGeomBase TKGeomAlgo TKBRep TKTopAlgo TKPrim TKBO)

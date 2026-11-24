@@ -256,7 +256,7 @@ std::vector<std::string> Families()
 
 } // namespace
 
-TEST_CASE("every pair case of the corpus is decided as required", "[intersect][corpus]")
+TEST_CASE("every pair case of the corpus is decided as required", "[intersect][corpus][ssi-corpus]")
 {
     std::size_t count = 0;
     for (const std::string& family : Families()) {
