@@ -101,10 +101,6 @@ constexpr double SeamMergeFactor = 16.0;
 /// Two seam points are apart from one unresolved cell when they are this
 /// many of its diameters apart: the margin over the enclosures' rounding.
 constexpr double SeamSeparationMargin = 2.0;
-/// How near its extreme angle a fold's rounded seam equation counts as at
-/// the fold. It only says which track the seam's exactly decided points
-/// belong to, a tangency or a pair; it never merges a pair by itself.
-constexpr double FoldTouch = 1e-9;
 
 [[nodiscard]] ExactVector<4> ExactAxisOf(const Cylinder& c)
 {
@@ -495,6 +491,9 @@ struct Track {
     /// acos of the configuration's cosines: the arc's ends in σ.
     double AngleLow = 0.0;
     double AngleHigh = 0.0;
+    /// A fold track's parameters on A's chart seam, within its first period
+    /// (PlaceSeamOnA).
+    std::inplace_vector<double, 8> SeamOnA = {};
 };
 
 template <Scalar T>
@@ -813,100 +812,133 @@ void ClipSpan(const Pair& p, const Configuration& c, const Track& k, const Inter
 
 // --- Cuts at the seams --------------------------------------------------
 
-/// The parameters at which a track takes a value: at most six, a loop's
-/// two per period over three periods.
-using Parameters = std::inplace_vector<double, 6>;
+/// How a fold track's angle σ(t) stands against a value: whether the
+/// rounded equation σ(t) = value has two roots on the track, the first of
+/// them, and the end of the track's arc of σ nearest the value with the
+/// distance between them in radians. An arc ends at a fold, where a seam
+/// that touches there is a cut, or at a lobe's node, the track's own ends,
+/// where nothing is cut.
+struct FoldCrossing {
+    bool Inside;
+    double Root;
+    double End;
+    bool EndCuts;
+    double Miss;
+};
 
-/// How a fold track's rounded seam equation stands against the exact number
-/// of the seam's points: no parameter, the fold alone, two parameters, or
-/// two points that the rounded equation cannot tell apart.
-enum class FoldRoots : std::uint8_t { None, Touch, Two, Unresolved };
-
-/// `inside` says the rounded equation has two roots on the track, `atFold`
-/// that it lies within FoldTouch of the fold. A tangent seam touches at
-/// the fold. A seam through two points gives two parameters however near
-/// the fold they are, and is refused where rounding has taken them off the
-/// track: they are distinct, and nothing places them.
-[[nodiscard]] FoldRoots FoldRootsOf(const std::size_t sites, const bool inside, const bool atFold)
+/// A fold-to-fold loop takes the value where cos t = x.
+[[nodiscard]] FoldCrossing LoopCrossingAt(const Track& k, const double target)
 {
-    if (sites == 0 || (!inside && !atFold)) {
-        return FoldRoots::None;
-    }
-    if (sites == 1 && atFold) {
-        return FoldRoots::Touch;
-    }
-    return inside ? FoldRoots::Two : FoldRoots::Unresolved;
+    const double reach = k.Center - k.Mirror * target;
+    const double x = reach / k.Half;
+    const bool inside = std::abs(x) < 1.0;
+    return {inside, inside ? std::acos(x) : 0.0, x > 0.0 ? 0.0 : Pi, true,
+            std::abs(std::abs(reach) - k.Half)};
 }
 
-[[nodiscard]] std::unexpected<KernelError> UnresolvedFold()
+/// A lobe takes the value where 1 - t² = value / (Mirror Fold): at ±1, its
+/// ends, for the node's angle zero, and at the fold for Mirror Fold.
+[[nodiscard]] FoldCrossing LobeCrossingAt(const Track& k, const double target)
 {
-    return Fail(ErrorCode::IntersectionFailed,
-                "CylinderCylinder: A's seam crosses within rounding of a fold, at two points "
-                "that the track's parameter cannot tell apart");
+    const double fold = k.Mirror * k.Fold;
+    const double squared = 1.0 - target / fold;
+    const bool inside = squared > 0.0 && squared <= 1.0;
+    const double fromNode = std::abs(target);
+    const double fromFold = std::abs(target - fold);
+    const bool atNode = fromNode < fromFold;
+    return {inside, inside ? std::sqrt(squared) : 0.0, atNode ? 1.0 : 0.0, !atNode,
+            std::min(fromNode, fromFold)};
 }
 
-/// The parameters of a fold-to-fold loop at which σ takes the value
-/// `target`, over a period of t on either side of the range: where
-/// cos t = x, or at the fold alone where the seam is tangent there.
-[[nodiscard]] Result<Parameters> LoopParametersAt(const Track& k, const double target,
-                                                  const std::size_t sites)
+[[nodiscard]] bool IsFold(const Track& k)
 {
-    const double x = (k.Center - k.Mirror * target) / k.Half;
-    const FoldRoots kind =
-        FoldRootsOf(sites, std::abs(x) < 1.0, std::abs(std::abs(x) - 1.0) <= FoldTouch);
-    if (kind == FoldRoots::None) {
-        return Parameters{};
+    return k.Kind != Track::Shape::Turn;
+}
+
+[[nodiscard]] FoldCrossing CrossingAt(const Track& k, const double target)
+{
+    return k.Kind == Track::Shape::FoldLoop ? LoopCrossingAt(k, target) : LobeCrossingAt(k, target);
+}
+
+/// The two parameters of a crossing inside the track: t and 2 pi - t on a
+/// loop, ±t on a lobe.
+void AddSeamPair(Track& k, const double root)
+{
+    const bool loop = k.Kind == Track::Shape::FoldLoop;
+    if (k.SeamOnA.size() + 2 <= k.SeamOnA.capacity()) {
+        k.SeamOnA.push_back(loop ? root : -root);
+        k.SeamOnA.push_back(loop ? CirclePeriod - root : root);
     }
-    if (kind == FoldRoots::Unresolved) {
-        return UnresolvedFold();
-    }
-    const bool touches = kind == FoldRoots::Touch;
-    const double t0 = touches ? (x > 0.0 ? 0.0 : Pi) : std::acos(x);
-    Parameters roots;
-    for (const double shift : {-CirclePeriod, 0.0, CirclePeriod}) {
-        roots.push_back(t0 + shift);
-        if (!touches) {
-            roots.push_back(CirclePeriod - t0 + shift);
+}
+
+/// The values of σ at which A's angle u = Phi + σ is a multiple of the
+/// period: σ stays within a turn of zero and Phi within one of the chart.
+constexpr std::array<double, 4> SeamTurns{-1.0, 0.0, 1.0, 2.0};
+
+/// A's seam through two points of B crosses the fold tracks at two
+/// parameters, however near a fold: every pair that the rounded equation
+/// places is kept. Where it places none, rounding has taken the two points
+/// off the tracks at a fold: they are distinct, nothing places them, and
+/// the pair is refused rather than answered without them.
+[[nodiscard]] Result<void> PlaceSeamPairs(const Pair& p, Tracks& tracks)
+{
+    bool placed = false;
+    for (Track& k : tracks) {
+        for (const double turn : SeamTurns) {
+            const FoldCrossing at = CrossingAt(k, turn * CirclePeriod - p.Phi);
+            if (at.Inside) {
+                AddSeamPair(k, at.Root);
+                placed = true;
+            }
         }
     }
-    return roots;
+    if (!placed) {
+        return Fail(ErrorCode::IntersectionFailed,
+                    "CylinderCylinder: A's seam crosses within rounding of a fold, at two points "
+                    "that the track's parameter cannot tell apart");
+    }
+    return {};
 }
 
-/// The parameters of a lobe at which σ takes the value `target`: where
-/// 1 - t² = target / (Mirror Fold), or the fold alone where the seam is
-/// tangent there. A seam tangent at the node meets the lobe at its ends.
-[[nodiscard]] Result<Parameters> LobeParametersAt(const Track& k, const double target,
-                                                  const std::size_t sites)
+/// A's seam tangent to B touches the curve at one point, an end of one
+/// track's arc: the end that the rounded equation puts nearest the seam,
+/// on whichever side of it. No distance is asked of it: the tangency is
+/// decided exactly, so one end is the seam's, and the others are farther.
+void PlaceSeamTouch(const Pair& p, Tracks& tracks)
 {
-    const double squared = 1.0 - target / (k.Mirror * k.Fold);
-    const FoldRoots kind =
-        FoldRootsOf(sites, squared > 0.0 && squared <= 1.0, std::abs(squared) <= FoldTouch);
-    switch (kind) {
-    case FoldRoots::None:
-        return Parameters{};
-    case FoldRoots::Unresolved:
-        return UnresolvedFold();
-    case FoldRoots::Touch:
-        return Parameters{0.0};
-    default:
-        return Parameters{-std::sqrt(squared), std::sqrt(squared)};
+    Track* nearest = nullptr;
+    FoldCrossing best{};
+    for (Track& k : tracks) {
+        for (const double turn : SeamTurns) {
+            const FoldCrossing at = CrossingAt(k, turn * CirclePeriod - p.Phi);
+            if (nearest == nullptr || at.Miss < best.Miss) {
+                nearest = &k;
+                best = at;
+            }
+        }
+    }
+    if (nearest != nullptr && best.EndCuts) {
+        nearest->SeamOnA.push_back(best.End);
     }
 }
 
-/// The parameters at which σ(t) takes the value `target`, given the exact
-/// number of points of A's seam; a turn's are its caller's, since there t
-/// is the angle itself.
-[[nodiscard]] Result<Parameters> ParametersAt(const Track& k, const double target,
-                                              const std::size_t sites)
+/// The fold tracks' parameters on A's chart seam. The seam is a line: it
+/// meets B at two points, at one where it is tangent, or at none, decided
+/// exactly on the input doubles (SeamSiteCount), and the rounded equation
+/// of the tracks is held to that count instead of to a threshold. With no
+/// point there is no cut, whatever rounding says of a fold beside the
+/// seam; with one, the cut is the fold alone; with two, both parameters or
+/// a refusal. A turn's cuts are the multiples of the period themselves.
+[[nodiscard]] Result<void> PlaceSeamOnA(const Pair& p, Tracks& tracks)
 {
-    switch (k.Kind) {
-    case Track::Shape::FoldLoop:
-        return LoopParametersAt(k, target, sites);
-    case Track::Shape::FoldLobe:
-        return LobeParametersAt(k, target, sites);
-    default:
-        return Parameters{};
+    if (p.SeamSitesA == 0 || tracks.empty() || !std::ranges::all_of(tracks, IsFold)) {
+        return {};
     }
+    if (p.SeamSitesA == 1) {
+        PlaceSeamTouch(p, tracks);
+        return {};
+    }
+    return PlaceSeamPairs(p, tracks);
 }
 
 /// Adds a cut strictly inside the span.
@@ -918,24 +950,27 @@ void AddCut(const Interval& span, const double t, std::vector<double>& cuts)
 }
 
 /// Where A's angle u = Phi + σ crosses a multiple of the period inside the
-/// span: for a turn, at the multiples themselves.
-[[nodiscard]] Result<void> SeamCutsOnA(const Pair& p, const Track& k, const Interval& span,
-                                       std::vector<double>& cuts)
+/// span: for a turn, at the multiples themselves; for a loop, at its seam
+/// parameters over a period on either side of the range; for a lobe, at
+/// its seam parameters.
+void SeamCutsOnA(const Track& k, const Interval& span, std::vector<double>& cuts)
 {
-    const double first = std::ceil(span.GetLower() / CirclePeriod - 1.0);
-    const double last = std::floor(span.GetUpper() / CirclePeriod + 1.0);
-    for (double n = first; n <= last; n += 1.0) {
-        if (k.Kind == Track::Shape::Turn) {
+    if (k.Kind == Track::Shape::Turn) {
+        const double first = std::ceil(span.GetLower() / CirclePeriod - 1.0);
+        const double last = std::floor(span.GetUpper() / CirclePeriod + 1.0);
+        for (double n = first; n <= last; n += 1.0) {
             AddCut(span, n * CirclePeriod, cuts);
-            continue;
         }
-        STEREON_TRY(const Parameters roots,
-                    ParametersAt(k, n * CirclePeriod - p.Phi, p.SeamSitesA));
-        for (const double t : roots) {
-            AddCut(span, t, cuts);
+        return;
+    }
+    const bool loop = k.Kind == Track::Shape::FoldLoop;
+    for (const double t : k.SeamOnA) {
+        AddCut(span, t, cuts);
+        if (loop) {
+            AddCut(span, t - CirclePeriod, cuts);
+            AddCut(span, t + CirclePeriod, cuts);
         }
     }
-    return {};
 }
 
 /// (P(t) - O_B) . Y_B: zero with (P(t) - O_B) . X_B positive where B's
@@ -1205,7 +1240,7 @@ void JoinEnd(std::vector<double>& distinct, const double end)
                                                      const Track& k, const Interval& span)
 {
     std::vector<double> cuts;
-    STEREON_TRY_VOID(SeamCutsOnA(p, k, span, cuts));
+    SeamCutsOnA(k, span, cuts);
     STEREON_TRY_VOID(SeamCutsOnB(p, c, k, span, cuts));
     std::ranges::sort(cuts);
     const auto repeats = std::ranges::unique(cuts);
@@ -1260,32 +1295,58 @@ struct Samples {
     std::vector<Point2> OnB;
 };
 
-/// A's angles into [0, 2 pi]: the piece crosses no seam inside, so the
-/// shift of a whole number of periods that brings its middle sample into
-/// the chart brings every sample, and the ends, which may lie on the seam
-/// to rounding, are clamped onto it.
+/// A's angles into [0, 2 pi]: the piece crosses no seam inside, so one
+/// shift of a whole number of periods brings every sample into the chart.
+/// It is read from the sample farthest from a seam: one on a seam to
+/// rounding, an end or a fold beside a seam that the curve does not reach,
+/// could fall on either side of it. Those are clamped onto the seam.
 void ChartOnA(std::vector<Point2>& onA)
 {
-    const double shift = CirclePeriod * std::floor(onA[onA.size() / 2].X / CirclePeriod);
+    double shift = 0.0;
+    double clear = -1.0;
+    for (const Point2& uv : onA) {
+        const double turn = CirclePeriod * std::floor(uv.X / CirclePeriod);
+        const double fromSeam = std::min(uv.X - turn, turn + CirclePeriod - uv.X);
+        if (fromSeam > clear) {
+            clear = fromSeam;
+            shift = turn;
+        }
+    }
     for (Point2& uv : onA) {
         uv.X = std::clamp(uv.X - shift, 0.0, CirclePeriod);
     }
 }
 
 /// B's angles, each wrapped into [0, 2 pi) on its own, into one chart: the
-/// piece crosses no seam inside, so only an end sample at the seam can have
-/// wrapped to the other side of it; it joins its neighbour's side.
+/// piece crosses no seam inside, so only a sample on the seam to rounding
+/// can have wrapped to the other side of it: an end, or a point where the
+/// curve comes within rounding of a seam that it does not cross. From the
+/// sample farthest from the seam, each joins its neighbour's side in turn,
+/// and what rounding leaves past the seam is clamped onto it.
 void ChartOnB(std::vector<Point2>& onB)
 {
-    const auto join = [](Point2& end, const Point2& neighbour) {
-        if (end.X - neighbour.X > Pi) {
-            end.X -= CirclePeriod;
-        } else if (neighbour.X - end.X > Pi) {
-            end.X += CirclePeriod;
+    std::size_t anchor = 0;
+    double clear = -1.0;
+    for (std::size_t i = 0; i < onB.size(); ++i) {
+        const double fromSeam = std::min(onB[i].X, CirclePeriod - onB[i].X);
+        if (fromSeam > clear) {
+            clear = fromSeam;
+            anchor = i;
+        }
+    }
+    const auto join = [](Point2& sample, const Point2& neighbour) {
+        if (sample.X - neighbour.X > Pi) {
+            sample.X -= CirclePeriod;
+        } else if (neighbour.X - sample.X > Pi) {
+            sample.X += CirclePeriod;
         }
     };
-    join(onB.front(), onB[1]);
-    join(onB.back(), onB[onB.size() - 2]);
+    for (std::size_t i = anchor; i-- > 0;) {
+        join(onB[i], onB[i + 1]);
+    }
+    for (std::size_t i = anchor + 1; i < onB.size(); ++i) {
+        join(onB[i], onB[i - 1]);
+    }
     for (Point2& uv : onB) {
         uv.X = std::clamp(uv.X, 0.0, CirclePeriod);
     }
@@ -1468,7 +1529,9 @@ SkewWith(const Surface& a, const Box2& boxA, const Surface& b, const Box2& boxB,
         STEREON_TRY_VOID(AddPoint(result, p, boxA, boxB));
         return result;
     }
-    for (const Track& k : TracksOf(c, p)) {
+    Tracks tracks = TracksOf(c, p);
+    STEREON_TRY_VOID(PlaceSeamOnA(p, tracks));
+    for (const Track& k : tracks) {
         STEREON_TRY_VOID(AddTrack(result, p, c, k, boxA, boxB, ctx));
     }
     return result;
