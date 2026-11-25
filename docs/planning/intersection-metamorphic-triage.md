@@ -230,6 +230,79 @@ The evidence that the new contract holds:
 - **MR-01, MR-03 and MR-04 on Line:Line:** the curve-curve relation tests of #275 (`tests/intersect/CurveCorpusRelationTests.cpp`, https://github.com/onurtuncer/Stereon/pull/275). They run the line-line cases under exact rotations and translation, power-of-two scales with the resolution scaled, and a line chart change.
 - **#239's documented residual is closed.** The residual: nearly parallel segments touching end to end, whose supports' closest approach lies past both ends, met as lines but were missed as splines. PR-241 (`51a2795`) closed it with the spline boundary-minimum search. Its tests "nearly parallel segments touching end to end meet as lines and as splines" (`LineLineTests.cpp`) and "nearly parallel splines touching end to end meet at the ends" (`SplineCurvePairTests.cpp`) pass on this branch. With PR-241's campaign fault applied (`SearchEnds` disabled for non-empty searches), both fail in each of two runs. So that repair is what closes the residual, and no open defect remains from it.
 
+## Batch 3: the open records of #305
+
+- **Date:** 2026-11-22
+- **Branch:** `verify/metamorphic-defects`, on `main` 898ed69
+- **Reviewer and meaning of "verified":** as for batches 1 and 2: this agent's documented review, with the owner's review still pending.
+- **Toolchain:** the shared disk was full during this work, so no local build was made. The red and green evidence is the pull request's native CI: the *Intersection metamorphic evidence* workflow (`tools/mutate.py` over every `intersection-backfill*.json`, GCC 16.2 on Linux, `gcc16-debug`), and the Linux, Windows and macOS CTest runs.
+
+At #305 the ledger held four open defect records: `SSI-translated-boundary` (`untriaged`, although #279 repaired it), `AUDIT-20261112-cone-polish` and `AUDIT-20261113-narrow-sphere-seam` (`MR implemented` by #286, with no replayable red), and `CI-272-ellipse-plane` (`fixture captured`). Each now has a metamorphic regression named "MR <ID> ..." in `tests/intersect/MetamorphicRegressionTests.cpp` and a fault reintroduction that CI replays. Every fixture is deterministic; there is no random seed.
+
+#### SSI-translated-boundary
+
+- **Defect:** far from the origin the generic SSI refused (`IntersectionFailed`) a pair of B-spline surfaces that it answers at the origin, near a branch's end on the domain's boundary. There were two root causes, both repaired in #279 (`0965d8aa4335210199404d6d01f2412bac218e5b`):
+  - *search-shift:* the patches' interval poles widen with the coordinates, while Krawczyk's acceptance of a root is measured in parameters. The search now runs on the surfaces moved exactly about the origin (`ShiftOf`).
+  - *edge-halving:* a root just outside the other patch's cell left the operator undecided on a whole edge. An undecided edge is now halved, up to `EdgeHalvings` = 8 times.
+- **Original red:** #279's description: on the base revision, refused at the shift (64, 0, 0) and beyond.
+- **Direct regression:** "SSI-translated-boundary: far translations answer as at the origin" (`GenericSSITranslationTests.cpp`).
+- **Metamorphic regression:** "MR SSI-translated-boundary far hyperbola branches end on the domain's sides". The same closed-form pair: 2x'^2 - 3y'^2 against the bowl x'^2 + y'^2 + 1/100, meeting where x'^2 - 4y'^2 = 1/100.
+  - MR-01: the shifts (64, 0, 0) and (480000, -300000, 210000), with the identity and the cyclic turns of the axes.
+  - MR-02: both orders.
+  - MR-03: scale 4 with the tolerance and context.
+  - MR-04: the first surface's u reversed.
+- **Oracle:** the closed form above, checked on every branch sample in the surfaces' local coordinates. Also checked independently: each branch has both ends on one side of the unit square, x = 0 or x = 1, at |y'| = sqrt(0.06). That makes the boundary roots part of the claim.
+- **Faults:** `tools/mutation/intersection-backfill-ssi-translated-boundary.json`, one per root cause: the shift forced to zero, and `EdgeHalvings` set to 0.
+
+#### AUDIT-20261112-cone-polish
+
+- **Defect:** a line's crossing of a cone was polished at origin + t direction, rounded twice. When a far origin cancels t direction, that loses the small offset, and near a generator the root's correction magnifies the loss. Found by CI seed 17298607298449989786 (Actions run 43251352135). Repaired in #286 (`76eb218f62b8828fc4dfe4ce50ed335491d91ac5`, `std::fma` in `PolishedOnCone`).
+- **Direct regression:** "MR audit cone crossings retain their positions after an exact origin shift" (`LineRevolutionTests.cpp`).
+- **Metamorphic regression:** "MR AUDIT-20261112-cone-polish far line origin keeps cone crossings". The shrunk seed's dyadic line and right cone.
+  - MR-04: the line's origin moved back 2^19 directions.
+  - MR-01: the three exact turns of the axes (identity and two cyclic), each with and without the translation (8, -4, 2).
+- **Oracle:** the ideal cone's roots -191 ± 60 sqrt(10), computed independently of the kernel. Each point must also lie on the actual rounded cone's support in its own frame, and the parameters must differ by exactly 2^19.
+- **Fault:** the `std::fma` point replaced by `Eval(line, t)`, the pre-repair code.
+
+#### AUDIT-20261113-narrow-sphere-seam
+
+- **Defect:** a plane's section of a sphere crossed the sphere's seam twice between adjacent samples of the trace's first scan. The fit clamped the excursion to the seam and never certified, so the trace failed with the sample budget. Found by coverage seed 13593231413355092879 (Actions run 43300991832, job 131471814362). Repaired in #286 (`SampleCuts` in `FitCertified`).
+- **Direct regression:** "MR audit narrow sphere seam excursions remain complete certified circles" (`ImplicitTraceTests.cpp`). The audit record observed that this test fails without the repair, with the original sample-budget error. The observation was made before a workspace reset and was not replayed.
+- **Metamorphic regression:** "MR AUDIT-20261113-narrow-sphere-seam plane section stays one whole circle". The shrunk seed's sphere and plane.
+  - MR-01: a cyclic turn of the axes and the translation (8, -4, 2).
+  - MR-02: both orders.
+  - MR-03: scale 2 with the context.
+  - MR-04: the sphere's chart turned a quarter about its axis.
+- **Oracle:** the section's closed form. The circle lies in the plane, about the foot of the centre, with radius sqrt(1 - (5/8)^2). Every sample must be on it, the branches must sweep exactly one turn, and they must make one connected curve. Each branch must also be certified, and its pcurves must lie on both surfaces.
+- **Fault:** the seam cuts found by the fitting samples are ignored (`if (false && !cuts.empty())`).
+
+#### CI-272-ellipse-plane
+
+- **Defect:** a conic is searched in quarter-turn arcs. A crossing exactly on a cut or on the seam was seen undecided from both arcs and refused: "unresolved root existence or multiplicity". Found by RapidCheck seed 17041817369036985825 (macOS Actions run 43273260370; [replay](ellipse-plane-ci-replay.md)). Repaired in #300 (`e8080c8aeb5490f6622f11ab52c68b885916fafd`): `ConicRootsOf` searches again with the cuts moved.
+- **Direct regression:** "MR macOS ellipse plane shrunk linearization fixture resolves" (`EllipsePlaneReplayTests.cpp`).
+- **Metamorphic regression:** "MR CI-272-ellipse-plane crossings on the seam and a cut are decided". The shrunk ellipse and the plane through its centre.
+  - MR-01: the three exact turns of the axes, each with and without the translation (8, -4, 2).
+  - MR-03: scales 1/4, 1 and 4, with the context.
+  - MR-04: the ellipse reversed, and its frame turned half (t' = t - pi).
+- **Oracle:** the plane's equation on the ellipse is b sin(phi) sin(t) = 0. So there are two transverse crossings, at centre ± a x, independently of the kernel. Every reported point must be decided, crossing, inside the curve's domain, on the curve and on the plane, at one of those two points, and both points must be reported.
+- **Fault:** the second search disabled (`if (false && !AllDecided(found))`).
+
+#### Batch 3 fault replay
+
+- **Command (CI):** `python3 tools/mutate.py --catalogue tools/mutation/intersection-backfill*.json --work build/metamorphic`. This is the *Intersection metamorphic evidence* workflow on this pull request.
+- **Run:** [#330's *Eight historical faults (GCC 16)* job](https://github.com/onurtuncer/Stereon/actions/runs/45064572675/job/137337734813), at `07780ba` (main 898ed69 with test-only changes), `gcc:16.2` container, `gcc16-debug`.
+- **Baseline:** green; every selected test passed before any fault was applied.
+- **Red:** killed in both runs by the named MR test, with the declared diagnostic found:
+  - `AUDIT-20261112-cone-polish`;
+  - `AUDIT-20261113-narrow-sphere-seam`;
+  - `CI-272-ellipse-plane`;
+  - `SSI-translated-boundary-search-shift`.
+
+  The 24 earlier faults were killed in the same run too (score 28 / 29).
+- **Survived:** `SSI-translated-boundary-edge-halving` (`EdgeHalvings` = 0). The MR test still passes without the halving, as long as the shift is kept. Like PR-159's `BisectSeam` candidate, this root cause is not observable alone with these fixtures. It was removed from the catalogue, so that the workflow tests only faults some test detects, and it is recorded here. No test was loosened. So the record stays `MR implemented`: its second root cause has no red evidence. Closing it needs a fixture that needs the halving with the shift in place (owner or SSI agent).
+- **Green:** the same tests passed in every CTest job of #330: [Linux `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45064572641/job/137337734757), [Linux `gcc16-asan`](https://github.com/onurtuncer/Stereon/actions/runs/45064572641/job/137337735042), [Windows `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45064572891/job/137337735813), [Windows `gcc16-windows`](https://github.com/onurtuncer/Stereon/actions/runs/45064572891/job/137337735659), [macOS `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45064572663/job/137337734763) and [coverage](https://github.com/onurtuncer/Stereon/actions/runs/45064572648/job/137337734570).
+- **Review:** this agent's review of the fixtures, oracles and runs above. On it, `AUDIT-20261112-cone-polish`, `AUDIT-20261113-narrow-sphere-seam` and `CI-272-ellipse-plane` are `verified`. The owner's review is pending.
+
 ## Inventory audit after #263
 
 - **Date:** 2026-11-22
