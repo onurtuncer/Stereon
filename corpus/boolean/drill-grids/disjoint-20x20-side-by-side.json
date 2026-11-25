@@ -1,0 +1,60 @@
+{
+  "format": "stereon-corpus-case/1",
+  "id": "boolean/drill-grids/disjoint-20x20-side-by-side",
+  "kind": "regression",
+  "summary": "Two disjoint 20 by 20 drill grids side by side, the second moved by 200 in x, united; the operands do not touch.",
+  "added": "2026-11-23",
+  "source": "Issue #160, found building a large-against-large fixture for the Boolean broad phase",
+  "licence": "MPL-2.0",
+  "references": [
+    "ADR-0007",
+    "ADR-0029"
+  ],
+  "tags": [
+    "issue160",
+    "disjoint",
+    "large"
+  ],
+  "inputs": {
+    "operands": [
+      {
+        "name": "A",
+        "type": "drill-grid",
+        "n": 20,
+        "offset": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "name": "B",
+        "type": "drill-grid",
+        "n": 20,
+        "offset": [
+          200.0,
+          0.0,
+          0.0
+        ]
+      }
+    ]
+  },
+  "operation": {
+    "name": "union",
+    "operands": [
+      "A",
+      "B"
+    ]
+  },
+  "expected": {
+    "solids": 800,
+    "faces": 2400,
+    "valid": true
+  },
+  "found": {
+    "commit": "6177bc0",
+    "issue": 160,
+    "observed": "Boolean: whether the shell of 3 faces bounds a solid or a void is not settled from any of them",
+    "fixed_by": "#319"
+  }
+}

@@ -53,11 +53,7 @@ LINEAR = [0.0, 0.0, 1.0, 1.0]
 CUBIC = [0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]
 
 TANGENT_REASON = "a tangency along a curve or at a point of rational surfaces; the generic path fails closed on it"
-NODE_REASON = ("two branches cross at a node of rational surfaces; the generic path fails closed at "
-               "a branch point it cannot prove a transverse node of polynomial surfaces")
 COINCIDENT_REASON = "the surfaces coincide within the tolerance; the generic path fails closed on an overlap"
-FAR_REASON = ("far from the origin the transverse search can refuse near a branch's end on the "
-              "domain's boundary (open defect SSI-translated-boundary)")
 TINY_REASON = "a loop a few thousandths of the patch across; subdivision may exhaust its budget first"
 
 
@@ -157,8 +153,7 @@ def saddle_plane():
                witnesses=[(1.0, c, c), (c, 1.0, c), (-1.0, -c, c), (-c, -1.0, c), (0.75, c / 0.75, c)]),
         # x y = 0: two lines crossing at a transverse node of polynomial
         # surfaces, which the generic path splits there.
-        regime("node", saddle(), flat(0.0), curves=1, witnesses=[(0.5, 0.0, 0.0), (0.0, -0.5, 0.0)],
-               hard_far=FAR_REASON),
+        regime("node", saddle(), flat(0.0), curves=1, witnesses=[(0.5, 0.0, 0.0), (0.0, -0.5, 0.0)]),
     ]
 
 
@@ -211,7 +206,7 @@ def cylinder_cylinder():
         regime("two-loops", small, cylinder_x((0.0, 0.0, 0.0), 2.0, 3.0), curves=2,
                witnesses=[(0.0, 1.0, math.sqrt(3.0)), (0.0, 1.0, -math.sqrt(3.0))]),
         regime("node", small, cylinder_x((0.0, 0.0, 0.0), 1.0, 3.0), curves=1,
-               witnesses=[(0.0, 1.0, 0.0), (1.0, 0.0, 1.0)], hard=NODE_REASON),
+               witnesses=[(0.0, 1.0, 0.0), (1.0, 0.0, 1.0)]),
     ]
 
 

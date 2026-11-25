@@ -1,0 +1,53 @@
+{
+  "format": "stereon-corpus-case/1",
+  "id": "boolean/drill-grids/level-caps-3x3-one-column",
+  "kind": "hard",
+  "summary": "Issue #160's level-cap overlap reduced to 3 by 3 grids, the second moved by (21, 0, 0).",
+  "added": "2026-11-23",
+  "source": "Reduced from issue #160 for the routine CI matrix",
+  "licence": "MPL-2.0",
+  "references": [
+    "ADR-0007",
+    "ADR-0029"
+  ],
+  "tags": [
+    "issue160",
+    "overlap",
+    "level-caps"
+  ],
+  "inputs": {
+    "operands": [
+      {
+        "name": "A",
+        "type": "drill-grid",
+        "n": 3,
+        "offset": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "name": "B",
+        "type": "drill-grid",
+        "n": 3,
+        "offset": [
+          21.0,
+          0.0,
+          0.0
+        ]
+      }
+    ]
+  },
+  "operation": {
+    "name": "union",
+    "operands": [
+      "A",
+      "B"
+    ]
+  },
+  "expected": {
+    "solids": 15,
+    "valid": true
+  }
+}
