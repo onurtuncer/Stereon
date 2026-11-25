@@ -1822,9 +1822,121 @@ the quotient rule on :math:`P = H / W`:
 
 the weight proved positive; the projections' hulls are those of the
 Cartesian poles. For polynomial patches these are the nets' own enclosures.
-A node on a knot line or on a closed surface's seam, where no single Bézier
-cell of each surface holds it inside (as in the corpus's crossing
-cylinders), still fails closed.
+
+*A transverse node on a knot line or a seam.* A node whose parameters lie on
+a knot line of either surface, where two knot lines cross, or on the seam
+where a chart closes, is inside no single Bézier patch: the patches around it
+meet there (in the corpus's crossing cylinders, one node is on a knot line of
+one cylinder and on the seam of the other). Across such a line the surface
+need not be smooth in its parameters, and a crease there cannot be proved
+absent: a full turn of a rational quadratic circle, its middle weights rounded
+to doubles, has one of a few roundings at each double knot. The proof
+therefore allows a crease and a gap, and is tolerant where the proof inside a
+cell is exact.
+
+Each surface is taken as a *chart* of one, two or four clipped Bézier pieces
+around a *corner*, :math:`c_S` and :math:`c_C`, a point of the knot line,
+crossing or seam that all of a chart's pieces share; the pieces tile a box,
+:math:`R` for :math:`S`. A piece beyond a seam is relabelled to continue the
+chart, which is sound because the chart is first proved closed on the input
+doubles: clamped knots and the same first and last lines of poles and
+weights. Then, in interval arithmetic:
+
+1. *Coordinates and containment*, as inside a cell: the hull of the pieces'
+   enclosures of :math:`D_q` is regular, so by the mean value theorem along a
+   segment, piece by piece, :math:`C` is a graph over its whole box; the
+   projection of :math:`S` misses that of the box's outer edges; and
+   :math:`S`'s corner projects into the box, by the Poincaré–Miranda theorem
+   on the preconditioned projection. The height :math:`h` is then defined
+   and continuous on :math:`R`, and smooth where :math:`s` and the point
+   :math:`c'(s)` of :math:`C` below it stay in one piece each.
+2. *A model of the height.* For :math:`s` in a piece :math:`i` of :math:`S`
+   with :math:`c'(s)` in a piece :math:`k` of :math:`C`, the gradient of
+   :math:`h` is :math:`\Phi(s, c') = (\nu \cdot \partial_u S, \nu \cdot
+   \partial_v S)`. :math:`\Phi` and :math:`E = e \cdot (S - C)` are smooth on
+   the product of the two pieces' boxes, a convex box with the corners
+   :math:`(c_S, c_C)` in its closure, so by the mean value theorem there,
+   with :math:`E = 0` at :math:`(s, c'(s))`,
+
+   .. math::
+
+      \nabla h(s) \in G + H (s - c_S), \qquad
+      G = \Phi(c_S, c_C) - D_p^{\mathsf T} \nabla^2 g \, E(c_S, c_C),
+
+   :math:`H` the Hessian's enclosure of the proof inside a cell. Both are
+   enclosed on each pair of pieces from that pair's own jets (two pieces
+   whose parameters run at different speeds have different Hessians) and the
+   hull taken over the pairs. :math:`G` holds the residuals at the corners:
+   rounding, a crease, a node a little off the line. :math:`h(c_S)` is
+   enclosed the same way.
+3. *A box given up.* Around :math:`c_S` a box :math:`D` is left unproved,
+   but for one thing: the model bounds :math:`|h|` over it by half the pair
+   tolerance, so the surfaces are within the tolerance of each other all
+   over it. :math:`D` is the smallest of a ladder of boxes, from
+   :math:`2^{-24}` to an eighth of the chart, on which the facts below hold;
+   a gap :math:`g` between the surfaces needs one about
+   :math:`\sqrt{g / \kappa}` wide, :math:`\kappa` the relative curvature.
+4. *Nothing else outside it.* For every :math:`s` in :math:`R` outside
+   :math:`D` and every gradient :math:`\gamma` that :math:`h` has there, one
+   per pair of pieces meeting at :math:`s`,
+   :math:`(s - c_S)^{\mathsf T} M J \gamma > 0`, with :math:`M` as inside a
+   cell: in coordinates scaled to :math:`D` the quadratic part is at least
+   :math:`\lambda |y|^2`, :math:`\lambda \ge \det / \operatorname{tr}` of the
+   scaled symmetric part of :math:`M J H`, and the residual at most
+   :math:`|w| |y|`, and :math:`\lambda > |w|` is proved. Zero is then outside
+   the generalized gradient of :math:`h`, so its zero set is a Lipschitz
+   curve through each of its points (Clarke's implicit function theorem),
+   along which :math:`Q(s) = (s - c_S)^{\mathsf T} M (s - c_S)` is strictly
+   monotone: no closed loop, no arc returning to its start.
+5. *Four sectors.* Along two directions :math:`e` on which
+   :math:`e^{\mathsf T} H e` is proved positive and negative, :math:`h` has no
+   zero on the four rays from :math:`c_S` outside :math:`D`: its derivative
+   along a ray is in :math:`e \cdot G + t\, e^{\mathsf T} H e`, of one sign
+   from :math:`D` on, and :math:`h` has that sign where the ray leaves
+   :math:`D`. The rays cut :math:`R` less :math:`D` into four sectors,
+   :math:`h` changing sign across each.
+6. *Counting.* :math:`h` has exactly four zeros on :math:`D`'s boundary,
+   counted on the model (between two places where its sign is proved, across
+   a stretch on which its derivative keeps one sign, one zero if the signs
+   differ and none if they agree), and exactly four on :math:`R`'s, each
+   isolated by Krawczyk's operator as a root of an outer edge of a piece of
+   :math:`S` on the part of a piece of :math:`C` that the mean value theorem
+   leaves it. Each sector's stretch of either boundary holds an odd number,
+   so one each.
+
+In each sector the zero set is therefore one arc, from :math:`D`'s boundary
+to :math:`R`'s. The node is reported as the shared end of the four branches
+through the four roots on :math:`R`, each on the pieces its root lies on,
+with its pcurves in those pieces' parameters (the node's own on a seam
+differ by the chart's period from one branch to the next). What the
+intersection does over :math:`D` is not told apart from a crossing: a crease
+or a gap within the tolerance is a node, and one beyond it is not (a crease
+of slope :math:`2^{-7}` through a node, where two branches touch instead of
+crossing, fails closed; one of :math:`2^{-39}` is a node).
+
+The node is settled once. The first pair of patches whose own search finds
+a candidate for it (Newton's method in doubles on the critical point's
+system, a guess that proves nothing; a candidate within :math:`2^{-10}` of a
+patch's side, or just beyond it, counts as on it) lays the charts across the
+lines it lies on, sized by the Bézier patches and narrowed until the proof
+holds, and records the product of the two charts' boxes as a settled region.
+A region is recorded only where the search has found nothing yet: no arc of a
+pair of patches sharing area with it, and no earlier region; otherwise a
+narrower chart is tried. Every pair of patches met afterwards that shares
+area with a region is cut along its sides, the parts inside dropped and the
+rest searched. Both charts are taken in coordinates about the node, and the
+frame's first axis along :math:`\partial_u C` there: the quotient rule's
+enclosures widen with the coordinates' size, and a Jacobian's box in a frame
+turned about the normal wraps it, which on the corpus's tilted cylinders
+left regions so small that the search around them ran out of its budget.
+
+Not covered, and failing closed: a node near a knot line but not within the
+box given up around it, where the proof inside a cell has too little room
+(with a knot line :math:`2^k` of a unit patch beside a node of two
+biquadratics and a tolerance of :math:`10^{-6}`, :math:`k \le -20` and
+:math:`k \ge -12` are answered and :math:`k = -14, -16` refused); a node on
+a cut of the requested domain or on an end that does not close; a seam whose
+two ends differ in the doubles; and every higher-order singularity.
 
 The node is proved within the pair tolerance of both surfaces, not on them: a
 gap within the tolerance (ADR-0050) is not told apart from a crossing, so two
@@ -1840,9 +1952,9 @@ surface's domain.
 
 Whatever cannot be settled fails: a tangency along a curve, an isolated touch,
 a branch point not proved a transverse node (a degenerate Hessian, as where
-three branches cross; a node on a line between
-Bézier patches, where no centred pair fits; a node whose gap the tolerance does
-not admit), an overlap, any tangency of rational surfaces, and a search past
+three branches cross; a node on a knot line or seam with a crease or a gap
+beyond the tolerance; a node whose gap the tolerance does not admit), an
+overlap, any tangency of rational surfaces, and a search past
 its budget of :math:`2^{14}` pairs return ``IntersectionFailed``, naming the
 patches, never a partial or an unproved empty result
 (``src/intersect/GenericSSI.cpp``; nodes in

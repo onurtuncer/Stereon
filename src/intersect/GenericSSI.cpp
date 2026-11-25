@@ -57,7 +57,9 @@ import Stereon.Robust;
 ///   the tolerance, around which a Lyapunov function proved on the Hessian's
 ///   enclosure rules out every other piece of the intersection, so that the
 ///   four roots on the pair's boundary are the ends of the four
-///   half-branches leaving it (see "Branch points" below).
+///   half-branches leaving it (see "Branch points" below). One on a knot
+///   line or seam, in no single patch, is settled on the patches around it
+///   together, once (SeamNode.hpp).
 ///
 /// Arcs join at shared seeds into branches, every free end on a boundary of
 /// the domains or at a node, where four branches end. Each arc is marched by Newton's method on S_A
@@ -67,10 +69,10 @@ import Stereon.Robust;
 ///
 /// What cannot be settled fails, never a partial or an unproved empty result:
 /// a tangency along a curve, a branch point that is not a proved transverse
-/// node (a higher-order singularity, a node on a knot line or seam between
-/// Bezier patches), an overlap, and any other tangency of rational surfaces,
-/// at the smallest pair, IntersectionFailed; a search past its budget, the
-/// same.
+/// node (a higher-order singularity, a node on a knot line or seam with a
+/// crease or a gap beyond the tolerance), an overlap, and any other tangency
+/// of rational surfaces, at the smallest pair, IntersectionFailed; a search
+/// past its budget, the same.
 namespace Stereon::Detail {
 namespace {
 
@@ -697,17 +699,40 @@ struct Arc {
     Box2 BoxB;
 };
 
+/// The part of the search a node on a knot line or seam has settled: every
+/// pair of a box of A's parameters with one of B's (see "Branch points on
+/// knot lines and seams").
+struct NodeRegion {
+    std::vector<Box2> OnA;
+    std::vector<Box2> OnB;
+};
+
 struct Findings {
     std::vector<Arc> Arcs;
     std::vector<IntersectionPoint> Touches;
     /// Proved transverse nodes, where four arcs end.
     std::vector<Point3> Nodes;
+    /// What the nodes on knot lines and seams have settled.
+    std::vector<NodeRegion> Regions;
+};
+
+/// A surface's Bezier patches over the searched domain, its own domain, and
+/// whether its chart is proved closed along each direction (ClosesAlong).
+struct Atlas {
+    std::vector<Patch> Patches;
+    Box2 Domain;
+    bool ClosedU = false;
+    bool ClosedV = false;
 };
 
 struct SearchSettings {
     double Tolerance;
     double Join;
     bool Polynomial;
+    /// The patches a node on a knot line or seam is settled across; without
+    /// them such a node fails closed.
+    const Atlas* OnA = nullptr;
+    const Atlas* OnB = nullptr;
 };
 
 [[nodiscard]] std::string Describe(const Box2& b)
@@ -1112,9 +1137,8 @@ struct NodeSystem {
 
 /// The inverse of C's projection Jacobian Dq, enclosed over C's box: each
 /// entry an adjugate entry over the determinant, which excludes zero.
-[[nodiscard]] std::optional<Matrix2> InverseProjection(const NodeSystem& sys)
+[[nodiscard]] std::optional<Matrix2> InverseOf(const Matrix2& dq)
 {
-    const Matrix2 dq = ProjectedJacobian(sys.Frame, sys.OverC.Pu, sys.OverC.Pv);
     const Interval det = dq[0][0] * dq[1][1] - dq[0][1] * dq[1][0];
     if (!ExcludesZero(det)) {
         return std::nullopt;
@@ -1122,45 +1146,85 @@ struct NodeSystem {
     return Matrix2{{{dq[1][1] / det, -dq[0][1] / det}, {-dq[1][0] / det, dq[0][0] / det}}};
 }
 
-/// Fact 4's enclosure of the Hessian of S's height over C, on S's box.
-[[nodiscard]] Matrix2 HeightHessian(const NodeSystem& sys, const Matrix2& inverse)
+[[nodiscard]] std::optional<Matrix2> InverseProjection(const NodeSystem& sys)
 {
-    const NodeFrame& f = sys.Frame;
-    // G = Dq^-T (n . C_u, n . C_v), the gradient of C's graph.
-    const Interval w1 = DotOf(f.N, sys.OverC.Pu);
-    const Interval w2 = DotOf(f.N, sys.OverC.Pv);
+    return InverseOf(ProjectedJacobian(sys.Frame, sys.OverC.Pu, sys.OverC.Pv));
+}
+
+/// nu = n - G1 e1 - G2 e2 for G = Dq^-T (n . C_u, n . C_v), the gradient of
+/// C's graph: the frame's normal less its slope, across C's tangent plane.
+[[nodiscard]] Bounds CoNormal(const NodeFrame& f, const Matrix2& inverse, const Jet& c)
+{
+    const Interval w1 = DotOf(f.N, c.Pu);
+    const Interval w2 = DotOf(f.N, c.Pv);
     const Interval g1 = inverse[0][0] * w1 + inverse[1][0] * w2;
     const Interval g2 = inverse[0][1] * w1 + inverse[1][1] * w2;
-    const Bounds nu{f.N[0] - g1 * f.E1[0] - g2 * f.E2[0], f.N[1] - g1 * f.E1[1] - g2 * f.E2[1],
-                    f.N[2] - g1 * f.E1[2] - g2 * f.E2[2]};
-    const auto second = [&](const Jet& j) {
-        return Matrix2{
-            {{DotOf(nu, j.Puu), DotOf(nu, j.Puv)}, {DotOf(nu, j.Puv), DotOf(nu, j.Pvv)}}};
-    };
-    const Matrix2 graph = Times(Transposed(inverse), Times(second(sys.OverC), inverse));
-    const Matrix2 dp = ProjectedJacobian(f, sys.OverS.Pu, sys.OverS.Pv);
+    return {f.N[0] - g1 * f.E1[0] - g2 * f.E2[0], f.N[1] - g1 * f.E1[1] - g2 * f.E2[1],
+            f.N[2] - g1 * f.E1[2] - g2 * f.E2[2]};
+}
+
+/// [nu . P_jk], a jet's second partials along nu.
+[[nodiscard]] Matrix2 SecondAlong(const Bounds& nu, const Jet& j)
+{
+    return Matrix2{{{DotOf(nu, j.Puu), DotOf(nu, j.Puv)}, {DotOf(nu, j.Puv), DotOf(nu, j.Pvv)}}};
+}
+
+/// The Hessian of C's graph, Dq^-T [nu . C_jk] Dq^-1.
+[[nodiscard]] Matrix2 GraphHessian(const Bounds& nu, const Jet& c, const Matrix2& inverse)
+{
+    return Times(Transposed(inverse), Times(SecondAlong(nu, c), inverse));
+}
+
+/// The Hessian of the height of a surface with jet s over the graph of one
+/// with jet c, Dq^-1 enclosed in `inverse`.
+[[nodiscard]] Matrix2 HeightHessianOf(const NodeFrame& f, const Jet& s, const Jet& c,
+                                      const Matrix2& inverse)
+{
+    const Bounds nu = CoNormal(f, inverse, c);
+    const Matrix2 graph = GraphHessian(nu, c, inverse);
+    const Matrix2 dp = ProjectedJacobian(f, s.Pu, s.Pv);
     const Matrix2 pulled = Times(Transposed(dp), Times(graph, dp));
-    const Matrix2 own = second(sys.OverS);
+    const Matrix2 own = SecondAlong(nu, s);
     return Matrix2{{{own[0][0] - pulled[0][0], own[0][1] - pulled[0][1]},
                     {own[1][0] - pulled[1][0], own[1][1] - pulled[1][1]}}};
 }
 
-/// Fact 4's Lyapunov test: sym(M J H) positive definite over the enclosure.
-[[nodiscard]] bool LevelCurvesLeave(const Matrix2& h)
+/// Fact 4's enclosure of the Hessian of S's height over C, on S's box.
+[[nodiscard]] Matrix2 HeightHessian(const NodeSystem& sys, const Matrix2& inverse)
+{
+    return HeightHessianOf(sys.Frame, sys.OverS, sys.OverC, inverse);
+}
+
+/// Fact 4's Lyapunov function Q(x) = x^T M x and the symmetric part of
+/// P = M J H over the Hessian's enclosure: its diagonal and off-diagonal.
+struct Lyapunov {
+    Matrix2 M;
+    Interval P00;
+    Interval P11;
+    Interval S01;
+};
+
+[[nodiscard]] std::optional<Lyapunov> LyapunovOf(const Matrix2& h)
 {
     const double h00 = Midpoint(h[0][0]);
     const double h11 = Midpoint(h[1][1]);
     const double h01 = 0.5 * (Midpoint(h[0][1]) + Midpoint(h[1][0]));
     if (!std::isfinite(h00) || !std::isfinite(h11) || !std::isfinite(h01)) {
-        return false;
+        return std::nullopt;
     }
     // J H0 = [[-h01, -h11], [h00, h01]]; M is its symmetric part.
     const Interval off{0.5 * (h00 - h11)};
     const Matrix2 m{{{Interval{-h01}, off}, {off, Interval{h01}}}};
     const Matrix2 jh{{{-h[1][0], -h[1][1]}, {h[0][0], h[0][1]}}};
     const Matrix2 p = Times(m, jh);
-    const Interval s01 = Interval{0.5} * (p[0][1] + p[1][0]);
-    return p[0][0].GetLower() > 0.0 && (p[0][0] * p[1][1] - s01 * s01).GetLower() > 0.0;
+    return Lyapunov{m, p[0][0], p[1][1], Interval{0.5} * (p[0][1] + p[1][0])};
+}
+
+/// Fact 4's Lyapunov test: sym(M J H) positive definite over the enclosure.
+[[nodiscard]] bool LevelCurvesLeave(const Matrix2& h)
+{
+    const std::optional<Lyapunov> l = LyapunovOf(h);
+    return l && l->P00.GetLower() > 0.0 && (l->P00 * l->P11 - l->S01 * l->S01).GetLower() > 0.0;
 }
 
 /// Whether the enclosure lies strictly inside the stretch.
@@ -1582,15 +1646,24 @@ struct Placed {
     return false;
 }
 
+} // namespace
+} // namespace Stereon::Detail
+
+#include "SeamNode.hpp"
+
+namespace Stereon::Detail {
+namespace {
+
 /// A pair with no advance direction, polynomial. Settled here: a proved
-/// transverse node (SettleNode). An isolated touch, a unique point of common
+/// transverse node (SettleNode), or one on a knot line or seam
+/// (SettleSeamNode). An isolated touch, a unique point of common
 /// tangency with the surfaces separating on every side of it, is found but
 /// not yet settled. No solution rules out only tangency, not a crossing;
 /// everything else is cut further, and fails at the smallest pair.
 [[nodiscard]] Settled SettleTouch(const PatchPair& pair, const SearchSettings& s, Findings& found,
                                   std::vector<PatchPair>& stack)
 {
-    if (SettleNode(pair, s, found, stack)) {
+    if (SettleNode(pair, s, found, stack) || SettleSeamNode(pair, s, found, stack)) {
         return Settled::Done;
     }
     if (!s.Polynomial) {
@@ -1778,6 +1851,16 @@ struct Placed {
         stack.pop_back();
         if (ProvedApart(pair.A.Extent, pair.B.Extent, s.Tolerance)) {
             continue;
+        }
+        const Carving carving = Carved(pair, found.Regions, stack);
+        if (carving == Carving::Consumed) {
+            continue;
+        }
+        if (carving == Carving::Failed) {
+            return Fail(ErrorCode::IntersectionFailed,
+                        "BSpline x BSpline: a cut along a settled node's region could not be "
+                        "enclosed at patches " +
+                            Describe(pair));
         }
         if (++visited > PairBudget) {
             return Fail(ErrorCode::IntersectionFailed,
@@ -2351,16 +2434,27 @@ Assembled(const Findings& found, const Marcher& marcher, const Box2& domainA, co
 struct ShiftedSearch {
     std::vector<PatchPair> Pairs;
     Vec3 Shift;
+    Atlas OnA;
+    Atlas OnB;
 };
+
+/// A moved surface's patches over the requested domain, and where its chart
+/// closes.
+[[nodiscard]] Result<Atlas> AtlasOf(const BSplineSurface& moved, const Box2& domain)
+{
+    STEREON_TRY(std::vector<Patch> patches, PatchesOver(moved, domain));
+    return Atlas{std::move(patches), Domain(moved), ClosesAlong(moved, true),
+                 ClosesAlong(moved, false)};
+}
 
 [[nodiscard]] Result<ShiftedSearch> SearchAbout(const BSplineSurface& sa, const Box2& domainA,
                                                 const BSplineSurface& sb, const Box2& domainB)
 {
     const Vec3 shift = ShiftOf(sa, sb);
-    STEREON_TRY(const std::vector<Patch> patchesA, PatchesOver(Moved(sa, shift), domainA));
-    STEREON_TRY(const std::vector<Patch> patchesB, PatchesOver(Moved(sb, shift), domainB));
-    STEREON_TRY(std::vector<PatchPair> pairs, AllPairs(patchesA, patchesB));
-    return ShiftedSearch{std::move(pairs), shift};
+    STEREON_TRY(Atlas onA, AtlasOf(Moved(sa, shift), domainA));
+    STEREON_TRY(Atlas onB, AtlasOf(Moved(sb, shift), domainB));
+    STEREON_TRY(std::vector<PatchPair> pairs, AllPairs(onA.Patches, onB.Patches));
+    return ShiftedSearch{std::move(pairs), shift, std::move(onA), std::move(onB)};
 }
 
 } // namespace
@@ -2378,9 +2472,10 @@ SSIResult NurbsHull(const Surface& a, const Box2& domainA, const Surface& b, con
     if (ProvedApart(NetBounds(*sa), NetBounds(*sb), tolerance)) {
         return SurfaceSurfaceIntersection{}; // Proven empty, including trims.
     }
-    const SearchSettings settings{tolerance, 0x1p-7 * ctx.GetResolution(),
-                                  sa->Weights.empty() && sb->Weights.empty()};
     STEREON_TRY(ShiftedSearch search, SearchAbout(*sa, domainA, *sb, domainB));
+    const SearchSettings settings{tolerance, 0x1p-7 * ctx.GetResolution(),
+                                  sa->Weights.empty() && sb->Weights.empty(), &search.OnA,
+                                  &search.OnB};
     STEREON_TRY(Findings found, SearchPairs(std::move(search.Pairs), settings));
     const Surface localA{Moved(*sa, search.Shift)};
     const Surface localB{Moved(*sb, search.Shift)};
