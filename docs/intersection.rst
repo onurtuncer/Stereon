@@ -1129,8 +1129,10 @@ face's parameter space, which is how a face-level operation restricts a
 branch to its loops (ADR-0009; the Boolean prototype's M6). A
 ``PlanarIntersection`` holds ``PlanarPoint`` entries, in order of the first
 curve's parameter, each with its parameter on both curves, its position,
-the ``ContactType`` there (``Crossing`` or ``Tangential``) and whether the
-count and the contact were *decided* exactly on the input doubles; and
+the ``ContactType`` there (``Crossing``, or ``Tangential`` for a touch
+that does not cross, including a non-smooth touch at a spline's corner,
+see *Algorithm K*) and whether the count and the contact were *decided*
+exactly on the input doubles; and
 ``PlanarOverlap`` stretches where coincident curves share their domains,
 with the parameter correspondence. A point is kept when both parameters
 lie in the requested domains, a periodic curve's taken modulo its period
@@ -1477,9 +1479,37 @@ uniqueness argument needs, so the test is as sound across a knot, a corner
 included, as inside a segment. The box tried first is the pair's own; if
 that fails, boxes about the segment's bracket, an eighth as wide each time
 while wider than the bracket. A bracket so proved and inside both splines
-is ``Decided``; one across a spline's own end stays undecided (past it the
-end segment continued was proved, not the spline), and a root no box
-proves is reported with ``Decided`` false, never dropped.
+is ``Decided``. One across a spline's own end was proved only for the end
+segment continued past it, so where it lies against the end is decided
+exactly on the input doubles when it can be (``AtEnds``, ``EndSide``):
+
+- the end is a *pole point* of its spline, a parameter where the spline
+  passes through one of its poles (a clamped end, or a knot of full
+  multiplicity), and the other spline passes through that same pole at a
+  pole point of its own inside the proof box: that pair of parameters is a
+  root in the box, so it is the root, exactly;
+- or the other spline is straight over the proof box (every pole reaching
+  it on one line, by exact orientation tests): the first curve's offset
+  from that line vanishes at the root and is strictly monotone over the box
+  (its derivative's sign is proved from the enclosed slopes), so the exact
+  side of the end's pole decides whether the root is at the end, inside
+  the spline or beyond it.
+
+A root inside is ``Decided``, its bracket cut at the end; one beyond is
+dropped (the spline does not reach it); anything else stays undecided. A
+root no box proves with the splines whole, at a corner (a knot of full
+multiplicity) whose arms the other curve meets inside their cone, is
+decided the same way on each arm, the segment's polynomial continued being
+what the pair's own box proved (``OnArms``). A root at the joint carries
+its arm and the sign of :math:`a' \times b'` over its box; two from
+opposite arms of one joint are one meeting, a ``Crossing`` when the signs
+agree and a touch that does not cross (``Tangential``, ``Decided``) when
+they differ. For plane curves ``Tangential`` means a touch, a meeting
+that does not cross. At a smooth point the curves then share a tangent,
+but a corner has two, so a corner touch is ``Tangential`` without a
+common tangent (owner's decision of 2026-11-23). A root on one arm only,
+or at a corner of both splines, stays undecided, and a root no box
+proves at all is reported with ``Decided`` false, never dropped.
 
 Two brackets that meet on both curves are one root only *by proof*: when
 one lies in the box the other was proved the only root of the curves' own
@@ -1567,8 +1597,12 @@ What is decided
        both splines, proved single with the splines taken whole and its
        bracket inside both splines, or a crossing beside a touch proved
        single by the signs of the graphs' height difference; a crossing at
-       a spline's own end, one no box proves, and every touch are reported
-       undecided
+       or within rounding of a spline's own end, and a meeting at a corner,
+       decided exactly against the end or the joint (a pole both splines
+       pass through, or the other spline straight there), a corner the
+       other curve meets inside its cone as a decided ``Tangential``; other
+       crossings at a spline's own end, ones no box proves, and every
+       smooth touch are reported undecided
 
 A point whose parameter on a conic lies within rounding of a requested
 domain's end may fall on either side of it; a B-spline root whose bracket

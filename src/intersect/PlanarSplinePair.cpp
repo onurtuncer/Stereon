@@ -68,6 +68,10 @@ import Stereon.Robust;
 /// so F is continuous and piecewise polynomial, F(x) - F(m) lies in
 /// J(X) (x - m) by the mean value theorem in integral form, and Krawczyk's
 /// test is as sound across a knot, even a corner, as inside a segment.
+/// A root across a spline's own end, or at a corner no box proves with the
+/// splines whole, is decided against the end exactly where a pole both
+/// splines pass through, or the other spline straight there, says where it
+/// lies (AtEnds, OnArms); two arms of a corner joined settle its contact.
 /// Two brackets that meet on both curves are one root only when one lies
 /// in the box the other was proved unique in, where the function proved is
 /// the curves' own; otherwise their hull is reported undecided. Equal
@@ -228,6 +232,11 @@ constexpr int RefineSteps = 64;
 /// curves' parameters and within both splines, in which it is proved the
 /// only root of the curves' own F (empty when undecided), and its contact:
 /// a crossing, or a touch bracketed to rounding (Tangential, undecided).
+/// A root proved on one arm of a corner (OnArms), exactly at the joint, is
+/// marked with that arm on its spline (-1 the segment ending at the joint,
+/// +1 the one starting there) and the sign of a' x b' over its proof box:
+/// whether the curves cross there is decided only when both arms of the
+/// joint are merged (Distinct).
 struct Meeting {
     Interval OnA;
     Interval OnB;
@@ -235,15 +244,21 @@ struct Meeting {
     Interval ProofA = Interval::Empty();
     Interval ProofB = Interval::Empty();
     ContactType Contact = ContactType::Crossing;
+    int ArmA = 0;
+    int ArmB = 0;
+    int Turn = 0;
 };
 
 /// Both splines' segments (those reaching the requested domains, and all of
-/// them, in order), the search's roots and its count of pairs.
+/// them, in order), the input splines, the search's roots and its count of
+/// pairs.
 struct PairSearch {
     std::vector<Segment> A;
     std::vector<Segment> B;
     std::vector<Segment> AllA;
     std::vector<Segment> AllB;
+    const BSplineCurve2d* SplineA = nullptr;
+    const BSplineCurve2d* SplineB = nullptr;
     std::vector<Meeting> Roots;
     std::size_t Pairs = 0;
     std::string Handler;
@@ -404,6 +419,248 @@ ProofBox(const PairSearch& search, const ParameterBox& pair, const ParameterBox&
     return std::nullopt;
 }
 
+// --- At a spline's own end: exact decisions -------------------------------
+
+/// A parameter at which the spline passes exactly through one of its
+/// poles, and that pole: a knot of multiplicity p inside the domain (the
+/// only basis function not zero there is the pole's), or a domain end whose
+/// knot is repeated p times on the domain's side, a clamped end.
+struct PolePoint {
+    double T;
+    Point2 Pole;
+};
+
+[[nodiscard]] std::vector<PolePoint> PolePoints(const BSplineCurve2d& spline)
+{
+    const auto p = static_cast<std::size_t>(spline.Degree);
+    const std::size_t m = spline.Poles.size();
+    const std::vector<double>& u = spline.Knots;
+    std::vector<PolePoint> found;
+    // The lower end, u[p], is the pole P_0's when u[1..p] are all u[p] and
+    // the first span is not empty; the upper end, u[m], P_(m-1)'s when
+    // u[m..m+p-1] are.
+    if (u[1] == u[p] && u[p] < u[p + 1]) {
+        found.push_back({u[p], spline.Poles.front()});
+    }
+    for (std::size_t j = p + 1; j < m; ++j) {
+        // A run of exactly p copies starting at j: C(u_j) = P_(j-1).
+        if (u[j - 1] < u[j] && u[j] == u[j + p - 1] && u[j + p - 1] < u[j + p]) {
+            found.push_back({u[j], spline.Poles[j - 1]});
+        }
+    }
+    if (u[m - 1] < u[m] && u[m] == u[m + p - 1]) {
+        found.push_back({u[m], spline.Poles.back()});
+    }
+    return found;
+}
+
+/// The poles of the spline whose basis functions reach `t`, clamped to the
+/// domain (the end spans continued beyond it are the end spans' poles); a
+/// pole is counted when its support's closure meets t's, which is more
+/// than enough.
+[[nodiscard]] std::vector<Point2> PolesOver(const BSplineCurve2d& spline, const Interval& t)
+{
+    const Interval domain = Domain(spline);
+    const double lo = std::clamp(t.GetLower(), domain.GetLower(), domain.GetUpper());
+    const double hi = std::clamp(t.GetUpper(), domain.GetLower(), domain.GetUpper());
+    const auto p = static_cast<std::size_t>(spline.Degree);
+    std::vector<Point2> poles;
+    for (std::size_t i = 0; i < spline.Poles.size(); ++i) {
+        if (spline.Knots[i] <= hi && lo <= spline.Knots[i + p + 1]) {
+            poles.push_back(spline.Poles[i]);
+        }
+    }
+    return poles;
+}
+
+/// The sign of (q - o) x (r - o), exact on the input doubles.
+[[nodiscard]] Sign Orientation(const Point2& o, const Point2& q, const Point2& r)
+{
+    return SignOfFormula([&](auto f) { return Cross2(f, Diff2(f, q, o), Diff2(f, r, o)); });
+}
+
+/// Two distinct poles of `poles` when all of them lie exactly on the line
+/// through those two: the curve they shape is then in that line (with
+/// positive weights it lies in the hull of its poles).
+[[nodiscard]] std::optional<std::pair<Point2, Point2>> LineOf(const std::vector<Point2>& poles)
+{
+    const auto other = std::ranges::find_if(poles, [&](const Point2& q) { return q != poles[0]; });
+    if (poles.empty() || other == poles.end()) {
+        return std::nullopt;
+    }
+    const Point2 o = poles[0];
+    const Point2 q = *other;
+    if (!std::ranges::all_of(poles,
+                             [&](const Point2& r) { return Orientation(o, q, r) == Sign::Zero; })) {
+        return std::nullopt;
+    }
+    return std::pair{o, q};
+}
+
+/// Where the root lies against a parameter e of one spline: the sign of
+/// r - e, r the root's parameter on that spline, and, when they are equal
+/// and it is known exactly, the root's parameter on the other.
+struct Against {
+    Sign Side;
+    std::optional<double> Other;
+};
+
+/// What a decision at an end sees of one spline: the spline, the segments
+/// whose polynomials, continued past the outer ones' ends, make the
+/// function that was proved (all of them, or one arm of a joint), and the
+/// parameters those polynomials are the spline's own over.
+struct View {
+    const BSplineCurve2d& Spline;
+    const std::vector<Segment>& Segments;
+    Interval Covered;
+};
+
+/// One spline of the pair, the other, and the root's proof box on each,
+/// for EndSide.
+struct EndView {
+    const View& Own;
+    const View& Other;
+    Interval OwnBox;
+    Interval OtherBox;
+};
+
+/// Where the root, the only one in the proof box of the function the views
+/// make (each spline's segments, the outer ones continued), lies against e,
+/// the end of the own view's stretch, a parameter at which its spline
+/// passes through its pole P exactly (PolePoints); nothing when that is not
+/// decided. Two cases are exact on the input doubles:
+///
+/// - the other spline passes through P at a parameter q of its proof box
+///   and of its view's stretch (one of its own PolePoints, P == its pole):
+///   (e, q) is a root of the function in the box, so it is the root;
+/// - the other spline is straight over its proof box (every pole that
+///   reaches the box on one line L, exactly): phi(s) = n . (C(s) - O), the
+///   own curve's offset from L, vanishes at the root, and its derivative
+///   n . C' has one strict sign over the box (it is proved from the
+///   enclosed slopes; Krawczyk's test makes it nonzero, J being regular).
+///   phi is then strictly monotone, so the root is e when P is on L, and
+///   otherwise lies on the side of e that sign(phi(e)) sign(phi') says.
+[[nodiscard]] std::optional<double> SharedPole(const EndView& v, const Point2& pole);
+[[nodiscard]] std::optional<Against> AgainstLine(const EndView& v, const Point2& pole);
+
+[[nodiscard]] std::optional<Against> EndSide(const EndView& v, const double e)
+{
+    const std::vector<PolePoint> own = PolePoints(v.Own.Spline);
+    const auto at = std::ranges::find_if(own, [&](const PolePoint& q) { return q.T == e; });
+    if (at == own.end()) {
+        return std::nullopt;
+    }
+    const Point2 pole = at->Pole;
+    if (const std::optional<double> q = SharedPole(v, pole)) {
+        return Against{Sign::Zero, *q};
+    }
+    return AgainstLine(v, pole);
+}
+
+/// The other view's parameter at a pole point of its spline that is
+/// `pole`, inside its proof box and its stretch.
+[[nodiscard]] std::optional<double> SharedPole(const EndView& v, const Point2& pole)
+{
+    for (const PolePoint& q : PolePoints(v.Other.Spline)) {
+        if (q.Pole == pole && Contains(v.OtherBox, q.T) && Contains(v.Other.Covered, q.T)) {
+            return q.T;
+        }
+    }
+    return std::nullopt;
+}
+
+/// EndSide's second case: the other spline straight over its proof box.
+[[nodiscard]] std::optional<Against> AgainstLine(const EndView& v, const Point2& pole)
+{
+    // The poles reaching the box include those of every span it meets, the
+    // view's own among them.
+    const std::optional<std::pair<Point2, Point2>> line =
+        LineOf(PolesOver(v.Other.Spline, v.OtherBox));
+    if (!line) {
+        return std::nullopt;
+    }
+    const auto [o, q] = *line;
+    const std::optional<std::array<Interval, 2>> slope = SlopeAcross(v.Own.Segments, v.OwnBox);
+    if (!slope) {
+        return std::nullopt;
+    }
+    const Interval along = (Interval{q.X} - Interval{o.X}) * (*slope)[1] -
+                           (Interval{q.Y} - Interval{o.Y}) * (*slope)[0];
+    const Strict rising = StrictSign(along);
+    if (rising == Strict::Unknown) {
+        return std::nullopt;
+    }
+    const Sign offset = Orientation(o, q, pole);
+    if (offset == Sign::Zero) {
+        return Against{Sign::Zero, std::nullopt};
+    }
+    // phi(e) - phi(r) = phi(e) has the sign of phi' (e - r).
+    const bool after = (offset == Sign::Positive) == (rising == Strict::Positive);
+    return Against{after ? Sign::Negative : Sign::Positive, std::nullopt};
+}
+
+/// The end of `covered` the bracket reaches across or onto, if any.
+[[nodiscard]] std::optional<double> EndIn(const Interval& bracket, const Interval& covered)
+{
+    if (Contains(bracket, covered.GetLower())) {
+        return covered.GetLower();
+    }
+    if (Contains(bracket, covered.GetUpper())) {
+        return covered.GetUpper();
+    }
+    return std::nullopt;
+}
+
+/// The bracket cut at a spline's end e by where the root lies against it:
+/// the part inside the spline, the end itself, or empty (beyond).
+[[nodiscard]] Interval CutAtEnd(const Interval& bracket, const Interval& covered, const double e,
+                                const Sign side)
+{
+    if (side == Sign::Zero) {
+        return Interval{e};
+    }
+    const bool lower = e == covered.GetLower();
+    // Inside the spline: past the lower end, before the upper.
+    if ((side == Sign::Positive) == lower) {
+        return lower ? Interval{e, bracket.GetUpper()} : Interval{bracket.GetLower(), e};
+    }
+    return Interval::Empty();
+}
+
+/// A proved root whose bracket reaches past the end of a view's stretch,
+/// decided where it can be (EndSide) on each spline in turn: its brackets
+/// cut to the stretches, empty when it is proved beyond either, or nothing
+/// when it is not decided.
+[[nodiscard]] std::optional<ParameterBox> AtEnds(const View& a, const View& b,
+                                                 const ParameterBox& proof, ParameterBox x)
+{
+    if (!Contains(a.Covered, x.S)) {
+        const std::optional<double> e = EndIn(x.S, a.Covered);
+        const std::optional<Against> side =
+            e ? EndSide({a, b, proof.S, proof.T}, *e) : std::nullopt;
+        if (!side) {
+            return std::nullopt;
+        }
+        x.S = CutAtEnd(x.S, a.Covered, *e, side->Side);
+        if (side->Other) {
+            x.T = Interval{*side->Other};
+        }
+    }
+    if (x.S.IsEmpty() || Contains(b.Covered, x.T)) {
+        return x;
+    }
+    const std::optional<double> e = EndIn(x.T, b.Covered);
+    const std::optional<Against> side = e ? EndSide({b, a, proof.T, proof.S}, *e) : std::nullopt;
+    if (!side) {
+        return std::nullopt;
+    }
+    x.T = CutAtEnd(x.T, b.Covered, *e, side->Side);
+    if (side->Other) {
+        x.S = Interval{*side->Other};
+    }
+    return x;
+}
+
 /// A root whose segment-local bracket straddles a segment's end, proved
 /// again with both splines whole; nothing when no box proves it, and the
 /// root stays undecided.
@@ -420,16 +677,92 @@ ProofBox(const PairSearch& search, const ParameterBox& pair, const ParameterBox&
         return std::nullopt;
     }
     const ParameterBox proof = *found;
-    const ParameterBox x = RefinedAcross(search, proof);
+    ParameterBox x = RefinedAcross(search, proof);
     // Past a spline's end its end segment continued was proved, not the
-    // spline: a bracket across the end is undecided (and one beyond it is
-    // dropped by the caller).
+    // spline: a bracket across the end is cut where the root is decided
+    // against the end (AtEnds; emptied when beyond, and the caller drops
+    // it), and is otherwise undecided (one wholly beyond is dropped by the
+    // caller too).
     const Interval onA = Covered(search.AllA);
     const Interval onB = Covered(search.AllB);
     if (!Contains(onA, x.S) || !Contains(onB, x.T)) {
-        return Meeting{x.S, x.T, false};
+        const std::optional<ParameterBox> cut =
+            AtEnds(View{*search.SplineA, search.AllA, onA}, View{*search.SplineB, search.AllB, onB},
+                   proof, x);
+        if (!cut) {
+            return Meeting{x.S, x.T, false};
+        }
+        if (cut->S.IsEmpty() || cut->T.IsEmpty()) {
+            return Meeting{Interval::Empty(), Interval::Empty(), false};
+        }
+        x = *cut;
     }
     return Meeting{x.S, x.T, true, Intersection(proof.S, onA), Intersection(proof.T, onB)};
+}
+
+/// The sign of a' x b' over the box, a' and b' the slopes of the views'
+/// polynomials: +-1, or 0 when not proved.
+[[nodiscard]] int TurnOver(const View& a, const View& b, const ParameterBox& box)
+{
+    const std::optional<std::array<Interval, 2>> da = SlopeAcross(a.Segments, box.S);
+    const std::optional<std::array<Interval, 2>> db = SlopeAcross(b.Segments, box.T);
+    if (!da || !db) {
+        return 0;
+    }
+    const Strict turn = StrictSign((*da)[0] * (*db)[1] - (*da)[1] * (*db)[0]);
+    return turn == Strict::Unknown ? 0 : (turn == Strict::Positive ? 1 : -1);
+}
+
+/// Which arm of a joint a bracket of one point at the end of a segment's
+/// stretch stands on: -1 at its upper end (the segment ending there), +1 at
+/// its lower end, 0 otherwise.
+[[nodiscard]] int ArmOf(const Interval& bracket, const Interval& stretch)
+{
+    if (Width(bracket) > 0.0) {
+        return 0;
+    }
+    if (bracket.GetLower() == stretch.GetUpper()) {
+        return -1;
+    }
+    return bracket.GetLower() == stretch.GetLower() ? 1 : 0;
+}
+
+/// A root no box proves with both splines whole, decided on the arms of the
+/// joint its bracket reaches across: the pair's own box proved it the only
+/// root of the two segments' polynomials, continued, so where it lies
+/// against the segments' ends (AtEnds, with each view one segment) says
+/// whether it is the curves' (inside both segments, or at a joint) or not
+/// (beyond, dropped: a neighbouring segment proves its own). A root at a
+/// joint is marked with its arm and turn, for Distinct to settle the
+/// contact. Nothing when the root is not decided so.
+[[nodiscard]] std::optional<Meeting> OnArms(const PairSearch& search, const Arc& a, const Arc& b,
+                                            const ParameterBox& local, const ParameterBox& bracket)
+{
+    const Segment& segmentA = search.A[a.Index];
+    const Segment& segmentB = search.B[b.Index];
+    const ParameterBox proof{InwardOnCurve(segmentA, a, local.S),
+                             InwardOnCurve(segmentB, b, local.T)};
+    if (proof.S.IsEmpty() || proof.T.IsEmpty() || !Contains(proof.S, bracket.S) ||
+        !Contains(proof.T, bracket.T)) {
+        return std::nullopt;
+    }
+    const std::vector<Segment> armA{segmentA};
+    const std::vector<Segment> armB{segmentB};
+    const View va{*search.SplineA, armA, Interval{segmentA.T0, segmentA.T1}};
+    const View vb{*search.SplineB, armB, Interval{segmentB.T0, segmentB.T1}};
+    const std::optional<ParameterBox> cut = AtEnds(va, vb, proof, bracket);
+    if (!cut) {
+        return std::nullopt;
+    }
+    if (cut->S.IsEmpty() || cut->T.IsEmpty()) {
+        return Meeting{Interval::Empty(), Interval::Empty(), false};
+    }
+    Meeting root{cut->S, cut->T, true, Intersection(proof.S, va.Covered),
+                 Intersection(proof.T, vb.Covered)};
+    root.ArmA = ArmOf(cut->S, va.Covered);
+    root.ArmB = ArmOf(cut->T, vb.Covered);
+    root.Turn = TurnOver(va, vb, proof);
+    return root;
 }
 
 /// Records the proved root of the pair's inflated box.
@@ -459,6 +792,12 @@ void Record(PairSearch& search, const Arc& a, const Arc& b, const ParameterBox& 
         if (Intersects(across->OnA, Covered(search.AllA)) &&
             Intersects(across->OnB, Covered(search.AllB))) {
             search.Roots.push_back(*across);
+        }
+        return;
+    }
+    if (const std::optional<Meeting> arm = OnArms(search, a, b, x, bracket)) {
+        if (!arm->OnA.IsEmpty()) {
+            search.Roots.push_back(*arm);
         }
         return;
     }
@@ -956,6 +1295,56 @@ struct Touching {
     return proved.Decided && Contains(proved.ProofA, root.OnA) && Contains(proved.ProofB, root.OnB);
 }
 
+/// Whether the meeting stands on an arm of a joint (OnArms).
+[[nodiscard]] bool OnArm(const Meeting& m)
+{
+    return m.ArmA != 0 || m.ArmB != 0;
+}
+
+/// Whether two roots stand on opposite arms of one joint of one spline,
+/// the other spline not at a joint.
+[[nodiscard]] bool OppositeArms(const Meeting& p, const Meeting& q)
+{
+    const bool jointA = p.ArmB == 0 && q.ArmB == 0 && p.ArmA == -q.ArmA;
+    const bool jointB = p.ArmA == 0 && q.ArmA == 0 && p.ArmB == -q.ArmB;
+    return jointA || jointB;
+}
+
+/// One root, proved the same, from `keep` (whose proof box holds `other`'s
+/// bracket) and `other`. A root on an arm of a joint takes the contact of a
+/// root proved otherwise (Krawczyk's test across the joint, or inside a
+/// segment: a transverse crossing). Two on opposite arms of one joint of
+/// one spline, the other spline not at a joint, settle it: the first arm
+/// lies on the side of the other curve sign(a'_1 x b') gives, the second
+/// on the side -sign(a'_2 x b'), so the curves cross there when the turns
+/// agree and touch without crossing (Tangential) when they differ. A turn
+/// not proved leaves it undecided; anything else stays on its arm.
+[[nodiscard]] Meeting Joined(Meeting keep, const Meeting& other)
+{
+    if (!OnArm(keep)) {
+        return keep;
+    }
+    if (!OnArm(other)) {
+        if (other.Decided) {
+            keep.ArmA = 0;
+            keep.ArmB = 0;
+            keep.Contact = other.Contact;
+        }
+        return keep;
+    }
+    if (!OppositeArms(keep, other)) {
+        return keep;
+    }
+    keep.ArmA = 0;
+    keep.ArmB = 0;
+    if (keep.Turn == 0 || other.Turn == 0) {
+        keep.Decided = false;
+    } else {
+        keep.Contact = keep.Turn == other.Turn ? ContactType::Crossing : ContactType::Tangential;
+    }
+    return keep;
+}
+
 /// Roots whose brackets meet on both curves: one decided root when one's
 /// bracket lies in the other's proof box (one crossing bracketed from
 /// either side of a knot or from overlapping pieces, or a continued
@@ -977,10 +1366,11 @@ struct Touching {
             continue;
         }
         if (ProvedSame(*same, r)) {
+            *same = Joined(*same, r);
             continue;
         }
         if (ProvedSame(r, *same)) {
-            *same = r;
+            *same = Joined(r, *same);
             continue;
         }
         const bool touch =
@@ -991,6 +1381,13 @@ struct Touching {
                  Interval::Empty(),
                  Interval::Empty(),
                  touch ? ContactType::Tangential : ContactType::Crossing};
+    }
+    // A root on one arm of a joint whose other arm was not joined to it:
+    // whether the curves cross there is not settled.
+    for (Meeting& m : distinct) {
+        if (OnArm(m)) {
+            m.Decided = false;
+        }
     }
     return distinct;
 }
@@ -1259,6 +1656,8 @@ Result<PlanarIntersection> SplineSpline2d(const Curve2d& a, const Interval& doma
     }
     PairSearch search;
     search.Handler = "BSplineCurve2d x BSplineCurve2d";
+    search.SplineA = sa;
+    search.SplineB = sb;
     STEREON_TRY_VOID(CheckBoth(*sa, domainA, *sb, domainB, search.Handler));
     if (*sa == *sb || SameCurve(*sa, *sb)) {
         return Identical(*sa, domainA, domainB);
