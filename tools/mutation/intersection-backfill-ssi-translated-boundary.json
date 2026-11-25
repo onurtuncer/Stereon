@@ -1,5 +1,5 @@
 {
-  "description": "SSI-translated-boundary's search-shift root cause in #279 (0965d8a): the search on the surfaces moved about the origin. The second root cause, the halving of an undecided edge (EdgeHalvings = 0), survived its first CI replay and is not catalogued; see the triage's Batch 3 fault replay. CI replays every intersection-backfill*.json together (tools/mutate.py --catalogue tools/mutation/intersection-backfill*.json).",
+  "description": "The two independent root causes repaired by #279: search about the origin and subdivision of an undecided patch edge. Replay both against their analytic fixtures.",
   "defect": "SSI-translated-boundary",
   "preset": "gcc16-debug",
   "mutants": [
@@ -15,6 +15,20 @@
       "target": "stereon_intersect_tests",
       "tests": "^intersect:\\ MR\\ SSI\\-translated\\-boundary\\ far\\ hyperbola\\ branches\\ end\\ on\\ the\\ domain's\\ sides$",
       "diagnostic": "intersect: MR SSI-translated-boundary far hyperbola branches end on the domain's sides",
+      "repair_commit": "0965d8aa4335210199404d6d01f2412bac218e5b"
+    },
+    {
+      "id": "SSI-translated-boundary-edge-halving",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: isolate both boundary roots of a transverse branch on one patch edge",
+      "file": "src/intersect/GenericSSI.cpp",
+      "find": "constexpr int EdgeHalvings = 8;",
+      "replace": "constexpr int EdgeHalvings = 0;",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ SSI\\-translated\\-boundary\\ resolves\\ both\\ roots\\ on\\ one\\ patch\\ edge$",
+      "diagnostic": "intersect: MR SSI-translated-boundary resolves both roots on one patch edge",
       "repair_commit": "0965d8aa4335210199404d6d01f2412bac218e5b"
     }
   ]
