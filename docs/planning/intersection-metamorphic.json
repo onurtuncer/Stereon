@@ -549,6 +549,12 @@
       "review": "docs/planning/intersection-metamorphic-triage.md#- **Review:** this agent's review of the fixtures, oracles and runs above"
     },
     {
+      "id": "AUDIT-20261122-plane-cylinder-periodic-box",
+      "source": "https://github.com/onurtuncer/Stereon/actions/runs/45059668981/job/137322549137",
+      "state": "fixture captured",
+      "fixture": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Finding: plane-cylinder boxes outside the base turn"
+    },
+    {
       "id": "PR-271",
       "source": "https://github.com/onurtuncer/Stereon/pull/271",
       "state": "untriaged"
@@ -4876,753 +4882,2056 @@
     },
     "surface-surface:BSplineSurface:BSplineSurface": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:BSplineSurface:Cone": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:BSplineSurface:Cylinder": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:BSplineSurface:Ellipsoid": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:BSplineSurface:Plane": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:BSplineSurface:Sphere": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:BSplineSurface:Torus": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Cone:BSplineSurface": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Cone:Cone": {
       "MR-01": {
-        "state": "MR implemented",
-        "domain": "docs/planning/metamorphic-priority-replay.md#PR-247",
-        "test": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-247 unequal cone angles remain unresolved",
-        "oracle": "docs/planning/metamorphic-priority-replay.md#PR-247",
-        "replay": "docs/planning/metamorphic-priority-replay.md",
-        "evidence_kind": "fail_closed_contract"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "MR implemented",
-        "domain": "docs/planning/metamorphic-priority-replay.md#PR-247",
-        "test": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-247 unequal cone angles remain unresolved",
-        "oracle": "docs/planning/metamorphic-priority-replay.md#PR-247",
-        "replay": "docs/planning/metamorphic-priority-replay.md",
-        "evidence_kind": "fail_closed_contract"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "MR implemented",
-        "domain": "docs/planning/metamorphic-priority-replay.md#PR-247",
-        "test": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-247 unequal cone angles remain unresolved",
-        "oracle": "docs/planning/metamorphic-priority-replay.md#PR-247",
-        "replay": "docs/planning/metamorphic-priority-replay.md",
-        "evidence_kind": "fail_closed_contract"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Cone:Cylinder": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Cone:Ellipsoid": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Cone:Plane": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Cone:Sphere": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "MR implemented",
-        "domain": "docs/planning/metamorphic-priority-replay.md#PR-244",
-        "test": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-244 near-axis sphere cone is not isolated points",
-        "oracle": "docs/planning/metamorphic-priority-replay.md#PR-244",
-        "replay": "docs/planning/metamorphic-priority-replay.md",
-        "evidence_kind": "fail_closed_contract"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Cone:Torus": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Cylinder:BSplineSurface": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Cylinder:Cone": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Cylinder:Cylinder": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Cylinder:Ellipsoid": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Cylinder:Plane": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "surface-surface:Cylinder:Sphere": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Cylinder:Torus": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Ellipsoid:BSplineSurface": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Ellipsoid:Cone": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Ellipsoid:Cylinder": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Ellipsoid:Ellipsoid": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Ellipsoid:Plane": {
       "MR-01": {
-        "state": "MR implemented",
-        "domain": "docs/planning/metamorphic-priority-replay.md#Ellipsoid combined applicability",
-        "test": "tests/intersect/MetamorphicRegressionTests.cpp",
-        "oracle": "docs/planning/metamorphic-priority-replay.md#Ellipsoid combined applicability",
-        "replay": "docs/planning/metamorphic-priority-replay.md",
-        "evidence_kind": "resolved_geometry"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "MR implemented",
-        "domain": "docs/planning/metamorphic-priority-replay.md#Ellipsoid combined applicability",
-        "test": "tests/intersect/MetamorphicRegressionTests.cpp",
-        "oracle": "docs/planning/metamorphic-priority-replay.md#Ellipsoid combined applicability",
-        "replay": "docs/planning/metamorphic-priority-replay.md",
-        "evidence_kind": "resolved_geometry"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "MR implemented",
-        "domain": "docs/planning/metamorphic-priority-replay.md#Ellipsoid combined applicability",
-        "test": "tests/intersect/MetamorphicRegressionTests.cpp",
-        "oracle": "docs/planning/metamorphic-priority-replay.md#Ellipsoid combined applicability",
-        "replay": "docs/planning/metamorphic-priority-replay.md",
-        "evidence_kind": "resolved_geometry"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "MR implemented",
-        "domain": "docs/planning/metamorphic-priority-replay.md#PR-230-pole",
-        "test": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-230-pole ellipsoid longitude boxes",
-        "oracle": "docs/planning/metamorphic-priority-replay.md#PR-230-pole",
-        "replay": "docs/planning/metamorphic-priority-replay.md",
-        "evidence_kind": "resolved_geometry"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Ellipsoid:Sphere": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Ellipsoid:Torus": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Plane:BSplineSurface": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Plane:Cone": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Plane:Cylinder": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "MR implemented",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry"
       }
     },
     "surface-surface:Plane:Ellipsoid": {
       "MR-01": {
-        "state": "MR implemented",
-        "domain": "docs/planning/metamorphic-priority-replay.md#Ellipsoid combined applicability",
-        "test": "tests/intersect/MetamorphicRegressionTests.cpp",
-        "oracle": "docs/planning/metamorphic-priority-replay.md#Ellipsoid combined applicability",
-        "replay": "docs/planning/metamorphic-priority-replay.md",
-        "evidence_kind": "resolved_geometry"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "MR implemented",
-        "domain": "docs/planning/metamorphic-priority-replay.md#Ellipsoid combined applicability",
-        "test": "tests/intersect/MetamorphicRegressionTests.cpp",
-        "oracle": "docs/planning/metamorphic-priority-replay.md#Ellipsoid combined applicability",
-        "replay": "docs/planning/metamorphic-priority-replay.md",
-        "evidence_kind": "resolved_geometry"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "MR implemented",
-        "domain": "docs/planning/metamorphic-priority-replay.md#Ellipsoid combined applicability",
-        "test": "tests/intersect/MetamorphicRegressionTests.cpp",
-        "oracle": "docs/planning/metamorphic-priority-replay.md#Ellipsoid combined applicability",
-        "replay": "docs/planning/metamorphic-priority-replay.md",
-        "evidence_kind": "resolved_geometry"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "MR implemented",
-        "domain": "docs/planning/metamorphic-priority-replay.md#PR-230-pole",
-        "test": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-230-pole ellipsoid longitude boxes",
-        "oracle": "docs/planning/metamorphic-priority-replay.md#PR-230-pole",
-        "replay": "docs/planning/metamorphic-priority-replay.md",
-        "evidence_kind": "resolved_geometry"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Plane:Plane": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Plane:Sphere": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Plane:Torus": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Sphere:BSplineSurface": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Sphere:Cone": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "MR implemented",
-        "domain": "docs/planning/metamorphic-priority-replay.md#PR-244",
-        "test": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-244 near-axis sphere cone is not isolated points",
-        "oracle": "docs/planning/metamorphic-priority-replay.md#PR-244",
-        "replay": "docs/planning/metamorphic-priority-replay.md",
-        "evidence_kind": "fail_closed_contract"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Sphere:Cylinder": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Sphere:Ellipsoid": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Sphere:Plane": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Sphere:Sphere": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Sphere:Torus": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Torus:BSplineSurface": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Torus:Cone": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Torus:Cylinder": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Torus:Ellipsoid": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Torus:Plane": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Torus:Sphere": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     },
     "surface-surface:Torus:Torus": {
       "MR-01": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-01: surface-surface answers move with exact rigid motions",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-02": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-02: surface-surface answers hold with the operands exchanged",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-03": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-03: surface-surface answers scale with the geometry and its tolerances",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "untriaged"
+        "state": "verified",
+        "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
+        "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Green",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       }
     }
   }
