@@ -1,0 +1,60 @@
+{
+  "format": "stereon-corpus-case/1",
+  "id": "boolean/drill-grids/level-caps-20x20-one-column",
+  "kind": "regression",
+  "summary": "Two 20 by 20 drill grids overlapping in one column, drill centres 1 apart in x, caps coplanar, united.",
+  "added": "2026-11-23",
+  "source": "Issue #160, found building a large-against-large fixture for the Boolean broad phase",
+  "licence": "MPL-2.0",
+  "references": [
+    "ADR-0007",
+    "ADR-0029"
+  ],
+  "tags": [
+    "issue160",
+    "overlap",
+    "level-caps",
+    "large"
+  ],
+  "inputs": {
+    "operands": [
+      {
+        "name": "A",
+        "type": "drill-grid",
+        "n": 20,
+        "offset": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "name": "B",
+        "type": "drill-grid",
+        "n": 20,
+        "offset": [
+          191.0,
+          0.0,
+          0.0
+        ]
+      }
+    ]
+  },
+  "operation": {
+    "name": "union",
+    "operands": [
+      "A",
+      "B"
+    ]
+  },
+  "expected": {
+    "solids": 780,
+    "valid": true
+  },
+  "found": {
+    "commit": "6177bc0",
+    "issue": 160,
+    "observed": "Commit: Freeze: the topology is not structurally valid; at 3c9b881 (after #319), Boolean: a curved use of Edge#1294 [Exact Circle] on another parameter than the edge it is identified with",
+    "fixed_by": "#321"
+  }
+}

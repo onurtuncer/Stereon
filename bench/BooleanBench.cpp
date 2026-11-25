@@ -105,7 +105,43 @@ void BM_ControlParallel(benchmark::State& state)
     Project(state, parallel);
 }
 
+/// Two operands of many solids each.
+struct Grids {
+    Stereon::Shape A;
+    Stereon::Shape B;
+};
+
+/// Issue #160's large-against-large row: two 20 x 20 drill grids, 400
+/// cylinders each, the second moved by 191 in x so that one column of each
+/// overlaps a column of the other, caps level. Of the 160 000 pairs of
+/// drills, 20 meet; the rest the broad phase must set aside.
+
+void BM_GridOverlapUnion(benchmark::State& state)
+{
+    static const Grids grids{BooleanCases::Drills(Holes),
+                             BooleanCases::Drills(Holes, Stereon::Vec3{191.0, 0.0, 0.0})};
+    const Stereon::Context serial =
+        Stereon::Context::Default().WithScheduler(Stereon::Scheduler::Serial);
+    for (auto _ : state) {
+        auto result = Boolean(grids.A, grids.B, Stereon::BooleanOperation::Union, serial);
+        if (!result) {
+            state.SkipWithError(std::string(result.error().GetMessage()));
+            return;
+        }
+        benchmark::DoNotOptimize(result);
+    }
+    state.counters["faces"] =
+        static_cast<double>(BooleanCases::CountOf<Stereon::EntityKind::Face>(grids.A) +
+                            BooleanCases::CountOf<Stereon::EntityKind::Face>(grids.B));
+}
+
 } // namespace
+
+BENCHMARK(BM_GridOverlapUnion)
+    ->Name("Boolean/GridOverlapUnion/serial")
+    ->Unit(benchmark::kMillisecond)
+    ->UseRealTime()
+    ->Iterations(1);
 
 BENCHMARK(BM_ControlSerial)
     ->Name("M10/Control/serial")

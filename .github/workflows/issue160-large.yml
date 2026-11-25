@@ -1,8 +1,14 @@
 # SPDX-FileCopyrightText: 2026 Onur Tuncer and Stereon contributors
 # SPDX-License-Identifier: MPL-2.0
 
-# Explicit full-scale qualification for issue #160. The 20x20 overlapping
-# grids are intentionally hidden from regular CTest for bounded routine CI.
+# Full-scale qualification for issue #160: the drill grids of 20 x 20 and
+# 30 x 30 cylinders (tests/boolean/SpeedupTests.cpp, "[issue160][large]").
+# They are hidden from the routine CTest matrix, which builds every library
+# on four presets; here only the Boolean tests are built. On GCC 16 Release
+# the three original grids took 1.2 to 1.6 s each on main at e84edff (run
+# 45133827402), the build about 4 minutes. So they run on every pull request
+# that touches the Boolean, on main after a merge, and nightly, both in
+# Release and under AddressSanitizer.
 name: Boolean issue 160 large grids
 
 on:
@@ -10,8 +16,19 @@ on:
     paths:
       - '.github/workflows/issue160-large.yml'
       - 'src/boolean/**'
-      - 'tests/boolean/SpeedupTests.cpp'
+      - 'tests/boolean/**'
       - 'tests/support/BooleanCases.hpp'
+      - 'corpus/boolean/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/issue160-large.yml'
+      - 'src/boolean/**'
+      - 'tests/boolean/**'
+      - 'tests/support/BooleanCases.hpp'
+      - 'corpus/boolean/**'
+  schedule:
+    - cron: '53 2 * * *'
   workflow_dispatch:
 
 permissions:
@@ -23,12 +40,16 @@ concurrency:
 
 jobs:
   large-grids:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'fix/issue160-')
-    name: GCC 16 release, original grid overlap (20x20)
+    name: GCC 16 ${{ matrix.preset }}, issue 160 drill grids (20x20, 30x30)
     runs-on: ubuntu-24.04
     container:
       image: gcc:16.2
-    timeout-minutes: 60
+      options: --cap-add SYS_PTRACE
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [gcc16-release, gcc16-asan]
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: '4'
     steps:
@@ -38,8 +59,8 @@ jobs:
           apt-get update -qq
           apt-get install -y -qq --no-install-recommends cmake ninja-build
       - name: Configure
-        run: cmake --preset gcc16-release -DSTEREON_WARNINGS_AS_ERRORS=ON
+        run: cmake --preset ${{ matrix.preset }} -DSTEREON_WARNINGS_AS_ERRORS=ON
       - name: Build Boolean tests
-        run: cmake --build --preset gcc16-release --target stereon_boolean_tests
-      - name: Run original large-grid regression
-        run: ./build/gcc16-release/tests/stereon_boolean_tests '[issue160][large]' --durations yes
+        run: cmake --build --preset ${{ matrix.preset }} --target stereon_boolean_tests
+      - name: Run the issue 160 grids, small and large
+        run: ./build/${{ matrix.preset }}/tests/stereon_boolean_tests '[issue160]' --durations yes

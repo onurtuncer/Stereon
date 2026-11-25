@@ -54,6 +54,9 @@ target_compile_definitions(stereon_intersect_tests PRIVATE
 stereon_add_tests(topo)
 stereon_add_tests(build)
 stereon_add_tests(boolean)
+# The Boolean corpus (corpus/boolean/): issue #160's drill grids.
+target_compile_definitions(stereon_boolean_tests PRIVATE
+    STEREON_CORPUS_DIR="${PROJECT_SOURCE_DIR}/corpus")
 stereon_add_tests(mesh)
 stereon_add_tests(io)
 
