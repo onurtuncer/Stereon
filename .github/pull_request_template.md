@@ -27,6 +27,7 @@ Fixes #<!-- issue number, if any -->
 - [ ] No global or `thread_local` mutable state; parallel code has a determinism test (ADR-0007)
 - [ ] Every new source file has the MPL-2.0 header (`docs/license-header.txt`)
 - [ ] Any new dependency has an MPL-compatible licence, named here: <!-- dependency + licence -->
+- [ ] New or changed algorithms, including private helpers, have a Sphinx method description, applicable academic reference or specification, and documented assumptions and failure conditions
 - [ ] Public behaviour changes are documented
 - [ ] Every commit is signed off (`git commit -s`)
 
