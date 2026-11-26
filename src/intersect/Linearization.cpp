@@ -149,8 +149,9 @@ struct SplineSide {
     }
 };
 
-/// Whether a conic has the radius a component moves: a circle its Radius,
-/// an ellipse its MajorRadius and MinorRadius, every conic its centre.
+/// Whether a conic has the value a component moves: a circle its Radius, an
+/// ellipse and a hyperbola their MajorRadius and MinorRadius, a parabola its
+/// FocalLength; every conic its centre (a parabola's vertex) and its frame.
 template <typename Conic>
 [[nodiscard]] bool HasRadius(const ConicComponent component)
 {
@@ -158,16 +159,66 @@ template <typename Conic>
         return std::is_same_v<Conic, Circle>;
     }
     if (component == ConicComponent::MajorRadius || component == ConicComponent::MinorRadius) {
-        return std::is_same_v<Conic, Ellipse>;
+        return std::is_same_v<Conic, Ellipse> || std::is_same_v<Conic, Hyperbola>;
+    }
+    if (component == ConicComponent::FocalLength) {
+        return std::is_same_v<Conic, Parabola>;
     }
     return true;
 }
 
-/// A circle's or an ellipse's side: its derivative, and dC/d(component) at
-/// the angle t: a unit for a centre coordinate, cos t X + sin t Y for a
-/// circle's radius, cos t X and sin t Y for an ellipse's major and minor
-/// radii, and e_k x (C - Center) for a rotation about the frame's axis e_k
-/// (X, Y, X x Y), with C - Center formed in the frame.
+/// C(t) - Center of a conic (a parabola's vertex), formed in its frame
+/// rather than by subtraction, as the coefficients of XAxis and YAxis.
+[[nodiscard]] std::pair<double, double> InFrameOf(const Circle& c, const double t)
+{
+    return {c.Radius * std::cos(t), c.Radius * std::sin(t)};
+}
+[[nodiscard]] std::pair<double, double> InFrameOf(const Ellipse& e, const double t)
+{
+    return {e.MajorRadius * std::cos(t), e.MinorRadius * std::sin(t)};
+}
+[[nodiscard]] std::pair<double, double> InFrameOf(const Hyperbola& h, const double t)
+{
+    return {h.MajorRadius * std::cosh(t), h.MinorRadius * std::sinh(t)};
+}
+[[nodiscard]] std::pair<double, double> InFrameOf(const Parabola& p, const double t)
+{
+    return {t * t / (4.0 * p.FocalLength), t};
+}
+
+/// dC/d(component) at fixed t of a conic's radius or focal length, as the
+/// coefficients of XAxis and YAxis: cos t X + sin t Y for a circle's radius;
+/// cos t X and sin t Y for an ellipse's major and minor radii; cosh t X and
+/// sinh t Y for a hyperbola's; -t^2 / (4 f^2) X for a parabola's focal
+/// length.
+[[nodiscard]] std::pair<double, double>
+ShapeRate(const Circle& /*c*/, const ConicComponent /*component*/, const double t)
+{
+    return {std::cos(t), std::sin(t)};
+}
+[[nodiscard]] std::pair<double, double> ShapeRate(const Ellipse& /*e*/,
+                                                  const ConicComponent component, const double t)
+{
+    return component == ConicComponent::MajorRadius ? std::pair{std::cos(t), 0.0}
+                                                    : std::pair{0.0, std::sin(t)};
+}
+[[nodiscard]] std::pair<double, double> ShapeRate(const Hyperbola& /*h*/,
+                                                  const ConicComponent component, const double t)
+{
+    return component == ConicComponent::MajorRadius ? std::pair{std::cosh(t), 0.0}
+                                                    : std::pair{0.0, std::sinh(t)};
+}
+[[nodiscard]] std::pair<double, double>
+ShapeRate(const Parabola& p, const ConicComponent /*component*/, const double t)
+{
+    return {-(t * t) / (4.0 * p.FocalLength * p.FocalLength), 0.0};
+}
+
+/// A conic's side (a circle's, an ellipse's, a hyperbola's or a parabola's):
+/// its derivative, and dC/d(component) at the parameter t: a unit for a
+/// centre coordinate, ShapeRate for a radius or the focal length, and
+/// e_k x (C - Center) for a rotation about the frame's axis e_k (X, Y,
+/// X x Y), with C - Center formed in the frame.
 template <typename Conic>
 struct ConicSide {
     const Conic& Geometry;
@@ -175,15 +226,9 @@ struct ConicSide {
 
     [[nodiscard]] Point3 At(const double t) const { return Eval(Geometry, t); }
     [[nodiscard]] Vec3 Tangent(const double t) const { return Deriv(Geometry, t, 1); }
-    /// C(t) - Center, from the frame rather than by subtraction.
-    [[nodiscard]] Vec3 Offset(const double t) const
+    [[nodiscard]] Vec3 Along(const std::pair<double, double>& xy) const
     {
-        if constexpr (std::is_same_v<Conic, Circle>) {
-            return Geometry.Radius * (std::cos(t) * Geometry.XAxis + std::sin(t) * Geometry.YAxis);
-        } else {
-            return (Geometry.MajorRadius * std::cos(t)) * Geometry.XAxis +
-                   (Geometry.MinorRadius * std::sin(t)) * Geometry.YAxis;
-        }
+        return xy.first * Geometry.XAxis + xy.second * Geometry.YAxis;
     }
     [[nodiscard]] Vec3 Partial(const ConicBinding& b, const double t) const
     {
@@ -191,15 +236,15 @@ struct ConicSide {
         case ConicComponent::RotationX:
         case ConicComponent::RotationY:
         case ConicComponent::RotationZ:
-            return Turned(
-                static_cast<int>(b.Component) - static_cast<int>(ConicComponent::RotationX),
-                Geometry.XAxis, Geometry.YAxis, Cross(Geometry.XAxis, Geometry.YAxis), Offset(t));
+            return Turned(static_cast<int>(b.Component) -
+                              static_cast<int>(ConicComponent::RotationX),
+                          Geometry.XAxis, Geometry.YAxis, Cross(Geometry.XAxis, Geometry.YAxis),
+                          Along(InFrameOf(Geometry, t)));
         case ConicComponent::Radius:
-            return std::cos(t) * Geometry.XAxis + std::sin(t) * Geometry.YAxis;
         case ConicComponent::MajorRadius:
-            return std::cos(t) * Geometry.XAxis;
         case ConicComponent::MinorRadius:
-            return std::sin(t) * Geometry.YAxis;
+        case ConicComponent::FocalLength:
+            return Along(ShapeRate(Geometry, b.Component, t));
         default:
             return UnitAlong(static_cast<int>(b.Component));
         }
@@ -216,8 +261,9 @@ struct ConicSide {
             if (!HasRadius<Conic>(b.Component)) {
                 return Fail(ErrorCode::InvalidInput,
                             std::string(where) +
-                                ": a binding of a radius the conic does not have (a major or "
-                                "minor radius on a circle, a radius on an ellipse)");
+                                ": a binding of a value the conic does not have (a circle has a "
+                                "Radius, an ellipse and a hyperbola a MajorRadius and a "
+                                "MinorRadius, a parabola a FocalLength)");
             }
         }
         return {};
@@ -832,6 +878,18 @@ Result<CurveSurfaceLinearization> Linearize(const Ellipse& ellipse, const Surfac
     return LinearizeOn(ConicSide<Ellipse>{ellipse, {}}, surface, point);
 }
 
+Result<CurveSurfaceLinearization> Linearize(const Hyperbola& hyperbola, const Surface& surface,
+                                            const CurveSurfacePoint& point)
+{
+    return LinearizeOn(ConicSide<Hyperbola>{hyperbola, {}}, surface, point);
+}
+
+Result<CurveSurfaceLinearization> Linearize(const Parabola& parabola, const Surface& surface,
+                                            const CurveSurfacePoint& point)
+{
+    return LinearizeOn(ConicSide<Parabola>{parabola, {}}, surface, point);
+}
+
 Result<SensitivityResult>
 IntersectJvp(const Line& line, const std::span<const LineBinding> lineBindings,
              const Surface& surface, const std::span<const SurfaceBinding> surfaceBindings,
@@ -900,6 +958,42 @@ IntersectVjp(const Ellipse& ellipse, const std::span<const ConicBinding> conicBi
 {
     return VjpOn(ConicSide<Ellipse>{ellipse, conicBindings}, surface, surfaceBindings, intersection,
                  sensitivity);
+}
+
+Result<SensitivityResult>
+IntersectJvp(const Hyperbola& hyperbola, const std::span<const ConicBinding> conicBindings,
+             const Surface& surface, const std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity)
+{
+    return JvpOn(ConicSide<Hyperbola>{hyperbola, conicBindings}, surface, surfaceBindings,
+                 intersection, sensitivity);
+}
+
+Result<SensitivityResult>
+IntersectJvp(const Parabola& parabola, const std::span<const ConicBinding> conicBindings,
+             const Surface& surface, const std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity)
+{
+    return JvpOn(ConicSide<Parabola>{parabola, conicBindings}, surface, surfaceBindings,
+                 intersection, sensitivity);
+}
+
+Result<SensitivityResult>
+IntersectVjp(const Hyperbola& hyperbola, const std::span<const ConicBinding> conicBindings,
+             const Surface& surface, const std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity)
+{
+    return VjpOn(ConicSide<Hyperbola>{hyperbola, conicBindings}, surface, surfaceBindings,
+                 intersection, sensitivity);
+}
+
+Result<SensitivityResult>
+IntersectVjp(const Parabola& parabola, const std::span<const ConicBinding> conicBindings,
+             const Surface& surface, const std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity)
+{
+    return VjpOn(ConicSide<Parabola>{parabola, conicBindings}, surface, surfaceBindings,
+                 intersection, sensitivity);
 }
 
 // The branch points of a surface–surface intersection (Linearization.cppm,
