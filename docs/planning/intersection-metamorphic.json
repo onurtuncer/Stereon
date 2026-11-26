@@ -574,12 +574,39 @@
     {
       "id": "PR-271",
       "source": "https://github.com/onurtuncer/Stereon/pull/271",
-      "state": "untriaged"
+      "state": "MR implemented",
+      "fixture": "tests/intersect/PlanarSplineOsculationTests.cpp#a B-spline's contact of order four with a parabola is reported as a touch",
+      "direct": "tests/intersect/PlanarSplineOsculationTests.cpp#a B-spline's contact of order four with a parabola is reported as a touch",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-271 a B-spline contact of order four with a parabola is a touch",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-271",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 4 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03",
+        "MR-04"
+      ],
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#PR-271",
+      "repair_commit": "ca74138fb1f1a97090c4ae6833cdf5a584df7071"
     },
     {
       "id": "PR-289",
       "source": "https://github.com/onurtuncer/Stereon/pull/289",
-      "state": "untriaged"
+      "state": "MR implemented",
+      "fixture": "tests/intersect/SkewOrderTests.cpp#two skew cylinders are answered in either order, the parametrisation chosen canonically",
+      "direct": "tests/intersect/SkewOrderTests.cpp#two skew cylinders are answered in either order, the parametrisation chosen canonically",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-289 skew cylinders are answered in either order",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-289",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 4 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03"
+      ],
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#PR-289",
+      "repair_commit": "51906ee3e021e5dcbccdd4f0fd2be2652c8b4399"
     },
     {
       "id": "PR-301",
@@ -589,32 +616,109 @@
     {
       "id": "PR-304",
       "source": "https://github.com/onurtuncer/Stereon/pull/304",
-      "state": "untriaged"
+      "state": "MR implemented",
+      "fixture": "tests/intersect/ClosestApproachTests.cpp#closest approach places the free parameter to rounding when the other rests on an end",
+      "direct": "tests/intersect/ClosestApproachTests.cpp#closest approach places the free parameter to rounding when the other rests on an end",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-304 closest approach places the free parameter to rounding",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-304",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 4 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03"
+      ],
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#PR-304",
+      "repair_commit": "814391b6152004bc0689eb15dee1a59aa17ac6e9"
     },
     {
       "id": "PR-312",
       "source": "https://github.com/onurtuncer/Stereon/pull/312",
-      "state": "untriaged"
+      "state": "MR implemented",
+      "fixture": "tests/intersect/ClosestApproachTests.cpp#closest approach moves the other parameter on once one lands on an end",
+      "direct": "tests/intersect/ClosestApproachTests.cpp#closest approach moves the other parameter on once one lands on an end",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-312 closest approach steps on after one parameter lands on an end",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-312",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 4 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03"
+      ],
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#PR-312",
+      "repair_commit": "9438a7eb05c8f1dd34c2477ad9140f6f91b9f8a8"
     },
     {
       "id": "PR-315",
       "source": "https://github.com/onurtuncer/Stereon/pull/315",
-      "state": "untriaged"
+      "state": "MR implemented",
+      "fixture": "tests/intersect/SurfaceCorpusTests.cpp#far-placed rational SSI branches certify against the input surfaces",
+      "direct": "tests/intersect/SurfaceCorpusTests.cpp#far-placed rational SSI branches certify against the input surfaces",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-315 far rational SSI branches certify against the input surfaces",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-315",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 4 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02"
+      ],
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#PR-315",
+      "repair_commit": "eeb3367d017453d444ee626af2f1c55e33536e7e"
     },
     {
       "id": "PR-316",
       "source": "https://github.com/onurtuncer/Stereon/pull/316",
-      "state": "untriaged"
+      "state": "MR implemented",
+      "fixture": "tests/intersect/PlanarLinearizationTests.cpp#two cubic Beziers' proved crossings lie on both curves to rounding",
+      "direct": "tests/intersect/PlanarLinearizationTests.cpp#two cubic Beziers' proved crossings lie on both curves to rounding",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-316 proved crossings of two cubic Beziers lie on both curves",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-316",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 4 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03",
+        "MR-04"
+      ],
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#PR-316",
+      "repair_commit": "8a1a76082d439cf2c73bc1a10df7ff523c54dda1"
     },
     {
       "id": "PR-317",
       "source": "https://github.com/onurtuncer/Stereon/pull/317",
-      "state": "untriaged"
+      "state": "MR implemented",
+      "fixture": "tests/intersect/GenericSSITests.cpp#a plane a thousandth below a rational sphere's pole cuts its small circle",
+      "direct": "tests/intersect/GenericSSITests.cpp#a plane a thousandth below a rational sphere's pole cuts its small circle",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-317 a plane near the pole of a rational sphere cuts its small circle",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-317",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 4 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02"
+      ],
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill-pr317.json#PR-317",
+      "repair_commit": "776459d8139decca8f8ab9e7c0e9d63d9584de00"
     },
     {
       "id": "PR-318",
       "source": "https://github.com/onurtuncer/Stereon/pull/318",
-      "state": "untriaged"
+      "state": "MR implemented",
+      "fixture": "tests/intersect/CurveSplineSurfaceTests.cpp#a requested B-spline surface knot excludes curve crossings beyond it",
+      "direct": "tests/intersect/CurveSplineSurfaceTests.cpp#a requested B-spline surface knot excludes curve crossings beyond it",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-318 a request ending on a surface knot excludes crossings beyond it",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-318",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 4 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-03",
+        "MR-04"
+      ],
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#PR-318",
+      "repair_commit": "f0da86e92c0f8e67769cff441888a4f823a36f17"
     },
     {
       "id": "PR-322",

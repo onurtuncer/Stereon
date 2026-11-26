@@ -373,3 +373,114 @@ No record is needed for the features and refactors in the same range. They add c
 #### What the audit does not establish
 
 It reads merged pull requests only. Closed issues, failing corpus entries and regression-test comments since #263 were not audited, so `inventory_complete` stays false. The owner decides whether the scope above, together with the earlier batches, is the complete historical audit.
+
+## Batch 4: the defect leads of the inventory audit after #263
+
+- **Date:** 2026-11-26
+- **Branch:** `verify/metamorphic-defects-after-263`, on `main` 09c0505 (#342)
+- **Reviewer and meaning of "verified":** as for batches 1 to 3: this agent's documented review, with the owner's review still pending.
+- **Toolchain:** the shared disk was full, so the red and green evidence is native CI: the *Intersection metamorphic evidence* workflow (`tools/mutate.py` over every `intersection-backfill*.json`, GCC 16.2 on Linux, `gcc16-debug`) and the Linux, Windows and macOS CTest jobs of the pull request.
+
+The audit above recorded eleven confirmed leads as `untriaged`. This batch takes eight of them, whose repairs are single root causes (PR-317: two) with a fault that can be put back at one site. For each: the repair's own reproducer as the direct regression, a metamorphic regression named "MR PR-<n> ..." in `tests/intersect/MetamorphicRegressionTests.cpp` with an independent oracle, and a fault reintroduction in `tools/mutation/intersection-backfill.json` (PR-317: `intersection-backfill-pr317.json`, one fault per root cause). Every fixture is deterministic; there is no random seed. A fault that preserves today's interfaces is an *adapted* reintroduction of the original fault, as for the earlier batches; each says below what it restores.
+
+PR-301, PR-322 and PR-323 are not in this batch; see *Leads still open after batch 4*.
+
+#### PR-271
+
+- **Defect:** a B-spline's contact of order four with a line or a conic was refused ("the subdivision budget is spent"), although the ledger promised touches "reported bracketed, never dropped". Along the spline the other curve's implicit equation vanishes there with its first three derivatives, so no piece about the touch can be proved apart, monotone or convex in doubles. Found by the planar corpus (`osculating` cases). Repaired in #271 (`ca74138`): `IsolateContacts` proves a derivative of order three or more of one sign and reports the contact as an undecided, bracketed touch.
+- **Direct regression:** "a B-spline's contact of order four with a parabola is reported as a touch" (`PlanarSplineOsculationTests.cpp`).
+- **Metamorphic regression:** "MR PR-271 a B-spline contact of order four with a parabola is a touch".
+  - MR-01: a quarter turn and the translation (1024, -512).
+  - MR-02: both orders.
+  - MR-03: scales 2^-10 and 2^10.
+  - MR-04: the spline reversed, which keeps the touch at s = 1/2.
+- **Oracle:** the quartic Bezier (3(2s - 1), 9(2s - 1)^2 + (2s - 1)^4) is y = x^2 + (x/3)^4 with exact poles, touching y = x^2 to order four at s = 1/2. One undecided tangential point there, within the fourth root of the coefficients' rounding.
+- **Fault:** the search for a derivative of order three or more of one sign is skipped (`LowestSigned(piece, 3, ...)` replaced by no order), which is the pre-repair `Isolate`.
+
+#### PR-289
+
+- **Defect:** the skew cylinders of `analytic-ssi/cylinder-cylinder/skew-tilted-non-unit` were answered in one order and refused in the other ("a branch of the skew cylinders exceeds the sample budget"): an MR-02 failure. The curve was parametrised by the first operand's angle. Repaired in #289 (`51906ee`): the parametrising cylinder is chosen from the geometry, and the other one is tried after a refusal.
+- **Direct regression:** "two skew cylinders are answered in either order, the parametrisation chosen canonically" (`SkewOrderTests.cpp`).
+- **Metamorphic regression:** "MR PR-289 skew cylinders are answered in either order".
+  - MR-02: both orders.
+  - MR-01: the cyclic turns of the axes and the translation (8, -4, 2).
+  - MR-03: scales 1/4 and 4, with the radii, the pair tolerance and the context.
+- **Oracle:** the axes are 4 apart, between |3 - 2| and 3 + 2, so the section is one loop. Every sample of every certified branch must lie on both cylinders, by the closed-form distance from each axis.
+- **Fault:** the curve parametrised by the first operand, with no second attempt (`return run(false)`). It restores both halves of the defect at once: one block replaces the canonical choice and the fallback, either of which alone would hide it.
+
+#### PR-304
+
+- **Defect:** `ClosestApproach` stopped a free parameter about 1e-8 short when the other rested on an end (shrunk macOS seed 9376910471991398838). `Refine` took a step only if phi = |A - B|^2/2 did not rise, and near the minimiser a correct step lowers phi below its rounding. Repaired in #304 (`814391b`): a step that shrinks the free gradient and raises phi by no more than its rounding is taken too.
+- **Direct regression:** "closest approach places the free parameter to rounding when the other rests on an end" (`ClosestApproachTests.cpp`).
+- **Metamorphic regression:** "MR PR-304 closest approach places the free parameter to rounding". The shrunk pair, B moved by 17 x 17 small steps.
+  - MR-01: the cyclic turns of the axes and the translation (8, -4, 2), exact on the dyadic centres.
+  - MR-02: both orders, the ends exchanged.
+  - MR-03: scales 1/4 and 4, with the context; the angles do not scale.
+- **Oracle:** B's parameter is the angle of A's end point projected into B's plane, atan2 in B's frame, to 1e-13.
+- **Fault:** the descent test alone (`m.Phi <= l.Phi`).
+
+#### PR-312
+
+- **Defect:** `ClosestApproach` returned A 1.5e-7 short of its end when B landed on its own, a distance 1.4e-7 above the long double oracle (Nightly, 2026-11-17). The step that landed B on its end moved A by a rounding, and that ended the loop. Repaired in #312 (`9438a7e`): a step that changes the active set is not convergence.
+- **Direct regression:** "closest approach moves the other parameter on once one lands on an end" (`ClosestApproachTests.cpp`).
+- **Metamorphic regression:** "MR PR-312 closest approach steps on after one parameter lands on an end".
+  - MR-01: the cyclic turns of the axes and the translation (8, -4, 2).
+  - MR-02: both orders.
+  - MR-03: scales 1/4 and 4, with the context.
+- **Oracle:** the direct regression's long double oracle puts the minimum at the corner where both arcs end. The MR test requires that corner: both ends `Upper`, and the distance equal to the corner's closed-form distance to 1e-12 relative. It also checks independently that the corner is a first-order minimum on the box: phi does not decrease into either domain.
+- **Fault:** the active-set clause removed from the convergence test.
+
+#### PR-315
+
+- **Defect:** eight far `nurbs-ssi` reference fixtures, in both orders, were refused by `CertifyDeviation`. Far from the origin the branches were certified against the input surfaces, whose rational enclosure widens every homogeneous component by a margin scaled to the largest pole: a floor of about |P| 1.5e-8, 0.007 mm at |P| = 6e5, at any span width. Repaired in #315 (`eeb3367`): each branch is certified on the surfaces moved exactly about the origin, then moved back with its rounding.
+- **Direct regression:** "far-placed rational SSI branches certify against the input surfaces" (`SurfaceCorpusTests.cpp`).
+- **Metamorphic regression:** "MR PR-315 far rational SSI branches certify against the input surfaces". The exact rational unit sphere and the plane z = 3/5.
+  - MR-01: at the origin and at the corpus's far origin (480000, -300000, 210000), each also with the axes turned cyclically.
+  - MR-02: both orders.
+- **Oracle:** the circle of radius 4/5 about the axis in the plane, in closed form. Every sample of every certified branch must lie on it within the pair tolerance, with each bound within the resolution, and the branches together must make one curve going once round it.
+- **Fault:** the branch moved back first and certified against the input surfaces, rebuilt exactly from the moved ones. This is the pre-repair certification at the current interfaces.
+
+#### PR-316
+
+- **Defect:** a decided crossing of two cubic Beziers was placed at the middle of brackets 8e-13 wide, the width at which Krawczyk's refinement on the subdivided pieces stalls. The curves' points at its parameters were 1.5e-13 apart, and `IntersectJvp` refused the primal's own point as stale (seed 15971369584168069721). Repaired in #316 (`8a1a760`): each decided crossing is narrowed on the splines' own poles.
+- **Direct regression:** "two cubic Beziers' proved crossings lie on both curves to rounding" (`PlanarLinearizationTests.cpp`).
+- **Metamorphic regression:** "MR PR-316 proved crossings of two cubic Beziers lie on both curves".
+  - MR-01: a quarter turn and the translation (8, -4), exact on the dyadic poles.
+  - MR-02: both orders.
+  - MR-03: scales 1/4 and 4.
+  - MR-04: either cubic reversed, t' = 1 - t.
+- **Oracle:** each operand is evaluated at its reported parameter by de Casteljau in long double, independently of the kernel. The two points, and the reported position, must be within 64 units in the last place of the coordinates' size. There must be two decided crossings, at the identity placement's positions, placed.
+- **Fault:** the tightening skipped.
+
+#### PR-317
+
+- **Defect:** the six `sphere-plane/near-pole` reference fixtures were refused: the plane z = 0.999 against the exact rational unit sphere, a small circle 2.56 degrees from tangency. Two root causes, both repaired in #317 (`776459d`):
+  - *partials-about-patch:* a rational patch's partials were enclosed by the quotient rule about the origin, widened by the patch's distance from it times the width of the weight's derivative. No advance direction or boundary root was proved near the pole, and the search refused the pair as a tangential contact. Now they are enclosed about the patch's middle.
+  - *roots-in-frame:* off the world axes (the corpus's tilt), the boundary roots were not isolated, and the search ran out of its budget. Now they are isolated in a frame about either patch's normal.
+
+  #317 also proves an advance direction in such a frame. Its own ablation shows no fixture that needs that third change once the other two are in, so it has no fault here.
+- **Direct regression:** "a plane a thousandth below a rational sphere's pole cuts its small circle" (`GenericSSITests.cpp`).
+- **Metamorphic regression:** "MR PR-317 a plane near the pole of a rational sphere cuts its small circle".
+  - MR-01: the identity, a cyclic turn of the axes, the corpus's tilt, and its far translation.
+  - MR-02: both orders.
+- **Oracle:** the circle of radius sqrt(1 - 0.999^2), in closed form, checked as for PR-315.
+- **Faults:** `tools/mutation/intersection-backfill-pr317.json`, one per root cause:
+  - `PR-317-partials-about-patch`: the partials enclosed about the origin;
+  - `PR-317-roots-in-frame`: no isolation in a frame.
+
+#### PR-318
+
+- **Defect:** a request on a B-spline surface ending exactly on an interior knot kept the neighbouring Bezier patch whole. That patch meets the request only in the knot edge, and the cut there could not be split off. So intersections beyond the request were answered, outside the requested domain: a wrong answer. Repaired in #318 (`f0da86e`): such a patch is skipped, and a cut that cannot be enclosed fails.
+- **Direct regression:** "a requested B-spline surface knot excludes curve crossings beyond it" (`CurveSplineSurfaceTests.cpp`).
+- **Metamorphic regression:** "MR PR-318 a request ending on a surface knot excludes crossings beyond it". The degree-1 spline plane S(u, v) = (u, v, 0) with a u knot at 1/2, and the line along z through (x, 1/2, -1), for x = 1/4 and 3/4.
+  - MR-01: the cyclic turns of the axes and the translation (8, -4, 2).
+  - MR-03: scales 1/4 and 4.
+  - MR-04: the surface's u reversed (u' = 1 - u, which exchanges the halves) and the line run downwards (t' = 2 - t).
+  - MR-02 does not apply: there is no exposed surface-curve operation.
+- **Oracle:** the crossing S(x, 1/2) at the line's t = 1, in closed form. The half of the request that contains u = x must have exactly that point; the other half, which ends on the knot, must have none.
+- **Fault:** a cut that meets a patch only in its edge keeps the patch whole, and such a patch counts as overlapping the request. This is the pre-repair `Clipped` at the current interfaces, applied as one block over the two adjacent functions.
+
+#### Batch 4 fault replay
+
+- **Command (CI):** `python3 tools/mutate.py --catalogue tools/mutation/intersection-backfill*.json --work build/metamorphic`, the *Intersection metamorphic evidence* workflow on this pull request.
+- **Result:** pending the pull request's CI. A record moves to `verified` only after its fault is killed in both runs with the declared diagnostic, and its MR test is green in the native CTest jobs.
