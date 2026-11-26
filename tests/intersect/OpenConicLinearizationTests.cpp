@@ -361,24 +361,30 @@ template <typename C>
 void RequireProperties()
 {
     const C conic = RandomConic<C>();
+    // Every surface passes through the conic's point at t0, well inside the
+    // stretch, so that most cases cross: placed at random, few did, and the
+    // property gave up on its discards.
+    const Point3 on = Eval(conic, *rc::gen::inRange(-8, 9) / 8.0);
+    const double radius = *rc::gen::inRange(15, 41) / 10.0;
     switch (*rc::gen::inRange(0, 3)) {
     case 0: {
-        const Sphere sphere{Point3{Coordinate() / 2.0, Coordinate() / 2.0, Coordinate() / 2.0},
-                            *rc::gen::inRange(15, 41) / 10.0, ex, ey};
+        const Vec3 away = RandomFrame().second;
+        const Sphere sphere{on + radius * away, radius, ex, ey};
         RC_PRE(WellConditioned(conic, sphere));
         RequireProducts(conic, sphere);
         break;
     }
     case 1: {
-        const Cylinder cylinder{Point3{Coordinate() / 2.0, Coordinate() / 2.0, 0.0},
-                                *rc::gen::inRange(15, 41) / 10.0, ex, ey};
+        const Vec3 away = RandomFrame().first;
+        const Point3 foot = on + radius * away;
+        const Cylinder cylinder{Point3{foot.X, foot.Y, 0.0}, radius, ex, ey};
         RC_PRE(WellConditioned(conic, cylinder));
         RequireProducts(conic, cylinder);
         break;
     }
     default: {
         const auto [x, y] = RandomFrame();
-        const Plane plane{Point3{Coordinate() / 4.0, Coordinate() / 4.0, Coordinate() / 4.0}, x, y};
+        const Plane plane{on, x, y};
         RC_PRE(WellConditioned(conic, plane));
         RequireProducts(conic, plane);
         break;
@@ -399,8 +405,9 @@ Plane ShelfAt(const double height)
 template <typename C>
 CurveSurfaceIntersection On(const C& conic, const Plane& plane)
 {
+    // Wider than the properties' stretch: the parabola meets z = 2 at t = 2.
     const Surface s{plane};
-    const auto at = Intersect(Stereon::Curve{conic}, Stretch, s, Domain(s), ctx);
+    const auto at = Intersect(Stereon::Curve{conic}, Interval{-3.0, 3.0}, s, Domain(s), ctx);
     INFO(IntersectTest::ErrorText(at));
     REQUIRE(at.has_value());
     return *at;
