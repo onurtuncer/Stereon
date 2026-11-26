@@ -989,16 +989,30 @@ struct BranchSystem {
 }
 
 /// The system at (onA, onB), for the tangent already in s.
+/// A point of a B-spline surface's parameters held in its domain: a branch
+/// ending on the patch's boundary has its pcurve end there to rounding, and
+/// Newton's steps from it may leave by as much, where Eval's contract does
+/// not reach. Other surfaces' parameters are left alone (an angle wraps).
+[[nodiscard]] Point2 Within(const Surface& surface, const Point2& uv)
+{
+    if (surface.Target<BSplineSurface>() == nullptr) {
+        return uv;
+    }
+    const Box2 d = Domain(surface);
+    return {std::clamp(uv.X, d.X.GetLower(), d.X.GetUpper()),
+            std::clamp(uv.Y, d.Y.GetLower(), d.Y.GetUpper())};
+}
+
 void Fill(const Surface& a, const Surface& b, const Point2& onA, const Point2& onB, BranchSystem& s)
 {
-    s.OnA = onA;
-    s.OnB = onB;
-    s.Position = Eval(a, onA);
-    s.Residual = s.Position - Eval(b, onB);
-    s.SuA = Deriv(a, onA, 1, 0);
-    s.SvA = Deriv(a, onA, 0, 1);
-    s.SuB = Deriv(b, onB, 1, 0);
-    s.SvB = Deriv(b, onB, 0, 1);
+    s.OnA = Within(a, onA);
+    s.OnB = Within(b, onB);
+    s.Position = Eval(a, s.OnA);
+    s.Residual = s.Position - Eval(b, s.OnB);
+    s.SuA = Deriv(a, s.OnA, 1, 0);
+    s.SvA = Deriv(a, s.OnA, 0, 1);
+    s.SuB = Deriv(b, s.OnB, 1, 0);
+    s.SvB = Deriv(b, s.OnB, 0, 1);
     const Vec3 normalA = Cross(s.SuA, s.SvA);
     const Vec3 normalB = Cross(s.SuB, s.SvB);
     s.AtPole = AtPoleOf(s.SuA, s.SvA) || AtPoleOf(s.SuB, s.SvB);
@@ -1031,8 +1045,8 @@ void Refine(const Surface& a, const Surface& b, const Point3& x0, BranchSystem& 
         if (!AllFinite(dz)) {
             return;
         }
-        const Point2 onA{s.OnA.X + dz[0], s.OnA.Y + dz[1]};
-        const Point2 onB{s.OnB.X + dz[2], s.OnB.Y + dz[3]};
+        const Point2 onA = Within(a, Point2{s.OnA.X + dz[0], s.OnA.Y + dz[1]});
+        const Point2 onB = Within(b, Point2{s.OnB.X + dz[2], s.OnB.Y + dz[3]});
         const bool settled = onA == s.OnA && onB == s.OnB;
         Fill(a, b, onA, onB, s);
         if (settled) {
