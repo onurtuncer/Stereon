@@ -1968,22 +1968,121 @@ gap within the tolerance (ADR-0050) is not told apart from a crossing, so two
 branches passing that close are reported meeting there. The node is a
 candidate for an arrangement event, never an event by itself (ADR-0054).
 
+*A tangency along a curve*, of polynomial or rational surfaces: the surfaces
+share a tangent plane all along a curve, a trough lying on a plane, a
+cylinder on a plane, a torus on a plane along a circle. No pair of patches
+across the curve is transverse at any size, and there is no isolated point of
+common tangency, so neither proof above applies. The tangency is settled as a
+*valley* of one surface's height over the other
+(``src/intersect/TangentBranch.hpp``). With :math:`S` a Bézier patch of one
+surface and :math:`C` one of the other, :math:`a` the parameter of :math:`S`
+across the curve and :math:`b` the one along it, each step
+:math:`[b_0, b_1]` is settled in a frame :math:`(e_1, e_2, n)` about
+:math:`C`'s normal on two pairs of boxes: a wide one,
+:math:`R = [a_0, a_1] \times [b_0, b_1]` of :math:`S` across the band the
+step settles with a box of :math:`C` covering it, and a narrow one,
+:math:`R' \subset R` close about the valley with a box of :math:`C` inside the
+wide one's, where the Hessian's enclosure is tight enough for facts 4 and 5.
+Five facts are proved in interval arithmetic:
+
+1. *Coordinates and containment*, as for a node, on both pairs: :math:`C`'s
+   box is a graph over the frame's plane and :math:`S` over the box lies over
+   it, so the height :math:`h` is defined on :math:`R`, its zeros are the
+   points the surfaces share there, and :math:`|h|` bounds how far a point
+   of :math:`S` is from :math:`C`.
+2. *Convexity across.* The Hessian of :math:`h` is enclosed over :math:`R`
+   and :math:`h_{aa}` excludes zero: on every line :math:`b = \text{const}`
+   :math:`h` is strictly convex or strictly concave on :math:`R`, and
+   :math:`h_a` vanishes at most once.
+3. *A root.* Krawczyk's operator isolates the point :math:`(a^\#, b_0)` with
+   :math:`h_a = 0`, the solution of
+   :math:`e_1 \cdot (S - C) = e_2 \cdot (S - C) = 0`,
+   :math:`\partial_a S \cdot \mathbf{n}_C = 0` in
+   :math:`(a, u_C, v_C)` (:math:`h_a = \nu \cdot \partial_a S` and
+   :math:`\nu` is parallel to :math:`\mathbf{n}_C`).
+4. *The valley spans the box.* By the mean value theorem,
+   :math:`h_a(a, b) = h_{aa} (a - a^\#) + h_{ab} (b - b_0)` for entries in
+   the Hessian's enclosure over :math:`R'`; this is proved of one sign on
+   :math:`R'`'s side :math:`a = a_0'` and of the other on :math:`a = a_1'`,
+   for every :math:`b`. Each line :math:`b = \text{const}` then holds exactly
+   one zero of :math:`h_a` in :math:`R`, inside :math:`R'`: the valley :math:`a = \varphi(b)` runs from the edge
+   :math:`b_0` to the edge :math:`b_1`, with
+   :math:`\varphi(b) - a^\# \in -(h_{ab} / h_{aa})(b - b_0)`.
+5. *Within the tolerance.* By Taylor's theorem about the root, where
+   :math:`\nabla h = (0, h_b)`,
+   :math:`h(\varphi(b), b) \in h + h_b\, d + \tfrac12 (h_{aa} \delta^2 + 2
+   h_{ab} \delta d + h_{bb} d^2)` with :math:`d = b - b_0` and
+   :math:`\delta = \varphi(b) - a^\#` enclosed by fact 4; this is proved
+   within the pair tolerance.
+
+On each line :math:`b = \text{const}`, :math:`h` therefore has at most two
+zeros, one either side of the valley's point, and between a zero and that
+point :math:`h` lies between zero and its value there. Every point the
+surfaces share over the box is joined to the valley, across it, by points of
+:math:`S` within the tolerance of :math:`C`: the valley is the tangential
+branch of ADR-0029 section 6 and accounts for every intersection in the
+product of the two boxes. Whether the surfaces touch, cross twice within the
+tolerance or stay apart within it is not told apart (ADR-0050), so the
+branch's side transition is ``Unresolved``. Within a gap :math:`g` the
+surfaces' common points may lie up to :math:`\sqrt{2 g / h_{aa}}` across from
+the valley.
+
+The search tries the trace at a pair with no advance direction whose cells
+hold a candidate (Newton's method in doubles: a valley point within the
+tolerance, :math:`h_b` too small to part the surfaces over the patch), with
+either surface as :math:`S` and either parameter across. The valley is
+walked back to the edge :math:`b_0` of :math:`S`'s Bézier patch and followed
+to its edge :math:`b_1` in boxes, each proved as above, the step along
+:math:`b` halved where a box is not and doubled where it is; all of them or
+none are kept. Each box reaches across as far as the step is long, and at
+least as far as the *band* where the surfaces part by eight tolerances
+(:math:`\sqrt{16 \tau / |h_{aa}|}` by the relative curvature at the valley),
+so that the pairs of patches left outside the region are proved apart; the
+wide boxes' sides are widened outward to a dyadic grid of each patch, so
+that consecutive regions share most of their sides. The boxes become arcs,
+recorded where the search has found nothing yet, and settled regions, which
+the search carves away as it does a node's, cutting the larger patch of a
+pair first (as it splits): a long region of thin boxes would otherwise slice
+the smaller into slivers, each met again with the whole of the larger. An arc's
+ends lie on :math:`S`'s knot lines or on the boundary of the requested
+domain; the next patch's trace finds the same end from its side, since along
+the shared edge :math:`\partial_a S` is the edge's own tangent. A trace that
+fails over a pair of Bézier patches is not retried from another pair of their
+cells.
+
+Each arc is marched on the valley's own system at :math:`b`, in the frame it
+was proved in, its points on :math:`S`. The branch is ``Tangential`` and
+certified within the larger of the pair tolerance and the resolution; past
+the resolution, its bound's cause is ``TolerantCoincidence`` (ADR-0050).
+
+Not covered, and failing closed: a curve of tangency that leaves
+:math:`S`'s patch across :math:`a` (it turns along a parameter line, or
+closes up inside the patch), that reaches an edge of :math:`C`'s Bézier patch
+(a knot line, a seam, or the boundary of its domain, as where both surfaces'
+domains end together at the valley's ends), that runs along a knot line or
+an edge of :math:`S`, that ends inside both surfaces, or whose surfaces part
+by more than the tolerance along it (for a polynomial valley the proof of
+fact 5 needs steps of about :math:`\sqrt{\tau}`; a tolerance of zero is never
+admitted); surfaces tangent along curves of both kinds, across :math:`u` and
+across :math:`v`, or with either surface as :math:`S`, since the first trace
+fixes both for the search; and a tangential branch meeting a transverse one.
+
 Arcs join at shared seeds into branches, every free end on a boundary of the
-domains or at a node, where four branches end. Each arc is marched by Newton's method on :math:`S_A = S_B` and
+domains or at a node, where four branches end. Each transverse arc is marched by Newton's method on :math:`S_A = S_B` and
 :math:`L \cdot S_A = s`, halving chords until they hold, and the polylines in
 space and on both surfaces are certified by ``CertifyDeviation``, tightened
 until they pass. They are polylines because a fitted cubic pcurve can leave a
 surface's domain.
 
-Whatever cannot be settled fails: a tangency along a curve, an isolated touch,
-a branch point not proved a transverse node (a degenerate Hessian, as where
-three branches cross; a node on a knot line or seam with a crease or a gap
-beyond the tolerance; a node whose gap the tolerance does not admit), an
-overlap, any tangency of rational surfaces, and a search past
-its budget of :math:`2^{14}` pairs return ``IntersectionFailed``, naming the
-patches, never a partial or an unproved empty result
-(``src/intersect/GenericSSI.cpp``; nodes in
-``tests/intersect/GenericSSINodeTests.cpp``).
+Whatever cannot be settled fails: an isolated touch, a tangency along a curve
+outside the cases above, a branch point not proved a transverse node (a
+degenerate Hessian, as where three branches cross; a node on a knot line or
+seam with a crease or a gap beyond the tolerance; a node whose gap the
+tolerance does not admit), an overlap, and a search past its budget of
+:math:`2^{14}` pairs return ``IntersectionFailed``, naming the patches, never
+a partial or an unproved empty result (``src/intersect/GenericSSI.cpp``;
+nodes in ``tests/intersect/GenericSSINodeTests.cpp``, tangencies along a
+curve in ``tests/intersect/GenericSSITangentTests.cpp``).
 
 A B-spline surface against a plane, cylinder, cone, sphere, torus or
 ellipsoid, in either order, goes to the parametric-implicit trace of

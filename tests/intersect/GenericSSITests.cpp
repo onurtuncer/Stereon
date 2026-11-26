@@ -385,7 +385,9 @@ TEST_CASE("tangency along a curve fails closed; a transverse node is split",
           "[intersect][generic][special]")
 {
     const Surface flat{Patch(0.0)};
-    // Height exactly 0 along u = 1/2: tangent to the plane along a line.
+    // Height exactly 0 along u = 1/2: tangent to the plane along a line whose
+    // ends lie where both domains end, which the trace does not settle
+    // (GenericSSITangentTests.cpp answers the tangencies it does).
     const auto tangent = Intersect(flat, Surface{Bowl(0.0, 1.0)}, ctx);
     REQUIRE_FALSE(tangent.has_value());
     REQUIRE(tangent.error().GetCode() == ErrorCode::IntersectionFailed);

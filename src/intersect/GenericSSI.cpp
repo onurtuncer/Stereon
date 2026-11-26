@@ -59,7 +59,13 @@ import Stereon.Robust;
 ///   four roots on the pair's boundary are the ends of the four
 ///   half-branches leaving it (see "Branch points" below). One on a knot
 ///   line or seam, in no single patch, is settled on the patches around it
-///   together, once (SeamNode.hpp).
+///   together, once (SeamNode.hpp);
+/// - a tangency along a curve, polynomial or rational: a valley of one
+///   surface's height over the other, proved box by box across a Bezier
+///   patch, along which the surfaces are within the tolerance and outside of
+///   which, on each line across it, the height has at most the two zeros of
+///   a convex function (TangentBranch.hpp). Reported as a tangential branch,
+///   certified within the tolerance.
 ///
 /// Arcs join at shared seeds into branches, every free end on a boundary of
 /// the domains or at a node, where four branches end. Each arc is marched by Newton's method on S_A
@@ -68,11 +74,11 @@ import Stereon.Robust;
 /// fitted cubic's pcurve can leave a surface's domain.
 ///
 /// What cannot be settled fails, never a partial or an unproved empty result:
-/// a tangency along a curve, a branch point that is not a proved transverse
-/// node (a higher-order singularity, a node on a knot line or seam with a
-/// crease or a gap beyond the tolerance), an overlap, and any other tangency
-/// of rational surfaces, at the smallest pair, IntersectionFailed; a search
-/// past its budget, the same.
+/// an isolated touch, a tangency along a curve the trace does not settle, a
+/// branch point that is not a proved transverse node (a higher-order
+/// singularity, a node on a knot line or seam with a crease or a gap beyond
+/// the tolerance), an overlap, at the smallest pair, IntersectionFailed; a
+/// search past its budget, the same.
 namespace Stereon::Detail {
 namespace {
 
@@ -689,14 +695,38 @@ struct LocalForm {
 
 // --- The search ------------------------------------------------------------
 
+/// How an arc of a tangency along a curve is marched (TangentBranch.hpp):
+/// which surface is S, the one whose height over the other has the valley,
+/// which of S's parameters runs across the valley, and the plane (E1, E2)
+/// of the frame its box was proved in, the height measured along E1 x E2.
+struct TangentChart {
+    bool SmallIsA;
+    bool AcrossU;
+    Vec3 E1;
+    Vec3 E2;
+};
+
+/// A trace of a tangency along a curve that failed: the Bezier patches of S
+/// and C it ran over, which is S and which parameter ran across. It is not
+/// tried again from another pair of their cells.
+struct FailedTrace {
+    Box2 OnS;
+    Box2 OnC;
+    bool SmallIsA;
+    bool AcrossU;
+};
+
 /// A stretch of one branch inside a pair: from one seed to the other,
-/// advancing along Direction, within the patches' parameter boxes.
+/// advancing along Direction, within the patches' parameter boxes. An arc of
+/// a tangency along a curve advances along S's parameter across from
+/// Tangent's, and Direction is unused.
 struct Arc {
     Seed From;
     Seed To;
     Vec3 Direction;
     Box2 BoxA;
     Box2 BoxB;
+    std::optional<TangentChart> Tangent = std::nullopt;
 };
 
 /// The part of the search a node on a knot line or seam has settled: every
@@ -712,8 +742,13 @@ struct Findings {
     std::vector<IntersectionPoint> Touches;
     /// Proved transverse nodes, where four arcs end.
     std::vector<Point3> Nodes;
-    /// What the nodes on knot lines and seams have settled.
+    /// What the nodes on knot lines and seams, and the traces of tangencies
+    /// along curves, have settled.
     std::vector<NodeRegion> Regions;
+    /// The first trace of a tangency along a curve: whether A is S, and
+    /// whether S's u runs across the valley. Every later trace keeps them.
+    std::optional<std::array<bool, 2>> Tangent;
+    std::vector<FailedTrace> FailedTraces;
 };
 
 /// A surface's Bezier patches over the searched domain, its own domain, and
@@ -1650,20 +1685,23 @@ struct Placed {
 } // namespace Stereon::Detail
 
 #include "SeamNode.hpp"
+#include "TangentBranch.hpp"
 
 namespace Stereon::Detail {
 namespace {
 
-/// A pair with no advance direction, polynomial. Settled here: a proved
-/// transverse node (SettleNode), or one on a knot line or seam
-/// (SettleSeamNode). An isolated touch, a unique point of common
-/// tangency with the surfaces separating on every side of it, is found but
-/// not yet settled. No solution rules out only tangency, not a crossing;
-/// everything else is cut further, and fails at the smallest pair.
+/// A pair with no advance direction. Settled here: a proved transverse node
+/// (SettleNode), one on a knot line or seam (SettleSeamNode), or a tangency
+/// along a curve, traced across a Bezier patch (SettleTangent). An isolated
+/// touch, a unique point of common tangency with the surfaces separating on
+/// every side of it, is found, of polynomial surfaces, but not yet settled.
+/// No solution rules out only tangency, not a crossing; everything else is
+/// cut further, and fails at the smallest pair.
 [[nodiscard]] Settled SettleTouch(const PatchPair& pair, const SearchSettings& s, Findings& found,
                                   std::vector<PatchPair>& stack)
 {
-    if (SettleNode(pair, s, found, stack) || SettleSeamNode(pair, s, found, stack)) {
+    if (SettleNode(pair, s, found, stack) || SettleSeamNode(pair, s, found, stack) ||
+        SettleTangent(pair, s, found, stack)) {
         return Settled::Done;
     }
     if (!s.Polynomial) {
@@ -1900,7 +1938,132 @@ struct Marcher {
     const Surface& B;
     Vec3 Shift;
     double Chord;
+    /// The pair tolerance: how far from C a tangency's valley may lie.
+    double Tolerance;
 };
+
+// --- Marching a tangency along a curve -----------------------------------------
+//
+// An arc of a tangency is marched on the valley's own system, as it was
+// proved (TangentBranch.hpp): at each value b of S's parameter along it,
+//     e1 . (S - C) = 0,  e2 . (S - C) = 0,  S_a . N_C = 0
+// in (a, u_C, v_C), e1 and e2 the plane of the frame the arc's box was
+// proved in. The point is S's: on S, and within the height |h| of C, which
+// the proof bounds by the tolerance along the valley. A sample's Advance is
+// b.
+
+/// The arc's S and C, and their parameters in a sample.
+struct TangentSides {
+    const Surface& S;
+    const Surface& C;
+};
+
+[[nodiscard]] TangentSides SidesOf(const Marcher& m, const TangentChart& t)
+{
+    return t.SmallIsA ? TangentSides{m.A, m.B} : TangentSides{m.B, m.A};
+}
+
+/// The parameters (across, along) on S of a sample, and its foot on C.
+[[nodiscard]] Point2& OnS(Sample& s, const TangentChart& t)
+{
+    return t.SmallIsA ? s.OnA : s.OnB;
+}
+
+[[nodiscard]] Point2& OnC(Sample& s, const TangentChart& t)
+{
+    return t.SmallIsA ? s.OnB : s.OnA;
+}
+
+/// Newton's step of the valley's system at a sample, b held.
+[[nodiscard]] std::optional<std::array<double, 3>>
+TangentNewtonStep(const Marcher& m, const TangentChart& t, const Point2& s, const Point2& c)
+{
+    const TangentSides sides = SidesOf(m, t);
+    const int du = t.AcrossU ? 1 : 0;
+    const int dv = 1 - du;
+    const Vec3 sa = Deriv(sides.S, s, du, dv);
+    const Vec3 saa = Deriv(sides.S, s, 2 * du, 2 * dv);
+    const Vec3 cu = Deriv(sides.C, c, 1, 0);
+    const Vec3 cv = Deriv(sides.C, c, 0, 1);
+    const Vec3 cuu = Deriv(sides.C, c, 2, 0);
+    const Vec3 cuv = Deriv(sides.C, c, 1, 1);
+    const Vec3 cvv = Deriv(sides.C, c, 0, 2);
+    const Vec3 r = Eval(sides.S, s) - Eval(sides.C, c);
+    const Vec3 n = Cross(cu, cv);
+    const Vec3 nu = Cross(cuu, cv) + Cross(cu, cuv);
+    const Vec3 nv = Cross(cuv, cv) + Cross(cu, cvv);
+    const DoubleMatrix<3> j{{{Dot(t.E1, sa), -Dot(t.E1, cu), -Dot(t.E1, cv)},
+                             {Dot(t.E2, sa), -Dot(t.E2, cu), -Dot(t.E2, cv)},
+                             {Dot(saa, n), Dot(sa, nu), Dot(sa, nv)}}};
+    const std::array<double, 3> f{Dot(t.E1, r), Dot(t.E2, r), Dot(sa, n)};
+    const std::optional<DoubleMatrix<3>> inverse = Inverted<3>(j);
+    if (!inverse) {
+        return std::nullopt;
+    }
+    std::array<double, 3> step{};
+    for (std::size_t row = 0; row < 3; ++row) {
+        for (std::size_t k = 0; k < 3; ++k) {
+            step[row] -= (*inverse)[row][k] * f[k];
+        }
+    }
+    return step;
+}
+
+/// Whether a Newton step moved no parameter by more than 2^-36 of its box.
+[[nodiscard]] bool StepConverged(const std::array<double, 3>& step,
+                                 const std::array<double, 3>& widths)
+{
+    for (std::size_t r = 0; r < 3; ++r) {
+        if (!(std::abs(step[r]) <= 0x1p-36 * widths[r])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// The sample at its converged parameters: S's point, kept when it is
+/// within a 2^-12th of the chord bound of C's in the frame's plane.
+[[nodiscard]] std::optional<Sample> ConvergedTangent(const Marcher& m, const TangentChart& t,
+                                                     Sample s)
+{
+    const TangentSides sides = SidesOf(m, t);
+    const Point3 p = Eval(sides.S, OnS(s, t));
+    const Vec3 r = p - Eval(sides.C, OnC(s, t));
+    if (std::hypot(Dot(t.E1, r), Dot(t.E2, r)) > m.Chord * 0x1p-12) {
+        return std::nullopt;
+    }
+    s.Position = p;
+    return s;
+}
+
+/// The valley's point at the sample's b, by Newton's method from the sample,
+/// kept within the arc's boxes: converged when a step moves no parameter by
+/// more than 2^-36 of its box and S's point is within a 2^-12th of the chord
+/// bound of C's in the frame's plane.
+[[nodiscard]] std::optional<Sample> SolvedTangent(const Marcher& m, const Arc& arc, Sample s)
+{
+    const TangentChart& t = *arc.Tangent;
+    const Box2& boxS = t.SmallIsA ? arc.BoxA : arc.BoxB;
+    const Box2& boxC = t.SmallIsA ? arc.BoxB : arc.BoxA;
+    const Interval across = t.AcrossU ? boxS.X : boxS.Y;
+    const std::array<double, 3> widths{Width(across), Width(boxC.X), Width(boxC.Y)};
+    Point2& onS = OnS(s, t);
+    Point2& onC = OnC(s, t);
+    (t.AcrossU ? onS.Y : onS.X) = s.Advance;
+    double& a = t.AcrossU ? onS.X : onS.Y;
+    for (int k = 0; k < NewtonLimit; ++k) {
+        const std::optional<std::array<double, 3>> step = TangentNewtonStep(m, t, onS, onC);
+        if (!step) {
+            return std::nullopt;
+        }
+        a = std::clamp(a + (*step)[0], across.GetLower(), across.GetUpper());
+        onC = ClampedInto(Point2{onC.X + (*step)[1], onC.Y + (*step)[2]}, boxC);
+        if (StepConverged(*step, widths)) {
+            return ConvergedTangent(m, t, s);
+        }
+    }
+    return std::nullopt;
+}
 
 /// Newton's system: S_A - S_B, and how far the point is from the plane
 /// L . S_A = advance. The columns are A's and B's partials.
@@ -1933,6 +2096,9 @@ struct NewtonSystem {
 /// the sample, kept within the arc's patches.
 [[nodiscard]] std::optional<Sample> Solved(const Marcher& m, const Arc& arc, Sample s)
 {
+    if (arc.Tangent) {
+        return SolvedTangent(m, arc, s);
+    }
     const double converged = m.Chord * 0x1p-12;
     for (int k = 0; k < NewtonLimit; ++k) {
         const NewtonSystem system = SystemAt(m, arc, s);
@@ -1957,14 +2123,21 @@ struct NewtonSystem {
 }
 
 /// Whether the chord between two samples stays within the marcher's bound
-/// of both surfaces and of the arc, at its middle.
-[[nodiscard]] bool ChordHolds(const Marcher& m, const Sample& a, const Sample& b, const Sample& mid)
+/// of both surfaces and of the arc, at its middle. Along a tangency, of S
+/// and of the arc only: C may lie as far as the tolerance from the valley,
+/// which the certificate bounds.
+[[nodiscard]] bool ChordHolds(const Marcher& m, const Arc& arc, const Sample& a, const Sample& b,
+                              const Sample& mid)
 {
     const Point3 chord = Midpoint(a.Position, b.Position);
     const Point2 onA{0.5 * (a.OnA.X + b.OnA.X), 0.5 * (a.OnA.Y + b.OnA.Y)};
     const Point2 onB{0.5 * (a.OnB.X + b.OnB.X), 0.5 * (a.OnB.Y + b.OnB.Y)};
-    return Distance(chord, mid.Position) <= m.Chord && Distance(chord, Eval(m.A, onA)) <= m.Chord &&
-           Distance(chord, Eval(m.B, onB)) <= m.Chord;
+    const bool onS = arc.Tangent && arc.Tangent->SmallIsA;
+    const bool checkA = !arc.Tangent || onS;
+    const bool checkB = !arc.Tangent || !onS;
+    return Distance(chord, mid.Position) <= m.Chord &&
+           (!checkA || Distance(chord, Eval(m.A, onA)) <= m.Chord) &&
+           (!checkB || Distance(chord, Eval(m.B, onB)) <= m.Chord);
 }
 
 /// The samples strictly between a and b, in order: the chord is halved in
@@ -1982,7 +2155,7 @@ struct NewtonSystem {
                     "BSpline x BSpline: marching lost a branch inside patches " +
                         Describe(arc.BoxA) + " against " + Describe(arc.BoxB));
     }
-    if (ChordHolds(m, a, b, *mid)) {
+    if (ChordHolds(m, arc, a, b, *mid)) {
         return {};
     }
     STEREON_TRY_VOID(Refine(m, arc, a, *mid, depth + 1, out));
@@ -1990,16 +2163,22 @@ struct NewtonSystem {
     return Refine(m, arc, *mid, b, depth + 1, out);
 }
 
-[[nodiscard]] Sample SampleOf(const Seed& seed, const Vec3& direction)
+/// A seed as a sample of the arc: its advance along the arc's direction, or
+/// along a tangency its parameter on S along the valley.
+[[nodiscard]] Sample SampleOf(const Seed& seed, const Arc& arc)
 {
-    return {seed.Position, seed.OnA, seed.OnB, Dot(direction, ToVec(seed.Position))};
+    if (arc.Tangent) {
+        const Point2& onS = arc.Tangent->SmallIsA ? seed.OnA : seed.OnB;
+        return {seed.Position, seed.OnA, seed.OnB, arc.Tangent->AcrossU ? onS.Y : onS.X};
+    }
+    return {seed.Position, seed.OnA, seed.OnB, Dot(arc.Direction, ToVec(seed.Position))};
 }
 
 /// The arc's samples, its seeds at the ends, in the arc's own order.
 [[nodiscard]] Result<std::vector<Sample>> Marched(const Marcher& m, const Arc& arc)
 {
-    const Sample first = SampleOf(arc.From, arc.Direction);
-    const Sample last = SampleOf(arc.To, arc.Direction);
+    const Sample first = SampleOf(arc.From, arc);
+    const Sample last = SampleOf(arc.To, arc);
     std::vector<Sample> samples{first};
     STEREON_TRY_VOID(Refine(m, arc, first, last, 0, samples));
     samples.push_back(last);
@@ -2246,14 +2425,29 @@ ChainSamples(const Marcher& m, const std::vector<Arc>& arcs, const Chain& chain)
     return ctx.WithResolution(target);
 }
 
+/// The declared bound to certify the local branch within: the declaration
+/// less the rounding of moving it back, as LocalContext does the resolution.
+[[nodiscard]] Result<double> LocalDeclared(const double declared, const double rounding)
+{
+    if (declared == 0.0 || rounding == 0.0) {
+        return declared;
+    }
+    const double target = std::nextafter(declared - rounding, 0.0);
+    if (!(target > 0.0)) {
+        return Fail(ErrorCode::CertificationFailed,
+                    "BSpline x BSpline: moving a tangency back from about the origin rounds by " +
+                        Number(rounding) + " mm, not within the tolerance");
+    }
+    return target;
+}
+
 /// The local branch, certified on the local surfaces, moved back to the
 /// input's place. The local surfaces are the input's translated exactly
 /// (Moved), so the exact translate of the local curve deviates from the
 /// input surfaces as the local curve does from the local ones; the moved
 /// curve lies within `rounding` of that translate.
 [[nodiscard]] Result<void> MoveBack(IntersectionBranch& branch, const BSplineCurve& local,
-                                    const Vec3& shift, const double rounding,
-                                    const double resolution)
+                                    const Vec3& shift, const double rounding, const double target)
 {
     if (shift == Vec3{}) {
         return {};
@@ -2265,10 +2459,10 @@ ChainSamples(const Marcher& m, const std::vector<Arc>& arcs, const Chain& chain)
     }
     STEREON_TRY(BSplineCurve moved, MakeBSplineCurve(local.Degree, local.Knots, std::move(poles)));
     branch.Curve3d = Curve(std::move(moved));
-    // The local bound is at most r - rounding, so both are upper bounds on
-    // the moved curve's deviation.
-    branch.Bound = std::min(resolution, std::nextafter(branch.Bound + rounding,
-                                                       std::numeric_limits<double>::infinity()));
+    // The local bound is at most the target less the rounding, so both are
+    // upper bounds on the moved curve's deviation.
+    branch.Bound = std::min(
+        target, std::nextafter(branch.Bound + rounding, std::numeric_limits<double>::infinity()));
     return {};
 }
 
@@ -2284,23 +2478,50 @@ ChainSamples(const Marcher& m, const std::vector<Arc>& arcs, const Chain& chain)
     return *curve;
 }
 
+/// Whether the chain follows a tangency along a curve; nothing when it
+/// mixes such arcs with transverse ones, which no proof joins.
+[[nodiscard]] Result<bool> TangentChain(const std::vector<Arc>& arcs, const Chain& chain)
+{
+    const auto tangent = [&](const ChainStep& step) { return arcs[step.Arc].Tangent.has_value(); };
+    const bool all = std::ranges::all_of(chain, tangent);
+    if (!all && std::ranges::any_of(chain, tangent)) {
+        return Fail(ErrorCode::IntersectionFailed,
+                    "BSpline x BSpline: a tangency along a curve meets a transverse branch");
+    }
+    return all;
+}
+
 /// The chain's branch, its chords tightened until it certifies. It is
 /// marched and certified on the surfaces moved about the origin: far from
 /// it, the enclosures of the input's homogeneous coordinates widen with
-/// their magnitude, enough to miss the resolution at any span width.
+/// their magnitude, enough to miss the resolution at any span width. A
+/// tangency along a curve is declared within the pair tolerance (ADR-0029
+/// section 6, ADR-0050): its curve lies on S and up to the tolerance from C,
+/// and is certified within the larger of the tolerance and the resolution.
 [[nodiscard]] Result<void> AddBranch(SurfaceSurfaceIntersection& result, Marcher m,
                                      const std::vector<Arc>& arcs, const Chain& chain,
                                      const Context& ctx)
 {
+    STEREON_TRY(const bool tangent, TangentChain(arcs, chain));
+    const double declared = tangent ? m.Tolerance : 0.0;
+    const double target = std::max(ctx.GetResolution(), declared);
     for (int attempt = 0;; ++attempt) {
         STEREON_TRY(std::vector<Sample> samples, ChainSamples(m, arcs, chain));
         STEREON_TRY(IntersectionBranch branch, BranchOf(Distinct(std::move(samples))));
+        if (tangent) {
+            branch.Contact = ContactType::Tangential;
+            branch.Transition = SideTransition::Unresolved;
+        }
         STEREON_TRY(const BSplineCurve local, LocalCurveOf(branch));
         const double rounding = MoveRounding(local.Poles, m.Shift);
         STEREON_TRY(const Context localCtx, LocalContext(ctx, rounding));
-        const Result<void> certified = Certify(branch, m.A, m.B, localCtx);
+        STEREON_TRY(const double localDeclared, LocalDeclared(declared, rounding));
+        const Result<void> certified = Certify(branch, m.A, m.B, localCtx, localDeclared);
         if (certified) {
-            STEREON_TRY_VOID(MoveBack(branch, local, m.Shift, rounding, ctx.GetResolution()));
+            STEREON_TRY_VOID(MoveBack(branch, local, m.Shift, rounding, target));
+            if (tangent && branch.Bound > ctx.GetResolution()) {
+                branch.BoundCause = ToleranceCause::TolerantCoincidence;
+            }
             result.Branches.push_back(std::move(branch));
             return {};
         }
@@ -2479,7 +2700,7 @@ SSIResult NurbsHull(const Surface& a, const Box2& domainA, const Surface& b, con
     STEREON_TRY(Findings found, SearchPairs(std::move(search.Pairs), settings));
     const Surface localA{Moved(*sa, search.Shift)};
     const Surface localB{Moved(*sb, search.Shift)};
-    const Marcher marcher{localA, localB, search.Shift, 0.25 * ctx.GetResolution()};
+    const Marcher marcher{localA, localB, search.Shift, 0.25 * ctx.GetResolution(), tolerance};
     return Assembled(found, marcher, SearchedDomain(*sa, domainA), SearchedDomain(*sb, domainB),
                      settings, ctx);
 }
