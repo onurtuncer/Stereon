@@ -347,6 +347,15 @@ TEST_CASE("plane cylinder sections use one representative of a repeated angular 
         REQUIRE(result->Branches.size() == 1);
         CHECK(result->Branches.front().Range == Interval{-3 * pi, -pi});
     }
+    // The face box supplied by ImprintBodies includes a resolution margin
+    // outside both seam uses. The branch must close on the actual face seam.
+    const double margin = ctx.GetResolution();
+    const Box2 padded{Interval{-margin, Stereon::CirclePeriod + margin}, Interval{-6, 6}};
+    const auto disc = Intersect(Horizontal(0), Box2::Everything(), aboutZ, padded, ctx);
+    REQUIRE(disc);
+    REQUIRE(disc->Branches.size() == 1);
+    CHECK(disc->Branches.front().Range == Interval{0, Stereon::CirclePeriod});
+
     const Box2 remote{Interval{1e100, infinity}, Interval::Everything()};
     const auto unresolved = Intersect(Horizontal(0), Box2::Everything(), aboutZ, remote, ctx);
     REQUIRE_FALSE(unresolved);

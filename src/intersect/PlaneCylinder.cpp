@@ -102,6 +102,12 @@ template <typename Conic>
 [[nodiscard]] Result<Interval> SectionAngles(const Interval& request, const double radius,
                                              const Context& ctx)
 {
+    // Face broad-phase boxes are inflated around their pcurve boundaries.
+    // Keep the topological seam when that bounded box contains the base turn.
+    const Interval base{0.0, CirclePeriod};
+    if (request.IsBounded() && Contains(request, base)) {
+        return base;
+    }
     const Interval turn = CylinderTurn(request);
     const double span = turn.GetUpper() - turn.GetLower();
     if (request.GetUpper() - request.GetLower() >= CirclePeriod &&
