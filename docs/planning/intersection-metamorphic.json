@@ -554,8 +554,22 @@
     {
       "id": "AUDIT-20261122-plane-cylinder-periodic-box",
       "source": "https://github.com/onurtuncer/Stereon/actions/runs/45059668981/job/137322549137",
-      "state": "fixture captured",
-      "fixture": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Finding: plane-cylinder boxes outside the base turn"
+      "state": "verified",
+      "fixture": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Finding: plane-cylinder boxes outside the base turn",
+      "direct": "tests/intersect/MetamorphicRegressionTests.cpp#MR AUDIT-20261122-plane-cylinder-periodic-box sections cover the requested turn",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR AUDIT-20261122-plane-cylinder-periodic-box sections cover the requested turn",
+      "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#- **Periodic chart oracle.**",
+      "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md##### Plane-cylinder shifted-chart repair",
+      "relations": [
+        "MR-02",
+        "MR-04"
+      ],
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#AUDIT-20261122-plane-cylinder-periodic-box",
+      "repair_commit": "a2ae770b0ce0da4f3073838f0de28dd9d7e21d5e",
+      "red": "docs/planning/intersection-metamorphic-relations-surface-surface.md#- **Periodic chart red.**",
+      "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#- **Periodic chart green.**",
+      "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#- **Periodic chart review.**"
     },
     {
       "id": "PR-271",
@@ -5671,12 +5685,14 @@
         "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
         "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
         "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
-        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
-        "evidence_kind": "resolved_geometry"
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md##### Plane-cylinder shifted-chart repair",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#- **Periodic chart green.**",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#- **Periodic chart review.**"
       }
     },
     "surface-surface:Cylinder:Sphere": {
@@ -6173,12 +6189,14 @@
         "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#**Review.** 194 of the 196"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
         "test": "tests/intersect/SurfaceRelationTests.cpp#MR-04: surface-surface answers keep their place in equivalent surface charts",
         "oracle": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Domain",
-        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md#### Replay",
-        "evidence_kind": "resolved_geometry"
+        "replay": "docs/planning/intersection-metamorphic-relations-surface-surface.md##### Plane-cylinder shifted-chart repair",
+        "evidence_kind": "resolved_geometry",
+        "green": "docs/planning/intersection-metamorphic-relations-surface-surface.md#- **Periodic chart green.**",
+        "review": "docs/planning/intersection-metamorphic-relations-surface-surface.md#- **Periodic chart review.**"
       }
     },
     "surface-surface:Plane:Ellipsoid": {
