@@ -265,6 +265,12 @@ TEST_CASE("plane cylinder circles clip across the seam and against both domains"
         CHECK(swapped->Branches[i].Range == result->Branches[i].Range);
         CHECK(PcurveDeviation(swapped->Branches[i], aboutZ, plane) <= ctx.GetResolution());
     }
+    const Box2 shifted{Interval{-pi, pi}, Interval{2.0, 4.0}};
+    const auto continuous = Intersect(plane, right, aboutZ, shifted, ctx);
+    REQUIRE(continuous);
+    REQUIRE(continuous->Branches.size() == 1);
+    CHECK_THAT(continuous->Branches[0].Range.GetLower(), WithinAbs(-pi / 2.0, 1e-14));
+    CHECK_THAT(continuous->Branches[0].Range.GetUpper(), WithinAbs(pi / 2.0, 1e-14));
     const Box2 angular{Interval{pi / 4.0, 3.0 * pi / 4.0}, Interval{2.0, 4.0}};
     const auto cut = Intersect(plane, right, aboutZ, angular, ctx);
     REQUIRE(cut);
@@ -326,5 +332,38 @@ TEST_CASE("clipped circular sections agree with a dense independent box-membersh
                 CHECK(found == expected);
             }
         }
+    }
+}
+
+TEST_CASE("plane cylinder sections use one representative of a repeated angular chart",
+          "[intersect][cylinder][regression]")
+{
+    const double infinity = std::numeric_limits<double>::infinity();
+    for (const Interval request :
+         {Interval{-infinity, -pi}, Interval{-3 * pi, pi}, Interval{-3 * pi, infinity}}) {
+        const Box2 box{request, Interval{-6, 6}};
+        const auto result = Intersect(Horizontal(0), Box2::Everything(), aboutZ, box, ctx);
+        REQUIRE(result);
+        REQUIRE(result->Branches.size() == 1);
+        CHECK(result->Branches.front().Range == Interval{-3 * pi, -pi});
+    }
+    const Box2 remote{Interval{1e100, infinity}, Interval::Everything()};
+    const auto unresolved = Intersect(Horizontal(0), Box2::Everything(), aboutZ, remote, ctx);
+    REQUIRE_FALSE(unresolved);
+    CHECK(unresolved.error().GetCode() == Stereon::ErrorCode::CertificationFailed);
+}
+
+TEST_CASE("plane cylinder rulings retain their lifted angular coordinates",
+          "[intersect][cylinder][regression]")
+{
+    const Surface plane{Plane{Point3{}, Vec3{1, 0, 0}, Vec3{0, 0, 1}}};
+    const Box2 box{Interval{1.5 * pi, 3.5 * pi}, Interval{-1, 1}};
+    const auto result = Intersect(plane, Box2::Everything(), aboutZ, box, ctx);
+    REQUIRE(result);
+    REQUIRE(result->Branches.size() == 2);
+    for (const auto& branch : result->Branches) {
+        const Stereon::Point2 uv = Eval(branch.OnB, 0.0);
+        CHECK(Contains(box.X, uv.X));
+        CHECK(PcurveDeviation(branch, plane, aboutZ) <= ctx.GetResolution());
     }
 }

@@ -1570,3 +1570,47 @@ TEST_CASE("MR CI-272-ellipse-plane crossings on the seam and a cut are decided",
         }
     }
 }
+
+TEST_CASE("MR AUDIT-20261122-plane-cylinder-periodic-box sections cover the requested turn",
+          "[intersect][metamorphic][backfill][periodic-cylinder]")
+{
+    const Surface cylinder{Cylinder{Point3{}, 1.0, Vec3{-1, 0, 0}, Vec3{0, -1, 0}, true}};
+    const Box2 planeBox{Interval{-4, 4}, Interval{-4, 4}};
+    const Context policy = Context::Default();
+    for (const bool tilted : {false, true}) {
+        const Vec3 y = tilted ? Vec3{0, 0.6, 0.8} : Vec3{0, 1, 0};
+        const Surface plane{Plane{Point3{0, 0, 0.5}, Vec3{1, 0, 0}, y}};
+        for (const Interval arc :
+             {Interval{-pi, pi}, Interval{-pi, -pi / 4}, Interval{2 * pi, 2.5 * pi}}) {
+            const Box2 cylinderBox{arc, Interval{-4, 4}};
+            for (const bool swapped : {false, true}) {
+                DYNAMIC_SECTION("tilted " << tilted << " lower " << arc.GetLower() << " upper "
+                                          << arc.GetUpper() << " swapped " << swapped)
+                {
+                    const auto result =
+                        swapped ? Intersect(cylinder, cylinderBox, plane, planeBox, 1e-5, policy)
+                                : Intersect(plane, planeBox, cylinder, cylinderBox, 1e-5, policy);
+                    INFO(IntersectTest::ErrorText(result));
+                    REQUIRE(result.has_value());
+                    REQUIRE(result->Branches.size() == 1);
+                    const IntersectionBranch& branch = result->Branches.front();
+                    REQUIRE(branch.IsCertified());
+                    const auto& onCylinder = swapped ? branch.OnA : branch.OnB;
+                    // Check the entire requested arc including both endpoints. At the
+                    // quarter turn of [-pi,pi] this includes the missing (0,1,11/6).
+                    for (const double f : {0.0, 0.25, 0.5, 0.75, 1.0}) {
+                        const double u = std::lerp(arc.GetLower(), arc.GetUpper(), f);
+                        const double t =
+                            std::lerp(branch.Range.GetLower(), branch.Range.GetUpper(), f);
+                        const double worldY = -std::sin(u);
+                        const Point3 expected{-std::cos(u), worldY,
+                                              0.5 + (tilted ? 4.0 * worldY / 3.0 : 0.0)};
+                        CHECK(Distance(Eval(branch.Curve3d, t), expected) <=
+                              policy.GetResolution());
+                        CHECK(std::abs(Eval(onCylinder, t).X - u) <= policy.GetResolution());
+                    }
+                }
+            }
+        }
+    }
+}

@@ -97,6 +97,21 @@ template <typename Conic>
     return (Squared(u) + Squared(v)).GetUpper() < 0.25;
 }
 
+/// One representative turn in the cylinder's chart. At a very large
+/// offset, adding a period to an endpoint can lose a resolvable arc.
+[[nodiscard]] Result<Interval> SectionAngles(const Interval& request, const double radius,
+                                             const Context& ctx)
+{
+    const Interval turn = CylinderTurn(request);
+    const double span = turn.GetUpper() - turn.GetLower();
+    if (request.GetUpper() - request.GetLower() >= CirclePeriod &&
+        (span == 0.0 || std::abs(span - CirclePeriod) * radius > ctx.GetResolution())) {
+        return Fail(ErrorCode::CertificationFailed,
+                    "PlaneCylinder: a full turn is not representable in the requested chart");
+    }
+    return turn;
+}
+
 /// The axis is perpendicular to the plane: the section circle at the
 /// plane's height, on the cylinder's angle.
 [[nodiscard]] Result<SurfaceSurfaceIntersection> CircleSection(const Sides& s, const Box2& boxA,
@@ -110,7 +125,7 @@ template <typename Conic>
     const Line2d onCylinder{Point2{0.0, v}, Vec2{1.0, 0.0}};
     const Box2 planeBox{Around(onPlane.Center.X, circle.Radius),
                         Around(onPlane.Center.Y, circle.Radius)};
-    const Interval range = Intersection(Domain(circle), boxB.X);
+    const Interval range = boxB.X;
     SurfaceSurfaceIntersection result;
     if (range.IsEmpty() || !Contains(boxB.Y, v) || !Intersects(planeBox, boxA) ||
         ProvenInteriorBox(onPlane, circle.Radius, circle.Radius, boxA)) {
@@ -131,9 +146,15 @@ template <typename Conic>
 
 /// The cylinder's ruling at angle u, with the line on each surface.
 [[nodiscard]] Result<void> AddRuling(SurfaceSurfaceIntersection& result, const Sides& s,
-                                     const double u, const bool tangent, const Box2& boxA,
+                                     const double angle, const bool tangent, const Box2& boxA,
                                      const Box2& boxB, const Context& ctx)
 {
+    // The generator repeats once per turn. Lift its principal angle into
+    // the requested chart before clipping its height, including at a seam.
+    const double u =
+        Contains(boxB.X, angle)
+            ? angle
+            : std::fma(std::ceil((boxB.X.GetLower() - angle) / CirclePeriod), CirclePeriod, angle);
     const Point3 point = Eval(s.C, Point2{u, 0.0});
     const Line2d onPlane{Project(s.P, point), InPlane(s.P, s.Axis)};
     const Line2d onCylinder{Point2{u, 0.0}, Vec2{0.0, 1.0}};
@@ -233,9 +254,8 @@ EllipseSection(const Sides& s, const Box2& boxA, const Box2& boxB, const Context
     const Ellipse2d onPlane{Project(s.P, center), majorRadius, s.C.Radius,
                             InPlane(s.P, ellipse.XAxis), InPlane(s.P, minor)};
     const double amplitude = s.C.Radius * lambda; // v(t) = vCenter + amplitude cos t.
-    // t runs from the seam round to it, so the pcurve stays within [0, 2 pi] in u.
-    const Interval range = Intersection(Interval{-u0, CirclePeriod - u0},
-                                        Interval{boxB.X.GetLower() - u0, boxB.X.GetUpper() - u0});
+    // Keep the cylinder pcurve in the requested chart: u = u0 + t.
+    const Interval range{boxB.X.GetLower() - u0, boxB.X.GetUpper() - u0};
     const Box2 planeBox{Around(onPlane.Center.X, majorRadius),
                         Around(onPlane.Center.Y, majorRadius)};
     SurfaceSurfaceIntersection result;
@@ -270,11 +290,13 @@ Result<SurfaceSurfaceIntersection> PlaneCylinder(const Surface& a, const Box2& b
     const Sides s = SidesOf(a, b, *plane, *cylinder);
     const ExactVector<4> normal = ExactCross(Exactly(s.P.XAxis), Exactly(s.P.YAxis));
     const ExactVector<4> axis = ExactAxis(s.C);
+    STEREON_TRY(const Interval angles, SectionAngles(boxB.X, cylinder->Radius, ctx));
+    const Box2 sectionBox{angles, boxB.Y};
     if (IsExactlyZero(ExactCross(normal, axis))) {
-        return CircleSection(s, boxA, boxB, ctx);
+        return CircleSection(s, boxA, sectionBox, ctx);
     }
     if (SignOf(ExactDot(normal, axis)) != Sign::Zero) {
-        return EllipseSection(s, boxA, boxB, ctx);
+        return EllipseSection(s, boxA, sectionBox, ctx);
     }
     // The axis runs along the plane: the axis's height over it against the radius.
     const auto height = ExactDot(ExactOffset(s.C.Origin, s.P.Origin), normal);
@@ -282,7 +304,7 @@ Result<SurfaceSurfaceIntersection> PlaneCylinder(const Surface& a, const Box2& b
     if (sign == Sign::Positive) {
         return SurfaceSurfaceIntersection{}; // Proved separate.
     }
-    return Rulings(s, boxA, boxB, sign, ctx);
+    return Rulings(s, boxA, sectionBox, sign, ctx);
 }
 
 Result<SurfaceSurfaceIntersection> CylinderPlane(const Surface& a, const Box2& boxA,
