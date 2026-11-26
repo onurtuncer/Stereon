@@ -1120,3 +1120,97 @@ TEST_CASE("MR PR-194 NURBS hull applies the factory bounds",
         }
     }
 }
+
+namespace {
+
+/// The exact turn of a direction by a placement's cyclic permutation.
+Vec3 SkewTurn(const Placement& p, const Vec3& v)
+{
+    return v.X * p.X + v.Y * p.Y + v.Z * Cross(p.X, p.Y);
+}
+
+/// |distance from the axis - radius| for the cylinder through o about the
+/// unit axis.
+double SkewOff(const Point3& q, const Point3& o, const Vec3& axis, const double radius)
+{
+    const Vec3 w = q - o;
+    return std::abs(Length(w - Dot(w, axis) * axis) - radius);
+}
+
+} // namespace
+
+TEST_CASE("MR PR-322 two B seam crossings in one former scan cell are both isolated",
+          "[intersect][metamorphic][backfill][PR-322]")
+{
+    // Root cause (CylinderCylinderSkew.cpp, repaired in #322, issue #195):
+    // the crossings of the curve with B's seam were looked for by a fixed
+    // scan of 256 steps of A's angle. Two crossings in one step of the scan
+    // were missed together, and the branch was not cut at B's seam. The
+    // fixture is #322's: A of radius 3 about z, B of radius 2 along x
+    // through (0, 4, 0), its frame (0, -q, s), (0, -s, -q) with
+    // q = (1 + delta) / 2, and A's angle requested on a window about the
+    // fold, cut asymmetrically. Oracle, in closed form: B's seam generator
+    // runs along x at y = 4 - 2q, z = 2s, and meets A at x = +-sqrt(9 - y^2).
+    // At delta = 1e-7 the two lie 6e-4 apart in A's angle, inside one step
+    // of the old scan (8e-3). Both must be the ends of certified branches,
+    // and every sample must lie on both cylinders. MR-01: the cyclic turns of
+    // the axes and the translation (8, -4, 2). MR-02: both orders, with the
+    // boxes exchanged. MR-03: scales 1/4 and 4 with the context. MR-04: B's
+    // handedness reversed, which reverses its angle.
+    const double half = std::acos(2.0 / 3.0);
+    const double middle = pi / 2.0;
+    const Interval window{middle - half * std::cos(0.2), middle - half * std::cos(2.3)};
+    for (const Placement& p : Placements()) {
+        Replay("PR-322", p);
+        const Context policy = p.Policy();
+        const double reach = 2.0 * policy.GetResolution();
+        const Vec3 zAxis = SkewTurn(p, Vec3{0.0, 0.0, 1.0});
+        const Vec3 xAxis = SkewTurn(p, Vec3{1.0, 0.0, 0.0});
+        const Surface a{Cylinder{p.Point(0.0, 0.0, 0.0), 3.0 * p.Scale, SkewTurn(p, Vec3{1, 0, 0}),
+                                 SkewTurn(p, Vec3{0, 1, 0}), true}};
+        for (const double delta : {1e-4, 1e-7}) {
+            const double q = (1.0 + delta) / 2.0;
+            const double s = std::sqrt(1.0 - q * q);
+            const double y = 4.0 - 2.0 * q;
+            const double x = std::sqrt(9.0 - y * y);
+            const Point3 plus = p.Point(x, y, 2.0 * s);
+            const Point3 minus = p.Point(-x, y, 2.0 * s);
+            for (const bool rightHanded : {false, true}) {
+                const Surface b{Cylinder{p.Point(0.0, 4.0, 0.0), 2.0 * p.Scale,
+                                         SkewTurn(p, Vec3{0.0, -q, s}),
+                                         SkewTurn(p, Vec3{0.0, -s, -q}), rightHanded}};
+                for (const bool swapped : {false, true}) {
+                    INFO("PR-322 scale " << p.Scale << " offset " << p.Offset.X << " axis ("
+                                         << p.X.X << ", " << p.X.Y << ", " << p.X.Z << ") delta "
+                                         << delta << " right-handed " << rightHanded << " "
+                                         << (swapped ? "B, A" : "A, B"));
+                    const Box2 onA{window, Interval::Everything()};
+                    const auto r = swapped ? Intersect(b, Domain(b), a, onA, policy)
+                                           : Intersect(a, onA, b, Domain(b), policy);
+                    INFO(IntersectTest::ErrorText(r));
+                    REQUIRE(r.has_value());
+                    REQUIRE_FALSE(r->Branches.empty());
+                    bool atPlus = false;
+                    bool atMinus = false;
+                    for (const IntersectionBranch& branch : r->Branches) {
+                        CHECK(branch.IsCertified());
+                        for (const double t : {branch.Range.GetLower(), branch.Range.GetUpper()}) {
+                            const Point3 end = Eval(branch.Curve3d, t);
+                            atPlus = atPlus || Distance(end, plus) <= reach;
+                            atMinus = atMinus || Distance(end, minus) <= reach;
+                        }
+                        for (const double t : IntersectTest::SamplesOf(branch.Range, 64)) {
+                            const Point3 sample = Eval(branch.Curve3d, t);
+                            CHECK(SkewOff(sample, p.Point(0.0, 0.0, 0.0), zAxis, 3.0 * p.Scale) <=
+                                  reach);
+                            CHECK(SkewOff(sample, p.Point(0.0, 4.0, 0.0), xAxis, 2.0 * p.Scale) <=
+                                  reach);
+                        }
+                    }
+                    CHECK(atPlus);
+                    CHECK(atMinus);
+                }
+            }
+        }
+    }
+}
