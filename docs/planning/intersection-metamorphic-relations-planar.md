@@ -92,4 +92,25 @@ This branch therefore:
 
 #### Strict green
 
-Pending this branch's CI: the per-PR tests in the native CTest jobs, and a Robustness run dispatched on the branch for the `[exhaustive]` forms. The 143 other cells move to `verified` only when both are green.
+At this branch's head `0c44caa` (`main` 09c0505 with test-only changes):
+
+- **Per-PR tests.** "only the planar-curves configurations the ledger lists are refused" and "MR-04: planar configurations of every pair but two B-splines refuse an equivalent chart only as documented" are no longer `[!mayfail]`. Both passed in every native CTest job of #351:
+  - [Linux `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45857746936/job/140040466089);
+  - [Linux `gcc16-asan`](https://github.com/onurtuncer/Stereon/actions/runs/45857746936/job/140040465754);
+  - [Windows `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45857747061/job/140040465721);
+  - [Windows `gcc16-windows`](https://github.com/onurtuncer/Stereon/actions/runs/45857747061/job/140040465233);
+  - [macOS `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45857746999/job/140040464749).
+
+  The existing safety tests passed with them.
+- **Exhaustive tests.** In the [Robustness run dispatched on the branch](https://github.com/onurtuncer/Stereon/actions/runs/45857747650/job/140040479322), every placement and scale was run, both ways. 8 test cases: 7 passed, and 1 failed as expected (the B-spline pair's `[!mayfail]` MR-04 test, its 48 refusals).
+  - Corpus completeness: 1560 answered, 48 refused as documented, 0 undocumented.
+  - The strict MR-04 gate without the B-spline pair: 2712 answered, 96 refused as documented, 0 undocumented.
+  - Both safety tests passed: nothing was answered wrongly.
+
+**Strict review.** This is the v0.2 verification agent's review; the owner's review is pending. The audit correction asked for completeness evidence that cannot accept an undocumented refusal. Each of the 143 cells has it now:
+
+- **MR-01, MR-02 and MR-03, all 36 pairs.** The safety test the cell cites holds every answer to its closed form. The strict corpus completeness test runs every placement and scale, both ways, and fails on any refusal a case does not document.
+- **MR-04, the 35 ordered pairs other than BSplineCurve2d with itself.** The safety test the cell cites is paired with the strict MR-04 gate on those pairs.
+- **The refusals that remain** are the cases' own `may_fail_closed` limitations, which the corpus README lists.
+
+On that review the 143 cells are `verified`. `planar:BSplineCurve2d:BSplineCurve2d/MR-04` stays `MR implemented`.
