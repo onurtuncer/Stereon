@@ -556,14 +556,18 @@ TEST_CASE("a closest approach's status comes from what the primal proved",
         CHECK(Approach(xAxis, Whole, tilted, Whole).Uniqueness == ApproachUniqueness::Unique);
         CHECK(StatusOf(xAxis, Whole, tilted, Whole) == DerivativeStatus::NearEvent);
     }
-    SECTION("a B-spline is not supported yet")
+    SECTION("a B-spline's approach is proved, its products are not supported yet")
     {
+        // The segment (u, u, 1) is nearest the x-axis at its start, 1 away
+        // (tests/intersect/SplineClosestApproachTests.cpp has the rest).
         const auto spline = Stereon::MakeBSplineCurve(
             1, {0.0, 0.0, 1.0, 1.0}, {Point3{0.0, 0.0, 1.0}, Point3{1.0, 1.0, 1.0}});
         REQUIRE(spline.has_value());
         const auto r = Stereon::ClosestApproach(Curve{*spline}, xAxis, ctx);
-        REQUIRE_FALSE(r.has_value());
-        CHECK(r.error().GetCode() == ErrorCode::NotSupported);
+        REQUIRE(r.has_value());
+        CHECK(r->Uniqueness == ApproachUniqueness::Unique);
+        CHECK(r->EndA == ApproachEnd::Lower);
+        CHECK(std::abs(r->Distance - 1.0) <= 1e-15);
         ParameterSet set;
         static_cast<void>(*set.Add("p", ParameterQuantity::Length, 1.0));
         SensitivityContext sensitivity(std::move(set));

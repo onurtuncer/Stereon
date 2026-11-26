@@ -34,10 +34,13 @@ import :ClosestApproach;
 #include "ApproachSide.hpp"
 
 /// The primal closest approach (ClosestApproach.cppm): two lines in closed
-/// form, decided parallel exactly; a line and a conic, or two conics, by
-/// branch and bound on phi = |A(s) - B(t)|^2 / 2, then an active-set Newton
-/// refinement and a proof that phi is strictly convex over the one cluster
-/// of boxes that may hold its minimum.
+/// form, decided parallel exactly; any other pair of lines, conics and
+/// polynomial B-splines by branch and bound on phi = |A(s) - B(t)|^2 / 2,
+/// then an active-set Newton refinement and a proof that phi is strictly
+/// convex over the one cluster of boxes that may hold its minimum. A
+/// B-spline's range is cut at its knots of low continuity (its side's
+/// Cuts): no box crosses one, so its derivatives' bounds hold over every
+/// box, and a cluster across one is left undecided.
 
 namespace Stereon {
 
@@ -106,6 +109,33 @@ struct Range {
     const bool loEnd = domain.GetLower() >= m;
     const bool hiEnd = domain.GetUpper() <= big;
     return {loEnd ? domain.GetLower() : m, hiEnd ? domain.GetUpper() : big, loEnd, hiEnd, false};
+}
+
+/// A B-spline's range: the requested domain within its own, both ends
+/// real (its own, or the domain's). Nothing when the two miss each other.
+[[nodiscard]] std::optional<Range> SplineRange(const ApproachSide& spline, const Interval& domain)
+{
+    const Interval own = Domain(*spline.Spline);
+    const double lo = std::max(domain.GetLower(), own.GetLower());
+    const double hi = std::min(domain.GetUpper(), own.GetUpper());
+    if (!(lo <= hi)) {
+        return std::nullopt;
+    }
+    return Range{lo, hi, true, true, false};
+}
+
+/// The cuts strictly inside a range, with its ends: the pieces no box
+/// crosses.
+[[nodiscard]] std::vector<double> PiecesOf(const ApproachSide& side, const Range& r)
+{
+    std::vector<double> ends{r.Lo};
+    for (const double c : side.Cuts) {
+        if (c > r.Lo && c < r.Hi) {
+            ends.push_back(c);
+        }
+    }
+    ends.push_back(r.Hi);
+    return ends;
 }
 
 // --- phi, its derivatives and its bounds ------------------------------------
@@ -245,7 +275,14 @@ struct Search {
     void Run()
     {
         std::priority_queue<Box, std::vector<Box>, ByLower> queue;
-        queue.push(Bounded(RangeS.Lo, RangeS.Hi, RangeT.Lo, RangeT.Hi));
+        // One box per pair of pieces: none crosses a B-spline's cut.
+        const std::vector<double> s = PiecesOf(A, RangeS);
+        const std::vector<double> t = PiecesOf(B, RangeT);
+        for (std::size_t i = 0; i + 1 < s.size(); ++i) {
+            for (std::size_t j = 0; j + 1 < t.size(); ++j) {
+                queue.push(Bounded(s[i], s[i + 1], t[j], t[j + 1]));
+            }
+        }
         while (!queue.empty()) {
             const Box box = queue.top();
             queue.pop();
@@ -714,6 +751,16 @@ using Exact = DynamicExpansion;
     return narrowed;
 }
 
+/// Whether a cluster's hull crosses a cut of either B-spline, where the
+/// bounds of ProvedUnique do not hold.
+[[nodiscard]] bool AcrossCut(const ApproachSide& a, const ApproachSide& b, const Box& hull)
+{
+    const auto across = [](const std::vector<double>& cuts, const double lo, const double hi) {
+        return std::ranges::any_of(cuts, [&](const double c) { return c > lo && c < hi; });
+    };
+    return across(a.Cuts, hull.S0, hull.S1) || across(b.Cuts, hull.T0, hull.T1);
+}
+
 /// Whether the one cluster holds one minimiser: proved on its hull, or,
 /// when the hull is too wide for the bounds, by searching again around it
 /// with finer leaves, which shrinks it. Every point outside the hull was
@@ -725,6 +772,9 @@ using Exact = DynamicExpansion;
     Range rs = search.RangeS;
     Range rt = search.RangeT;
     for (int pass = 0; pass < 4; ++pass) {
+        if (AcrossCut(a, b, hull)) {
+            return false;
+        }
         if (ProvedUnique(a, b, hull, z)) {
             return true;
         }
@@ -744,7 +794,7 @@ using Exact = DynamicExpansion;
         const Refined refined = Refine(a, b, search.RangeS, search.RangeT, z.S, z.T);
         z = refined;
     }
-    return ProvedUnique(a, b, hull, z);
+    return !AcrossCut(a, b, hull) && ProvedUnique(a, b, hull, z);
 }
 
 /// The search with the seams of whole conics moved off every leaf.
@@ -812,17 +862,35 @@ using Exact = DynamicExpansion;
            Coaxial(a, b);
 }
 
-/// The ranges of a line against a conic, or of two conics, and whether
-/// their minimisers are proved a set.
-[[nodiscard]] ClosestApproachResult WithConic(const ApproachSide& a, const Interval& domainA,
-                                              const ApproachSide& b, const Interval& domainB,
-                                              const Context& ctx)
+/// One curve's range against the other: a line's cut to where its
+/// minimiser can lie, a conic's angle, a B-spline's domain within its own.
+[[nodiscard]] Result<Range> RangeOf(const ApproachSide& side, const Interval& domain,
+                                    const ApproachSide& other)
 {
     using K = ApproachSide::Kind;
-    const Range rs =
-        a.Shape == K::Line ? LineRange(a, domainA, b.Origin, b.Reach) : ConicRange(domainA);
-    const Range rt =
-        b.Shape == K::Line ? LineRange(b, domainB, a.Origin, a.Reach) : ConicRange(domainB);
+    if (side.Shape == K::Line) {
+        return LineRange(side, domain, other.Origin, other.Reach);
+    }
+    if (side.Shape == K::Spline) {
+        const std::optional<Range> r = SplineRange(side, domain);
+        if (!r) {
+            return Fail(ErrorCode::InvalidInput,
+                        "ClosestApproach: a domain that misses the B-spline's own");
+        }
+        return *r;
+    }
+    return ConicRange(domain);
+}
+
+/// The ranges of a line against a conic or a B-spline, or of two conics or
+/// B-splines, and whether their minimisers are proved a set.
+[[nodiscard]] Result<ClosestApproachResult> WithConic(const ApproachSide& a,
+                                                      const Interval& domainA,
+                                                      const ApproachSide& b,
+                                                      const Interval& domainB, const Context& ctx)
+{
+    STEREON_TRY(const Range rs, RangeOf(a, domainA, b));
+    STEREON_TRY(const Range rt, RangeOf(b, domainB, a));
     return Searched(a, rs, b, rt, ProvedSet(a, rs, b, rt), ctx);
 }
 

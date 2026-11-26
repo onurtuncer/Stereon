@@ -441,8 +441,28 @@ was proved about the minimiser:
   one alone. The reported pair is then the best found, and ``LowerBound`` is
   a certified lower bound on the minimum distance.
 
-``Meets`` says the distance is within the resolution. B-spline curves answer
-``NotSupported``.
+``Meets`` says the distance is within the resolution.
+
+Polynomial B-spline curves (and rational ones whose weights are all equal)
+take part in the same branch and bound. Their bounds on the first three
+derivatives' lengths are the largest poles of the derivative B-splines,
+:math:`p (P_{i+1} - P_i) / (u_{i+p+1} - u_{i+1})` applied up to three
+times, by the convex hull property; their reach is the farthest pole from
+the centre of the poles' box. Those bounds are Lipschitz constants only
+where the curve is twice continuously differentiable, so the search starts
+from one box per pair of pieces between the knots of multiplicity at least
+:math:`p - 1` (every interior knot below degree 3), and no box crosses one.
+A cluster of leaves across such a knot is not proved: the answer is
+``Undecided``, with ``LowerBound`` certified, as for a corner of the curve
+nearest the other. A rational B-spline answers ``NotSupported``, and the
+products of any B-spline's approach answer ``NotSupported`` as a status.
+``tests/intersect/SplineClosestApproachTests.cpp`` holds closed forms (a
+parabola written as a quadratic Bézier against a line, a mirrored
+parabola, a circle with an end minimum and with a tie between both ends, a
+corner, a restricted domain) and an independent oracle (dense sampling,
+then projected Newton's method) on random cubics with a double knot half
+the time, against bounded lines, circles and other cubics: the lower bound
+never exceeds the oracle's minimum, and a ``Unique`` answer attains it.
 
 How the minimum is proved:
 
