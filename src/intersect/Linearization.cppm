@@ -295,19 +295,42 @@ struct BranchPointLinearization {
 /// The status: a Tangential or Overlap branch is Nondifferentiable; an
 /// uncertified one, or a point at a pole of either surface's parameters,
 /// Indeterminate; a crossing NearEvent below NearEventSine, else Valid.
+/// One branch does not show whether its point is at a node of the result:
+/// the overload taking the whole result does.
 /// InvalidInput for an empty surface, a parameter outside the branch's
 /// Range, or a point Newton's method does not bring onto both surfaces
 /// within the branch's bound.
 [[nodiscard]] Result<BranchPointLinearization>
 Linearize(const Surface& a, const Surface& b, const IntersectionBranch& branch, double t);
 
+/// The linearisation of a sample of `intersection`, the result of
+/// Intersect(a, b): as Linearize(a, b, branch, t) on the sample's branch,
+/// read against the whole result, which shows what one branch cannot. A
+/// result with an overlap is Nondifferentiable at every sample. A sample at
+/// a node is Nondifferentiable: a node is an end where three or more ends of
+/// the result's certified branches meet (four at a transverse node of two
+/// B-spline surfaces, or of two equal cylinders whose axes meet), ends
+/// meeting when they lie within their branches' Bounds of each other, and
+/// the sample is at it when its point lies within its own branch's Bound of
+/// the node. The surfaces are tangent there and the intersection is
+/// singular: a candidate event (ADR-0054), which a generic change of either
+/// surface resolves into other branches, not a point that moves.
+/// IntersectJvp and IntersectVjp classify their samples this way.
+/// InvalidInput as the overload above, and for a sample naming a branch the
+/// result does not have.
+[[nodiscard]] Result<BranchPointLinearization>
+Linearize(const Surface& a, const Surface& b, const SurfaceSurfaceIntersection& intersection,
+          const BranchSample& sample);
+
 /// The forward product of Intersect(a, b) for the seed of `sensitivity`:
 /// for each sample, in order, BranchPointValues values. The bindings of
 /// either surface move it as for a curve–surface intersection; one
 /// parameter may move both. A result with an overlap is Nondifferentiable
-/// as a whole, and so is any sample on a branch that is not a crossing.
+/// as a whole, and so is any sample on a branch that is not a crossing or
+/// at a node of the result (as Linearize on the whole result says).
 /// NotSupported (a status) unless both surfaces are planes, cylinders,
-/// cones, spheres, tori or ellipsoids. InvalidInput as Linearize, for a sample naming
+/// cones, spheres, tori, ellipsoids or B-spline surfaces. InvalidInput as
+/// Linearize, for a sample naming
 /// a branch the result does not have, a binding as IntersectJvp refuses it
 /// above, or a seed that was never set.
 [[nodiscard]] Result<SensitivityResult>
