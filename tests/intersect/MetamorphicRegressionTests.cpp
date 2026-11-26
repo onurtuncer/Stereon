@@ -1269,6 +1269,64 @@ TEST_CASE("MR SSI-translated-boundary far hyperbola branches end on the domain's
     }
 }
 
+TEST_CASE("MR SSI-translated-boundary resolves both roots on one patch edge",
+          "[intersect][generic][metamorphic][backfill][SSI-translated-boundary]")
+{
+    // In local coordinates the second patch is (s*u, s*v, s*(u + (v-1/2)^2 - 1/16)).
+    // Its section by z=0 is one parabola. Both ends are on u=0 at v=1/4 and 3/4.
+    // The wider plane contains the whole arc. With halving disabled the edge
+    // search cannot isolate both roots before the pair reaches the tolerance.
+    constexpr double s = 0x1p-12;
+    constexpr double pairTolerance = 5e-5;
+    constexpr double resolution = 1e-8;
+    constexpr std::array<double, 3> square{0.25, -0.25, 0.25};
+    const std::vector<double> knots{0.0, 0.0, 0.0, 1.0, 1.0, 1.0};
+    const Context policy = Context::Default().WithResolution(resolution);
+    for (const double shift : {0.0, 1.0}) {
+        std::vector<Point3> planePoles;
+        std::vector<Point3> curvedPoles;
+        for (std::size_t i = 0; i < 3; ++i) {
+            for (std::size_t j = 0; j < 3; ++j) {
+                const double u = static_cast<double>(i) / 2.0;
+                const double v = static_cast<double>(j) / 2.0;
+                planePoles.push_back({shift + s * (2.0 * u - 0.5), s * (2.0 * v - 0.5), 0.0});
+                curvedPoles.push_back({shift + s * u, s * v, s * (u + square.at(j) - 0.0625)});
+            }
+        }
+        const auto plane = Stereon::MakeBSplineSurface(2, 2, knots, knots, planePoles, {});
+        const auto curved = Stereon::MakeBSplineSurface(2, 2, knots, knots, curvedPoles, {});
+        REQUIRE(plane.has_value());
+        REQUIRE(curved.has_value());
+        const Surface a{*plane};
+        const Surface b{*curved};
+        for (const bool swapped : {false, true}) {
+            CAPTURE(shift, swapped);
+            const auto result = Intersect(swapped ? b : a, Box2::Everything(), swapped ? a : b,
+                                          Box2::Everything(), pairTolerance, policy);
+            INFO(IntersectTest::ErrorText(result));
+            REQUIRE(result.has_value());
+            REQUIRE(result->Branches.size() == 1);
+            CHECK(result->Points.empty());
+            CHECK(result->Overlaps.empty());
+            const auto& branch = result->Branches.front();
+            REQUIRE(branch.IsCertified());
+            REQUIRE(branch.Range.IsBounded());
+            const Point3 first = Eval(branch.Curve3d, branch.Range.GetLower());
+            const Point3 last = Eval(branch.Curve3d, branch.Range.GetUpper());
+            CHECK(std::abs(first.X - shift) <= resolution);
+            CHECK(std::abs(last.X - shift) <= resolution);
+            CHECK(std::abs(std::min(first.Y, last.Y) - 0.25 * s) <= resolution);
+            CHECK(std::abs(std::max(first.Y, last.Y) - 0.75 * s) <= resolution);
+            for (const double t : IntersectTest::SamplesOf(branch.Range, 32)) {
+                const Point3 p = Eval(branch.Curve3d, t);
+                const double y = p.Y / s - 0.5;
+                CHECK(std::abs(p.Z) <= resolution);
+                CHECK(std::abs((p.X - shift) - s * (0.0625 - y * y)) <= resolution);
+            }
+        }
+    }
+}
+
 TEST_CASE("MR AUDIT-20261112-cone-polish far line origin keeps cone crossings",
           "[intersect][metamorphic][backfill][AUDIT-20261112-cone-polish]")
 {

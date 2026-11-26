@@ -299,9 +299,41 @@ At #305 the ledger held four open defect records: `SSI-translated-boundary` (`un
   - `SSI-translated-boundary-search-shift`.
 
   The 24 earlier faults were killed in the same run too (score 28 / 29).
-- **Survived:** `SSI-translated-boundary-edge-halving` (`EdgeHalvings` = 0). The MR test still passes without the halving, as long as the shift is kept. Like PR-159's `BisectSeam` candidate, this root cause is not observable alone with these fixtures. It was removed from the catalogue, so that the workflow tests only faults some test detects, and it is recorded here. No test was loosened. So the record stays `MR implemented`: its second root cause has no red evidence. Closing it needs a fixture that needs the halving with the shift in place (owner or SSI agent).
+- **Survived:** `SSI-translated-boundary-edge-halving` (`EdgeHalvings` = 0). The MR test still passes without the halving, as long as the shift is kept. Like PR-159's `BisectSeam` candidate, this root cause is not observable alone with these fixtures. It was removed from the catalogue, so that the workflow tests only faults some test detects, and it is recorded here. No test was loosened. At that revision the record stayed `MR implemented`. The one-edge parabola below supplies the missing evidence with the search shift enabled.
 - **Green:** the same tests passed in every CTest job of #330: [Linux `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45064572641/job/137337734757), [Linux `gcc16-asan`](https://github.com/onurtuncer/Stereon/actions/runs/45064572641/job/137337735042), [Windows `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45064572891/job/137337735813), [Windows `gcc16-windows`](https://github.com/onurtuncer/Stereon/actions/runs/45064572891/job/137337735659), [macOS `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45064572663/job/137337734763) and [coverage](https://github.com/onurtuncer/Stereon/actions/runs/45064572648/job/137337734570).
 - **Review:** this agent's review of the fixtures, oracles and runs above. On it, `AUDIT-20261112-cone-polish`, `AUDIT-20261113-narrow-sphere-seam` and `CI-272-ellipse-plane` are `verified`. The owner's review is pending.
+
+#### SSI-translated-boundary edge-halving replay (2026-11-25)
+
+- **Historical replay.** On Linux with GCC 16.2, the original direct fixture from
+  `75722ba82` on its parent `cbece058f` failed at (64, 0, 0), with one failure
+  in 1067 assertions. On main `1fc0086` the direct fixture and the existing
+  far-hyperbola MR passed all 7036 assertions.
+- **Edge oracle.** In local coordinates the patch is
+  `(s*u, s*v, s*(u + (v-1/2)^2 - 1/16))` on the unit square, with
+  `s = 2^-12`. Its section by the wider plane z = 0 is one arc,
+  `u = 1/16 - (v-1/2)^2`, with both ends on u = 0 at v = 1/4 and 3/4.
+  The regression requires one certified branch, both distinct endpoints
+  in either traversal order, and sampled residuals against both equations.
+  It repeats at x offsets 0 and 1 and in both operand orders. The pair
+  tolerance is 5e-5 and the world-coordinate oracle tolerance is 1e-8.
+- **Edge red.** On [fixture revision 93e1411](https://github.com/onurtuncer/Stereon/commit/93e1411c2b3b55ea7338b1f29ae4931285884743),
+  replacing only `EdgeHalvings = 8` with `0` made the public intersection
+  refuse the arc. Two independent runs failed at `result.has_value()` with
+  the search shift enabled. The named test is “MR SSI-translated-boundary
+  resolves both roots on one patch edge”.
+- **Edge green.** With halving enabled, the same regression passed all 308
+  assertions in GCC 16.2 debug on Linux. All three targeted tests passed
+  7344 assertions. The clean-worktree campaign on `93e1411` with CMake
+  4.4.5 scored 2/2 critical faults killed. Both failed twice with their
+  declared test diagnostics; no fault survived or was inconclusive.
+- **Edge review.** The two endpoint ordinates follow from the patch
+  equation at u = 0. Checking both prevents a duplicate endpoint from
+  passing. The translated and exchanged cases use the same geometric oracle.
+  The far-hyperbola regression and the one-edge regression detect the
+  search-shift and edge-halving faults separately. Replay from the fixture
+  revision with
+  `python tools/mutate.py --catalogue tools/mutation/intersection-backfill-ssi-translated-boundary.json`.
 
 ## Inventory audit after #263
 
