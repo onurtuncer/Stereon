@@ -32,7 +32,21 @@ file(GLOB_RECURSE STEREON_DOC_PAGES CONFIGURE_DEPENDS
     ${STEREON_DOCS_SOURCE}/*.rst
     ${STEREON_DOCS_SOURCE}/references.bib)
 
-set(_sphinx_depends ${STEREON_DOC_PAGES} ${STEREON_DOCS_SOURCE}/conf.py)
+set(_sphinx_depends ${STEREON_DOC_PAGES} ${STEREON_DOCS_SOURCE}/conf.py
+    ${STEREON_DOCS_SOURCE}/_ext/stereon_algorithms.py)
+
+# Source notes are rendered into the manual even when Doxygen is unavailable.
+file(GLOB _algorithm_pages CONFIGURE_DEPENDS "${STEREON_DOCS_SOURCE}/algorithms/*.rst")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${_algorithm_pages})
+foreach(_page IN LISTS _algorithm_pages)
+    file(STRINGS "${_page}" _entries REGEX "^   [^ ]+/[^ ]+$")
+    foreach(_entry IN LISTS _entries)
+        string(STRIP "${_entry}" _path)
+        if(EXISTS "${PROJECT_SOURCE_DIR}/${_path}")
+            list(APPEND _sphinx_depends "${PROJECT_SOURCE_DIR}/${_path}")
+        endif()
+    endforeach()
+endforeach()
 
 if(DOXYGEN_FOUND)
     file(GLOB_RECURSE STEREON_DOXYGEN_INPUTS CONFIGURE_DEPENDS
