@@ -295,6 +295,20 @@
       "tests": "^intersect:\\ MR\\ CI\\-272\\-ellipse\\-plane\\ crossings\\ on\\ the\\ seam\\ and\\ a\\ cut\\ are\\ decided$",
       "diagnostic": "intersect: MR CI-272-ellipse-plane crossings on the seam and a cut are decided",
       "repair_commit": "e8080c8aeb5490f6622f11ab52c68b885916fafd"
+    },
+    {
+      "id": "AUDIT-20261122-plane-cylinder-periodic-box",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: full and partial plane-cylinder sections retain the requested angular chart",
+      "file": "src/intersect/PlaneCylinder.cpp",
+      "find": "    const Box2 sectionBox{angles, boxB.Y};",
+      "replace": "    const Interval clipped = Intersection(angles, Interval{0.0, CirclePeriod});\n    if (clipped.IsEmpty()) {\n        return SurfaceSurfaceIntersection{};\n    }\n    const Box2 sectionBox{clipped, boxB.Y};",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ AUDIT\\-20261122\\-plane\\-cylinder\\-periodic\\-box\\ sections\\ cover\\ the\\ requested\\ turn$",
+      "diagnostic": "intersect: MR AUDIT-20261122-plane-cylinder-periodic-box sections cover the requested turn",
+      "repair_commit": "a2ae770b0ce0da4f3073838f0de28dd9d7e21d5e"
     }
   ]
 }

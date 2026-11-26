@@ -147,22 +147,6 @@ Rulings(const Frame& a, const Frame& b, const Vec3& across, const double distanc
            Compare(squaredDistance, margin, scale) != Sign::Positive;
 }
 
-/// One turn is enough to describe a periodic domain. Preserve the caller's
-/// chart for bounded arcs; an unbounded interval covers the whole circle.
-[[nodiscard]] Interval OneTurn(const Interval& angle)
-{
-    if (!angle.IsBounded()) {
-        if (std::isfinite(angle.GetLower())) {
-            return {angle.GetLower(), angle.GetLower() + CirclePeriod};
-        }
-        if (std::isfinite(angle.GetUpper())) {
-            return {angle.GetUpper() - CirclePeriod, angle.GetUpper()};
-        }
-        return {0.0, CirclePeriod};
-    }
-    return {angle.GetLower(), std::min(angle.GetUpper(), angle.GetLower() + CirclePeriod)};
-}
-
 [[nodiscard]] bool CoversTurn(const Interval& angle)
 {
     return !angle.IsBounded() || angle.GetUpper() - angle.GetLower() >= CirclePeriod;
@@ -173,8 +157,8 @@ Rulings(const Frame& a, const Frame& b, const Vec3& across, const double distanc
 [[nodiscard]] Result<std::vector<OverlapRegion>> ClipAngles(OverlapRegion overlap, const Box2& boxA,
                                                             const Box2& boxB)
 {
-    const Interval arcA = OneTurn(boxA.X);
-    const Interval arcB = OneTurn(boxB.X);
+    const Interval arcA = CylinderTurn(boxA.X);
+    const Interval arcB = CylinderTurn(boxB.X);
     const double widthA = arcA.GetUpper() - arcA.GetLower();
     const double widthB = arcB.GetUpper() - arcB.GetLower();
     if (CoversTurn(boxA.X) && CoversTurn(boxB.X)) {

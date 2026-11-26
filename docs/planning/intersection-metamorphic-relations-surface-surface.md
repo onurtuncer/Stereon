@@ -88,6 +88,37 @@ The first CI run of this branch mapped a whole-turn box [0, 2 pi] to [-pi, pi] u
 - **Not repaired here:** this pull request changes no library code. The inventory records it as `AUDIT-20261122-plane-cylinder-periodic-box`, `fixture captured`. Its repair belongs to the SSI owner, and the owner decides whether such boxes are supported or refused.
 - **Effect on the cells:** Plane:Cylinder/MR-04 and Cylinder:Plane/MR-04 stay `MR implemented` until that record is closed. The MR-04 test now keeps boxes within the base turn, so it no longer exercises this fault.
 
+#### Plane-cylinder shifted-chart repair
+
+The former restriction in the MR-04 matrix test is complemented by a
+dedicated case in `MetamorphicRegressionTests.cpp`. It exercises both
+plane orientations and both operand orders on the unit cylinder with its
+frame turned half. The three angular requests are [-π, π], [-π, -π/4]
+and [2π, 5π/2]. This covers the missing half of a complete section, an arc
+entirely outside the base turn, and a partial arc starting at the far seam.
+
+- **Periodic chart oracle.** At requested angle u the point is
+  (-cos u, -sin u, z), with z = 1/2 for the circle and z = 1/2 + 4y/3
+  for the ellipse. Each run checks one certified branch, its two endpoints
+  and three interior witnesses, and the cylinder pcurve's angular coordinate.
+  These checks also detect a partial request incorrectly widened to a full turn.
+- **Periodic chart red.** The regression on main `648a8ea` failed 54 of
+  88 assertions. Both circle and ellipse lost the negative-angle half.
+  On the repaired kernel, reintroducing the base-turn clip and returning an
+  empty result for disjoint angular boxes made the named regression fail
+  twice with ordinary CTest assertion failures.
+- **Periodic chart green.** The [repair](https://github.com/onurtuncer/Stereon/commit/a2ae770b0ce0da4f3073838f0de28dd9d7e21d5e)
+  passed all 156 assertions of the dedicated regression on Linux with
+  GCC 16.2, preset `gcc16-debug`. The focused plane-cylinder tests together
+  with the existing surface-surface MR-04 test passed 35,266 assertions.
+- **Periodic chart review.** Both ordered-pair MR-04 cells now have the
+  missing off-base full-turn witness and out-of-base partial-arc witnesses.
+  The named regression detects loss of angular coverage even when every
+  point on the truncated arc has a valid surface certificate.
+
+Replay the fault with
+`python tools/mutate.py --catalogue tools/mutation/intersection-backfill.json --only AUDIT-20261122-plane-cylinder-periodic-box`.
+
 #### Green
 
 At this branch's head `bbec12a` (main 898ed69 with test-only changes), the four tests passed in every native CTest job of #329: [Linux `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45065020641/job/137339209208), [Linux `gcc16-asan`](https://github.com/onurtuncer/Stereon/actions/runs/45065020641/job/137339209139), [Windows `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45065020649/job/137339207223), [Windows `gcc16-windows`](https://github.com/onurtuncer/Stereon/actions/runs/45065020649/job/137339207144), [macOS `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45065020688/job/137339132173) and [coverage](https://github.com/onurtuncer/Stereon/actions/runs/45065020698/job/137339134895). A refusal fails each test, so every configuration answered under every relation, in both orders.

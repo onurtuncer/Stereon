@@ -23,6 +23,22 @@ namespace {
 
 inline constexpr double Infinity = std::numeric_limits<double>::infinity();
 
+/// One turn is enough to describe a periodic domain. Preserve the caller's
+/// chart for bounded arcs; an unbounded interval covers the whole circle.
+[[nodiscard]] inline Interval CylinderTurn(const Interval& angle)
+{
+    if (!angle.IsBounded()) {
+        if (std::isfinite(angle.GetLower())) {
+            return {angle.GetLower(), angle.GetLower() + CirclePeriod};
+        }
+        if (std::isfinite(angle.GetUpper())) {
+            return {angle.GetUpper() - CirclePeriod, angle.GetUpper()};
+        }
+        return {0.0, CirclePeriod};
+    }
+    return {angle.GetLower(), std::min(angle.GetUpper(), angle.GetLower() + CirclePeriod)};
+}
+
 /// x in a message, shortest round-trip form.
 [[nodiscard]] inline std::string Number(const double x)
 {
