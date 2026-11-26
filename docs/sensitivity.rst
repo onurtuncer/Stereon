@@ -190,6 +190,19 @@ parameters (a sphere's)                derivative, though the geometry is regula
 A result takes its worst point's status, and carries values only for
 ``Valid`` and ``NearEvent``.
 
+A crossing where a B-spline is not smooth has no derivative. At a B-spline
+curve's own end the point leaves the curve as the geometry moves (a closed
+curve's end too, where its parameter jumps by the period); at a corner, an
+interior knot of multiplicity at least the degree whose one-sided tangents
+differ, it passes from one arm to the other; on a B-spline surface's
+boundary it leaves the surface. All three are ``Nondifferentiable``, in
+space and in the plane, since #334 decides such crossings exactly. A
+crossing on an interior knot line of a surface of multiplicity at least
+its degree, where the partials may jump, is ``Indeterminate``: whether they
+jump is not checked. A joint whose one-sided tangents agree keeps its
+derivative (``src/intersect/SplineJoint.hpp``;
+``tests/intersect/SplineJointLinearizationTests.cpp``).
+
 ``IntersectJvp`` and ``IntersectVjp`` implement the products for a line or
 a B-spline curve against a plane, a cylinder, a cone, a sphere, a torus or
 an ellipsoid.
