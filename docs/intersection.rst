@@ -94,6 +94,11 @@ The configurations:
   resolution, and the certificate below proves what it achieved. The fit
   is limited to 2^16 sample intervals; an excessive or non-finite count
   returns ``CertificationFailed`` before integer conversion or allocation.
+  Circle and ellipse sections retain the cylinder's requested angular chart.
+  A shifted full turn returns the complete section once, and a shorter
+  interval returns its arc. Rulings use an equivalent angle in the same
+  chart. A full turn whose span collapses or loses a resolvable arc at a
+  large angular offset returns ``CertificationFailed``.
   Circular sections are clipped to a bounded plane box by the same complete
   planar edge-intersection clipper used for curves lying in a plane.
   Retained arcs keep the cylinder-angle parameter and are certified against
