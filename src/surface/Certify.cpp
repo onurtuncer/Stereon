@@ -791,7 +791,22 @@ struct ActiveSpans {
 /// under a unit each. The magnitude is the spline's own: a partial's poles
 /// are a degree over a knot span times the differences of the surface's,
 /// and may be far larger than those.
-[[nodiscard]] Homogeneous4 ValueAt(const TensorSpline& s, const double u, const double v)
+// REPLAY OF THE PRE-#323 FAULT (scratch branch, never for merge): the margin
+// of every spline evaluated, partials included, is taken from the surface's
+// largest homogeneous pole, as before #323.
+[[nodiscard]] double MagnitudeOf(const TensorSpline& s)
+{
+    double magnitude = 0.0;
+    for (const Homogeneous4& pole : s.Poles) {
+        for (const Interval& c : pole) {
+            magnitude = std::max({magnitude, std::abs(c.GetLower()), std::abs(c.GetUpper())});
+        }
+    }
+    return magnitude;
+}
+
+[[nodiscard]] Homogeneous4 ValueAt(const TensorSpline& s, const double u, const double v,
+                                   const double surfaceMagnitude)
 {
     const auto p = static_cast<std::size_t>(s.DegreeU);
     const auto q = static_cast<std::size_t>(s.DegreeV);
@@ -816,7 +831,8 @@ struct ActiveSpans {
     }
     const auto terms = static_cast<double>(p + q + 2);
     for (std::size_t c = 0; c < sum.size(); ++c) {
-        sum[c] = Inflated(sum[c], 8.0 * terms * terms * 0x1p-53 * magnitude[c]);
+        static_cast<void>(magnitude[c]);
+        sum[c] = Inflated(sum[c], 8.0 * terms * terms * 0x1p-53 * surfaceMagnitude);
     }
     return sum;
 }
@@ -850,7 +866,7 @@ struct SurfaceEnclosure {
         }
         const double mu = 0.5 * (u.GetLower() + u.GetUpper());
         const double mv = 0.5 * (v.GetLower() + v.GetUpper());
-        const Homogeneous4 at = ValueAt(f, mu, mv);
+        const Homogeneous4 at = ValueAt(f, mu, mv, MagnitudeOf(S));
         const Homogeneous4 slopeU = du != nullptr ? PoleHull(*du, u, v)
                                                   : Homogeneous4{Interval{0.0}, Interval{0.0},
                                                                  Interval{0.0}, Interval{0.0}};
@@ -1488,7 +1504,9 @@ std::optional<EnclosedHomogeneousJet> HomogeneousJetAt(const Surface& surface, c
     if (!e) {
         return std::nullopt;
     }
-    return EnclosedHomogeneousJet{ValueAt(e->S, u, v), ValueAt(e->Su, u, v), ValueAt(e->Sv, u, v)};
+    const double m = MagnitudeOf(e->S);
+    return EnclosedHomogeneousJet{ValueAt(e->S, u, v, m), ValueAt(e->Su, u, v, m),
+                                  ValueAt(e->Sv, u, v, m)};
 }
 
 } // namespace Detail
