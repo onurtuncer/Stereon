@@ -1993,7 +1993,17 @@ TEST_CASE("MR PR-316 proved crossings of two cubic Beziers lie on both curves",
     const std::vector<Point2> pa{{-3.0, 1.625}, {-1.375, -0.5}, {0.8125, -1.375}, {2.59375, 1.5}};
     const std::vector<Point2> pb{
         {-3.3125, -1.0}, {-1.03125, -0.75}, {0.5, 1.25}, {2.65625, -1.625}};
+    // The identity placement's answer, which every other run must place.
     std::vector<Point2> reference;
+    {
+        const auto base = Intersect(Curve2d{Bezier2(pa)}, Curve2d{Bezier2(pb)}, IntersectTest::ctx);
+        INFO(IntersectTest::ErrorText(base));
+        REQUIRE(base.has_value());
+        for (const PlanarPoint& p : base->Points) {
+            reference.push_back(p.Position);
+        }
+    }
+    REQUIRE(reference.size() == 2);
     for (const Placement2& at : Placements2(Vec2{8.0, -4.0})) {
         for (const int reversed : {0, 1, 2}) {
             const std::vector<Point2> qa = PlacedPoles(pa, at, reversed == 1);
@@ -2010,16 +2020,10 @@ TEST_CASE("MR PR-316 proved crossings of two cubic Beziers lie on both curves",
                 REQUIRE(r.has_value());
                 CHECK(r->Overlaps.empty());
                 REQUIRE(r->Points.size() == 2);
-                const bool identity = at.Turns == 0 && at.Scale == 1.0 && at.Shift.X == 0.0 &&
-                                      reversed == 0 && !swapped;
                 for (const PlanarPoint& p : r->Points) {
                     CheckOnBothBeziers(p, qa, qb, swapped);
                     const double size =
                         std::max({1.0, std::abs(p.Position.X), std::abs(p.Position.Y)});
-                    if (identity) {
-                        reference.push_back(p.Position);
-                        continue;
-                    }
                     double nearest = std::numeric_limits<double>::infinity();
                     for (const Point2& q : reference) {
                         nearest = std::min(nearest, Distance(at.Of(q), p.Position));
@@ -2029,7 +2033,6 @@ TEST_CASE("MR PR-316 proved crossings of two cubic Beziers lie on both curves",
             }
         }
     }
-    CHECK(reference.size() == 2);
 }
 
 TEST_CASE("MR PR-271 a B-spline contact of order four with a parabola is a touch",
@@ -2319,4 +2322,240 @@ TEST_CASE("MR PR-317 a plane near the pole of a rational sphere cuts its small c
     // turn of the axes, the corpus's tilt and its far translation. MR-02:
     // both orders.
     RunLevelSection("PR-317", 1.0 - 1e-3, {identityAt, turnedAt, tiltedAt, farAt});
+}
+
+namespace {
+
+/// A unit vector turned about the axis k by the angle a (Rodrigues).
+Vec3 TurnedAbout(const Vec3& v, const Vec3& k, const double a)
+{
+    return std::cos(a) * v + std::sin(a) * Cross(k, v) + (1.0 - std::cos(a)) * Dot(k, v) * k;
+}
+
+/// PR-301's claim for one ellipse chart against the plane through its centre
+/// and major axis: both crossings, at the centre -+ the major semi-axis,
+/// each decided and transverse, with its parameter in the curve's domain.
+void CheckSeamCrossings(const Curve& curve, const Surface& plane, const Point3& centre,
+                        const Vec3& major, const Context& policy)
+{
+    const auto r = Intersect(curve, plane, policy);
+    INFO(IntersectTest::ErrorText(r));
+    REQUIRE(r.has_value());
+    CHECK(r->Overlaps.empty());
+    CHECK(r->Points.size() >= 2);
+    CHECK(r->Points.size() <= 3);
+    bool low = false;
+    bool high = false;
+    const double reach = policy.GetResolution();
+    for (const CurveSurfacePoint& point : r->Points) {
+        INFO("parameter " << point.Parameter);
+        const bool atLow = Distance(point.Position, centre - major) <= reach;
+        const bool atHigh = Distance(point.Position, centre + major) <= reach;
+        CHECK((atLow || atHigh));
+        low = low || atLow;
+        high = high || atHigh;
+        CHECK(point.Decided);
+        CHECK(point.Contact == ContactType::Crossing);
+        CHECK(Contains(Domain(curve), point.Parameter));
+        CHECK(Distance(Eval(curve, point.Parameter), point.Position) <= reach);
+    }
+    CHECK(low);
+    CHECK(high);
+}
+
+} // namespace
+
+TEST_CASE("MR PR-301 seam crossings of a full turn stay in the conic domain",
+          "[intersect][metamorphic][backfill][PR-301]")
+{
+    // Root cause (SplineSurface.cpp, repaired in #301): #300 decides a
+    // crossing on the seam of a full turn by searching again with the cuts
+    // turned and bringing the roots past the upper end back a period. Each
+    // bracket brought back is widened by a few units for the rounding of
+    // 2 pi, so it could reach below the domain, and the root, or its polish
+    // inside the bracket, could be placed at about -1e-17, outside
+    // Domain(curve): a wrong answer, in about 2 % of the translation
+    // property's runs (seed 152652381). The fixture: an ellipse (semi-axes
+    // 3/2 and 3/5) against the plane through its centre and its major axis,
+    // which it crosses exactly on the seam (t = 0) and on a cut (t = pi).
+    // Oracle, in closed form: the plane's equation on the ellipse is
+    // b sin(t) = 0, so the crossings are the centre -+ a x, each decided,
+    // transverse and with its parameter in the domain. The placements vary
+    // the rounding of 2 pi's neighbourhood, so that the brought-back roots
+    // land on both sides of it. MR-01: 16 turns about an oblique axis, each
+    // with 8 translations. MR-03: scales 1/4 and 4 with the context. MR-04:
+    // the ellipse reversed (t' = 2 pi - t).
+    const Vec3 axis = Normalized(Vec3{1.0, 2.0, 2.0});
+    const double a = 1.5;
+    const double b = 0.6;
+    for (const double scale : {0.25, 1.0, 4.0}) {
+        const Context policy = Context::Default()
+                                   .WithResolution(Context::DefaultResolution * scale)
+                                   .WithToleranceCeiling(Context::DefaultToleranceCeiling * scale)
+                                   .WithScheduler(Scheduler::Serial);
+        for (int k = 0; k < 16; ++k) {
+            const double angle = 0.37 * k;
+            const Vec3 x = TurnedAbout(Vec3{1, 0, 0}, axis, angle);
+            const Vec3 y = TurnedAbout(Vec3{0, 1, 0}, axis, angle);
+            const Vec3 n = TurnedAbout(Vec3{0, 0, 1}, axis, angle);
+            for (int j = 0; j < 8; ++j) {
+                const Point3 centre =
+                    Point3{} + scale * Vec3{0.1 * j - 1.25, 0.37 * j + 0.5, -0.23 * j + 0.125};
+                const Ellipse ellipse{centre, a * scale, b * scale, x, y};
+                const Surface plane{Plane{centre, x, n}};
+                for (const bool reversed : {false, true}) {
+                    INFO("PR-301 scale " << scale << " turn " << k << " shift " << j << " reversed "
+                                         << reversed);
+                    const Curve curve = reversed ? Curve{Reversed(ellipse)} : Curve{ellipse};
+                    CheckSeamCrossings(curve, plane, centre, a * scale * x, policy);
+                }
+            }
+        }
+    }
+}
+
+namespace {
+
+/// The exact turn of a direction by a placement's cyclic permutation.
+Vec3 SkewTurn(const Placement& p, const Vec3& v)
+{
+    return v.X * p.X + v.Y * p.Y + v.Z * Cross(p.X, p.Y);
+}
+
+/// |distance from the axis - radius| for the cylinder through o about the
+/// unit axis.
+double SkewOff(const Point3& q, const Point3& o, const Vec3& axis, const double radius)
+{
+    const Vec3 w = q - o;
+    return std::abs(Length(w - Dot(w, axis) * axis) - radius);
+}
+
+} // namespace
+
+TEST_CASE("MR PR-322 two B seam crossings in one former scan cell are both isolated",
+          "[intersect][metamorphic][backfill][PR-322]")
+{
+    // Root cause (CylinderCylinderSkew.cpp, repaired in #322, issue #195):
+    // the crossings of the curve with B's seam were looked for by a fixed
+    // scan of 256 steps of A's angle. Two crossings in one step of the scan
+    // were missed together, and the branch was not cut at B's seam. The
+    // fixture is #322's: A of radius 3 about z, B of radius 2 along x
+    // through (0, 4, 0), its frame (0, -q, s), (0, -s, -q) with
+    // q = (1 + delta) / 2, and A's angle requested on a window about the
+    // fold, cut asymmetrically. Oracle, in closed form: B's seam generator
+    // runs along x at y = 4 - 2q, z = 2s, and meets A at x = +-sqrt(9 - y^2).
+    // At delta = 1e-7 the two lie 6e-4 apart in A's angle, inside one step
+    // of the old scan (8e-3). Both must be the ends of certified branches,
+    // and every sample must lie on both cylinders. MR-01: the cyclic turns of
+    // the axes and the translation (8, -4, 2). MR-02: both orders, with the
+    // boxes exchanged. MR-03: scales 1/4 and 4 with the context. MR-04: B's
+    // handedness reversed, which reverses its angle.
+    const double half = std::acos(2.0 / 3.0);
+    const double middle = pi / 2.0;
+    const Interval window{middle - half * std::cos(0.2), middle - half * std::cos(2.3)};
+    for (const Placement& p : Placements()) {
+        Replay("PR-322", p);
+        const Context policy = p.Policy();
+        const double reach = 2.0 * policy.GetResolution();
+        const Vec3 zAxis = SkewTurn(p, Vec3{0.0, 0.0, 1.0});
+        const Vec3 xAxis = SkewTurn(p, Vec3{1.0, 0.0, 0.0});
+        const Surface a{Cylinder{p.Point(0.0, 0.0, 0.0), 3.0 * p.Scale, SkewTurn(p, Vec3{1, 0, 0}),
+                                 SkewTurn(p, Vec3{0, 1, 0}), true}};
+        for (const double delta : {1e-4, 1e-7}) {
+            const double q = (1.0 + delta) / 2.0;
+            const double s = std::sqrt(1.0 - q * q);
+            const double y = 4.0 - 2.0 * q;
+            const double x = std::sqrt(9.0 - y * y);
+            const Point3 plus = p.Point(x, y, 2.0 * s);
+            const Point3 minus = p.Point(-x, y, 2.0 * s);
+            for (const bool rightHanded : {false, true}) {
+                const Surface b{Cylinder{p.Point(0.0, 4.0, 0.0), 2.0 * p.Scale,
+                                         SkewTurn(p, Vec3{0.0, -q, s}),
+                                         SkewTurn(p, Vec3{0.0, -s, -q}), rightHanded}};
+                for (const bool swapped : {false, true}) {
+                    INFO("PR-322 scale " << p.Scale << " offset " << p.Offset.X << " axis ("
+                                         << p.X.X << ", " << p.X.Y << ", " << p.X.Z << ") delta "
+                                         << delta << " right-handed " << rightHanded << " "
+                                         << (swapped ? "B, A" : "A, B"));
+                    const Box2 onA{window, Interval::Everything()};
+                    const auto r = swapped ? Intersect(b, Domain(b), a, onA, policy)
+                                           : Intersect(a, onA, b, Domain(b), policy);
+                    INFO(IntersectTest::ErrorText(r));
+                    REQUIRE(r.has_value());
+                    REQUIRE_FALSE(r->Branches.empty());
+                    bool atPlus = false;
+                    bool atMinus = false;
+                    for (const IntersectionBranch& branch : r->Branches) {
+                        CHECK(branch.IsCertified());
+                        for (const double t : {branch.Range.GetLower(), branch.Range.GetUpper()}) {
+                            const Point3 end = Eval(branch.Curve3d, t);
+                            atPlus = atPlus || Distance(end, plus) <= reach;
+                            atMinus = atMinus || Distance(end, minus) <= reach;
+                        }
+                        for (const double t : IntersectTest::SamplesOf(branch.Range, 64)) {
+                            const Point3 sample = Eval(branch.Curve3d, t);
+                            CHECK(SkewOff(sample, p.Point(0.0, 0.0, 0.0), zAxis, 3.0 * p.Scale) <=
+                                  reach);
+                            CHECK(SkewOff(sample, p.Point(0.0, 4.0, 0.0), xAxis, 2.0 * p.Scale) <=
+                                  reach);
+                        }
+                    }
+                    CHECK(atPlus);
+                    CHECK(atMinus);
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("MR PR-326 spheres touching within the tolerance touch between their surfaces",
+          "[intersect][metamorphic][backfill][PR-326]")
+{
+    // Root cause (ElementaryPairs.cpp, repaired in #326, issue #336): two
+    // coaxial profile circles that touch within the pair tolerance were
+    // declared tangent at the radical axis's point, (d^2 + R_p^2 - R_q^2) / 2d
+    // along the centre line. That is the contact only at an exact tangency;
+    // near an internal one it lies gap (R_p + R_q) / 2d from it, outside both
+    // spheres by more than the tolerance (a sphere of radius 1.5 inside one of
+    // radius 2, 0.005 from touching, tolerance 0.01: the point (2.0152, 0, 0)).
+    // Found by the OCCT corpus comparison of #326. Oracle, in closed form: the
+    // contact lies within half the gap of each sphere, by the distance from
+    // each centre. Gaps of 1/2 and 9/10 of the tolerance, inside and outside,
+    // internal and external. MR-01: the cyclic turns of the axes and the
+    // translation (8, -4, 2). MR-02: both orders. MR-03: scales 1/4 and 4
+    // with the tolerance and the context.
+    for (const Placement& p : Placements()) {
+        Replay("PR-326", p);
+        const double tolerance = 0.01 * p.Scale;
+        const Point3 centreA = p.Point(0.0, 0.0, 0.0);
+        const Vec3 x = TurnOf(p, Vec3{1.0, 0.0, 0.0});
+        const Vec3 y = TurnOf(p, Vec3{0.0, 1.0, 0.0});
+        const Surface a{Sphere{centreA, 2.0 * p.Scale, x, y, true}};
+        for (const double fraction : {-0.9, -0.5, 0.5, 0.9}) {
+            const double gap = fraction * 0.01;
+            for (const bool internal : {true, false}) {
+                const double along = internal ? 0.5 - gap : 3.5 + gap;
+                const Point3 centreB = p.Point(0.0, 0.6 * along, 0.8 * along);
+                const Surface b{Sphere{centreB, 1.5 * p.Scale, x, y, true}};
+                for (const bool swapped : {false, true}) {
+                    INFO("PR-326 scale " << p.Scale << " offset " << p.Offset.X << " axis ("
+                                         << p.X.X << ", " << p.X.Y << ", " << p.X.Z << ") gap "
+                                         << gap << " internal " << internal << " "
+                                         << (swapped ? "B, A" : "A, B"));
+                    const Box2 all = Box2::Everything();
+                    const auto r = swapped ? Intersect(b, all, a, all, tolerance, p.Policy())
+                                           : Intersect(a, all, b, all, tolerance, p.Policy());
+                    INFO(IntersectTest::ErrorText(r));
+                    REQUIRE(r.has_value());
+                    CHECK(r->Branches.empty());
+                    CHECK(r->Overlaps.empty());
+                    REQUIRE(r->Points.size() == 1);
+                    const Point3 q = r->Points.front().Position;
+                    const double reach = 0.5 * std::abs(gap) * p.Scale + 1e-12 * p.Scale;
+                    CHECK(std::abs(Distance(q, centreA) - 2.0 * p.Scale) <= reach);
+                    CHECK(std::abs(Distance(q, centreB) - 1.5 * p.Scale) <= reach);
+                }
+            }
+        }
+    }
 }

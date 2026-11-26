@@ -383,7 +383,7 @@ It reads merged pull requests only. Closed issues, failing corpus entries and re
 
 The audit above recorded eleven confirmed leads as `untriaged`. This batch takes eight of them, whose repairs are single root causes (PR-317: two) with a fault that can be put back at one site. For each: the repair's own reproducer as the direct regression, a metamorphic regression named "MR PR-<n> ..." in `tests/intersect/MetamorphicRegressionTests.cpp` with an independent oracle, and a fault reintroduction in `tools/mutation/intersection-backfill.json` (PR-317: `intersection-backfill-pr317.json`, one fault per root cause). Every fixture is deterministic; there is no random seed. A fault that preserves today's interfaces is an *adapted* reintroduction of the original fault, as for the earlier batches; each says below what it restores.
 
-PR-301, PR-322 and PR-323 are not in this batch; see *Leads still open after batch 4*.
+PR-301, PR-322 and PR-323 follow the eight. Their faults cannot all be put back at one site on current code, so their red is a replay on the revision before the repair, in native CI (*Historical replays of PR-301, PR-322 and PR-323*). PR-301 also has a fault in the catalogue. The batch ends with the leads merged after #323 (*Leads after #323*).
 
 #### PR-271
 
@@ -479,6 +479,94 @@ PR-301, PR-322 and PR-323 are not in this batch; see *Leads still open after bat
   - MR-02 does not apply: there is no exposed surface-curve operation.
 - **Oracle:** the crossing S(x, 1/2) at the line's t = 1, in closed form. The half of the request that contains u = x must have exactly that point; the other half, which ends on the knot, must have none.
 - **Fault:** a cut that meets a patch only in its edge keeps the patch whole, and such a patch counts as overlapping the request. This is the pre-repair `Clipped` at the current interfaces, applied as one block over the two adjacent functions.
+
+#### PR-301
+
+- **Defect:** #300 decides a crossing on the seam of a full turn by searching again with the cuts turned, then bringing the roots past the upper end back a period. Each bracket brought back is widened by a few units for the rounding of 2 pi. It could therefore reach outside the domain, and the root (or its polish inside the bracket) could be placed just outside `Domain(curve)`. That is a wrong answer, in about 2 % of the translation property's runs (seed 152652381). Repaired in #301 (`0b8f782`): every bracket and root of the turned search is kept in the domain.
+- **Direct and metamorphic regression:** "MR PR-301 seam crossings of a full turn stay in the conic domain". #301's own tests were property seeds, so this deterministic fixture is new. An ellipse (semi-axes 3/2 and 3/5) against the plane through its centre and its major axis: it crosses on the seam (t = 0) and on a cut (t = pi).
+  - MR-01: 16 turns about an oblique axis, each with 8 translations, so that the rounding about 2 pi varies.
+  - MR-03: scales 1/4 and 4 with the context.
+  - MR-04: the ellipse reversed.
+  - MR-02 does not apply: there is no exposed surface-curve operation.
+- **Oracle:** the plane's equation on the ellipse is b sin(t) = 0, so the crossings are the centre -+ a x, in closed form. Each must be decided, transverse and on the curve, with its parameter in `Domain(curve)`.
+- **Fault:** the clamp of `BroughtBack` removed. The fault replay shows whether it is observable on current code; the historical replay does not depend on it.
+
+#### PR-322
+
+- **Defect:** the skew-cylinder handler looked for the curve's crossings with B's seam by a fixed scan of 256 steps of A's angle. Two crossings within one step were missed together, and the branch was not cut at B's seam, so the answer lost both seam crossings (issue #195). Repaired in #322 (`898ed69`): fail-closed interval isolation.
+- **Direct regression:** "two B seam crossings inside a former scan cell are both isolated" (`CylinderCylinderSkewTests.cpp`).
+- **Metamorphic regression:** "MR PR-322 two B seam crossings in one former scan cell are both isolated". #322's fixture:
+  - A, of radius 3 about z;
+  - B, of radius 2 along x through (0, 4, 0), with frame (0, -q, s), (0, -s, -q), where q = (1 + delta)/2 and delta = 1e-4 or 1e-7;
+  - A's angle requested on an asymmetric window about the fold.
+
+  The relations:
+  - MR-01: the cyclic turns of the axes and the translation (8, -4, 2).
+  - MR-02: both orders, with the boxes exchanged.
+  - MR-03: scales 1/4 and 4 with the context.
+  - MR-04: B's handedness reversed, which reverses its angle.
+- **Oracle:** B's seam generator meets A at (+-sqrt(9 - y^2), y, 2s), with y = 4 - 2q, in closed form. Both points must be ends of certified branches. Every sample must lie on both cylinders, by the distance from each axis.
+- **Fault:** none in the catalogue. #322 replaced the scan with a new isolation, and no single site of the new code restores the scan. The red is the historical replay.
+
+#### PR-326
+
+- **Defect (issue #336):** two coaxial profile circles touching within the pair tolerance were declared tangent at the radical axis's point. Near an internal tangency that point lies gap (R_p + R_q)/2d from the contact, outside both spheres by more than the tolerance. Example: a sphere of radius 1.5 inside one of radius 2, 0.005 from touching, at tolerance 0.01, put the contact at (2.0152, 0, 0). The OCCT corpus comparison of #326 found it, and #326 repaired it (`8f955e0`, `TouchAlong`). The audit after #263 read #326 as a comparison only, so this record is new.
+- **Direct regression:** "spheres touching within the tolerance touch between their surfaces" (`ElementaryPairsTests.cpp`).
+- **Metamorphic regression:** "MR PR-326 spheres touching within the tolerance touch between their surfaces". Gaps of 1/2 and 9/10 of the tolerance, inside and outside, internal and external.
+  - MR-01: the cyclic turns of the axes and the translation (8, -4, 2).
+  - MR-02: both orders.
+  - MR-03: scales 1/4 and 4, with the tolerance and the context.
+- **Oracle:** the contact lies within half the gap of each sphere, by the closed-form distance from each centre.
+- **Fault:** the radical axis's point restored for the tolerant tangency.
+
+#### Historical replays of PR-301, PR-322 and PR-323
+
+Each replay is a scratch branch that is never merged. For PR-301 and PR-322 it is the revision before the repair with only the regression under test added. For PR-323 it is current `main` with the pre-repair code put back. The *Linux* workflow was dispatched on each branch.
+
+- **PR-301:** `verify/replay-pr301-red` at `bfcbe56`: `8ba9d6d`, the parent of #301, plus the MR test.
+  - In [`gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45858817643/job/140044149022), "MR PR-301 seam crossings of a full turn stay in the conic domain" failed 72 of its 12288 assertions.
+  - Every failure is `Contains(Domain(curve), point.Parameter)`, with the parameter reported as 6.28319, past the domain's end. They occur at scales 1/4, 1 and 4 and in both charts.
+  - The run's other failure, "conic derivative fixtures retain unresolved domain ends and tangencies", was already failing on `8ba9d6d`; #304 repaired it.
+- **PR-322:** `verify/replay-pr322-red` at `44fa41b`: `d9f9207`, the parent of #322, plus the MR test.
+  - In [`gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45858785888/job/140044036294), "MR PR-322 ..." was the only failure, 144 of 57222 assertions.
+  - Every failure is `atPlus` or `atMinus` at delta = 1e-7: both seam crossings missed together, in all 18 placements, both handednesses and both orders.
+  - Every delta = 1e-4 case passes, and so do the checks of the samples on both cylinders.
+- **PR-323:** `verify/replay-pr323-red` at `11ff162`: `main` 09c0505 with `ValueAt`'s margin again taken from the surface's largest homogeneous pole for every spline, partials included, as before #323.
+  - In [`gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45858979933/job/140044715911), the three oracle tests of #323 failed, and nothing else did: "a B-spline surface's jet covers its rounding on every span, polynomial or rational", "a partial that vanishes by cancellation is enclosed to its poles' rounding" and "a partial's enclosure covers the worst rounding of its own poles".
+- **Green:**
+  - The PR-301, PR-322 and PR-326 MR tests: this pull request's CTest jobs (see *Batch 4 fault replay*).
+  - The three PR-323 tests passed on `main` 09c0505 in [Linux `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45829925674/job/139943711808).
+
+#### PR-323: metamorphic exception
+
+- **Defect:** `CertifyDeviation`'s B-spline enclosure (`src/surface/Certify.cpp`, `ValueAt`) widened a partial's value by a margin sized to the surface's largest pole. A partial's poles are a degree over a knot span times differences of the surface's, so over short spans the margin fell below the rounding it covers. The certificate was unproved there, though no wrong enclosure was observed. Repaired in #323 (`d9f9207`): the margin comes from the poles each sum combines.
+- **Direct regression and oracle:** "a B-spline surface's jet covers its rounding on every span, polynomial or rational" (`tests/surface/CertifyTests.cpp`).
+  - Its oracle is exact in doubles: Cox–de Boor from the definition, on integer poles, dyadic knots and dyadic parameters.
+  - It covers 518400 components: degrees 1 to 4, rational and polynomial, spans from 2^10 to 2^-45.
+  - Two tests accompany it: "a partial's enclosure covers the worst rounding of its own poles" and "a partial that vanishes by cancellation is enclosed to its poles' rounding".
+- **Relations considered:**
+  - MR-01 (rigid motion), MR-02 (exchange) and MR-03 (scale) act on an intersection's operands. This defect is in a point enclosure, and it made no intersection answer wrong in any run measured. Two intersection runs would agree and expose nothing.
+  - MR-04 (equivalent parameterization) is what the oracle already applies, by scaling the knot vectors by powers of two from 2^10 to 2^-45. That is the rechart under which the defect appears, checked against the exact value rather than against another run.
+  - A metamorphic test of intersections would be weaker than the exact oracle, so none is invented (ADR-0053 section 3).
+- **Red:** the historical replay above.
+- **Green:** the three tests on `main` 09c0505.
+- **Review:** this agent's review of the margin argument in `ValueAt`'s comment, the oracle and the runs above. On it the record is `exception reviewed`. ADR-0053 asks for an exception to be reviewed explicitly; the owner's review is pending.
+
+#### Leads after #323
+
+The inventory audit after #263 stopped at #323. These merges since then, up to `main` 09c0505, touch `src/intersect/` or `src/surface/Certify.cpp`. Each was read from its description and diff.
+
+- **PR-326** (`8f955e0`): a defect, recorded above. Its kernel commit is inside an OCCT comparison PR.
+- **PR-334** (`431d9e9`): not a defect. A crossing of two B-splines at a spline's own end, or at a corner, was reported undecided. That was the ledger's listed limitation (2D curve–curve, *Remaining*), and the PR decides such crossings. The point it replaced was labelled `Crossing`, but undecided points carry no claim about their contact.
+- **PR-337** (`7cb4564`): not a defect. Transverse nodes on knot lines and seams were refused with `IntersectionFailed`, the generic SSI's documented limitation (step 3 of the critical path). The PR answers them.
+- **PR-339** (`3b4afef`): **untriaged**. Its audit of #195 found three things:
+  - refusals (`CertificationFailed`) of skew cylinders whose seam passes within rounding of a fold, on either cylinder;
+  - the fixed threshold `FoldTouch = 1e-9`;
+  - no answer that was wrong.
+
+  It is still to be decided, from the ledger as it stood then, whether those refusals were inside the skew-cylinder row's supported domain. That rule is what made PR-159 a defect. Until then the record stays open.
+- **PR-342** (`09c0505`): already recorded, as AUDIT-20261122-plane-cylinder-periodic-box.
+- #310 (which closed issue #309) changed tests only. #333, #338 and #341 add a corpus, Booleans and evidence, and change no intersection result. None of them needs a record.
 
 #### Batch 4 fault replay
 

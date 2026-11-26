@@ -407,6 +407,34 @@
       "tests": "^intersect:\\ MR\\ PR\\-318\\ a\\ request\\ ending\\ on\\ a\\ surface\\ knot\\ excludes\\ crossings\\ beyond\\ it$",
       "diagnostic": "intersect: MR PR-318 a request ending on a surface knot excludes crossings beyond it",
       "repair_commit": "f0da86e92c0f8e67769cff441888a4f823a36f17"
+    },
+    {
+      "id": "PR-301",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: a seam crossing brought back a period stays in the conic domain",
+      "file": "src/intersect/SplineSurface.cpp",
+      "find": "        f.Bracket =\n            Interval{std::max(f.Bracket.GetLower(), lower), std::min(f.Bracket.GetUpper(), upper)};\n        f.T = std::clamp(f.T, lower, upper);\n",
+      "replace": "        static_cast<void>(lower);\n",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ PR\\-301\\ seam\\ crossings\\ of\\ a\\ full\\ turn\\ stay\\ in\\ the\\ conic\\ domain$",
+      "diagnostic": "intersect: MR PR-301 seam crossings of a full turn stay in the conic domain",
+      "repair_commit": "0b8f782f7cb88ccad10f3fca1f72084ac82d2bb7"
+    },
+    {
+      "id": "PR-326",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: a tolerant tangency of two profile circles is placed between them",
+      "file": "src/intersect/ElementaryPairs.cpp",
+      "find": "        const double along = TouchAlong(p, q, d, outer, inner);\n",
+      "replace": "        const double along = (d * d + p.R * p.R - q.R * q.R) / (2.0 * d) + 0.0 * TouchAlong(p, q, d, outer, inner);\n",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ PR\\-326\\ spheres\\ touching\\ within\\ the\\ tolerance\\ touch\\ between\\ their\\ surfaces$",
+      "diagnostic": "intersect: MR PR-326 spheres touching within the tolerance touch between their surfaces",
+      "repair_commit": "8f955e00f93c166562e6a105e1fec0239a4f6bd0"
     }
   ]
 }

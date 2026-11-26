@@ -611,7 +611,20 @@
     {
       "id": "PR-301",
       "source": "https://github.com/onurtuncer/Stereon/pull/301",
-      "state": "untriaged"
+      "state": "MR implemented",
+      "fixture": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-301 seam crossings of a full turn stay in the conic domain",
+      "direct": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-301 seam crossings of a full turn stay in the conic domain",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-301 seam crossings of a full turn stay in the conic domain",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-301",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Historical replays of PR-301, PR-322 and PR-323",
+      "relations": [
+        "MR-01",
+        "MR-03",
+        "MR-04"
+      ],
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#PR-301",
+      "repair_commit": "0b8f782f7cb88ccad10f3fca1f72084ac82d2bb7"
     },
     {
       "id": "PR-304",
@@ -723,12 +736,33 @@
     {
       "id": "PR-322",
       "source": "https://github.com/onurtuncer/Stereon/pull/322",
-      "state": "untriaged"
+      "state": "MR implemented",
+      "fixture": "tests/intersect/CylinderCylinderSkewTests.cpp#two B seam crossings inside a former scan cell are both isolated",
+      "direct": "tests/intersect/CylinderCylinderSkewTests.cpp#two B seam crossings inside a former scan cell are both isolated",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-322 two B seam crossings in one former scan cell are both isolated",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-322",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Historical replays of PR-301, PR-322 and PR-323",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03",
+        "MR-04"
+      ],
+      "evidence_kind": "resolved_geometry"
     },
     {
       "id": "PR-323",
       "source": "https://github.com/onurtuncer/Stereon/pull/323",
-      "state": "untriaged"
+      "state": "exception reviewed",
+      "fixture": "tests/surface/CertifyTests.cpp#a B-spline surface's jet covers its rounding on every span, polynomial or rational",
+      "direct": "tests/surface/CertifyTests.cpp#a B-spline surface's jet covers its rounding on every span, polynomial or rational",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#- **Direct regression and oracle:**",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#- **PR-323:** `verify/replay-pr323-red`",
+      "evidence_kind": "resolved_geometry",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **PR-323:** `verify/replay-pr323-red`",
+      "green": "docs/planning/intersection-metamorphic-triage.md#The three PR-323 tests passed on `main` 09c0505",
+      "rationale": "docs/planning/intersection-metamorphic-triage.md#- **Relations considered:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Review:** this agent's review of the margin argument"
     },
     {
       "id": "PR-267",
@@ -750,6 +784,43 @@
       "state": "not a defect",
       "rationale": "docs/planning/intersection-metamorphic-triage.md#- **PR-295**",
       "review": "docs/planning/intersection-metamorphic-triage.md#Inventory audit after #263"
+    },
+    {
+      "id": "PR-326",
+      "source": "https://github.com/onurtuncer/Stereon/pull/326",
+      "state": "MR implemented",
+      "fixture": "tests/intersect/ElementaryPairsTests.cpp#spheres touching within the tolerance touch between their surfaces",
+      "direct": "tests/intersect/ElementaryPairsTests.cpp#spheres touching within the tolerance touch between their surfaces",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-326 spheres touching within the tolerance touch between their surfaces",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-326",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 4 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03"
+      ],
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#PR-326",
+      "repair_commit": "8f955e00f93c166562e6a105e1fec0239a4f6bd0"
+    },
+    {
+      "id": "PR-339",
+      "source": "https://github.com/onurtuncer/Stereon/pull/339",
+      "state": "untriaged"
+    },
+    {
+      "id": "PR-334",
+      "source": "https://github.com/onurtuncer/Stereon/pull/334",
+      "state": "not a defect",
+      "rationale": "docs/planning/intersection-metamorphic-triage.md#- **PR-334**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#### Leads after #323"
+    },
+    {
+      "id": "PR-337",
+      "source": "https://github.com/onurtuncer/Stereon/pull/337",
+      "state": "not a defect",
+      "rationale": "docs/planning/intersection-metamorphic-triage.md#- **PR-337**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#### Leads after #323"
     }
   ],
   "handlers": {
