@@ -71,3 +71,25 @@ On main integrated with this stack, the ordinary MR-04 safety subset passes
 The separate completeness test records those 22 undocumented refusals as
 expected failures, without exempting any safety assertion. The 144 planar
 cells remain `MR implemented` until strict coverage is qualified.
+
+## Strict completeness, 2026-11-26
+
+- **Branch:** `verify/planar-strict-completeness`, on `main` 09c0505 (#342)
+- **Reviewer:** the v0.2 verification agent (Agent E); the owner's review is pending.
+
+The correction of 2026-11-12 kept every planar cell `MR implemented` until the completeness gates passed without `[!mayfail]`. The [Robustness run on `main` 09c0505](https://github.com/onurtuncer/Stereon/actions/runs/45834398857/job/139959311443) shows where they stand. It ran every placement and scale, both ways, with the `[exhaustive]` tests.
+
+- **Corpus completeness** ("only the planar-curves corpus cases the ledger lists are refused, both ways"): 1560 answered, 48 refused as documented, 0 refused without a documented limitation. The refusals the tag was for were answered by #267 and #271: the B-splines' order-four contacts and the two B-splines at the far placement.
+- **MR-04 completeness** ("MR-04: only documented planar corpus cases refuse equivalent charts, both ways"): 3048 answered, 120 refused as documented, and 48 refused without a documented limitation. All 48 are one configuration of one ordered pair, BSplineCurve2d with itself: `spline-spline/identical-arcs-*` and `rational-rational/identical-arcs-*`, at all six placements, with either operand reversed. Each is refused as "a pair of pieces neither apart nor a single crossing". Identical arcs are answered in their own chart (one overlap), so this is a refusal of a reversed coincidence. It fails closed and is never a wrong answer. It is a completeness finding for the curve handlers.
+
+This branch therefore:
+
+- makes the two corpus completeness tests strict (the tag removed);
+- adds the MR-04 completeness gate, strict, on the 35 ordered pairs other than BSplineCurve2d with itself: "MR-04: planar configurations of every pair but two B-splines refuse an equivalent chart only as documented" (per pull request) and its `[exhaustive]` both-ways form;
+- keeps the existing MR-04 completeness tests, still `[!mayfail]`, so the B-spline pair's debt stays visible.
+
+`planar:BSplineCurve2d:BSplineCurve2d/MR-04` stays `MR implemented` until reversed identical B-spline arcs are answered, or the owner records them as a documented limitation.
+
+#### Strict green
+
+Pending this branch's CI: the per-PR tests in the native CTest jobs, and a Robustness run dispatched on the branch for the `[exhaustive]` forms. The 143 other cells move to `verified` only when both are green.
