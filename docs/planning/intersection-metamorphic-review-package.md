@@ -79,8 +79,12 @@ Review points:
 | PR-112, PR-112-budget, PR-120, PR-159, PR-194, PR-200, PR-205, PR-206, PR-207, PR-218, PR-230, PR-230-pole, PR-236, PR-236-tangent, PR-238, PR-240, PR-241, PR-244, PR-247, PR-263-translated-boundary, SSI-translated-boundary, AUDIT-20261112-cone-polish, AUDIT-20261113-narrow-sphere-seam, CI-272-ellipse-plane, AUDIT-20261122-plane-cylinder-periodic-box (25) | verified | [triage](intersection-metamorphic-triage.md), batches 1–3 | each fault killed twice in the fault replay above. PR-200's own fault is masked on current code; its two-site replay is manual (batch 1). PR-240 shares PR-241's fault. |
 | PR-75, PR-90, PR-106, PR-126, PR-135, PR-267, PR-281, PR-295 (8) | not a defect | [triage](intersection-metamorphic-triage.md): no intersection result changed, or a documented limitation lifted | n/a |
 | PR-239 (1) | not a defect | the owner's decision of 2026-11-12: a contract change | n/a |
-| PR-271, PR-289, PR-304, PR-312, PR-315, PR-316, PR-317, PR-318 (8) | untriaged on `main`; `MR implemented` in #348, `verified` when its replay is green | triage batch 4 (#348) | #348's fault replay |
-| PR-301, PR-322, PR-323 (3) | untriaged | triage, *Leads still open after batch 4* | none yet |
+| PR-271, PR-289, PR-304, PR-312, PR-315, PR-316, PR-317, PR-318 (8) | untriaged on `main`; `MR implemented` in #348, and `verified` once their replay is green | triage batch 4 (#348) | #348's fault replay |
+| PR-301, PR-322 (2) | untriaged on `main`; `MR implemented` in #348 | triage batch 4 (#348): MR regressions | historical replays on the revisions before #301 and #322, both red in native CI; PR-301 is also in #348's fault replay |
+| PR-326 (1, new: issue #336, repaired inside the OCCT comparison PR) | `MR implemented` in #348 | triage batch 4 (#348) | #348's fault replay |
+| PR-323 (1) | untriaged on `main`; `exception reviewed` in #348 | triage batch 4: an exact oracle in `tests/surface/CertifyTests.cpp`, with the intersection relations considered and found inapplicable | historical replay of the pre-repair margin, red in native CI. This exception needs the owner's explicit review (ADR-0053 section 3). |
+| PR-334, PR-337 (2, new) | `not a defect` in #348 | triage, *Leads after #323*: documented limitations lifted | n/a |
+| PR-339 (1, new) | `untriaged` in #348 | triage, *Leads after #323*: refusals near a fold; whether they were within the supported domain is still to be decided | none |
 
 ## What still blocks the release check
 
@@ -90,11 +94,11 @@ At 09c0505 `--release` reports 199 errors:
 | --- | --- | --- |
 | 144 | planar cells `MR implemented` | #351 (143 cells); `planar:BSplineCurve2d:BSplineCurve2d/MR-04` needs a kernel answer for reversed identical B-spline arcs, or the owner's decision to document the refusal |
 | 42 | curve–surface hyperbola and parabola cells `MR implemented` | #346 |
-| 11 | untriaged defect records | #348 (8); PR-301, PR-322 and PR-323 remain |
+| 11 | untriaged defect records | #348 triages all 11; it adds PR-326 (a defect), PR-334 and PR-337 (not defects) and PR-339 (untriaged). Each of the 10 non-exception records counts as open until it is `verified`, after #348's evidence commit. |
 | 1 | `inventory_complete` is false | see below |
 | 1 | `inventory_review` missing | the owner only |
 
-`inventory_complete` is false because the historical audit read merged pull requests only. The audit after #263 did not read closed issues, failing corpus entries or regression-test comments since #263. The owner decides whether the merged-PR audit, with batches 1–4, is the complete historical inventory. If so, the owner records `inventory_complete: true` together with `inventory_review`. If not, the scope still to be read is those three sources, from #263 (`cbeddfb`) to the release revision.
+`inventory_complete` is false. #348 extends the merged-PR audit to `main` 09c0505 and reads the closed issues since #263: #309 (tests only) and #336 (PR-326). PR-339 remains untriaged. The historical audit has read merged pull requests and those issues only. Failing corpus entries and regression-test comments since #263 have not been read. The owner decides whether the merged-PR audit, with batches 1–4, is the complete historical inventory. If so, the owner records `inventory_complete: true` together with `inventory_review`. If not, the scope still to be read is those two sources from #263 (`cbeddfb`), and every merge from 09c0505 to the release revision.
 
 ## What the owner records
 
@@ -102,3 +106,4 @@ At 09c0505 `--release` reports 199 errors:
 2. The MR-02 exception of the 42 curve–surface pairs.
 3. `inventory_complete` and `inventory_review` in `intersection-metamorphic.json`.
 4. The decision on `planar:BSplineCurve2d:BSplineCurve2d/MR-04` (see #351).
+5. The PR-323 metamorphic exception, and the triage of PR-339.
