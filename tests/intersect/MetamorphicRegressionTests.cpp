@@ -1111,3 +1111,93 @@ TEST_CASE("MR PR-194 NURBS hull applies the factory bounds",
         }
     }
 }
+
+namespace {
+
+/// A unit vector turned about the axis k by the angle a (Rodrigues).
+Vec3 TurnedAbout(const Vec3& v, const Vec3& k, const double a)
+{
+    return std::cos(a) * v + std::sin(a) * Cross(k, v) + (1.0 - std::cos(a)) * Dot(k, v) * k;
+}
+
+/// PR-301's claim for one ellipse chart against the plane through its centre
+/// and major axis: both crossings, at the centre -+ the major semi-axis,
+/// each decided and transverse, with its parameter in the curve's domain.
+void CheckSeamCrossings(const Curve& curve, const Surface& plane, const Point3& centre,
+                        const Vec3& major, const Context& policy)
+{
+    const auto r = Intersect(curve, plane, policy);
+    INFO(IntersectTest::ErrorText(r));
+    REQUIRE(r.has_value());
+    CHECK(r->Overlaps.empty());
+    CHECK(r->Points.size() >= 2);
+    CHECK(r->Points.size() <= 3);
+    bool low = false;
+    bool high = false;
+    const double reach = policy.GetResolution();
+    for (const CurveSurfacePoint& point : r->Points) {
+        INFO("parameter " << point.Parameter);
+        const bool atLow = Distance(point.Position, centre - major) <= reach;
+        const bool atHigh = Distance(point.Position, centre + major) <= reach;
+        CHECK((atLow || atHigh));
+        low = low || atLow;
+        high = high || atHigh;
+        CHECK(point.Decided);
+        CHECK(point.Contact == ContactType::Crossing);
+        CHECK(Contains(Domain(curve), point.Parameter));
+        CHECK(Distance(Eval(curve, point.Parameter), point.Position) <= reach);
+    }
+    CHECK(low);
+    CHECK(high);
+}
+
+} // namespace
+
+TEST_CASE("MR PR-301 seam crossings of a full turn stay in the conic domain",
+          "[intersect][metamorphic][backfill][PR-301]")
+{
+    // Root cause (SplineSurface.cpp, repaired in #301): #300 decides a
+    // crossing on the seam of a full turn by searching again with the cuts
+    // turned and bringing the roots past the upper end back a period. Each
+    // bracket brought back is widened by a few units for the rounding of
+    // 2 pi, so it could reach below the domain, and the root, or its polish
+    // inside the bracket, could be placed at about -1e-17, outside
+    // Domain(curve): a wrong answer, in about 2 % of the translation
+    // property's runs (seed 152652381). The fixture: an ellipse (semi-axes
+    // 3/2 and 3/5) against the plane through its centre and its major axis,
+    // which it crosses exactly on the seam (t = 0) and on a cut (t = pi).
+    // Oracle, in closed form: the plane's equation on the ellipse is
+    // b sin(t) = 0, so the crossings are the centre -+ a x, each decided,
+    // transverse and with its parameter in the domain. The placements vary
+    // the rounding of 2 pi's neighbourhood, so that the brought-back roots
+    // land on both sides of it. MR-01: 16 turns about an oblique axis, each
+    // with 8 translations. MR-03: scales 1/4 and 4 with the context. MR-04:
+    // the ellipse reversed (t' = 2 pi - t).
+    const Vec3 axis = Normalized(Vec3{1.0, 2.0, 2.0});
+    const double a = 1.5;
+    const double b = 0.6;
+    for (const double scale : {0.25, 1.0, 4.0}) {
+        const Context policy = Context::Default()
+                                   .WithResolution(Context::DefaultResolution * scale)
+                                   .WithToleranceCeiling(Context::DefaultToleranceCeiling * scale)
+                                   .WithScheduler(Scheduler::Serial);
+        for (int k = 0; k < 16; ++k) {
+            const double angle = 0.37 * k;
+            const Vec3 x = TurnedAbout(Vec3{1, 0, 0}, axis, angle);
+            const Vec3 y = TurnedAbout(Vec3{0, 1, 0}, axis, angle);
+            const Vec3 n = TurnedAbout(Vec3{0, 0, 1}, axis, angle);
+            for (int j = 0; j < 8; ++j) {
+                const Point3 centre =
+                    Point3{} + scale * Vec3{0.1 * j - 1.25, 0.37 * j + 0.5, -0.23 * j + 0.125};
+                const Ellipse ellipse{centre, a * scale, b * scale, x, y};
+                const Surface plane{Plane{centre, x, n}};
+                for (const bool reversed : {false, true}) {
+                    INFO("PR-301 scale " << scale << " turn " << k << " shift " << j << " reversed "
+                                         << reversed);
+                    const Curve curve = reversed ? Curve{Reversed(ellipse)} : Curve{ellipse};
+                    CheckSeamCrossings(curve, plane, centre, a * scale * x, policy);
+                }
+            }
+        }
+    }
+}
