@@ -14,7 +14,8 @@
 // from the kernel. Each configuration is checked in both operand orders,
 // placed at the origin, turned onto another axis by an exact permutation of
 // the frame, moved far out by an exact translation and scaled by powers of
-// two, under which the closed forms move exactly.
+// two, under which the closed forms move exactly, and turned by a rational
+// rotation, coaxial only to rounding.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -51,8 +52,8 @@ namespace {
 constexpr double pi = std::numbers::pi;
 
 /// Where a configuration is put: its frame, a point the local origin goes
-/// to, and a scale. Every placement here is exact in doubles: the frames
-/// are permutations of the axes, the shifts and scales dyadic.
+/// to, and a scale. Every placement but the last is exact in doubles: the
+/// frames are permutations of the axes, the shifts and scales dyadic.
 struct Placement {
     const char* Name;
     Vec3 X;
@@ -66,12 +67,15 @@ struct Placement {
     [[nodiscard]] Point3 At(const double z) const { return Point3{} + Shift + (Scale * z) * Z(); }
 };
 
-const std::array<Placement, 5> Placements{{
+const std::array<Placement, 6> Placements{{
     {"origin", {1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {}, 1.0},
     {"axis along x", {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}, {}, 1.0},
     {"far", {0.0, 0.0, 1.0}, {1.0, 0.0, 0.0}, {480000.5, -300000.25, 210000.75}, 1.0},
     {"scaled 2^-3", {1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {-3.5, 2.25, 1.0}, 0x1p-3},
     {"scaled 2^5", {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}, {64.0, 0.0, -32.0}, 0x1p5},
+    // A rational rotation, orthonormal only to rounding: centres placed
+    // along its rounded axis miss the exact one by units in the last place.
+    {"tilted", {0.6, 0.8, 0.0}, {-0.48, 0.36, 0.8}, {12.0, -7.0, 5.0}, 1.0},
 }};
 
 /// The surfaces of a configuration, built in a placement: local heights

@@ -213,7 +213,6 @@ def sphere_cone():
         curves=1,
         contact="tangential",
         witnesses=[(2 * co * s * 2, 0.0, 4 * co * co)],
-        hard=TANGENT_REASON,
     )
     yield regime("coaxial-two", sphere(z_at(4.0), 3.0), c, curves=2, witnesses=along(0.0, 4.0, 3.0))
     # The upper circle is at v = 8.04: past the default box.
@@ -279,7 +278,7 @@ def sphere_ellipsoid():
     yield regime("spheroid-equator", sphere(O, 3.0), S, curves=1, contact="tangential", witnesses=[x_at(3.0), (0.0, -3.0, 0.0)])
     yield regime("spheroid-poles", sphere(O, 2.0), S, points=2, witnesses=[z_at(2.0), z_at(-2.0)])
     # h = 1, R^2 = 9 (1 + h^2 / 5): a double root at w = -0.8.
-    yield regime("spheroid-touching-below", sphere(z_at(1.0), math.sqrt(10.8)), S, curves=1, contact="tangential", witnesses=[(math.sqrt(7.56), 0.0, -0.8)], placements=EXACT_ONLY)
+    yield regime("spheroid-touching-below", sphere(z_at(1.0), math.sqrt(10.8)), S, curves=1, contact="tangential", witnesses=[(math.sqrt(7.56), 0.0, -0.8)])
 
 
 def cylinder_cone():
@@ -352,7 +351,7 @@ def cone_torus():
     yield regime("coaxial-two", c, torus(z_at(3.0), 3.0, 1.0), curves=2, witnesses=[(3 - root, 0.0, 3 - root), (3 + root, 0.0, 3 + root)])
     h = 3.0 + math.sqrt(2.0)
     foot = 3.0 + math.sqrt(0.5)
-    yield regime("coaxial-touching", c, torus(z_at(h), 3.0, 1.0), curves=1, contact="tangential", witnesses=[(foot, 0.0, foot)], hard=TANGENT_REASON)
+    yield regime("coaxial-touching", c, torus(z_at(h), 3.0, 1.0), curves=1, contact="tangential", witnesses=[(foot, 0.0, foot)])
     yield regime("coaxial-apart", c, torus(z_at(6.0), 3.0, 1.0))
 
 
@@ -367,9 +366,9 @@ def cone_ellipsoid():
     # h = 3 cuts at w = 0 and w = -24 / 13 (13 w^2 + 24 w = 0); h = sqrt(13)
     # puts the generator at the ellipse's support distance along its normal.
     S = ellipsoid(O, 3.0, 3.0, 2.0)
-    yield regime("spheroid-two", cone(z_at(-3.0), 0.0, a), S, curves=2, witnesses=[x_at(3.0), (15.0 / 13.0, 0.0, -24.0 / 13.0)], placements=EXACT_ONLY)
+    yield regime("spheroid-two", cone(z_at(-3.0), 0.0, a), S, curves=2, witnesses=[x_at(3.0), (15.0 / 13.0, 0.0, -24.0 / 13.0)])
     s = math.sqrt(13.0)
-    yield regime("spheroid-touching", cone(z_at(-s), 0.0, a), S, curves=1, contact="tangential", witnesses=[(9.0 / s, 0.0, -4.0 / s)], placements=EXACT_ONLY)
+    yield regime("spheroid-touching", cone(z_at(-s), 0.0, a), S, curves=1, contact="tangential", witnesses=[(9.0 / s, 0.0, -4.0 / s)])
 
 
 def torus_torus():
@@ -377,7 +376,7 @@ def torus_torus():
     for h, name in ((1.0, "shifted-1"), (1.5, "shifted-1p5")):
         p = circle_circle((3.0, 0.0), 1.0, (3.0, h), 1.0)
         yield regime(name, A, torus(z_at(h), 3.0, 1.0), curves=2, witnesses=[(q[0], 0.0, q[1]) for q in p])
-    yield regime("shifted-touching", A, torus(z_at(2.0), 3.0, 1.0), curves=1, contact="tangential", witnesses=[(3.0, 0.0, 1.0)], hard=TANGENT_REASON)
+    yield regime("shifted-touching", A, torus(z_at(2.0), 3.0, 1.0), curves=1, contact="tangential", witnesses=[(3.0, 0.0, 1.0)])
     yield regime("shifted-apart", A, torus(z_at(3.0), 3.0, 1.0))
     p = circle_circle((3.0, 0.0), 1.0, (4.5, 0.0), 1.0)
     yield regime("concentric-two", A, torus(O, 4.5, 1.0), curves=2, witnesses=[(q[0], 0.0, q[1]) for q in p])
@@ -431,10 +430,10 @@ def ellipsoid_ellipsoid():
     yield regime("spheroids-equator", S, ellipsoid(O, 3.0, 3.0, 1.0), curves=1, contact="tangential", witnesses=[x_at(3.0), (0.0, 3.0, 0.0)])
     m = 6.0 / math.sqrt(13.0)
     yield regime("spheroids-two", S, ellipsoid(O, 2.0, 2.0, 3.0), curves=2, witnesses=[(m, 0.0, m), (0.0, m, -m)])
-    yield regime("spheroids-shifted", S, ellipsoid(z_at(2.0), 3.0, 3.0, 2.0), curves=1, witnesses=[(1.5 * math.sqrt(3.0), 0.0, 1.0)], placements=EXACT_ONLY)
-    yield regime("spheroids-pole", S, ellipsoid(z_at(4.0), 3.0, 3.0, 2.0), points=1, witnesses=[z_at(2.0)], placements=EXACT_ONLY)
+    yield regime("spheroids-shifted", S, ellipsoid(z_at(2.0), 3.0, 3.0, 2.0), curves=1, witnesses=[(1.5 * math.sqrt(3.0), 0.0, 1.0)])
+    yield regime("spheroids-pole", S, ellipsoid(z_at(4.0), 3.0, 3.0, 2.0), points=1, witnesses=[z_at(2.0)])
     a = math.sqrt(81.0 / 8.0)
-    yield regime("spheroids-touching-below", S, ellipsoid(z_at(2.0), a, a, 2.0 * a), curves=1, contact="tangential", witnesses=[(3.0 * math.sqrt(63.0) / 8.0, 0.0, -0.25)], placements=EXACT_ONLY)
+    yield regime("spheroids-touching-below", S, ellipsoid(z_at(2.0), a, a, 2.0 * a), curves=1, contact="tangential", witnesses=[(3.0 * math.sqrt(63.0) / 8.0, 0.0, -0.25)])
     yield regime("spheroids-coincident", S, S, overlap=True)
 
 

@@ -313,7 +313,15 @@ certified clip, and the result is ``NotImplemented``, as for plane–cylinder.
 
 Whether the axes coincide is decided exactly on the input doubles: the
 cross products of the frames' axes, and of the offset between origins with
-an axis, vanish or not. A sphere shares an axis with any line through its
+an axis, vanish or not. A pair placed by a rounded rotation is coaxial in
+its construction but not in its doubles, whose cross products miss zero by
+units in the last place. It is taken as coaxial when its axes are parallel
+within :math:`2^{-40}` in sine and the misalignment, the sine times the
+pair's reach plus the distance of the other's origin from the axis, moves
+its circles by at most a sixteenth of the resolution, so that they still
+certify within the resolution against both surfaces as given; the
+declaration is logged at ``Info``, and a coincidence so declared carries
+``Tolerant`` evidence. A sphere shares an axis with any line through its
 centre, so two spheres always share the line of their centres, and a plane
 and a sphere the normal through the centre. A sphere's circles are its
 parallels of latitude only when its poles lie on the common axis. Otherwise

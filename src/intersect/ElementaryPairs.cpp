@@ -203,12 +203,66 @@ template <typename G>
 /// its unit direction, the first surface with an axis of its own giving
 /// both, else the plane's normal through the sphere's centre, else the
 /// line of the spheres' centres.
+///
+/// Misalignment is zero when the axes are one exactly. A pair placed by a
+/// rounded rotation is coaxial in its construction but not in its doubles:
+/// the cross products miss zero by units in the last place. It is taken as
+/// coaxial when the misalignment moves its circles by at most the slack,
+/// a sixteenth of the resolution, so that they still certify within the
+/// resolution against both surfaces as given (Keep proves it, or the pair
+/// fails closed); Misalignment then bounds that move.
 struct Axis3 {
     Point3 Origin;
     Vec3 Direction;
+    double Misalignment = 0.0;
 };
 
-[[nodiscard]] std::optional<Axis3> OwnAxisShared(const Elementary& r, const Elementary& other)
+/// How far a surface's points of interest reach from its frame's origin:
+/// its radii and semi-axes; none for a plane, a cone's apex circle.
+[[nodiscard]] double SizeOf(const Elementary& e)
+{
+    const Quadric q = QuadricOf(e);
+    switch (q.Kind) {
+    case QuadricKind::Plane:
+        return 0.0;
+    case QuadricKind::Torus:
+        return q.Major + q.Radius;
+    case QuadricKind::Ellipsoid:
+        return std::max({q.Radius, q.SemiB, q.SemiC});
+    default:
+        return q.Radius;
+    }
+}
+
+/// How far the other surface's axis is from r's, over the reach of the
+/// pair: the sine between the axes times the reach, and the distance of
+/// the other's origin from r's axis. A sphere has no axis of its own, a
+/// plane no origin on one.
+[[nodiscard]] double MisalignmentOf(const Elementary& r, const Elementary& other)
+{
+    const Vec3 a = AxisDirectionOf(r);
+    const Vec3 offset = OriginOf(other) - OriginOf(r);
+    const double reach = Length(offset) + SizeOf(r) + SizeOf(other);
+    double m = 0.0;
+    if (!IsSphere(other)) {
+        // Axes apart by more than rounding are no common axis, however
+        // small the reach: a cone's apex alone reaches nowhere.
+        const double sine = Length(Cross(a, AxisDirectionOf(other)));
+        if (!(sine <= 0x1p-40)) {
+            return std::numeric_limits<double>::infinity();
+        }
+        m += sine * reach;
+    }
+    if (!IsPlane(other)) {
+        m += Length(Cross(offset, a));
+    }
+    return m;
+}
+
+/// r's own axis, when the other surface shares it exactly or within the
+/// slack (Axis3).
+[[nodiscard]] std::optional<Axis3> OwnAxisShared(const Elementary& r, const Elementary& other,
+                                                 const double slack)
 {
     const ExactVector<4> axis = ExactAxisOf(r);
     const Point3 origin = OriginOf(r);
@@ -216,22 +270,28 @@ struct Axis3 {
                         : IsSphere(other) ? OnLine(OriginOf(other), origin, axis)
                                           : Parallel(axis, ExactAxisOf(other)) &&
                                                 OnLine(OriginOf(other), origin, axis);
-    if (!shared) {
+    if (shared) {
+        return Axis3{origin, AxisDirectionOf(r)};
+    }
+    const double misalignment = MisalignmentOf(r, other);
+    if (!(misalignment <= slack)) {
         return std::nullopt;
     }
-    return Axis3{origin, AxisDirectionOf(r)};
+    return Axis3{origin, AxisDirectionOf(r), misalignment};
 }
 
-[[nodiscard]] std::optional<Axis3> CommonAxis(const Elementary& a, const Elementary& b)
+/// The axis both surfaces turn about, if they share one (Axis3).
+[[nodiscard]] std::optional<Axis3> CommonAxis(const Elementary& a, const Elementary& b,
+                                              const double slack)
 {
     if (IsTriaxial(a) || IsTriaxial(b)) {
         return std::nullopt;
     }
     if (HasOwnAxis(a)) {
-        return OwnAxisShared(a, b);
+        return OwnAxisShared(a, b, slack);
     }
     if (HasOwnAxis(b)) {
-        return OwnAxisShared(b, a);
+        return OwnAxisShared(b, a, slack);
     }
     if (IsPlane(a) != IsPlane(b)) {
         const Elementary& sphere = IsPlane(a) ? b : a;
@@ -244,11 +304,22 @@ struct Axis3 {
     return Axis3{OriginOf(a), concentric ? Normalized(QuadricOf(a).Axis) : Normalized(between)};
 }
 
+/// Unit directions parallel within rounding, 2^-40 in sine, whose angle
+/// moves a point `reach` away by at most the slack.
+[[nodiscard]] bool WithinSlack(const Vec3& a, const Vec3& b, const double reach, const double slack)
+{
+    const double sine = Length(Cross(a, b));
+    return sine <= 0x1p-40 && sine * reach <= slack;
+}
+
 /// Whether a sphere's poles lie on the common axis, so that its circles
 /// about it are its parallels of latitude; whether a spheroid turns about
 /// its own axis, its equal semi-axes A and B, so that its circles are too.
 /// True for every other surface.
-[[nodiscard]] bool Aligned(const Elementary& e, const Elementary& other)
+///
+/// Poles within the slack of the axis, as for the axes themselves (Axis3):
+/// the sine between the pole's direction and the axis's, times the radius.
+[[nodiscard]] bool Aligned(const Elementary& e, const Elementary& other, const double slack)
 {
     if (const Ellipsoid* g = std::get_if<Ellipsoid>(&e); g != nullptr && !IsSphere(e)) {
         return SpheroidOf(*g)->Along == 2;
@@ -257,12 +328,15 @@ struct Axis3 {
         return true;
     }
     const bool concentric = IsSphere(other) && OriginOf(other) == OriginOf(e);
+    const Vec3 pole = AxisDirectionOf(e);
     if (!IsSphere(other) || concentric) {
-        return Parallel(ExactAxisOf(e), ExactAxisOf(other));
+        return Parallel(ExactAxisOf(e), ExactAxisOf(other)) ||
+               WithinSlack(pole, AxisDirectionOf(other), SizeOf(e), slack);
     }
     // Two spheres about the line of their centres.
     const ExactVector<2> between = ExactOffset(OriginOf(other), OriginOf(e));
-    return IsExactlyZero(ExactCross(ExactAxisOf(e), between));
+    return IsExactlyZero(ExactCross(ExactAxisOf(e), between)) ||
+           WithinSlack(pole, Normalized(OriginOf(other) - OriginOf(e)), SizeOf(e), slack);
 }
 
 // --- Meridian profiles --------------------------------------------------------
@@ -976,6 +1050,8 @@ struct Pair {
     Box2 BoxA;
     Box2 BoxB;
     double Tolerance;
+    /// How far from coaxial a pair may be and be taken as coaxial (Axis3).
+    double Slack;
 };
 
 /// The circle the profiles meet at, as branches inside both boxes.
@@ -1010,6 +1086,16 @@ void AddAxisPoint(SurfaceSurfaceIntersection& result, const Pair& p, const Axis3
     const Point2 onB = ProjectOnto(p.B, at);
     if (ParametersIn(p.A, onA, p.BoxA) && ParametersIn(p.B, onB, p.BoxB)) {
         result.Points.push_back({at, onA, onB});
+    }
+}
+
+/// A pair taken as coaxial within rounding says so (Axis3).
+void LogMisalignment(const Axis3& axis, const Context& ctx)
+{
+    if (axis.Misalignment > 0.0) {
+        ctx.Log(LogLevel::Info, "Intersect: surfaces " + Number(axis.Misalignment) +
+                                    " mm from coaxial, within rounding: taken as coaxial, "
+                                    "their circles certified against both (ADR-0029)");
     }
 }
 
@@ -1063,8 +1149,8 @@ void LogTangency(const Meets& meets, const Context& ctx)
 [[nodiscard]] Result<SurfaceSurfaceIntersection> Coincident(const Pair& p, const Axis3& axis,
                                                             const double gap, const Context& ctx)
 {
-    if (!WholeChart(p.A, p.BoxA) || !WholeChart(p.B, p.BoxB) || !Aligned(p.A, p.B) ||
-        !Aligned(p.B, p.A)) {
+    if (!WholeChart(p.A, p.BoxA) || !WholeChart(p.B, p.BoxB) || !Aligned(p.A, p.B, p.Slack) ||
+        !Aligned(p.B, p.A, p.Slack)) {
         return Fail(ErrorCode::NotImplemented,
                     "Intersect: coincident cones, spheres or tori over part of their charts, or "
                     "spheres whose poles differ");
@@ -1113,7 +1199,7 @@ void LogTangency(const Meets& meets, const Context& ctx)
 [[nodiscard]] Result<std::optional<SurfaceSurfaceIntersection>> Coaxial(const Pair& p,
                                                                         const Context& ctx)
 {
-    const std::optional<Axis3> axis = CommonAxis(p.A, p.B);
+    const std::optional<Axis3> axis = CommonAxis(p.A, p.B, p.Slack);
     if (!axis) {
         return std::optional<SurfaceSurfaceIntersection>{};
     }
@@ -1129,15 +1215,17 @@ void LogTangency(const Meets& meets, const Context& ctx)
                     "subdivision of its angle could not resolve (ADR-0029)");
     }
     if (meets.Coincident) {
-        STEREON_TRY(SurfaceSurfaceIntersection overlap, Coincident(p, *axis, meets.Gap, ctx));
+        STEREON_TRY(SurfaceSurfaceIntersection overlap,
+                    Coincident(p, *axis, std::max(meets.Gap, axis->Misalignment), ctx));
         return std::optional<SurfaceSurfaceIntersection>{std::move(overlap)};
     }
     const bool circles =
         std::ranges::any_of(meets.Points, [](const Meet& m) { return m.Rho > 0.0; });
-    if (circles && (!Aligned(p.A, p.B) || !Aligned(p.B, p.A))) {
+    if (circles && (!Aligned(p.A, p.B, p.Slack) || !Aligned(p.B, p.A, p.Slack))) {
         return std::optional<SurfaceSurfaceIntersection>{}; // A sphere's tilted circles: the trace.
     }
     LogTangency(meets, ctx);
+    LogMisalignment(*axis, ctx);
     SurfaceSurfaceIntersection result;
     for (const Meet& m : meets.Points) {
         if (m.Rho > 0.0) {
@@ -1418,7 +1506,14 @@ Result<SurfaceSurfaceIntersection> ElementaryPair(const Surface& a, const Box2& 
     if (!ea || !eb) {
         return Fail(ErrorCode::InvalidInput, "ElementaryPair: dispatched for other surface types");
     }
-    const Pair p{a, b, *ea, *eb, boxA, boxB, std::max(tolerance, ctx.GetResolution())};
+    const Pair p{a,
+                 b,
+                 *ea,
+                 *eb,
+                 boxA,
+                 boxB,
+                 std::max(tolerance, ctx.GetResolution()),
+                 ctx.GetResolution() / 16.0};
     // An ellipsoid has the coaxial closed form when it is a spheroid on the
     // other's axis; every other configuration with one goes to the trace
     // (ADR-0048 §3.4).
