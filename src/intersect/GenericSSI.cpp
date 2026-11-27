@@ -1958,17 +1958,19 @@ struct TangentSides {
     const Surface& C;
 };
 
+/// The marcher's surfaces as the chart's S and C.
 [[nodiscard]] TangentSides SidesOf(const Marcher& m, const TangentChart& t)
 {
     return t.SmallIsA ? TangentSides{m.A, m.B} : TangentSides{m.B, m.A};
 }
 
-/// The parameters (across, along) on S of a sample, and its foot on C.
+/// A sample's parameters on S.
 [[nodiscard]] Point2& OnS(Sample& s, const TangentChart& t)
 {
     return t.SmallIsA ? s.OnA : s.OnB;
 }
 
+/// A sample's parameters on C, the foot of its point of S.
 [[nodiscard]] Point2& OnC(Sample& s, const TangentChart& t)
 {
     return t.SmallIsA ? s.OnB : s.OnA;

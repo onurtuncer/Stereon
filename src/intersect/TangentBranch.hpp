@@ -116,6 +116,7 @@ struct ValleyTrace {
     double Join;
 };
 
+/// The plane (e1, e2) of a frame about C's normal at a foot, in doubles.
 [[nodiscard]] std::optional<std::array<Vec3, 2>> PlaneAt(const ValleyTrace& t, const Point2& onC)
 {
     const std::optional<NodeFrame> f = FrameAbout(NormalAt(t.C, t.OnC, onC.X, onC.Y));
@@ -131,6 +132,7 @@ struct ValleyJets {
     Jet C;
 };
 
+/// S's and C's jets at a point of the valley's system.
 [[nodiscard]] std::optional<ValleyJets> JetsAt(const ValleyTrace& t, const ValleyPoint& p)
 {
     const Point2 uv = OnSmall(t.AcrossU, p.Across, p.Along);
@@ -259,6 +261,7 @@ struct ValleyHeight {
     Interval Slope;
 };
 
+/// h and h_b at the root, enclosed over its box.
 [[nodiscard]] std::optional<ValleyHeight> HeightAtRoot(const NodeSystem& sys, const bool acrossU,
                                                        const IntervalsN<3>& x, const double along)
 {
@@ -345,6 +348,7 @@ struct ValleyGuesses {
     ValleyPoint Last;
 };
 
+/// The valley's points, in doubles, at the start, middle and end of a step.
 [[nodiscard]] std::optional<ValleyGuesses> GuessesOver(const ValleyTrace& t,
                                                        const std::array<Vec3, 2>& e,
                                                        const ValleyPoint& start,
@@ -499,6 +503,7 @@ constexpr double BandTolerances = 8.0;
     return wide ? Box2{Snapped(cu, t.C.Parameters.X), Snapped(cv, t.C.Parameters.Y)} : Box2{cu, cv};
 }
 
+/// A step's boxes on S and C, narrow about the valley or wide across the band.
 [[nodiscard]] std::optional<ValleyBoxes> BoxesOver(const ValleyTrace& t,
                                                    const std::array<Vec3, 2>& e,
                                                    const ValleyGuesses& g, const Interval& along,
@@ -525,6 +530,7 @@ struct PairJets {
     Jet OverC;
 };
 
+/// The pair's nets and jets; nothing when a jet cannot be enclosed.
 [[nodiscard]] std::optional<PairJets> JetsOfPair(const PatchPair& pair)
 {
     SecondNets small = SecondNetsOf(pair.A);
@@ -599,6 +605,7 @@ struct StepBoxes {
     ValleyBoxes Wide;
 };
 
+/// Both pairs of boxes of a step, or nothing unless the narrow lie in the wide.
 [[nodiscard]] std::optional<StepBoxes> StepBoxesOver(const ValleyTrace& t,
                                                      const std::array<Vec3, 2>& e,
                                                      const ValleyGuesses& g, const Interval& along)
@@ -785,6 +792,7 @@ void RecordValley(const ValleyTrace& t, std::vector<ValleyBox> boxes, Findings& 
     return slope * Width(StretchOf(t.S, !t.AcrossU)) <= t.Tolerance;
 }
 
+/// A candidate for the valley in a pair's cells (see NearTangent), or nothing.
 [[nodiscard]] std::optional<ValleyPoint> ValleyCandidate(const ValleyTrace& t, const Box2& cellS,
                                                          const Box2& cellC)
 {
@@ -813,6 +821,7 @@ struct TracePatches {
     const Patch* C;
 };
 
+/// The Bezier patches of the searched atlases that hold the pair's cells.
 [[nodiscard]] std::optional<TracePatches>
 PatchesHolding(const PatchPair& pair, const SearchSettings& s, const bool smallIsA)
 {

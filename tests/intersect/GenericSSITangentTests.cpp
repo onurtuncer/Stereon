@@ -51,6 +51,7 @@ constexpr double Pi = std::numbers::pi;
 
 // --- Polynomial graphs over the unit square ----------------------------------
 
+/// The binomial coefficient C(n, k), as a double.
 double Binomial(const std::size_t n, const std::size_t k)
 {
     double c = 1.0;
@@ -156,6 +157,8 @@ struct CircleArc {
     std::array<double, 3> Weights;
 };
 
+/// The arc from a0 to a1: its ends, the tangents' meeting point, and the
+/// cosine of half the span as the middle weight.
 CircleArc ArcOf(const double a0, const double a1)
 {
     const double half = 0.5 * (a1 - a0);
@@ -219,6 +222,7 @@ BSplineSurface TorusPatch()
 
 // --- Transformations of the input -----------------------------------------
 
+/// The surface with every pole moved by f: a NURBS surface follows exactly.
 BSplineSurface Mapped(BSplineSurface s, const std::function<Point3(const Point3&)>& f)
 {
     for (Point3& p : s.Poles) {
@@ -227,6 +231,7 @@ BSplineSurface Mapped(BSplineSurface s, const std::function<Point3(const Point3&
     return s;
 }
 
+/// The number of poles along v.
 std::size_t CountV(const BSplineSurface& s)
 {
     return s.KnotsV.size() - static_cast<std::size_t>(s.DegreeV) - 1;
@@ -282,10 +287,12 @@ BSplineSurface Transposed(const BSplineSurface& s)
 struct Motion {
     double Scale = 1.0;
     Point3 Shift{0.0, 0.0, 0.0};
+    /// The point moved.
     [[nodiscard]] Point3 Forward(const Point3& p) const
     {
         return {Scale * p.X + Shift.X, Scale * p.Y + Shift.Y, Scale * p.Z + Shift.Z};
     }
+    /// The moved point taken back.
     [[nodiscard]] Point3 Back(const Point3& p) const
     {
         return {(p.X - Shift.X) / Scale, (p.Y - Shift.Y) / Scale, (p.Z - Shift.Z) / Scale};
@@ -311,12 +318,14 @@ struct Expected {
     std::function<double(const Point3&)> OffCurve;
 };
 
+/// z = 4 x'^2 on z = height: the line x = 1/2 at that height, y in [0, 1].
 Expected TroughLine(const double z = 0.0)
 {
     return {{Point3{0.5, 0.0, z}, Point3{0.5, 1.0, z}},
             [z](const Point3& p) { return std::max(std::abs(p.X - 0.5), std::abs(p.Z - z)); }};
 }
 
+/// The parabola y = 1/2 + (x - 1/2)^2 on z = 0, x in [0, 1].
 Expected Parabola()
 {
     return {{Point3{0.0, 0.75, 0.0}, Point3{1.0, 0.75, 0.0}}, [](const Point3& p) {
@@ -325,12 +334,14 @@ Expected Parabola()
             }};
 }
 
+/// The cylinder's bottom line y = 0, z = -1, x in [0, 1].
 Expected CylinderLine()
 {
     return {{Point3{0.0, 0.0, -1.0}, Point3{1.0, 0.0, -1.0}},
             [](const Point3& p) { return std::max(std::abs(p.Y), std::abs(p.Z + 1.0)); }};
 }
 
+/// The torus's top circle x^2 + y^2 = 4 at z = 1/2, a quarter turn.
 Expected TorusCircle()
 {
     return {{Point3{TorusR, 0.0, Torusr}, Point3{0.0, TorusR, Torusr}}, [](const Point3& p) {
@@ -407,6 +418,7 @@ void CheckMoved(const BSplineSurface& sa, const BSplineSurface& sb, const Expect
 
 } // namespace
 
+/// A polynomial tangency along a straight line, in both orders.
 TEST_CASE("a trough lying on a plane is one tangential branch along its bottom line",
           "[intersect][generic][tangent]")
 {
@@ -414,11 +426,13 @@ TEST_CASE("a trough lying on a plane is one tangential branch along its bottom l
     CheckMoved(Trough(), Wide(0.0), TroughLine(), {});
 }
 
+/// A polynomial tangency along a curved line, h_ab nonzero along it.
 TEST_CASE("a tangency along a parabola is traced across the patch", "[intersect][generic][tangent]")
 {
     CheckMoved(ParabolicValley(), Wide(0.0), Parabola(), {});
 }
 
+/// Rational tangencies along a line and a circle.
 TEST_CASE("rational surfaces tangent along a line and along a circle",
           "[intersect][generic][tangent][rational]")
 {
@@ -436,6 +450,7 @@ TEST_CASE("rational surfaces tangent along a line and along a circle",
     }
 }
 
+/// MR-01 to MR-04 on the tangency fixtures.
 TEST_CASE("tangency answers move with the surfaces", "[intersect][generic][tangent][metamorphic]")
 {
     SECTION("MR-01: translations, exact in binary")
@@ -463,6 +478,7 @@ TEST_CASE("tangency answers move with the surfaces", "[intersect][generic][tange
     // MR-02, the exchange of the surfaces, is in every CheckMoved.
 }
 
+/// Near events: gaps within and beyond the tolerance, either way.
 TEST_CASE("a gap within the tolerance is declared a tangency; beyond it, crossings or nothing",
           "[intersect][generic][tangent][near-event]")
 {
@@ -530,6 +546,7 @@ TEST_CASE("a gap within the tolerance is declared a tangency; beyond it, crossin
     }
 }
 
+/// A sub-case the trace does not settle, failing closed.
 TEST_CASE("a tangency whose ends lie where both domains end fails closed",
           "[intersect][generic][tangent][special]")
 {
