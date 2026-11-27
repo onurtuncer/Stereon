@@ -371,8 +371,17 @@ TEST_CASE("near extrema never replace closed loops with isolated touches",
     for (const double height : {0.0, 5e-7}) {
         const auto result = Intersect(bowl, Box2::Everything(), Surface{Patch(height)},
                                       Box2::Everything(), 1e-6, ctx);
-        if (result) {
-            REQUIRE(height > 0.0);
+        INFO(IntersectTest::ErrorText(result));
+        REQUIRE((result.has_value() || height > 0.0));
+        if (result && height == 0.0) {
+            // An exact touch at the bowl's bottom: one proved point, no
+            // branch (the owner's decision of 2026-11-26 asks it answered).
+            REQUIRE(result->Branches.empty());
+            REQUIRE(result->Points.size() == 1);
+            REQUIRE(result->Points.front().Bound <= ctx.GetResolution());
+        } else if (result) {
+            // A loop some 1.4e-3 across, wider than the resolution: never a
+            // point.
             REQUIRE_FALSE(result->Branches.empty());
             REQUIRE(result->Points.empty());
         } else {
