@@ -75,6 +75,7 @@ const Vec3 ez{0.0, 0.0, 1.0};
 /// The stretch of an open conic every case is asked over.
 const Interval Stretch{-1.5, 1.5};
 
+/// Whether a component turns the conic's frame: an Angle, not a Length.
 bool IsTurn(const ConicComponent c)
 {
     return c == ConicComponent::RotationX || c == ConicComponent::RotationY ||
@@ -99,23 +100,28 @@ std::vector<ConicComponent> ComponentsOf()
     return components;
 }
 
+/// The point a conic's centre bindings move: a hyperbola's centre.
 Point3& CentreOf(Hyperbola& h)
 {
     return h.Center;
 }
+/// The point a conic's centre bindings move: a parabola's vertex.
 Point3& CentreOf(Parabola& p)
 {
     return p.Vertex;
 }
 
+/// The point a surface's origin bindings move: a plane's origin.
 Point3& OriginOf(Plane& s)
 {
     return s.Origin;
 }
+/// The point a surface's origin bindings move: a sphere's centre.
 Point3& OriginOf(Sphere& s)
 {
     return s.Center;
 }
+/// The point a surface's origin bindings move: a cylinder's origin.
 Point3& OriginOf(Cylinder& s)
 {
     return s.Origin;
@@ -134,6 +140,7 @@ Vec3 Rotated(const Vec3& v, const Vec3& w)
            ((1.0 - std::cos(angle)) * Dot(k, v)) * k;
 }
 
+/// Intersect over the properties' stretch; a fail-closed refusal discards the case.
 template <typename C, typename S>
 CurveSurfaceIntersection Meet(const C& conic, const S& surface)
 {
@@ -215,6 +222,7 @@ std::pair<C, S> Moved(C conic, S surface, const std::vector<double>& seed,
     return {conic, surface};
 }
 
+/// The Euclidean norm of a vector of values.
 double Norm(const std::vector<double>& v)
 {
     double sum = 0.0;
@@ -329,6 +337,7 @@ void RequireProducts(const C& conic, const S& surface)
     RC_ASSERT(std::abs(left - right) <= 1e-12 * (1.0 + scale));
 }
 
+/// A random coordinate in [-5, 5], a multiple of 1/8.
 double Coordinate()
 {
     return *rc::gen::inRange(-40, 41) / 8.0;
@@ -344,6 +353,7 @@ std::pair<Vec3, Vec3> RandomFrame()
             Vec3{-std::sin(theta) * std::cos(phi), std::cos(theta) * std::cos(phi), std::sin(phi)}};
 }
 
+/// A random hyperbola or parabola in a random frame near the origin.
 template <typename C>
 C RandomConic()
 {
@@ -357,6 +367,8 @@ C RandomConic()
     }
 }
 
+/// One random case: a conic and a sphere, a cylinder or a plane through one of
+/// its points, checked for Taylor decay and the transpose.
 template <typename C>
 void RequireProperties()
 {
@@ -397,11 +409,13 @@ void RequireProperties()
 const Hyperbola UpHyperbola{Point3{}, 3.0, 4.0, ex, ez};
 const Parabola UpParabola{Point3{}, 0.25, ex, ez};
 
+/// The plane z = height, framed by x and y.
 Plane ShelfAt(const double height)
 {
     return Plane{Point3{0.0, 0.0, height}, ex, ey};
 }
 
+/// The intersection of a closed-form case, required to succeed.
 template <typename C>
 CurveSurfaceIntersection On(const C& conic, const Plane& plane)
 {
@@ -448,6 +462,8 @@ void RequireRate(const std::vector<double>& v, const Vec3& x, const double t)
 
 } // namespace
 
+/// Every binding of the hyperbola (3 cosh t, 0, 4 sinh t) across z = 3 against
+/// its closed form.
 TEST_CASE("a hyperbola's crossing of a plane moves as its closed form says",
           "[intersect][linearization][open-conic]")
 {
@@ -481,6 +497,8 @@ TEST_CASE("a hyperbola's crossing of a plane moves as its closed form says",
     }
 }
 
+/// Every binding of the parabola (t^2, 0, t) across z = 2 against its closed
+/// form.
 TEST_CASE("a parabola's crossing of a plane moves as its closed form says",
           "[intersect][linearization][open-conic]")
 {
@@ -508,6 +526,7 @@ TEST_CASE("a parabola's crossing of a plane moves as its closed form says",
     }
 }
 
+/// Second-order Taylor decay and the adjoint identity on random open conics.
 TEST_CASE("hyperbola and parabola crossings: second-order Taylor decay and the transpose",
           "[intersect][linearization][open-conic][property]")
 {
@@ -517,6 +536,8 @@ TEST_CASE("hyperbola and parabola crossings: second-order Taylor decay and the t
              [] { RequireProperties<Parabola>(); });
 }
 
+/// Linearize's residual, tangent, partials, conditioning and status, and its
+/// refusals.
 TEST_CASE("Linearize exposes an open conic's residual, system and regularity",
           "[intersect][linearization][open-conic]")
 {
@@ -550,6 +571,8 @@ TEST_CASE("Linearize exposes an open conic's residual, system and regularity",
           ErrorCode::InvalidInput);
 }
 
+/// Touches, overlaps, undecided, grazing and singular points: their statuses,
+/// forward and reverse, with no values.
 TEST_CASE("an open conic's point without a derivative says so and carries none",
           "[intersect][linearization][open-conic]")
 {
@@ -635,6 +658,8 @@ TEST_CASE("an open conic's point without a derivative says so and carries none",
     }
 }
 
+/// Bindings the conic lacks, wrong quantities, foreign parameters, stale
+/// results and adjoints of the wrong length are refused.
 TEST_CASE("an open conic's bindings are refused where it has no such value",
           "[intersect][linearization][open-conic]")
 {

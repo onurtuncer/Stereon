@@ -173,14 +173,17 @@ template <typename Conic>
 {
     return {c.Radius * std::cos(t), c.Radius * std::sin(t)};
 }
+/// An ellipse's C(t) - Center in its frame.
 [[nodiscard]] std::pair<double, double> InFrameOf(const Ellipse& e, const double t)
 {
     return {e.MajorRadius * std::cos(t), e.MinorRadius * std::sin(t)};
 }
+/// A hyperbola's C(t) - Center in its frame: (a cosh t, b sinh t).
 [[nodiscard]] std::pair<double, double> InFrameOf(const Hyperbola& h, const double t)
 {
     return {h.MajorRadius * std::cosh(t), h.MinorRadius * std::sinh(t)};
 }
+/// A parabola's C(t) - Vertex in its frame: (t^2 / (4 f), t).
 [[nodiscard]] std::pair<double, double> InFrameOf(const Parabola& p, const double t)
 {
     return {t * t / (4.0 * p.FocalLength), t};
@@ -196,12 +199,14 @@ ShapeRate(const Circle& /*c*/, const ConicComponent /*component*/, const double 
 {
     return {std::cos(t), std::sin(t)};
 }
+/// An ellipse's dC/dMajorRadius (cos t, 0) or dC/dMinorRadius (0, sin t).
 [[nodiscard]] std::pair<double, double> ShapeRate(const Ellipse& /*e*/,
                                                   const ConicComponent component, const double t)
 {
     return component == ConicComponent::MajorRadius ? std::pair{std::cos(t), 0.0}
                                                     : std::pair{0.0, std::sin(t)};
 }
+/// A hyperbola's dC/dMajorRadius (cosh t, 0) or dC/dMinorRadius (0, sinh t).
 [[nodiscard]] std::pair<double, double> ShapeRate(const Hyperbola& /*h*/,
                                                   const ConicComponent component, const double t)
 {
@@ -209,6 +214,7 @@ ShapeRate(const Circle& /*c*/, const ConicComponent /*component*/, const double 
                                                     : std::pair{0.0, std::sinh(t)};
 }
 [[nodiscard]] std::pair<double, double>
+/// A parabola's dC/dFocalLength at fixed t: (-t^2 / (4 f^2), 0).
 ShapeRate(const Parabola& p, const ConicComponent /*component*/, const double t)
 {
     return {-(t * t) / (4.0 * p.FocalLength * p.FocalLength), 0.0};
@@ -226,6 +232,7 @@ struct ConicSide {
 
     [[nodiscard]] Point3 At(const double t) const { return Eval(Geometry, t); }
     [[nodiscard]] Vec3 Tangent(const double t) const { return Deriv(Geometry, t, 1); }
+    /// The vector of frame coefficients (x, y): x XAxis + y YAxis.
     [[nodiscard]] Vec3 Along(const std::pair<double, double>& xy) const
     {
         return xy.first * Geometry.XAxis + xy.second * Geometry.YAxis;
@@ -878,12 +885,14 @@ Result<CurveSurfaceLinearization> Linearize(const Ellipse& ellipse, const Surfac
     return LinearizeOn(ConicSide<Ellipse>{ellipse, {}}, surface, point);
 }
 
+/// Linearize for a hyperbola's crossing: the conic side's system.
 Result<CurveSurfaceLinearization> Linearize(const Hyperbola& hyperbola, const Surface& surface,
                                             const CurveSurfacePoint& point)
 {
     return LinearizeOn(ConicSide<Hyperbola>{hyperbola, {}}, surface, point);
 }
 
+/// Linearize for a parabola's crossing: the conic side's system.
 Result<CurveSurfaceLinearization> Linearize(const Parabola& parabola, const Surface& surface,
                                             const CurveSurfacePoint& point)
 {
@@ -961,6 +970,7 @@ IntersectVjp(const Ellipse& ellipse, const std::span<const ConicBinding> conicBi
 }
 
 Result<SensitivityResult>
+/// The forward product for a hyperbola's crossings.
 IntersectJvp(const Hyperbola& hyperbola, const std::span<const ConicBinding> conicBindings,
              const Surface& surface, const std::span<const SurfaceBinding> surfaceBindings,
              const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity)
@@ -970,6 +980,7 @@ IntersectJvp(const Hyperbola& hyperbola, const std::span<const ConicBinding> con
 }
 
 Result<SensitivityResult>
+/// The forward product for a parabola's crossings.
 IntersectJvp(const Parabola& parabola, const std::span<const ConicBinding> conicBindings,
              const Surface& surface, const std::span<const SurfaceBinding> surfaceBindings,
              const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity)
@@ -979,6 +990,7 @@ IntersectJvp(const Parabola& parabola, const std::span<const ConicBinding> conic
 }
 
 Result<SensitivityResult>
+/// The reverse product for a hyperbola's crossings.
 IntersectVjp(const Hyperbola& hyperbola, const std::span<const ConicBinding> conicBindings,
              const Surface& surface, const std::span<const SurfaceBinding> surfaceBindings,
              const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity)
@@ -988,6 +1000,7 @@ IntersectVjp(const Hyperbola& hyperbola, const std::span<const ConicBinding> con
 }
 
 Result<SensitivityResult>
+/// The reverse product for a parabola's crossings.
 IntersectVjp(const Parabola& parabola, const std::span<const ConicBinding> conicBindings,
              const Surface& surface, const std::span<const SurfaceBinding> surfaceBindings,
              const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity)
