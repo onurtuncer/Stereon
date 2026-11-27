@@ -606,6 +606,7 @@ TEST_CASE("no planar-curves configuration, rotated or else far, is answered wron
 // placement) were answered by #267 and #271. On main 09c0505 the whole
 // corpus, both ways, has no refusal the ledger does not list (the Robustness
 // run 45834398857). A refusal a case does not document fails.
+/// Completeness of one placement per configuration: only documented refusals.
 TEST_CASE("only the planar-curves configurations the ledger lists are refused",
           "[intersect][planar][corpus]")
 {
@@ -620,7 +621,7 @@ TEST_CASE("no planar-curves corpus case is answered wrongly, both ways",
     RunAll(files, true, Gate::Safety);
 }
 
-// The same at every placement and scale, both ways.
+/// The same at every placement and scale, both ways.
 TEST_CASE("only the planar-curves corpus cases the ledger lists are refused, both ways",
           "[.][exhaustive][intersect][planar][corpus]")
 {
@@ -664,9 +665,9 @@ TEST_CASE("MR-04: only documented planar corpus cases refuse equivalent charts, 
     RunReparam(CaseFiles(), true, Gate::Completeness);
 }
 
-// The MR-04 completeness gate on the 35 ordered pairs other than
-// BSplineCurve2d with itself, strict: a refusal in an equivalent chart that
-// the case does not document fails.
+/// The MR-04 completeness gate on the 35 ordered pairs other than
+/// BSplineCurve2d with itself, strict: a refusal in an equivalent chart that
+/// the case does not document fails.
 TEST_CASE("MR-04: planar configurations of every pair but two B-splines refuse an equivalent "
           "chart only as documented",
           "[intersect][planar][corpus][metamorphic]")
@@ -676,6 +677,7 @@ TEST_CASE("MR-04: planar configurations of every pair but two B-splines refuse a
     RunReparam(files, false, Gate::Completeness);
 }
 
+/// The same at every placement and scale, both ways.
 TEST_CASE("MR-04: planar corpus cases of every pair but two B-splines refuse equivalent charts "
           "only as documented, both ways",
           "[.][exhaustive][intersect][planar][corpus][metamorphic]")
