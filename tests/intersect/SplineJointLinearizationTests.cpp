@@ -57,6 +57,7 @@ using Stereon::Vec3;
 
 namespace {
 
+/// A plane B-spline, required valid.
 BSplineCurve2d Spline(const int degree, std::vector<double> knots, std::vector<Point2> poles)
 {
     auto made = Stereon::MakeBSplineCurve(degree, std::move(knots), std::move(poles), {});
@@ -64,6 +65,7 @@ BSplineCurve2d Spline(const int degree, std::vector<double> knots, std::vector<P
     return *made;
 }
 
+/// A space B-spline, required valid.
 BSplineCurve Spline3(const int degree, std::vector<double> knots, std::vector<Point3> poles)
 {
     auto made = Stereon::MakeBSplineCurve(degree, std::move(knots), std::move(poles), {});
@@ -80,10 +82,12 @@ BSplineCurve2d Arch()
 {
     return Spline(3, cubic, {{0, 0}, {0.3, 0.6}, {0.7, 1.2}, {1, 1}});
 }
+/// A cubic from (1, 1) to (2, 0), across Arch at their shared pole.
 BSplineCurve2d Descent()
 {
     return Spline(3, cubic, {{1, 1}, {1.4, 0.7}, {1.7, 0.2}, {2, 0}});
 }
+/// The vertical segment x = 1 from (1, -1) to (1, 3).
 BSplineCurve2d Post()
 {
     return Spline(1, {0.0, 0.0, 1.0, 1.0}, {{1, -1}, {1, 3}});
@@ -95,6 +99,7 @@ BSplineCurve2d Vee()
 {
     return Spline(1, {0.0, 0.0, 1.0, 2.0, 2.0}, {{-1, 1}, {0, 0}, {1, 1}});
 }
+/// y = 0 over [-1, 1] as a polyline jointed at the origin, smooth there.
 BSplineCurve2d Bar()
 {
     return Spline(1, {0.0, 0.0, 1.0, 2.0, 2.0}, {{-1, 0}, {0, 0}, {1, 0}});
@@ -115,6 +120,7 @@ struct Statuses {
     bool Values;
 };
 
+/// The statuses of a planar result: forward, reverse and Linearize's worst.
 Statuses PlanarStatuses(const BSplineCurve2d& a, const BSplineCurve2d& b,
                         const PlanarIntersection& at)
 {
@@ -144,6 +150,7 @@ Statuses PlanarStatuses(const BSplineCurve2d& a, const BSplineCurve2d& b,
     return {jvp->GetStatus(), vjp->GetStatus(), point, jvp->GetValues().has_value()};
 }
 
+/// Intersect two plane B-splines, required to succeed without overlaps.
 PlanarIntersection Meet(const BSplineCurve2d& a, const BSplineCurve2d& b)
 {
     const auto r = Stereon::Intersect(Curve2d{a}, Curve2d{b}, ctx);
@@ -238,6 +245,7 @@ Line Upright(const double x, const double y)
     return Line{Point3{x, y, 0.0}, Vec3{0.0, 0.0, 1.0}};
 }
 
+/// A decided crossing at (t, uv, x), made by hand.
 CurveSurfacePoint Crossing(const double t, const Point2& uv, const Point3& x)
 {
     return CurveSurfacePoint{t, uv, x, ContactType::Crossing, true};
@@ -247,6 +255,7 @@ const Surface ground{Plane{Point3{}, Vec3{1.0, 0.0, 0.0}, Vec3{0.0, 1.0, 0.0}}};
 
 } // namespace
 
+/// #334's crossings at a spline's own end have no derivative.
 TEST_CASE("plane B-splines crossing at a spline's own end have no derivative",
           "[intersect][linearization][planar][spline-end]")
 {
@@ -257,6 +266,7 @@ TEST_CASE("plane B-splines crossing at a spline's own end have no derivative",
     RequireNoDerivative(Arch(), Post(), Point2{1, 1});
 }
 
+/// #334's crossing through a vee's corner has no derivative.
 TEST_CASE("a plane B-spline crossed at its corner has no derivative",
           "[intersect][linearization][planar][spline-end]")
 {
@@ -266,6 +276,7 @@ TEST_CASE("a plane B-spline crossed at its corner has no derivative",
     RequireNoDerivative(Vee(), Pole(), Point2{0, 0});
 }
 
+/// A joint whose one-sided tangents agree keeps its derivative.
 TEST_CASE("a plane B-spline crossed at a smooth joint keeps its derivative",
           "[intersect][linearization][planar][spline-end]")
 {
@@ -291,6 +302,7 @@ TEST_CASE("a plane B-spline crossed at a smooth joint keeps its derivative",
     CHECK(PlanarStatuses(Vee(), Pole(), exact).Jvp == DerivativeStatus::Nondifferentiable);
 }
 
+/// A space polyline's corner and end on a plane have no derivative.
 TEST_CASE("a space B-spline's end or corner on a surface has no derivative",
           "[intersect][linearization][spline-end]")
 {
@@ -322,6 +334,7 @@ TEST_CASE("a space B-spline's end or corner on a surface has no derivative",
     }
 }
 
+/// A bilinear patch's edge and corner, and its interior knot line.
 TEST_CASE("a point on a B-spline surface's boundary or knot line keeps no derivative",
           "[intersect][linearization][spline-end]")
 {

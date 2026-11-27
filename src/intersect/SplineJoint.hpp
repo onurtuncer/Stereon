@@ -64,6 +64,8 @@ template <typename Spline>
 /// it may jump, and whether they do is not established), or neither.
 enum class SurfaceJoint : std::uint8_t { None, Boundary, KnotLine };
 
+/// Where uv stands on a B-spline surface: its boundary, an interior knot line
+/// of multiplicity at least the degree, or neither.
 [[nodiscard]] inline SurfaceJoint SurfaceJointAt(const BSplineSurface& surface, const Point2& uv)
 {
     const Box2 domain = Domain(surface);

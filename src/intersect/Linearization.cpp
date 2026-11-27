@@ -123,6 +123,7 @@ struct LineSide {
         return {};
     }
     [[nodiscard]] static bool Covers(double /*t*/) { return true; }
+    /// A line or a conic is smooth everywhere.
     [[nodiscard]] static bool AtJoint(double /*t*/) { return false; }
 };
 
@@ -157,6 +158,7 @@ struct SplineSide {
     {
         return std::isfinite(t) && Contains(Domain(Geometry), t);
     }
+    /// Whether t is the B-spline's own end or a corner of it (SplineJoint.hpp).
     [[nodiscard]] bool AtJoint(const double t) const { return Detail::AtSplineJoint(Geometry, t); }
 };
 
@@ -234,6 +236,7 @@ struct ConicSide {
         return {};
     }
     [[nodiscard]] static bool Covers(const double t) { return std::isfinite(t); }
+    /// A line or a conic is smooth everywhere.
     [[nodiscard]] static bool AtJoint(double /*t*/) { return false; }
 };
 
