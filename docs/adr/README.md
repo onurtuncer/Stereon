@@ -72,3 +72,4 @@ Open questions that have to be researched before they can be decided live in [`d
 | [0054](0054-topological-event-detection.md) | Topological event detection and classification | 2–4 (staged); later parameter tracking | Proposed |
 | [0055](0055-geometric-assurance-profiles.md) | Geometric assurance profiles and representation-independent query contracts | 2–6 (staged) | Proposed |
 | [0056](0056-cpp26-feature-usage.md) | Where C++26 features are used in kernel code | 0 | Proposed |
+| [0057](0057-circle-seam-piece-storage.md) | Inline storage for analytic circle seam splitting | 2 | Proposed |
