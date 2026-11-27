@@ -48,6 +48,8 @@ using Stereon::Point2;
 using Stereon::SensitivityContext;
 using Stereon::Vec2;
 
+/// The fixed replay of seed 10340478410048779848: no point off either
+/// parabola is reported.
 TEST_CASE("a root of the implicit equation off the parametric conic fails closed",
           "[intersect][planar][conic]")
 {
