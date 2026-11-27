@@ -96,6 +96,7 @@ Implementation notes
    tests/intersect/DispatchTests.cpp
    tests/intersect/ElementaryPairsTests.cpp
    tests/intersect/EllipsePlaneReplayTests.cpp
+   tests/intersect/GenericSSICutNodeTests.cpp
    tests/intersect/GenericSSINodeTests.cpp
    tests/intersect/GenericSSITangentTests.cpp
    tests/intersect/GenericSSITests.cpp

@@ -656,6 +656,8 @@ struct Atlas {
     Box2 Domain;
     bool ClosedU = false;
     bool ClosedV = false;
+    /// The domain searched: the request met with Domain.
+    Box2 Searched = Domain;
 };
 
 struct SearchSettings {
@@ -1333,10 +1335,16 @@ struct NodeEdge {
     return ends;
 }
 
+/// A proved node's ends and what the proof knows of its critical point.
+struct NodeProof {
+    NodeEnds Ends;
+    NodeAt At;
+};
+
 /// Facts 1 to 4 on a pair (small, cover), with the tolerance the surfaces
 /// may be apart at the node and the join of seeds.
-[[nodiscard]] std::optional<NodeEnds> ProvedNode(const PatchPair& pair, const Vec3& normal,
-                                                 const SearchSettings& s)
+[[nodiscard]] std::optional<NodeProof> ProvedNodeAt(const PatchPair& pair, const Vec3& normal,
+                                                    const SearchSettings& s)
 {
     const std::optional<NodeFrame> frame = FrameAbout(normal);
     if (!frame) {
@@ -1362,14 +1370,22 @@ struct NodeEdge {
     }
     const Bounds onS = XyzOver(pair.A, (*x)[0], (*x)[1]);
     const Bounds gap = MinusOf(onS, XyzOver(pair.B, (*x)[2], (*x)[3]));
-    std::optional<std::vector<Seed>> ends =
-        NodeEndsOf(sys, NodeAt{*x, DotOf(frame->N, gap), hessian, *inverse}, s.Join);
+    const NodeAt at{*x, DotOf(frame->N, gap), hessian, *inverse};
+    std::optional<std::vector<Seed>> ends = NodeEndsOf(sys, at, s.Join);
     if (!ends) {
         return std::nullopt;
     }
     const std::array<double, 4> m = MidpointsOf<4>(*x);
     const Seed node{Middle(onS), Point2{m[0], m[1]}, Point2{m[2], m[3]}};
-    return NodeEnds{node, std::move(*ends)};
+    return NodeProof{NodeEnds{node, std::move(*ends)}, at};
+}
+
+/// The node's four ends, or nothing (ProvedNodeAt).
+[[nodiscard]] std::optional<NodeEnds> ProvedNode(const PatchPair& pair, const Vec3& normal,
+                                                 const SearchSettings& s)
+{
+    std::optional<NodeProof> proof = ProvedNodeAt(pair, normal, s);
+    return proof ? std::optional<NodeEnds>{std::move(proof->Ends)} : std::nullopt;
 }
 
 /// A patch cut into a centre over `inner`, strictly inside it, and the four
@@ -1581,9 +1597,13 @@ struct Placed {
 } // namespace
 } // namespace Stereon::Detail
 
+// In this order: each part uses the helpers of those before it.
+// clang-format off
 #include "SeamNode.hpp"
 #include "TangentBranch.hpp"
 #include "TouchPoint.hpp"
+#include "NodeOnCut.hpp"
+// clang-format on
 
 namespace Stereon::Detail {
 namespace {
@@ -1599,7 +1619,8 @@ namespace {
                                   std::vector<PatchPair>& stack)
 {
     if (SettleNode(pair, s, found, stack) || SettleSeamNode(pair, s, found, stack) ||
-        SettleTangent(pair, s, found, stack) || SettleTouchPoint(pair, s, found, stack)) {
+        SettleCutNode(pair, s, found, stack) || SettleTangent(pair, s, found, stack) ||
+        SettleTouchPoint(pair, s, found, stack)) {
         return Settled::Done;
     }
     return Settled::Cut;
@@ -2171,8 +2192,9 @@ using Chain = std::vector<ChainStep>;
 }
 
 /// A node must join exactly two arcs, unless it is an end of the branch on
-/// a boundary of the domains, or a proved branch point joining its four;
-/// anything else means the arcs do not fit.
+/// a boundary of the domains, or a proved branch point joining its four, or
+/// fewer on a cut of the domains (NodeOnCut.hpp); anything else means the
+/// arcs do not fit.
 [[nodiscard]] Result<void> CheckGraph(const ArcGraph& g, const std::vector<Arc>& arcs,
                                       const Box2& domainA, const Box2& domainB)
 {
@@ -2180,9 +2202,9 @@ using Chain = std::vector<ChainStep>;
         const std::size_t degree = g.AtNode[n].size();
         const Arc& arc = arcs[g.AtNode[n].front()];
         const Seed& seed = g.Ends[g.AtNode[n].front()][0] == n ? arc.From : arc.To;
-        const bool fits = g.Branching[n]
-                              ? degree == 4
-                              : degree <= 2 && (degree == 2 || OnBoundary(seed, domainA, domainB));
+        const bool onBoundary = OnBoundary(seed, domainA, domainB);
+        const bool fits = g.Branching[n] ? degree == 4 || (degree >= 1 && degree < 4 && onBoundary)
+                                         : degree <= 2 && (degree == 2 || onBoundary);
         if (!fits) {
             return Fail(ErrorCode::IntersectionFailed,
                         "BSpline x BSpline: arcs do not join into branches at (" +
@@ -2543,7 +2565,7 @@ struct ShiftedSearch {
 {
     STEREON_TRY(std::vector<Patch> patches, PatchesOver(moved, domain));
     return Atlas{std::move(patches), Domain(moved), ClosesAlong(moved, true),
-                 ClosesAlong(moved, false)};
+                 ClosesAlong(moved, false), SearchedDomain(moved, domain)};
 }
 
 [[nodiscard]] Result<ShiftedSearch> SearchAbout(const BSplineSurface& sa, const Box2& domainA,

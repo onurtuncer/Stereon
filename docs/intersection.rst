@@ -1999,9 +1999,37 @@ Not covered, and failing closed: a node near a knot line but not within the
 box given up around it, where the proof inside a cell has too little room
 (with a knot line :math:`2^k` of a unit patch beside a node of two
 biquadratics and a tolerance of :math:`10^{-6}`, :math:`k \le -20` and
-:math:`k \ge -12` are answered and :math:`k = -14, -16` refused); a node on
-a cut of the requested domain or on an end that does not close; a seam whose
+:math:`k \ge -12` are answered and :math:`k = -14, -16` refused); a seam whose
 two ends differ in the doubles; and every higher-order singularity.
+
+*A transverse node on a cut of the requested domain, or on an end of a
+domain that does not close* (``src/intersect/NodeOnCut.hpp``). No box the
+proof inside a cell can use is centred on it, so :math:`S`'s cell is
+*continued* past the cut: its Bézier net, polynomial or homogeneous, is the
+same polynomial beyond the side (de Casteljau's algorithm at a parameter
+outside :math:`[0, 1]`, in interval arithmetic), a surface the proof may use
+though the result may not. The node is proved on the continued patch as
+inside a cell, four half-branches ending at the four roots on the centred
+box's edges, :math:`Q` strictly increasing along each. Then, for each cut
+line through the centred box:
+
+5. *The cut keeps clear.* On the cut, by Taylor's theorem about
+   :math:`s^*`, :math:`h(s) \in h^* + (s - s^*)^{\mathsf T} H (s - s^*) / 2`
+   for :math:`H` in the Hessian's enclosure; on every piece of the line this
+   is proved to exclude zero, but within a window about the node whose reach
+   in space is within the resolution and over which :math:`|h|` is within
+   the tolerance.
+
+A half-branch therefore crosses the cut only in the window, and once past
+the window's largest :math:`Q` never returns: its far part lies on the side
+of its end. The half-branches whose ends lie in the searched domain are the
+intersection there; each is reported from the node, clamped onto the cut, to
+its end, and the node, on the domain's boundary, may join fewer than four.
+Not covered, and failing closed: a cut along a direction on which the
+Hessian's form is not of one sign (a branch along the cut, as the saddle's
+line :math:`x = 1/2` on the cut :math:`u = 1/2`), a node on cuts of both
+surfaces at once, a node on a knot line or seam and a cut together, and a
+window wider than the resolution allows.
 
 The node is proved within the pair tolerance of both surfaces, not on them: a
 gap within the tolerance (ADR-0050) is not told apart from a crossing, so two
