@@ -319,6 +319,45 @@ and a sphere the normal through the centre. A sphere's circles are its
 parallels of latitude only when its poles lie on the common axis. Otherwise
 their pcurves are not lines, and such a pair is traced.
 
+**Coaxial spheroids.** An ellipsoid with two semi-axes exactly equal is a
+spheroid, the turn of its meridian ellipse about the third:
+:math:`\rho^2 / a^2 + (z - z_c)^2 / c^2 = 1`, with :math:`a` the equal
+semi-axes and :math:`c` the other. Its axis is the frame's axis along
+:math:`c`, decided exactly as the others are; an ellipsoid with three equal
+semi-axes is round, as a sphere is, and one with three unequal ones has no
+axis and is traced. Where the ellipse meets another profile has no
+closed form in general (against a torus's circle it is a quartic), so it is
+isolated by certified subdivision of the ellipse's angle :math:`t`
+(``MeetEllipse``). Each other profile is the zero set of a level function
+:math:`G = \alpha (\rho - \rho_0)^2 + \beta (z - z_0)^2 + A \rho + B z - C`
+whose value bounds the distance from it: :math:`|G|` itself for a line with
+:math:`(A, B)` a unit normal, :math:`|G| / R` for a circle of radius
+:math:`R`, :math:`|G| \max(a, c)` for another ellipse. Over each span of
+:math:`t`, with the signs of :math:`g(t) = G(a \cos t, z_c + c \sin t)` and
+of :math:`g'` certain at its ends, interval enclosures of :math:`g`,
+:math:`g'` and :math:`g''` decide it:
+
+- :math:`g` keeps its sign: no meeting;
+- :math:`g'` keeps its sign: one crossing exactly where :math:`g` changes
+  sign between the ends;
+- :math:`g''` keeps its sign: one extremum :math:`t^*`, placed by bisection
+  on :math:`g'`. Where :math:`|g(t^*)|` bounds a distance within the pair
+  tolerance, the profiles touch there and the circle is ``Tangential``,
+  declared within the tolerance as a circle tangency is. Otherwise they
+  cross once on each side whose end has the other sign, or miss.
+
+A span that none of these resolves is split, at a point a little off its
+middle where both signs are certain, within a budget of :math:`2^{14}`
+spans. A contact of higher order, or a profile within rounding of the
+ellipse along a stretch, exhausts it and ends with ``IntersectionFailed``.
+Two ellipses, or an ellipse and a sphere's circle, whose centres and
+semi-axes differ by at most the tolerance in sum are declared coincident.
+The circles are exact, each point on the spheroid to rounding. On a
+spheroid whose equal semi-axes are :math:`A` and :math:`B` the chart turns
+about its own axis, and each circle's pcurve is a line of constant
+:math:`v`; a spheroid turning about its frame's :math:`X` or :math:`Y` axis
+has curved pcurves, and such a pair is traced (``CoaxialSpheroidTests``).
+
 The meetings themselves cannot be decided exactly. A cone's profile comes
 from the sine and cosine of its angle, which no double represents. So the
 meetings are decided on the profiles' nominal values. A configuration
