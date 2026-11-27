@@ -105,6 +105,7 @@ Implementation notes
    tests/intersect/LineSurfaceTests.cpp
    tests/intersect/LinearizationTests.cpp
    tests/intersect/MetamorphicRegressionTests.cpp
+   tests/intersect/NodeLinearizationTests.cpp
    tests/intersect/OpenConicSurfaceTests.cpp
    tests/intersect/OutcomeTests.cpp
    tests/intersect/PlanarCorpusTests.cpp

@@ -1365,6 +1365,8 @@ void AccumulateBranch(const Surface& a, const std::span<const SurfaceBinding> bi
 
 } // namespace
 
+/// The linearisation of a sample read against the whole result: a node's
+/// sample is Nondifferentiable (Linearization.cppm).
 Result<BranchPointLinearization> Linearize(const Surface& a, const Surface& b,
                                            const IntersectionBranch& branch, const double t)
 {
@@ -1377,6 +1379,8 @@ Result<BranchPointLinearization> Linearize(const Surface& a, const Surface& b,
                                     s.SvA,      s.SuB, s.SvB, s.Conditioning, p.Status};
 }
 
+/// The linearisation of a sample read against the whole result: a node's
+/// sample is Nondifferentiable (Linearization.cppm).
 Result<BranchPointLinearization> Linearize(const Surface& a, const Surface& b,
                                            const SurfaceSurfaceIntersection& intersection,
                                            const BranchSample& sample)

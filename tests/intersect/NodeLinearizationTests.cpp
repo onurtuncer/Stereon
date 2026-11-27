@@ -163,6 +163,8 @@ BSplineSurface Floor()
 
 } // namespace
 
+/// Two cylinders of radius 3 whose axes meet: eight branch ends at the two
+/// nodes, every one without a derivative.
 TEST_CASE("a sample at a node of two equal cylinders has no derivative",
           "[intersect][linearization][branch][node]")
 {
@@ -221,6 +223,8 @@ TEST_CASE("a sample at a node of two equal cylinders has no derivative",
     }
 }
 
+/// A saddle across a plane, in both orders: four branch ends at the node,
+/// every one without a derivative.
 TEST_CASE("a sample at a transverse node of two B-spline surfaces has no derivative",
           "[intersect][linearization][branch][node]")
 {
@@ -246,6 +250,7 @@ TEST_CASE("a sample at a transverse node of two B-spline surfaces has no derivat
     }
 }
 
+/// A circle split at a sphere's seam keeps its derivatives at every end.
 TEST_CASE("two branch ends meeting at a seam are no node",
           "[intersect][linearization][branch][node]")
 {
@@ -264,6 +269,8 @@ TEST_CASE("two branch ends meeting at a seam are no node",
     CHECK(RequireNodesSingled(cut, rise, ball, *at, {}, 0.0, sensitivity) == 0);
 }
 
+/// The whole-result Linearize refuses bad input and agrees with the
+/// single-branch one elsewhere.
 TEST_CASE("Linearize on a whole result refuses what it cannot read",
           "[intersect][linearization][branch][node]")
 {
