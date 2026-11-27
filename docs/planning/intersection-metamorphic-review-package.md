@@ -100,6 +100,17 @@ At 09c0505 `--release` reports 199 errors:
 
 `inventory_complete` is false. #348 extends the merged-PR audit to `main` 09c0505 and reads the closed issues since #263: #309 (tests only) and #336 (PR-326). PR-339 remains untriaged. The historical audit has read merged pull requests and those issues only. Failing corpus entries and regression-test comments since #263 have not been read. The owner decides whether the merged-PR audit, with batches 1–4, is the complete historical inventory. If so, the owner records `inventory_complete: true` together with `inventory_review`. If not, the scope still to be read is those two sources from #263 (`cbeddfb`), and every merge from 09c0505 to the release revision.
 
+### After #346, #348 and #351
+
+#346 is merged. With #348 and #351 merged as well, `--release` reports 4 errors:
+
+- PR-339, untriaged;
+- `inventory_complete`;
+- `inventory_review`;
+- `planar:BSplineCurve2d:BSplineCurve2d/MR-04`.
+
+In #348, at `95755ef`, the fault replay killed all 41 faults. PR-271, PR-289, PR-301, PR-304, PR-312, PR-315, PR-316, PR-317, PR-318, PR-322 and PR-326 are `verified` there. PR-323 is `exception reviewed`.
+
 ## What the owner records
 
 1. A review of the cells and defect records above, or of a sample with the reason for it. The `review` fields stay as they are, and the owner's review is referenced from `inventory_review`.
