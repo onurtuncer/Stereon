@@ -55,6 +55,7 @@ extensions = [
     'sphinx.ext.githubpages',
     'sphinxcontrib.bibtex',
     'stereon_api',
+    'stereon_algorithms',
 ]
 
 source_encoding = 'utf-8'

@@ -8,10 +8,8 @@
 References
 ==========
 
-.. todo::
-
-   Add entries to ``references.bib`` and cite them from the chapters
-   with ``:cite:p:`key```.
+The :doc:`algorithms/index` links each method family to its implementation
+and relevant literature.
 
 .. bibliography::
    :all:

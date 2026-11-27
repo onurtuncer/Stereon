@@ -1021,6 +1021,7 @@ conic's angle, which may run over several turns.
 A ``Hyperbola``'s branch :math:`C + a\cosh t\,X + b\sinh t\,Y` and a
 ``Parabola`` :math:`V + t^2/(4f)\,X + t\,Y` go through the same search
 (``OpenConicSurface``, the arcs described by a ``ConicChart``):
+
 - a hyperbola is cut into stretches of at most one unit of :math:`t`,
   each the rational quadratic with :math:`\cosh` and :math:`\sinh` for
   :math:`\cos` and :math:`\sin` and middle weight :math:`\cosh h`, which
@@ -1055,6 +1056,7 @@ domain's own end stays undecided. What the second search leaves undecided
 fails closed; a tangency stays undecided wherever the cuts are.
 
 The tests have the closed forms:
+
 - ``tests/intersect/ConicArcCutTests.cpp``: a circle crossing a plane, a
   cylinder and a sphere exactly on its cuts, and an ellipse crossing a
   plane on them;
@@ -1588,6 +1590,7 @@ proved crossing is ``Decided``.
 **Touches** (``Touches``). At a tangency :math:`J` is singular, and no box
 ever passes Krawczyk's test. So a pair that is neither apart nor settled
 is tried as two graphs before it is halved, under three conditions:
+
 - both pieces' :math:`x = u\cdot(P - O)`, along the chord :math:`u` of the
   first, are proved strictly monotone;
 - :math:`h'` is *not* proved of one sign over their common :math:`x` (if it
@@ -1605,6 +1608,7 @@ the range come from bisection on its monotone :math:`x`, rounded outward.
 
 The range is then followed as the plane handler's ``OfOrder`` follows a
 spline against a conic (*Algorithm S*):
+
 - :math:`h` of one sign: no meeting;
 - a lower derivative of one sign: the range has that order, and
   :math:`h'` of one sign makes :math:`h` monotone. Opposite strict signs
@@ -1633,6 +1637,7 @@ would round, nothing is proved and the pair is searched.
 
 A pair that is none of these when its pieces can no longer be halved, or a
 search past :math:`2^{16}` pairs, fails with ``IntersectionFailed``:
+
 - an overlap other than these, including a spline along a different
   parameterization of itself, or along a conic;
 - a touch with no derivative of order up to four of one sign;
