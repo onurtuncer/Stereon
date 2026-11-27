@@ -141,3 +141,29 @@ The tangent at P is 3 sinh(0.6) x + 2 cosh(0.6) d, or t*/(2f) x + d = 0.3 x + d.
 - **Tests:** the three cited tests, which run in every pull request (`[intersect][curve-surface][metamorphic]`, not hidden). Since the audit hardening of 2026-11-12 and #292, every fixture must answer: a refusal or `NotImplemented` fails the test.
 - **Oracle:** the closed form above; the kernel is used only for the answer under test.
 - **Green:** see "Green, hyperbolas and parabolas" below.
+
+#### Green, hyperbolas and parabolas
+
+- **Date:** 2026-11-26
+- **Branch:** `verify/v02-release-inventory-20261126`, on `main` 09c0505 (#342). #324 merged before its follow-up commit recorded the green run, so the 42 cells stayed `MR implemented` on `main`; this records it.
+- **Revision:** `main` at [`09c05055c2e2737dfe7810307337bb2b7ec8e22b`](https://github.com/onurtuncer/Stereon/commit/09c05055c2e2737dfe7810307337bb2b7ec8e22b). The fixture is the one of #324 (`e84edff`); `tests/intersect/CurveSurfaceRelationTests.cpp` is unchanged since.
+- **Runs:** the three cited tests passed in every native CTest job of the push to `main`:
+  - [Linux `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45829925674/job/139943711808);
+  - [Linux `gcc16-release`](https://github.com/onurtuncer/Stereon/actions/runs/45829925674/job/139943711584);
+  - [Linux `gcc16-asan`](https://github.com/onurtuncer/Stereon/actions/runs/45829925674/job/139943711702);
+  - [Windows `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45829925840/job/139943736324);
+  - [Windows `gcc16-windows`](https://github.com/onurtuncer/Stereon/actions/runs/45829925840/job/139943737037);
+  - [macOS `gcc16-debug`](https://github.com/onurtuncer/Stereon/actions/runs/45829925624/job/139943711047).
+
+  Each job's CTest log lists "MR-01: curve-surface crossings move with exact rigid motions", "MR-03: curve-surface crossings scale with the geometry and its resolution" and "MR-04: curve-surface crossings keep their place in an equivalent curve chart" as `Passed`. None of the three is tagged `[!mayfail]` or hidden, and each `REQUIRE`s an answer, so every hyperbola and parabola fixture answered against every surface under every motion, scale and chart.
+
+**Open-conic review.** Reviewed by the v0.2 verification agent (Agent E), as for the 84 cells above; the owner's review is pending. Checked in the test source:
+
+- **MR-04 parameter map.** With y = -d the hyperbola is C + a cosh(t) x - b sinh(t) d, which passes through P at t = -0.6. The parabola V + t^2/(4f) x - t d passes through P at t = -0.6 f. Those are the values the test expects, so a sign error in the reported parameter fails the claim.
+- **MR-03.** The parabola's parameter, a length, is scaled with the fixture, and so is its domain [-4f, 4f]. The hyperbola's parameter is an angle and is not scaled.
+- **Oracle.** P and the surface distances are closed forms evaluated in the test. The kernel's projection is not used, and every reported point, not only the one at P, must lie on the curve and the surface.
+- **Domain.** The claim is local, a transverse crossing at P. Other crossings of the same pair are checked to lie on both operands, but their completeness is not claimed. Unbounded hyperbola and parabola domains stay out of scope.
+
+No fault spot-check was run for these cells: nothing could be built on the workstation while this was written.
+
+On that review, the 42 cells MR-01, MR-03 and MR-04 of `Hyperbola` and `Parabola` against all seven surfaces are `verified`.
