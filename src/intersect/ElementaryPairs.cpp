@@ -38,8 +38,10 @@ import :Dispatch;
 import Stereon.Robust;
 
 #include "Analytic.hpp"
+#include "BoxClip.hpp"
 #include "Exact.hpp"
 #include "Implicit.hpp"
+#include "OvalPcurve.hpp"
 
 /// The pairs of planes, cylinders, cones, spheres and tori that
 /// PlanePlane.cpp, PlaneCylinder.cpp and the cylinder handlers do not take
@@ -1055,24 +1057,146 @@ struct Pair {
 };
 
 /// The circle the profiles meet at, as branches inside both boxes.
+/// The circle's branch over a span, its contact the meeting's: a tangency
+/// is declared within the pair tolerance (MeetProfiles), so certified
+/// within it.
+[[nodiscard]] Result<void> KeepCircle(SurfaceSurfaceIntersection& result, const Pair& p,
+                                      const Circle& circle, const Meet& m, Curve2d curveA,
+                                      Curve2d curveB, const Interval& span, const Context& ctx)
+{
+    IntersectionBranch branch =
+        m.Tangent ? Tangency(Curve(circle), std::move(curveA), std::move(curveB), span)
+                  : Crossing(Curve(circle), std::move(curveA), std::move(curveB), span);
+    return Keep(result, std::move(branch), p.ErasedA, p.ErasedB, ctx,
+                m.Tangent ? p.Tolerance : 0.0);
+}
+
+[[nodiscard]] bool WholeChart(const Elementary& e, const Box2& box);
+
+// --- Circles on a chart that does not turn about the axis -------------------------
+
+/// The chart of a sphere or an ellipsoid, as OvalPcurve.hpp takes it.
+[[nodiscard]] OvalChart OvalChartOf(const Elementary& e)
+{
+    if (const Sphere* s = std::get_if<Sphere>(&e)) {
+        return ChartOf(*s);
+    }
+    return ChartOf(std::get<Ellipsoid>(e));
+}
+
+/// One side of a circle whose pcurve may be fitted: a sphere whose poles
+/// are off the common axis, or a spheroid turning about its frame's X or Y
+/// axis, has the certified interpolant of OvalPcurve.hpp; every other
+/// surface the exact pcurve of PcurveOf.
+struct CircleSide {
+    const Elementary* Geometry;
+    const Surface* Erased;
+    const Box2* Box;
+    bool Fitted;
+    CirclePcurve Line;
+};
+
+/// The side of the circle on one surface: fitted or exact.
+[[nodiscard]] CircleSide SideOf(const Elementary& e, const Surface& erased, const Box2& box,
+                                const Elementary& other, const Circle& circle, const Axis3& axis,
+                                const double slack)
+{
+    const bool fitted = !Aligned(e, other, slack);
+    return {&e, &erased, &box, fitted, fitted ? CirclePcurve{} : PcurveOf(e, circle, axis)};
+}
+
+/// Where the side's pcurve leaves its chart: a seam crossing of either kind.
+void AddSeamCuts(const CircleSide& side, const Circle& circle, std::vector<double>& cuts)
+{
+    if (!side.Fitted) {
+        if (const std::optional<double> t = SeamOf(side.Line)) {
+            cuts.push_back(*t);
+        }
+        return;
+    }
+    for (const double t : OvalSeamCrossings(OvalChartOf(*side.Geometry), OvalOf(circle))) {
+        cuts.push_back(t);
+    }
+}
+
+/// The side's pcurve over a piece crossing no seam of either chart.
+[[nodiscard]] Result<Curve2d> SideCurve(const CircleSide& side, const Circle& circle,
+                                        const Interval& piece, const Context& ctx)
+{
+    if (!side.Fitted) {
+        return PieceCurve(side.Line, piece);
+    }
+    return FittedOvalPcurve(OvalChartOf(*side.Geometry), OvalOf(circle), Curve(circle),
+                            *side.Erased, piece, ctx, "Intersect");
+}
+
+/// The stretches of a span inside the side's box.
+[[nodiscard]] Result<std::vector<Interval>> SideSpans(const CircleSide& side, const Curve2d& curve,
+                                                      const Interval& span, const Context& ctx)
+{
+    if (!side.Fitted) {
+        return ClipPiece(side.Line, span, *side.Box);
+    }
+    if (WholeChart(*side.Geometry, *side.Box)) {
+        return std::vector<Interval>{span};
+    }
+    return ClipPcurveToBox(curve, span, *side.Box, ctx, "Intersect");
+}
+
+/// The circle cut at every seam of both charts, into pieces of [0, 2 pi].
+[[nodiscard]] std::vector<Interval> FittedPieces(const CircleSide& a, const CircleSide& b,
+                                                 const Circle& circle)
+{
+    std::vector<double> cuts{0.0, CirclePeriod};
+    AddSeamCuts(a, circle, cuts);
+    AddSeamCuts(b, circle, cuts);
+    std::ranges::sort(cuts);
+    std::vector<Interval> pieces;
+    for (std::size_t i = 1; i < cuts.size(); ++i) {
+        if (cuts[i] - cuts[i - 1] > 0x1p-40) {
+            pieces.emplace_back(cuts[i - 1], cuts[i]);
+        }
+    }
+    return pieces;
+}
+
+/// A circle about the axis with a fitted pcurve on a side whose chart does
+/// not turn about it: cut at both charts' seams, each piece's pcurves
+/// computed, then clipped to both boxes.
+[[nodiscard]] Result<void> AddFittedCircle(SurfaceSurfaceIntersection& result, const Pair& p,
+                                           const Circle& circle, const Axis3& axis, const Meet& m,
+                                           const Context& ctx)
+{
+    const CircleSide a = SideOf(p.A, p.ErasedA, p.BoxA, p.B, circle, axis, p.Slack);
+    const CircleSide b = SideOf(p.B, p.ErasedB, p.BoxB, p.A, circle, axis, p.Slack);
+    for (const Interval& piece : FittedPieces(a, b, circle)) {
+        STEREON_TRY(const Curve2d curveA, SideCurve(a, circle, piece, ctx));
+        STEREON_TRY(const Curve2d curveB, SideCurve(b, circle, piece, ctx));
+        STEREON_TRY(const std::vector<Interval> onA, SideSpans(a, curveA, piece, ctx));
+        for (const Interval& spanA : onA) {
+            STEREON_TRY(const std::vector<Interval> onB, SideSpans(b, curveB, spanA, ctx));
+            for (const Interval& span : onB) {
+                STEREON_TRY_VOID(KeepCircle(result, p, circle, m, curveA, curveB, span, ctx));
+            }
+        }
+    }
+    return {};
+}
+
 [[nodiscard]] Result<void> AddCircle(SurfaceSurfaceIntersection& result, const Pair& p,
                                      const Axis3& axis, const Meet& m, const Context& ctx)
 {
     const auto [cx, cy] = CircleFrame(axis, HasOwnAxis(p.A) || !HasOwnAxis(p.B) ? p.A : p.B);
     const Circle circle{axis.Origin + m.Z * axis.Direction, m.Rho, cx, cy};
+    if (!Aligned(p.A, p.B, p.Slack) || !Aligned(p.B, p.A, p.Slack)) {
+        return AddFittedCircle(result, p, circle, axis, m, ctx);
+    }
     const CirclePcurve onA = PcurveOf(p.A, circle, axis);
     const CirclePcurve onB = PcurveOf(p.B, circle, axis);
     STEREON_TRY(const std::vector<Interval> spans, CircleSpans(onA, p.BoxA, onB, p.BoxB));
     for (const Interval& span : spans) {
-        Curve2d curveA = PieceCurve(onA, span);
-        Curve2d curveB = PieceCurve(onB, span);
-        IntersectionBranch branch =
-            m.Tangent ? Tangency(Curve(circle), std::move(curveA), std::move(curveB), span)
-                      : Crossing(Curve(circle), std::move(curveA), std::move(curveB), span);
-        // A tangency is declared within the pair tolerance (MeetProfiles):
-        // certified within it.
-        STEREON_TRY_VOID(Keep(result, std::move(branch), p.ErasedA, p.ErasedB, ctx,
-                              m.Tangent ? p.Tolerance : 0.0));
+        STEREON_TRY_VOID(KeepCircle(result, p, circle, m, PieceCurve(onA, span),
+                                    PieceCurve(onB, span), span, ctx));
     }
     return {};
 }
@@ -1218,11 +1342,6 @@ void LogTangency(const Meets& meets, const Context& ctx)
         STEREON_TRY(SurfaceSurfaceIntersection overlap,
                     Coincident(p, *axis, std::max(meets.Gap, axis->Misalignment), ctx));
         return std::optional<SurfaceSurfaceIntersection>{std::move(overlap)};
-    }
-    const bool circles =
-        std::ranges::any_of(meets.Points, [](const Meet& m) { return m.Rho > 0.0; });
-    if (circles && (!Aligned(p.A, p.B, p.Slack) || !Aligned(p.B, p.A, p.Slack))) {
-        return std::optional<SurfaceSurfaceIntersection>{}; // A sphere's tilted circles: the trace.
     }
     LogTangency(meets, ctx);
     LogMisalignment(*axis, ctx);

@@ -126,6 +126,7 @@ Implementation notes
    tests/intersect/SsiCorpusGateTests.cpp
    tests/intersect/SurfaceCorpusTests.cpp
    tests/intersect/SurfaceRelationTests.cpp
+   tests/intersect/TiltedChartCircleTests.cpp
    tests/io/DumpTests.cpp
    tests/io/GeometryArchiveTests.cpp
    tests/mesh/SamplingTests.cpp

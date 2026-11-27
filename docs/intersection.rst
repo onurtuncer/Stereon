@@ -324,8 +324,16 @@ declaration is logged at ``Info``, and a coincidence so declared carries
 ``Tolerant`` evidence. A sphere shares an axis with any line through its
 centre, so two spheres always share the line of their centres, and a plane
 and a sphere the normal through the centre. A sphere's circles are its
-parallels of latitude only when its poles lie on the common axis. Otherwise
-their pcurves are not lines, and such a pair is traced.
+parallels of latitude only when its poles lie on the common axis.
+Otherwise the circle is still exact, but its pcurve on the sphere is no
+line of constant :math:`v`: it is the cubic interpolant through the
+circle's longitudes and latitudes, sampled more densely until
+``CertifyDeviation`` proves it within half the resolution of the sphere,
+as the pcurve of a plane's section on an ellipsoid is
+(``OvalPcurve.hpp``). The circle is cut where it crosses either chart's
+seam, and clipped to a box short of the whole chart by the certified clip
+of a pcurve to a box. A circle through a pole of the tilted chart, where the
+longitude has no rate, fails closed with ``IntersectionFailed``.
 
 **Coaxial spheroids.** An ellipsoid with two semi-axes exactly equal is a
 spheroid, the turn of its meridian ellipse about the third:
@@ -363,8 +371,10 @@ semi-axes differ by at most the tolerance in sum are declared coincident.
 The circles are exact, each point on the spheroid to rounding. On a
 spheroid whose equal semi-axes are :math:`A` and :math:`B` the chart turns
 about its own axis, and each circle's pcurve is a line of constant
-:math:`v`; a spheroid turning about its frame's :math:`X` or :math:`Y` axis
-has curved pcurves, and such a pair is traced (``CoaxialSpheroidTests``).
+:math:`v`; on a spheroid turning about its frame's :math:`X` or :math:`Y`
+axis the pcurve is fitted and certified as on a tilted sphere, and its
+equator, which holds both poles of its chart, fails closed
+(``CoaxialSpheroidTests``, ``TiltedChartCircleTests``).
 
 The meetings themselves cannot be decided exactly. A cone's profile comes
 from the sine and cosine of its angle, which no double represents. So the

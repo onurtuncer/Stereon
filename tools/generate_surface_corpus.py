@@ -57,13 +57,23 @@ def plane_y(d):
     return plane((0.0, d, 0.0), EZ, EX)
 
 
-def sphere(center, radius):
-    return {"type": "sphere", "center": center, "radius": radius, "x_axis": EX, "y_axis": EY}
+def sphere(center, radius, x=EX, y=EY):
+    return {"type": "sphere", "center": center, "radius": radius, "x_axis": x, "y_axis": y}
+
+
+# A frame turned about x by a rational rotation: its poles, +-(0, -0.8, 0.6),
+# lie off the z axis, and off every circle about it below.
+TX, TY = EX, (0.0, 0.6, 0.8)
 
 
 def cylinder(origin, radius, v=(-8.0, 8.0)):
     """A cylinder about the z axis direction, bounded along it."""
     return {"type": "cylinder", "origin": origin, "radius": radius, "x_axis": EX, "y_axis": EY, "v": v}
+
+
+def cylinder_about_x(radius, v=(-8.0, 8.0)):
+    """A cylinder about the x axis direction, bounded along it."""
+    return {"type": "cylinder", "origin": O, "radius": radius, "x_axis": EY, "y_axis": EZ, "v": v}
 
 
 def cone(origin, radius, angle, v=(-8.0, 8.0)):
@@ -74,8 +84,8 @@ def torus(center, major, minor):
     return {"type": "torus", "center": center, "major": major, "minor": minor, "x_axis": EX, "y_axis": EY}
 
 
-def ellipsoid(center, a, b, c):
-    return {"type": "ellipsoid", "center": center, "a": a, "b": b, "c": c, "x_axis": EX, "y_axis": EY}
+def ellipsoid(center, a, b, c, x=EX, y=EY):
+    return {"type": "ellipsoid", "center": center, "a": a, "b": b, "c": c, "x_axis": x, "y_axis": y}
 
 
 O = (0.0, 0.0, 0.0)
@@ -219,6 +229,14 @@ def sphere_cone():
         contact="tangential",
         witnesses=[(2 * co * s * 2, 0.0, 4 * co * co)],
     )
+    yield regime(
+        "coaxial-touching-tilted-poles",
+        sphere(z_at(4.0), 2.0, TX, TY),
+        c,
+        curves=1,
+        contact="tangential",
+        witnesses=around(2 * co * s * 2, 4 * co * co),
+    )
     yield regime("coaxial-two", sphere(z_at(4.0), 3.0), c, curves=2, witnesses=along(0.0, 4.0, 3.0))
     # The upper circle is at v = 8.04: past the default box.
     yield regime("coaxial-around-apex", sphere(z_at(4.0), 5.0), cone(O, 0.0, a, (-9.0, 9.0)), curves=2, witnesses=along(0.0, 4.0, 5.0))
@@ -239,6 +257,10 @@ def sphere_torus():
     yield regime("concentric-two", sphere(O, 3.0), T, curves=2, witnesses=[(x, 0.0, z), (x, 0.0, -z)])
     yield regime("concentric-outer-circle", sphere(O, 4.0), T, curves=1, contact="tangential", witnesses=[(4.0, 0.0, 0.0)])
     yield regime("concentric-around", sphere(O, 5.0), T)
+    # The same circles on a sphere whose poles are off the torus's axis.
+    yield regime("tilted-poles-inner-circle", sphere(O, 2.0, TX, TY), T, curves=1, contact="tangential", witnesses=around(2.0, 0.0))
+    yield regime("tilted-poles-two", sphere(O, 3.0, TX, TY), T, curves=2, witnesses=[(x, 0.0, z), (x, 0.0, -z)])
+    yield regime("tilted-poles-outer-circle", sphere(O, 4.0, TX, TY), T, curves=1, contact="tangential", witnesses=around(4.0, 0.0))
     yield regime("in-the-tube", sphere(x_at(3.0), 0.5), T)
     outer = circle_circle((0.0, 0.0), 4.0, (3.0, 0.0), 2.0)
     inner = circle_circle((0.0, 0.0), 2.0, (3.0, 0.0), 2.0)
@@ -284,6 +306,10 @@ def sphere_ellipsoid():
     yield regime("spheroid-poles", sphere(O, 2.0), S, points=2, witnesses=[z_at(2.0), z_at(-2.0)])
     # h = 1, R^2 = 9 (1 + h^2 / 5): a double root at w = -0.8.
     yield regime("spheroid-touching-below", sphere(z_at(1.0), math.sqrt(10.8)), S, curves=1, contact="tangential", witnesses=around(math.sqrt(7.56), -0.8))
+    # A sphere on its axis, 1 along, of radius^2 4 - 4 / 5: rho^2 differs by
+    # 5 w^2 / 9 - 2 w + 1 + 4 - R^2, a double root at w = 1.8, rho = 1.6.
+    # (The equator holds both poles of the chart, and is not a case here.)
+    yield regime("spheroid-about-x-touching", sphere(x_at(1.0), math.sqrt(3.2)), ellipsoid(O, 3.0, 2.0, 2.0), curves=1, contact="tangential", witnesses=[(1.8, 1.6, 0.0), (1.8, 0.0, 1.6), (1.8, -1.6, 0.0), (1.8, 0.0, -1.6)])
 
 
 def cylinder_cone():
@@ -335,6 +361,10 @@ def cylinder_ellipsoid():
     yield regime("spheroid-two", cylinder(O, 2.0), S, curves=2, witnesses=[(2.0, 0.0, z), (2.0, 0.0, -z)])
     yield regime("spheroid-equator", cylinder(O, 3.0), S, curves=1, contact="tangential", witnesses=around(3.0, 0.0))
     yield regime("spheroid-outside", cylinder(O, 4.0), S)
+    # A spheroid turning about its frame's x axis, the cylinder about x.
+    X = ellipsoid(O, 3.0, 2.0, 2.0)
+    w = 3.0 * math.sqrt(1.0 - 1.5 * 1.5 / 4.0)
+    yield regime("spheroid-about-x-two", cylinder_about_x(1.5), X, curves=2, witnesses=[(w, 1.5, 0.0), (-w, 0.0, 1.5)])
 
 
 def cone_cone():
