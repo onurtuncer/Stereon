@@ -1637,6 +1637,7 @@ Vec3 TurnOf(const Placement& p, const Vec3& v)
 
 } // namespace
 
+/// Skew cylinders answered alike in either order (#289), under rigid motions and scales.
 TEST_CASE("MR PR-289 skew cylinders are answered in either order",
           "[intersect][metamorphic][backfill][PR-289]")
 {
@@ -1694,6 +1695,7 @@ Point3 ConicPoint(const Point3& c, const double a, const double b, const Vec3& x
     return c + a * std::cos(t) * x + b * std::sin(t) * y;
 }
 
+/// The tangent of that circle or ellipse at t, in closed form.
 Vec3 ConicTangent(const double a, const double b, const Vec3& x, const Vec3& y, const double t)
 {
     return -a * std::sin(t) * x + b * std::cos(t) * y;
@@ -1707,6 +1709,7 @@ Point3 PlacedAt(const std::array<Vec3, 3>& turn, const double scale, const Vec3&
     return Point3{} + scale * Turned(turn, q - Point3{}) + shift;
 }
 
+/// The default context with its lengths scaled: resolution and tolerance ceiling.
 Context ScaledPolicy(const double scale)
 {
     return Context::Default()
@@ -1745,6 +1748,7 @@ int FreeParameterPlaced(const Circle& a, const Interval& domainA, const Circle& 
 
 } // namespace
 
+/// A closest approach places its free parameter to rounding (#304), under the relations.
 TEST_CASE("MR PR-304 closest approach places the free parameter to rounding",
           "[intersect][metamorphic][backfill][PR-304]")
 {
@@ -1799,6 +1803,7 @@ TEST_CASE("MR PR-304 closest approach places the free parameter to rounding",
     }
 }
 
+/// A closest approach steps on after landing on an end (#312), under the relations.
 TEST_CASE("MR PR-312 closest approach steps on after one parameter lands on an end",
           "[intersect][metamorphic][backfill][PR-312]")
 {
@@ -1892,6 +1897,7 @@ struct Placement2 {
     double Scale = 1.0;
     Vec2 Shift{};
 
+    /// The direction turned a quarter, `Turns` times.
     [[nodiscard]] Vec2 Turn(Vec2 v) const
     {
         for (int k = 0; k < Turns; ++k) {
@@ -1899,6 +1905,7 @@ struct Placement2 {
         }
         return v;
     }
+    /// The point turned, scaled and shifted.
     [[nodiscard]] Point2 Of(const Point2& p) const
     {
         const Vec2 v = Turn(Vec2{p.X, p.Y});
@@ -1906,6 +1913,7 @@ struct Placement2 {
     }
 };
 
+/// No turn and a quarter turn, scales 1/4, 1 and 4, with and without the shift.
 std::vector<Placement2> Placements2(const Vec2 far)
 {
     std::vector<Placement2> out;
@@ -1923,17 +1931,21 @@ std::vector<Placement2> Placements2(const Vec2 far)
 /// kernel's evaluation.
 std::array<long double, 2> BezierAt(const std::vector<Point2>& poles, const double t)
 {
-    std::vector<std::array<long double, 2>> q;
-    for (const Point2& p : poles) {
-        q.push_back({p.X, p.Y});
+    constexpr std::size_t most = 8;
+    REQUIRE(!poles.empty());
+    REQUIRE(poles.size() <= most);
+    std::array<std::array<long double, 2>, most> q{};
+    for (std::size_t i = 0; i < poles.size(); ++i) {
+        q.at(i) = {poles[i].X, poles[i].Y};
     }
     const long double s = t;
-    for (std::size_t n = q.size(); n > 1; --n) {
+    for (std::size_t n = poles.size(); n > 1; --n) {
         for (std::size_t i = 0; i + 1 < n; ++i) {
-            q[i] = {(1 - s) * q[i][0] + s * q[i + 1][0], (1 - s) * q[i][1] + s * q[i + 1][1]};
+            q.at(i) = {(1 - s) * q.at(i)[0] + s * q.at(i + 1)[0],
+                       (1 - s) * q.at(i)[1] + s * q.at(i + 1)[1]};
         }
     }
-    return q.front();
+    return q[0];
 }
 
 /// The poles placed, and reversed when asked (t' = 1 - t).
@@ -1973,6 +1985,7 @@ void CheckOnBothBeziers(const PlanarPoint& p, const std::vector<Point2>& qa,
 
 } // namespace
 
+/// Two cubic Beziers' proved crossings lie on both curves (#316), under the relations.
 TEST_CASE("MR PR-316 proved crossings of two cubic Beziers lie on both curves",
           "[intersect][metamorphic][backfill][PR-316]")
 {
@@ -2035,6 +2048,7 @@ TEST_CASE("MR PR-316 proved crossings of two cubic Beziers lie on both curves",
     }
 }
 
+/// An order-four contact of a B-spline with a parabola is a touch (#271).
 TEST_CASE("MR PR-271 a B-spline contact of order four with a parabola is a touch",
           "[intersect][metamorphic][backfill][PR-271]")
 {
@@ -2098,75 +2112,6 @@ TEST_CASE("MR PR-271 a B-spline contact of order four with a parabola is a touch
     }
 }
 
-TEST_CASE("MR PR-318 a request ending on a surface knot excludes crossings beyond it",
-          "[intersect][metamorphic][backfill][PR-318]")
-{
-    // Root cause (BezierPatch.hpp, repaired in #318): a request ending
-    // exactly on an interior knot kept the neighbouring Bezier patch, which
-    // meets it only in that knot edge, whole, because the cut there could not
-    // be split off; so a crossing beyond the request was answered, outside
-    // the requested domain. The fixture is #318's two-span curve-NURBS
-    // regression: the degree-1 spline plane S(u, v) = (u, v, 0) with a u
-    // knot at 1/2, and the line through (x, 1/2, -1) along z, x = 1/4 or 3/4.
-    // Oracle, in closed form: the crossing is S(x, 1/2) at the line's t = 1.
-    // A request containing u = x has exactly that point; the other half,
-    // ending on the knot, has none. MR-01: the cyclic turns of the axes and
-    // the translation (8, -4, 2). MR-03: scales 1/4 and 4. MR-04: the
-    // surface's u reversed (u' = 1 - u, the halves exchanged) and the line
-    // run from (x, 1/2, 1) down (t' = 2 - t, still 1 at the crossing).
-    // MR-02 does not apply: there is no exposed surface-curve operation.
-    const std::vector<double> knotsU{0.0, 0.0, 0.5, 1.0, 1.0};
-    const std::vector<double> knotsV{0.0, 0.0, 1.0, 1.0};
-    for (const Placement& p : Placements()) {
-        Replay("PR-318", p);
-        const Context policy = p.Policy();
-        const double reach = 4.0 * policy.GetResolution();
-        for (const bool flipU : {false, true}) {
-            std::vector<Point3> poles;
-            for (const double u : {0.0, 0.5, 1.0}) {
-                for (const double v : {0.0, 1.0}) {
-                    poles.push_back(p.Point(flipU ? 1.0 - u : u, v, 0.0));
-                }
-            }
-            const auto built = MakeBSplineSurface(1, 1, knotsU, knotsV, poles, {});
-            REQUIRE(built.has_value());
-            const Surface spline{*built};
-            for (const double x : {0.25, 0.75}) {
-                const double ux = flipU ? 1.0 - x : x;
-                const Point3 crossing = p.Point(x, 0.5, 0.0);
-                for (const bool down : {false, true}) {
-                    const Curve line{
-                        down ? Line{p.Point(x, 0.5, 1.0), TurnOf(p, Vec3{0.0, 0.0, -p.Scale})}
-                             : Line{p.Point(x, 0.5, -1.0), TurnOf(p, Vec3{0.0, 0.0, p.Scale})}};
-                    for (const bool lower : {false, true}) {
-                        const Box2 half{lower ? Interval{0.0, 0.5} : Interval{0.5, 1.0},
-                                        Interval{0.0, 1.0}};
-                        const bool holds = lower == (ux < 0.5);
-                        INFO("PR-318 scale " << p.Scale << " offset " << p.Offset.X << " axis ("
-                                             << p.X.X << ", " << p.X.Y << ", " << p.X.Z
-                                             << ") flipU " << flipU << " x " << x << " down "
-                                             << down << " lower half " << lower);
-                        const auto r = Intersect(line, Interval{0.0, 2.0}, spline, half, policy);
-                        INFO(IntersectTest::ErrorText(r));
-                        REQUIRE(r.has_value());
-                        CHECK(r->Overlaps.empty());
-                        if (!holds) {
-                            CHECK(r->Points.empty());
-                            continue;
-                        }
-                        REQUIRE(r->Points.size() == 1);
-                        const CurveSurfacePoint& q = r->Points.front();
-                        CHECK(Distance(q.Position, crossing) <= reach);
-                        CHECK(std::abs(q.Parameter - 1.0) <= 1e-9);
-                        CHECK(std::abs(q.OnSurface.X - ux) <= 1e-9);
-                        CHECK(std::abs(q.OnSurface.Y - 0.5) <= 1e-9);
-                    }
-                }
-            }
-        }
-    }
-}
-
 namespace {
 
 /// A rigid placement of the unit sphere fixtures: local (x, y, z) to
@@ -2177,10 +2122,12 @@ struct Rigid {
     Vec3 E3;
     Point3 O;
 
+    /// The placed point of local (x, y, z).
     [[nodiscard]] Point3 Of(const double x, const double y, const double z) const
     {
         return O + x * E1 + y * E2 + z * E3;
     }
+    /// The local coordinates of a placed point.
     [[nodiscard]] Vec3 Local(const Point3& p) const
     {
         const Vec3 d = p - O;
@@ -2259,6 +2206,8 @@ void CheckLevelSection(const SurfaceSurfaceIntersection& r, const double height,
     CHECK(std::abs(turned - 2.0 * pi) <= 1e-6 + 2.0 * IntersectTest::ctx.GetResolution() / radius);
 }
 
+/// The unit sphere against z = height at each placement, in both orders,
+/// checked by CheckLevelSection.
 void RunLevelSection(const char* defect, const double height, const std::vector<Rigid>& placements)
 {
     constexpr double tolerance = 1e-5;
@@ -2290,6 +2239,135 @@ const Rigid tiltedAt{{0.6, 0.8, 0.0}, {-0.48, 0.36, 0.8}, {0.64, -0.48, 0.6}, {1
 
 } // namespace
 
+namespace {
+
+/// PR-318's generic SSI half: the rational sphere requested up to its knot.
+void KnotRequestOnRationalSphere()
+{
+    // The same root cause in the generic SSI (#318's other regression): the
+    // exact rational unit sphere requested over u in [0, 1/2] or [1/2, 1],
+    // ending on its knot at 1/2, against the plane z = 1/2. Oracle, in closed
+    // form: half of the circle of radius sqrt(3)/2, every branch inside the
+    // requested u and on the circle. MR-01: the identity, a cyclic turn of the
+    // axes and the corpus's tilt. MR-02: both orders.
+    for (const Rigid& at : {identityAt, turnedAt, tiltedAt}) {
+        const Surface sphere{RationalSphere(at)};
+        const Surface flat{Level(0.5, at)};
+        for (const Interval u : {Interval{0.0, 0.5}, Interval{0.5, 1.0}}) {
+            const Box2 wanted{u, Interval{0.0, 1.0}};
+            for (const bool swapped : {false, true}) {
+                INFO("PR-318 sphere origin ("
+                     << at.O.X << ", " << at.O.Y << ", " << at.O.Z << ") E1 (" << at.E1.X << ", "
+                     << at.E1.Y << ", " << at.E1.Z << ") u [" << u.GetLower() << ", "
+                     << u.GetUpper() << "] " << (swapped ? "plane first" : "sphere first"));
+                const Box2 all = Box2::Everything();
+                const auto r = swapped
+                                   ? Intersect(flat, all, sphere, wanted, 1e-5, IntersectTest::ctx)
+                                   : Intersect(sphere, wanted, flat, all, 1e-5, IntersectTest::ctx);
+                INFO(IntersectTest::ErrorText(r));
+                REQUIRE(r.has_value());
+                REQUIRE_FALSE(r->Branches.empty());
+                double turned = 0.0;
+                for (const IntersectionBranch& branch : r->Branches) {
+                    CHECK(branch.IsCertified());
+                    double previous = 0.0;
+                    bool first = true;
+                    for (const double s : IntersectTest::SamplesOf(branch.Range, 64)) {
+                        const Point2 uv = Eval(swapped ? branch.OnB : branch.OnA, s);
+                        CHECK(uv.X >= u.GetLower() - 1e-10);
+                        CHECK(uv.X <= u.GetUpper() + 1e-10);
+                        const Vec3 q = at.Local(Eval(branch.Curve3d, s));
+                        CHECK(std::abs(std::hypot(q.X, q.Y) - std::sqrt(0.75)) <= 1e-5);
+                        CHECK(std::abs(q.Z - 0.5) <= 1e-5);
+                        const double angle = std::atan2(q.Y, q.X);
+                        if (!first) {
+                            turned += std::abs(std::remainder(angle - previous, 2.0 * pi));
+                        }
+                        previous = angle;
+                        first = false;
+                    }
+                }
+                CHECK(std::abs(turned - pi) <= 1e-5);
+            }
+        }
+    }
+}
+
+} // namespace
+
+/// A request ending on a surface knot excludes what lies beyond it (#318).
+TEST_CASE("MR PR-318 a request ending on a surface knot excludes crossings beyond it",
+          "[intersect][metamorphic][backfill][PR-318]")
+{
+    // Root cause (BezierPatch.hpp, repaired in #318): a request ending
+    // exactly on an interior knot kept the neighbouring Bezier patch, which
+    // meets it only in that knot edge, whole, because the cut there could not
+    // be split off; so a crossing beyond the request was answered, outside
+    // the requested domain. The fixture is #318's two-span curve-NURBS
+    // regression: the degree-1 spline plane S(u, v) = (u, v, 0) with a u
+    // knot at 1/2, and the line through (x, 1/2, -1) along z, x = 1/4 or 3/4.
+    // Oracle, in closed form: the crossing is S(x, 1/2) at the line's t = 1.
+    // A request containing u = x has exactly that point; the other half,
+    // ending on the knot, has none. MR-01: the cyclic turns of the axes and
+    // the translation (8, -4, 2). MR-03: scales 1/4 and 4. MR-04: the
+    // surface's u reversed (u' = 1 - u, the halves exchanged) and the line
+    // run from (x, 1/2, 1) down (t' = 2 - t, still 1 at the crossing).
+    // MR-02 does not apply: there is no exposed surface-curve operation.
+    // The generic SSI half of the test follows the curve-surface half.
+    const std::vector<double> knotsU{0.0, 0.0, 0.5, 1.0, 1.0};
+    const std::vector<double> knotsV{0.0, 0.0, 1.0, 1.0};
+    for (const Placement& p : Placements()) {
+        Replay("PR-318", p);
+        const Context policy = p.Policy();
+        const double reach = 4.0 * policy.GetResolution();
+        for (const bool flipU : {false, true}) {
+            std::vector<Point3> poles;
+            for (const double u : {0.0, 0.5, 1.0}) {
+                for (const double v : {0.0, 1.0}) {
+                    poles.push_back(p.Point(flipU ? 1.0 - u : u, v, 0.0));
+                }
+            }
+            const auto built = MakeBSplineSurface(1, 1, knotsU, knotsV, poles, {});
+            REQUIRE(built.has_value());
+            const Surface spline{*built};
+            for (const double x : {0.25, 0.75}) {
+                const double ux = flipU ? 1.0 - x : x;
+                const Point3 crossing = p.Point(x, 0.5, 0.0);
+                for (const bool down : {false, true}) {
+                    const Curve line{
+                        down ? Line{p.Point(x, 0.5, 1.0), TurnOf(p, Vec3{0.0, 0.0, -p.Scale})}
+                             : Line{p.Point(x, 0.5, -1.0), TurnOf(p, Vec3{0.0, 0.0, p.Scale})}};
+                    for (const bool lower : {false, true}) {
+                        const Box2 half{lower ? Interval{0.0, 0.5} : Interval{0.5, 1.0},
+                                        Interval{0.0, 1.0}};
+                        const bool holds = lower == (ux < 0.5);
+                        INFO("PR-318 scale " << p.Scale << " offset " << p.Offset.X << " axis ("
+                                             << p.X.X << ", " << p.X.Y << ", " << p.X.Z
+                                             << ") flipU " << flipU << " x " << x << " down "
+                                             << down << " lower half " << lower);
+                        const auto r = Intersect(line, Interval{0.0, 2.0}, spline, half, policy);
+                        INFO(IntersectTest::ErrorText(r));
+                        REQUIRE(r.has_value());
+                        CHECK(r->Overlaps.empty());
+                        if (!holds) {
+                            CHECK(r->Points.empty());
+                            continue;
+                        }
+                        REQUIRE(r->Points.size() == 1);
+                        const CurveSurfacePoint& q = r->Points.front();
+                        CHECK(Distance(q.Position, crossing) <= reach);
+                        CHECK(std::abs(q.Parameter - 1.0) <= 1e-9);
+                        CHECK(std::abs(q.OnSurface.X - ux) <= 1e-9);
+                        CHECK(std::abs(q.OnSurface.Y - 0.5) <= 1e-9);
+                    }
+                }
+            }
+        }
+    }
+    KnotRequestOnRationalSphere();
+}
+
+/// Far rational SSI branches certify against the input surfaces (#315).
 TEST_CASE("MR PR-315 far rational SSI branches certify against the input surfaces",
           "[intersect][metamorphic][backfill][PR-315]")
 {
@@ -2306,6 +2384,7 @@ TEST_CASE("MR PR-315 far rational SSI branches certify against the input surface
     RunLevelSection("PR-315", 0.6, {identityAt, turnedAt, farAt, farTurnedAt});
 }
 
+/// A plane near the pole of a rational sphere cuts its small circle (#317).
 TEST_CASE("MR PR-317 a plane near the pole of a rational sphere cuts its small circle",
           "[intersect][metamorphic][backfill][PR-317]")
 {
@@ -2365,6 +2444,7 @@ void CheckSeamCrossings(const Curve& curve, const Surface& plane, const Point3& 
 
 } // namespace
 
+/// Seam crossings of a full turn stay in the conic's domain (#301).
 TEST_CASE("MR PR-301 seam crossings of a full turn stay in the conic domain",
           "[intersect][metamorphic][backfill][PR-301]")
 {
@@ -2432,6 +2512,7 @@ double SkewOff(const Point3& q, const Point3& o, const Vec3& axis, const double 
 
 } // namespace
 
+/// Two seam crossings of B within one former scan step are both isolated (#322).
 TEST_CASE("MR PR-322 two B seam crossings in one former scan cell are both isolated",
           "[intersect][metamorphic][backfill][PR-322]")
 {
@@ -2508,6 +2589,7 @@ TEST_CASE("MR PR-322 two B seam crossings in one former scan cell are both isola
     }
 }
 
+/// A tolerant tangency of two spheres lies between them (#326).
 TEST_CASE("MR PR-326 spheres touching within the tolerance touch between their surfaces",
           "[intersect][metamorphic][backfill][PR-326]")
 {

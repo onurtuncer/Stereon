@@ -476,8 +476,10 @@ PR-301, PR-322 and PR-323 follow the eight. Their faults cannot all be put back 
   - MR-01: the cyclic turns of the axes and the translation (8, -4, 2).
   - MR-03: scales 1/4 and 4.
   - MR-04: the surface's u reversed (u' = 1 - u, which exchanges the halves) and the line run downwards (t' = 2 - t).
-  - MR-02 does not apply: there is no exposed surface-curve operation.
-- **Oracle:** the crossing S(x, 1/2) at the line's t = 1, in closed form. The half of the request that contains u = x must have exactly that point; the other half, which ends on the knot, must have none.
+  - MR-02 does not apply to that half: there is no exposed surface-curve operation.
+  - The generic SSI half is #318's other regression: the exact rational unit sphere requested over u in [0, 1/2] or [1/2, 1], ending on its knot, against the plane z = 1/2. It runs at the identity, under a cyclic turn and under the corpus's tilt (MR-01), and in both orders (MR-02).
+  - The [first fault replay](https://github.com/onurtuncer/Stereon/actions/runs/45896367150/job/140171146116) (`572e8c7`, before this half was added) showed the fault surviving the curve-surface half alone. The curve-surface path does not reach the restored patch. The sphere is the fixture on which the defect was found (#317's finding).
+- **Oracle:** for the curve-surface half, the crossing S(x, 1/2) at the line's t = 1, in closed form. The half of the request that contains u = x must have exactly that point; the other half, which ends on the knot, must have none. For the sphere, half of the circle of radius sqrt(3)/2: every branch must stay inside the requested u and on the circle, and the branches together must turn pi.
 - **Fault:** a cut that meets a patch only in its edge keeps the patch whole, and such a patch counts as overlapping the request. This is the pre-repair `Clipped` at the current interfaces, applied as one block over the two adjacent functions.
 
 #### PR-301
