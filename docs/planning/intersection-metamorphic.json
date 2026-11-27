@@ -574,7 +574,7 @@
     {
       "id": "PR-271",
       "source": "https://github.com/onurtuncer/Stereon/pull/271",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/PlanarSplineOsculationTests.cpp#a B-spline's contact of order four with a parabola is reported as a touch",
       "direct": "tests/intersect/PlanarSplineOsculationTests.cpp#a B-spline's contact of order four with a parabola is reported as a touch",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-271 a B-spline contact of order four with a parabola is a touch",
@@ -588,12 +588,15 @@
       ],
       "evidence_kind": "resolved_geometry",
       "campaign": "tools/mutation/intersection-backfill.json#PR-271",
-      "repair_commit": "ca74138fb1f1a97090c4ae6833cdf5a584df7071"
+      "repair_commit": "ca74138fb1f1a97090c4ae6833cdf5a584df7071",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 red:**",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 green:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 review:**"
     },
     {
       "id": "PR-289",
       "source": "https://github.com/onurtuncer/Stereon/pull/289",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/SkewOrderTests.cpp#two skew cylinders are answered in either order, the parametrisation chosen canonically",
       "direct": "tests/intersect/SkewOrderTests.cpp#two skew cylinders are answered in either order, the parametrisation chosen canonically",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-289 skew cylinders are answered in either order",
@@ -606,12 +609,15 @@
       ],
       "evidence_kind": "resolved_geometry",
       "campaign": "tools/mutation/intersection-backfill.json#PR-289",
-      "repair_commit": "51906ee3e021e5dcbccdd4f0fd2be2652c8b4399"
+      "repair_commit": "51906ee3e021e5dcbccdd4f0fd2be2652c8b4399",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 red:**",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 green:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 review:**"
     },
     {
       "id": "PR-301",
       "source": "https://github.com/onurtuncer/Stereon/pull/301",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-301 seam crossings of a full turn stay in the conic domain",
       "direct": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-301 seam crossings of a full turn stay in the conic domain",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-301 seam crossings of a full turn stay in the conic domain",
@@ -624,12 +630,15 @@
       ],
       "evidence_kind": "resolved_geometry",
       "campaign": "tools/mutation/intersection-backfill.json#PR-301",
-      "repair_commit": "0b8f782f7cb88ccad10f3fca1f72084ac82d2bb7"
+      "repair_commit": "0b8f782f7cb88ccad10f3fca1f72084ac82d2bb7",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 red:**",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 green:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 review:**"
     },
     {
       "id": "PR-304",
       "source": "https://github.com/onurtuncer/Stereon/pull/304",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/ClosestApproachTests.cpp#closest approach places the free parameter to rounding when the other rests on an end",
       "direct": "tests/intersect/ClosestApproachTests.cpp#closest approach places the free parameter to rounding when the other rests on an end",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-304 closest approach places the free parameter to rounding",
@@ -642,12 +651,15 @@
       ],
       "evidence_kind": "resolved_geometry",
       "campaign": "tools/mutation/intersection-backfill.json#PR-304",
-      "repair_commit": "814391b6152004bc0689eb15dee1a59aa17ac6e9"
+      "repair_commit": "814391b6152004bc0689eb15dee1a59aa17ac6e9",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 red:**",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 green:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 review:**"
     },
     {
       "id": "PR-312",
       "source": "https://github.com/onurtuncer/Stereon/pull/312",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/ClosestApproachTests.cpp#closest approach moves the other parameter on once one lands on an end",
       "direct": "tests/intersect/ClosestApproachTests.cpp#closest approach moves the other parameter on once one lands on an end",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-312 closest approach steps on after one parameter lands on an end",
@@ -660,12 +672,15 @@
       ],
       "evidence_kind": "resolved_geometry",
       "campaign": "tools/mutation/intersection-backfill.json#PR-312",
-      "repair_commit": "9438a7eb05c8f1dd34c2477ad9140f6f91b9f8a8"
+      "repair_commit": "9438a7eb05c8f1dd34c2477ad9140f6f91b9f8a8",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 red:**",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 green:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 review:**"
     },
     {
       "id": "PR-315",
       "source": "https://github.com/onurtuncer/Stereon/pull/315",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/SurfaceCorpusTests.cpp#far-placed rational SSI branches certify against the input surfaces",
       "direct": "tests/intersect/SurfaceCorpusTests.cpp#far-placed rational SSI branches certify against the input surfaces",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-315 far rational SSI branches certify against the input surfaces",
@@ -677,12 +692,15 @@
       ],
       "evidence_kind": "resolved_geometry",
       "campaign": "tools/mutation/intersection-backfill.json#PR-315",
-      "repair_commit": "eeb3367d017453d444ee626af2f1c55e33536e7e"
+      "repair_commit": "eeb3367d017453d444ee626af2f1c55e33536e7e",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 red:**",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 green:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 review:**"
     },
     {
       "id": "PR-316",
       "source": "https://github.com/onurtuncer/Stereon/pull/316",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/PlanarLinearizationTests.cpp#two cubic Beziers' proved crossings lie on both curves to rounding",
       "direct": "tests/intersect/PlanarLinearizationTests.cpp#two cubic Beziers' proved crossings lie on both curves to rounding",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-316 proved crossings of two cubic Beziers lie on both curves",
@@ -696,12 +714,15 @@
       ],
       "evidence_kind": "resolved_geometry",
       "campaign": "tools/mutation/intersection-backfill.json#PR-316",
-      "repair_commit": "8a1a76082d439cf2c73bc1a10df7ff523c54dda1"
+      "repair_commit": "8a1a76082d439cf2c73bc1a10df7ff523c54dda1",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 red:**",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 green:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 review:**"
     },
     {
       "id": "PR-317",
       "source": "https://github.com/onurtuncer/Stereon/pull/317",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/GenericSSITests.cpp#a plane a thousandth below a rational sphere's pole cuts its small circle",
       "direct": "tests/intersect/GenericSSITests.cpp#a plane a thousandth below a rational sphere's pole cuts its small circle",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-317 a plane near the pole of a rational sphere cuts its small circle",
@@ -713,12 +734,15 @@
       ],
       "evidence_kind": "resolved_geometry",
       "campaign": "tools/mutation/intersection-backfill-pr317.json#PR-317",
-      "repair_commit": "776459d8139decca8f8ab9e7c0e9d63d9584de00"
+      "repair_commit": "776459d8139decca8f8ab9e7c0e9d63d9584de00",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 red:**",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 green:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 review:**"
     },
     {
       "id": "PR-318",
       "source": "https://github.com/onurtuncer/Stereon/pull/318",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/CurveSplineSurfaceTests.cpp#a requested B-spline surface knot excludes curve crossings beyond it",
       "direct": "tests/intersect/CurveSplineSurfaceTests.cpp#a requested B-spline surface knot excludes curve crossings beyond it",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-318 a request ending on a surface knot excludes crossings beyond it",
@@ -731,12 +755,15 @@
       ],
       "evidence_kind": "resolved_geometry",
       "campaign": "tools/mutation/intersection-backfill.json#PR-318",
-      "repair_commit": "f0da86e92c0f8e67769cff441888a4f823a36f17"
+      "repair_commit": "f0da86e92c0f8e67769cff441888a4f823a36f17",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 red:**",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 green:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 review:**"
     },
     {
       "id": "PR-322",
       "source": "https://github.com/onurtuncer/Stereon/pull/322",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/CylinderCylinderSkewTests.cpp#two B seam crossings inside a former scan cell are both isolated",
       "direct": "tests/intersect/CylinderCylinderSkewTests.cpp#two B seam crossings inside a former scan cell are both isolated",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-322 two B seam crossings in one former scan cell are both isolated",
@@ -748,7 +775,10 @@
         "MR-03",
         "MR-04"
       ],
-      "evidence_kind": "resolved_geometry"
+      "evidence_kind": "resolved_geometry",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **PR-322:** `verify/replay-pr322-red`",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 green:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 review:**"
     },
     {
       "id": "PR-323",
@@ -788,7 +818,7 @@
     {
       "id": "PR-326",
       "source": "https://github.com/onurtuncer/Stereon/pull/326",
-      "state": "MR implemented",
+      "state": "verified",
       "fixture": "tests/intersect/ElementaryPairsTests.cpp#spheres touching within the tolerance touch between their surfaces",
       "direct": "tests/intersect/ElementaryPairsTests.cpp#spheres touching within the tolerance touch between their surfaces",
       "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-326 spheres touching within the tolerance touch between their surfaces",
@@ -801,7 +831,10 @@
       ],
       "evidence_kind": "resolved_geometry",
       "campaign": "tools/mutation/intersection-backfill.json#PR-326",
-      "repair_commit": "8f955e00f93c166562e6a105e1fec0239a4f6bd0"
+      "repair_commit": "8f955e00f93c166562e6a105e1fec0239a4f6bd0",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 red:**",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 green:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 review:**"
     },
     {
       "id": "PR-339",
