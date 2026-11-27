@@ -1033,6 +1033,8 @@ TEST_CASE("closest approach products: second-order Taylor decay and the transpos
     });
 }
 
+/// Pins the Taylor property's counterexample: a step that moves the global
+/// minimum to another local minimum is a change of branch, not a derivative.
 TEST_CASE("closest approach: a step that hands the minimum to another branch is no derivative",
           "[intersect][closest-approach][regression]")
 {
