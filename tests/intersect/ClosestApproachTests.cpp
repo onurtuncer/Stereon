@@ -916,6 +916,37 @@ double Norm(const std::vector<double>& v)
     return std::sqrt(sum);
 }
 
+/// A local minimum the oracle reached, and its distance.
+struct Followed {
+    Point3 OnA;
+    Point3 OnB;
+    double Distance = 0.0;
+};
+
+/// The base's minimum followed onto moved curves: the oracle's Newton
+/// iteration started from the base's parameters, which a small step leaves
+/// on the base's own branch of local minima.
+Followed Follow(const Curve& a, const Interval& da, const Curve& b, const Interval& db,
+                const ClosestApproachResult& base)
+{
+    const OCurve oa = OracleOf(a, da);
+    const OCurve ob = OracleOf(b, db);
+    const auto [s, t] = Polish(oa, ob, base.ParameterA, base.ParameterB);
+    const P3 pa = oa.At(s)[0];
+    const P3 pb = ob.At(t)[0];
+    return {Point3{static_cast<double>(pa.X), static_cast<double>(pa.Y), static_cast<double>(pa.Z)},
+            Point3{static_cast<double>(pb.X), static_cast<double>(pb.Y), static_cast<double>(pb.Z)},
+            static_cast<double>(std::sqrt(2 * Phi(oa, ob, s, t)))};
+}
+
+/// Whether r is that minimum. The bound is far above the primal's error
+/// and the Taylor remainders asserted below, and far below the distance
+/// between two well-conditioned minima.
+bool OnBranch(const ClosestApproachResult& r, const Followed& f)
+{
+    return Distance(r.OnA, f.OnA) <= 1e-3 * Scale(r) && Distance(r.OnB, f.OnB) <= 1e-3 * Scale(r);
+}
+
 } // namespace
 
 TEST_CASE("closest approach products: second-order Taylor decay and the transpose",
@@ -957,6 +988,15 @@ TEST_CASE("closest approach products: second-order Taylor decay and the transpos
             // another minimum, is a new regime.
             RC_PRE(moved->Uniqueness == ApproachUniqueness::Unique && moved->EndA == p.R.EndA &&
                    moved->EndB == p.R.EndB);
+            // Unique on both sides does not make it the same minimum: where
+            // two local minima are nearly as far, the step can make the
+            // other the nearer. The primal's must then be no farther than
+            // the base's, followed.
+            const Followed followed = Follow(a, p.DomainA, b, p.DomainB, p.R);
+            if (!OnBranch(*moved, followed)) {
+                RC_ASSERT(moved->Distance <= followed.Distance + 1e-12 * Scale(*moved));
+                RC_DISCARD("the step hands the minimum to another branch");
+            }
             const std::vector<double> after = Layout(*moved);
             std::vector<double> r(base.size());
             for (std::size_t i = 0; i < base.size(); ++i) {
@@ -995,6 +1035,56 @@ TEST_CASE("closest approach products: second-order Taylor decay and the transpos
         }
         RC_ASSERT(std::abs(left - right) <= 1e-12 * (1.0 + scale));
     });
+}
+
+TEST_CASE("closest approach: a step that hands the minimum to another branch is no derivative",
+          "[intersect][closest-approach][regression]")
+{
+    // The Taylor property's counterexample under RapidCheck's seed
+    // 13132903268228513612 (Linux gcc16-asan on main at 648a8ea, run
+    // 45788270803): a line passing a circle of radius 1/2 with two local
+    // minima, at distance 0.0827031 at the circle's angle 3.83463 and at
+    // 0.0828380 at 5.51635. Moving every bound value by -1e-4 of its reference makes
+    // them 0.0827835 and 0.0827731: the second is now the nearer. Each
+    // answer is unique and right, and their difference is the minimiser's
+    // jump, not a derivative's remainder.
+    const auto unit = [](const int theta, const int z) {
+        const double height = z / 16.0;
+        const double r = std::sqrt(1.0 - height * height);
+        return Vec3{r * std::cos(theta * tau / 64.0), r * std::sin(theta * tau / 64.0), height};
+    };
+    const Curve a{Line{Point3{-9.0 / 8.0, -5.0 / 8.0, -15.0 / 8.0}, unit(21, -9)}};
+    const Vec3 x = unit(19, -7);
+    Vec3 y = Cross(Vec3{0.0, 0.0, 1.0}, x);
+    y = y / Length(y);
+    const double phi = 5.0 * tau / 32.0;
+    const Curve b{Circle{Point3{-5.0 / 8.0, -15.0 / 8.0, -5.0 / 8.0}, 0.5, x,
+                         std::cos(phi) * y + std::sin(phi) * Cross(x, y)}};
+    const Interval turn{0.0, tau};
+
+    const ClosestApproachResult base = Approach(a, Whole, b, turn);
+    REQUIRE(base.Uniqueness == ApproachUniqueness::Unique);
+    CHECK(std::abs(base.ParameterB - 3.834628) <= 1e-5);
+    CHECK(std::abs(base.Distance - 0.0827031) <= 1e-6);
+
+    const std::array<double, 10> references{0.1, 0.1, 0.1, 0.1, 0.2, 0.1, 0.4, 0.1, 0.4, 0.1};
+    const auto step = [&](const std::size_t k) { return -1e-4 * references[k]; };
+    const Curve movedA = MovedCurve(a, step, 0);
+    const Curve movedB = MovedCurve(b, step, CountOf(a));
+    const ClosestApproachResult moved = Approach(movedA, Whole, movedB, turn);
+    REQUIRE(moved.Uniqueness == ApproachUniqueness::Unique);
+    CHECK(std::abs(moved.ParameterB - 5.516385) <= 1e-5);
+    CHECK(std::abs(moved.Distance - 0.0827731) <= 1e-6);
+    const auto oracle = OracleMinimum(OracleOf(movedA, Whole), OracleOf(movedB, turn));
+    CHECK(std::abs(moved.Distance - static_cast<double>(std::sqrt(2 * oracle.first))) <= 1e-12);
+
+    // The base's minimum is still a local one, and the farther.
+    const Followed followed = Follow(movedA, Whole, movedB, turn, base);
+    CHECK(std::abs(followed.Distance - 0.0827835) <= 1e-6);
+    CHECK(moved.Distance < followed.Distance);
+    CHECK_FALSE(OnBranch(moved, followed));
+    // On the base's own curves the same test finds the base's minimum.
+    CHECK(OnBranch(base, Follow(a, Whole, b, turn, base)));
 }
 
 TEST_CASE("closest approach places the free parameter to rounding when the other rests on an end",
