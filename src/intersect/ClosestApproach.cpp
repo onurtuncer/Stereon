@@ -528,12 +528,16 @@ struct Refined {
     const double reach = std::sqrt(2.0 * l.Phi) + (a.L1 + b.L1) * rho;
     const double rounding = 64.0 * Epsilon * (std::abs(l.Hess[0]) + std::abs(l.Hess[2]));
     const double moved = 1.25 * SecondBound(a, b, reach) * rho + rounding;
-    if (!Held(z.EndS, l.Grad[0], hull.S1 == hull.S0, moved) ||
-        !Held(z.EndT, l.Grad[1], hull.T1 == hull.T0, moved)) {
-        return false;
-    }
-    const bool freeS = z.EndS == ApproachEnd::Interior && hull.S1 > hull.S0;
-    const bool freeT = z.EndT == ApproachEnd::Interior && hull.T1 > hull.T0;
+    // A parameter on an end its gradient holds it to is pinned there; any
+    // other one, an end's included (a minimiser at an end with no pull
+    // outward), is free, and strict convexity over the hull, a box in the
+    // domains, then proves the minimiser unique on its own.
+    const bool pinnedS = z.EndS != ApproachEnd::Interior && hull.S1 > hull.S0 &&
+                         Held(z.EndS, l.Grad[0], false, moved);
+    const bool pinnedT = z.EndT != ApproachEnd::Interior && hull.T1 > hull.T0 &&
+                         Held(z.EndT, l.Grad[1], false, moved);
+    const bool freeS = hull.S1 > hull.S0 && !pinnedS;
+    const bool freeT = hull.T1 > hull.T0 && !pinnedT;
     return FreeCurvature(l.Hess, freeS, freeT) > 1.25 * ThirdBound(a, b, reach) * rho + rounding;
 }
 
@@ -751,6 +755,16 @@ using Exact = DynamicExpansion;
     return narrowed;
 }
 
+/// The hull of every cluster.
+[[nodiscard]] Box Union(const std::vector<Box>& hulls)
+{
+    Box all = hulls.front();
+    for (const Box& h : hulls) {
+        all = Joined(all, h);
+    }
+    return all;
+}
+
 /// Whether a cluster's hull crosses a cut of either B-spline, where the
 /// bounds of ProvedUnique do not hold.
 [[nodiscard]] bool AcrossCut(const ApproachSide& a, const ApproachSide& b, const Box& hull)
@@ -761,7 +775,7 @@ using Exact = DynamicExpansion;
     return across(a.Cuts, hull.S0, hull.S1) || across(b.Cuts, hull.T0, hull.T1);
 }
 
-/// Whether the one cluster holds one minimiser: proved on its hull, or,
+/// Whether the clusters' hull holds one minimiser: proved on the hull, or,
 /// when the hull is too wide for the bounds, by searching again around it
 /// with finer leaves, which shrinks it. Every point outside the hull was
 /// proved worse, so the minimiser is inside whatever narrower search
@@ -786,11 +800,7 @@ using Exact = DynamicExpansion;
         if (finer.Exhausted || finer.Leaves.empty()) {
             return false;
         }
-        const std::vector<Box> hulls = Clusters(finer.Leaves, rs, rt);
-        if (hulls.size() != 1) {
-            return false;
-        }
-        hull = hulls.front();
+        hull = Union(Clusters(finer.Leaves, rs, rt));
         const Refined refined = Refine(a, b, search.RangeS, search.RangeT, z.S, z.T);
         z = refined;
     }
@@ -832,7 +842,12 @@ using Exact = DynamicExpansion;
     const std::vector<Box> hulls = Clusters(search.Leaves, search.RangeS, search.RangeT);
     const Box& first = hulls.front();
     Refined best = Refine(a, b, search.RangeS, search.RangeT, first.Cs(), first.Ct());
-    if (hulls.size() == 1 && ProvedAlone(a, b, search, first, best)) {
+    // Every minimiser lies in the union of the clusters: one unique there
+    // is unique. Clusters of leaves a few leaves apart, which a flat
+    // direction of phi leaves where the slack prunes some and keeps others,
+    // are one candidate; clusters far apart give a hull phi is not convex
+    // over, and stay undecided.
+    if (ProvedAlone(a, b, search, Union(hulls), best)) {
         return Assemble(a, b, search.RangeS, search.RangeT, best, ApproachUniqueness::Unique, lower,
                         ctx);
     }

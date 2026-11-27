@@ -120,31 +120,37 @@ double Phi(const Bounded& a, const Bounded& b, const double s, const double t)
     return 0.5 * Dot(d, d);
 }
 
+/// The projected Newton direction of phi at (s, t): a parameter resting on
+/// an end its gradient pushes against stays; the other takes its own step.
+std::pair<double, double> Direction(const Bounded& a, const Bounded& b, const double s,
+                                    const double t)
+{
+    const Vec3 d = Eval(a.Geometry, s) - Eval(b.Geometry, t);
+    const Vec3 a1 = Deriv(a.Geometry, s, 1);
+    const Vec3 b1 = Deriv(b.Geometry, t, 1);
+    const double gs = Dot(d, a1);
+    const double gt = -Dot(d, b1);
+    const double hss = Dot(a1, a1) + Dot(d, Deriv(a.Geometry, s, 2));
+    const double hst = -Dot(a1, b1);
+    const double htt = Dot(b1, b1) - Dot(d, Deriv(b.Geometry, t, 2));
+    const bool atS = (s <= a.Lo && gs > 0.0) || (s >= a.Hi && gs < 0.0);
+    const bool atT = (t <= b.Lo && gt > 0.0) || (t >= b.Hi && gt < 0.0);
+    const double det = hss * htt - hst * hst;
+    if (!atS && !atT && hss > 0.0 && det > 0.0) {
+        return {-(htt * gs - hst * gt) / det, -(hss * gt - hst * gs) / det};
+    }
+    const auto alone = [](const bool held, const double g, const double h) {
+        return held ? 0.0 : (h > 0.0 ? -g / h : -g);
+    };
+    return {alone(atS, gs, hss), alone(atT, gt, htt)};
+}
+
 /// Projected Newton's method on phi with backtracking, each parameter held
 /// in its range; from a grid sample it reaches the nearby minimum.
 std::pair<double, double> Polish(const Bounded& a, const Bounded& b, double s, double t)
 {
     for (int k = 0; k < 60; ++k) {
-        const Vec3 d = Eval(a.Geometry, s) - Eval(b.Geometry, t);
-        const Vec3 a1 = Deriv(a.Geometry, s, 1);
-        const Vec3 b1 = Deriv(b.Geometry, t, 1);
-        const double gs = Dot(d, a1);
-        const double gt = -Dot(d, b1);
-        const double hss = Dot(a1, a1) + Dot(d, Deriv(a.Geometry, s, 2));
-        const double hst = -Dot(a1, b1);
-        const double htt = Dot(b1, b1) - Dot(d, Deriv(b.Geometry, t, 2));
-        const bool atS = (s <= a.Lo && gs > 0.0) || (s >= a.Hi && gs < 0.0);
-        const bool atT = (t <= b.Lo && gt > 0.0) || (t >= b.Hi && gt < 0.0);
-        double ds = 0.0;
-        double dt = 0.0;
-        const double det = hss * htt - hst * hst;
-        if (!atS && !atT && hss > 0.0 && det > 0.0) {
-            ds = -(htt * gs - hst * gt) / det;
-            dt = -(hss * gt - hst * gs) / det;
-        } else {
-            ds = atS ? 0.0 : (hss > 0.0 ? -gs / hss : -gs);
-            dt = atT ? 0.0 : (htt > 0.0 ? -gt / htt : -gt);
-        }
+        const auto [ds, dt] = Direction(a, b, s, t);
         const double before = Phi(a, b, s, t);
         double step = 1.0;
         for (int halving = 0; halving < 40; ++halving, step *= 0.5) {

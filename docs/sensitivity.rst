@@ -456,6 +456,15 @@ A cluster of leaves across such a knot is not proved: the answer is
 ``Undecided``, with ``LowerBound`` certified, as for a corner of the curve
 nearest the other. A rational B-spline answers ``NotSupported``, and the
 products of any B-spline's approach answer ``NotSupported`` as a status.
+Two refinements of the proof serve every curve. Uniqueness is proved over
+the hull of all the clusters, every minimiser lying in it: a flat
+direction of phi spaces the surviving leaves a few widths apart, the slack pruning
+some and keeping others, and the clusters they form are one candidate.
+Clusters far apart still give a hull phi is not convex over, and stay
+undecided. And a parameter at an end with no outward pull (a minimiser at
+the end that would be stationary in the interior too) is no longer left
+undecided: it is treated as free, and strict convexity over the hull
+proves the minimiser unique.
 ``tests/intersect/SplineClosestApproachTests.cpp`` holds closed forms (a
 parabola written as a quadratic Bézier against a line, a mirrored
 parabola, a circle with an end minimum and with a tie between both ends, a
@@ -473,15 +482,14 @@ How the minimum is proved:
   exceeds the best value found. :math:`M_2` bounds the Hessian through the
   curves' derivative bounds; a line's parameter is first cut to the window
   where its nearest points to the conic lie.
-- The surviving leaves form clusters. A single cluster holds the unique
-  minimiser when two conditions hold:
+- The surviving leaves form clusters, and the hull of all of them holds
+  every minimiser. It holds a unique one when :math:`\varphi`'s Hessian
+  over the free parameters outweighs a bound on its third derivatives out
+  to the hull's farthest corner. A parameter is not free when the minimum
+  rests on an end that pushes it outward by more than the gradient can
+  change over the hull; an end without that pull leaves it free.
 
-  - an end the minimum rests on is pushed outward by more than the gradient
-    can change over the cluster;
-  - :math:`\varphi`'s Hessian over the free parameters outweighs a bound on
-    its third derivatives out to the cluster's farthest corner.
-
-  When the cluster is too wide for that, it is searched again with finer
+  When the hull is too wide for that, it is searched again with finer
   leaves.
 
 ``ClosestApproachJvp`` and ``ClosestApproachVjp`` take a ``CurveBindings`` per
