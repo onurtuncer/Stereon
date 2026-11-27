@@ -93,6 +93,7 @@ struct Spheroid {
     double Height;
 };
 
+/// The spheroid an ellipsoid is, from which semi-axes are equal.
 [[nodiscard]] std::optional<Spheroid> SpheroidOf(const Ellipsoid& e)
 {
     if (e.A == e.B) {
@@ -463,6 +464,7 @@ struct Level {
     double Reach = 1.0;
 };
 
+/// The part's level function, heights measured from z0.
 [[nodiscard]] Level LevelOf(const ProfilePart& part, const double z0)
 {
     if (const ProfileLine* l = std::get_if<ProfileLine>(&part)) {
@@ -486,6 +488,7 @@ struct AlongJet {
     T Curvature;
 };
 
+/// g, g' and g'' at angle t, in doubles or over an interval of angles.
 template <typename T>
 [[nodiscard]] AlongJet<T> AlongEllipse(const ProfileEllipse& e, const Level& g, const T& t)
 {
@@ -541,6 +544,7 @@ struct Mark {
     int Slope;
 };
 
+/// The mark at t; nothing where either sign is uncertain.
 [[nodiscard]] std::optional<Mark> MarkAt(const ProfileEllipse& e, const Level& g, const double t)
 {
     const AlongJet<Interval> j = JetAlong(e, g, Interval{t});
@@ -703,6 +707,7 @@ constexpr std::size_t EllipseBudget = std::size_t{1} << 14;
     return std::nullopt;
 }
 
+/// An ellipse and a part: coincident within the tolerance, or met.
 void MeetEllipseParts(const ProfileEllipse& e, const ProfilePart& other, const double tol,
                       Meets& out)
 {

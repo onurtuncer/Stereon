@@ -60,7 +60,9 @@ struct Placement {
     Vec3 Shift;
     double Scale;
 
+    /// The common axis's direction.
     [[nodiscard]] Vec3 Z() const { return Cross(X, Y); }
+    /// The point at local height z on the axis.
     [[nodiscard]] Point3 At(const double z) const { return Point3{} + Shift + (Scale * z) * Z(); }
 };
 
@@ -80,21 +82,25 @@ Surface Spheroid(const Placement& p, const double z, const double across, const 
         Ellipsoid{p.At(z), p.Scale * across, p.Scale * across, p.Scale * along, p.X, p.Y, true}};
 }
 
+/// The cylinder of the given radius about the axis.
 Surface CylinderOf(const Placement& p, const double radius)
 {
     return Surface{Cylinder{p.At(0.0), p.Scale * radius, p.X, p.Y, true}};
 }
 
+/// The cone with its apex z up the axis.
 Surface ConeApexAt(const Placement& p, const double z, const double angle)
 {
     return Surface{Cone{p.At(z), 0.0, angle, p.X, p.Y, true}};
 }
 
+/// The sphere centred z up the axis.
 Surface SphereOf(const Placement& p, const double z, const double radius)
 {
     return Surface{Sphere{p.At(z), p.Scale * radius, p.X, p.Y, true}};
 }
 
+/// The torus centred at the local origin.
 Surface TorusOf(const Placement& p, const double major, const double minor)
 {
     return Surface{Torus{p.At(0.0), p.Scale * major, p.Scale * minor, p.X, p.Y, true}};
@@ -177,6 +183,7 @@ void CheckEverywhere(const Build& build, const std::vector<Expected>& circles,
     }
 }
 
+/// The two surfaces of a configuration.
 struct Pair {
     Surface A;
     Surface B;
@@ -184,6 +191,8 @@ struct Pair {
 
 } // namespace
 
+/// Closed forms: a cylinder about a spheroid's axis cuts two circles, touches its equator, or
+/// misses.
 TEST_CASE("a cylinder about a spheroid's axis cuts two circles, touches its equator, or misses",
           "[intersect][elementary][spheroid]")
 {
@@ -201,6 +210,7 @@ TEST_CASE("a cylinder about a spheroid's axis cuts two circles, touches its equa
         {});
 }
 
+/// Closed forms: a sphere on a spheroid's axis cuts circles or touches along one or at the poles.
 TEST_CASE("a sphere on a spheroid's axis cuts circles or touches along one or at the poles",
           "[intersect][elementary][spheroid]")
 {
@@ -229,6 +239,7 @@ TEST_CASE("a sphere on a spheroid's axis cuts circles or touches along one or at
         {{std::sqrt(7.56), -0.8, true}});
 }
 
+/// Closed forms: a cone about a spheroid's axis cuts two circles or touches along one.
 TEST_CASE("a cone about a spheroid's axis cuts two circles or touches along one",
           "[intersect][elementary][spheroid]")
 {
@@ -252,6 +263,8 @@ TEST_CASE("a cone about a spheroid's axis cuts two circles or touches along one"
         {{9.0 / s, -4.0 / s, true}});
 }
 
+/// Closed forms: a torus about a spheroid's axis cuts two circles or touches along its inner
+/// equator.
 TEST_CASE("a torus about a spheroid's axis cuts two circles or touches along its inner equator",
           "[intersect][elementary][spheroid]")
 {
@@ -284,6 +297,7 @@ TEST_CASE("a torus about a spheroid's axis cuts two circles or touches along its
         {{rho, -std::sin(v), false}, {rho, std::sin(v), false}});
 }
 
+/// Closed forms: coaxial spheroids cross, touch along a circle or at a pole, or coincide.
 TEST_CASE("coaxial spheroids cross, touch along a circle or at a pole, or coincide",
           "[intersect][elementary][spheroid]")
 {
@@ -336,6 +350,7 @@ TEST_CASE("coaxial spheroids cross, touch along a circle or at a pole, or coinci
     }
 }
 
+/// Closed forms: a spheroid touching within the tolerance is declared tangent, past it is not.
 TEST_CASE("a spheroid touching within the tolerance is declared tangent, past it is not",
           "[intersect][elementary][spheroid]")
 {
@@ -381,6 +396,7 @@ TEST_CASE("a spheroid touching within the tolerance is declared tangent, past it
     }
 }
 
+/// Closed forms: a spheroid's circles are clipped to the requested boxes.
 TEST_CASE("a spheroid's circles are clipped to the requested boxes",
           "[intersect][elementary][spheroid]")
 {

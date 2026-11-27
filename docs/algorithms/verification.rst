@@ -80,6 +80,7 @@ Implementation notes
    tests/intersect/CertificationTests.cpp
    tests/intersect/Checks.hpp
    tests/intersect/ClosestApproachTests.cpp
+   tests/intersect/CoaxialSpheroidTests.cpp
    tests/intersect/ConicArcCutTests.cpp
    tests/intersect/ConicSurfaceTests.cpp
    tests/intersect/CorpusTests.cpp
