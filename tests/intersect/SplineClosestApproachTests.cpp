@@ -51,6 +51,7 @@ using Stereon::Vec3;
 
 namespace {
 
+/// A B-spline curve, required valid.
 BSplineCurve Spline(const int degree, std::vector<double> knots, std::vector<Point3> poles,
                     std::vector<double> weights = {})
 {
@@ -84,6 +85,8 @@ BSplineCurve Vee()
 /// The line x = 0, y = -1, along z.
 const Curve Below{Line{Point3{0.0, -1.0, 0.0}, Vec3{0.0, 0.0, 1.0}}};
 
+/// ClosestApproach, required to succeed, with its points on the curves and its
+/// gap and bounds consistent.
 ClosestApproachResult Approach(const Curve& a, const Interval& da, const Curve& b,
                                const Interval& db)
 {
@@ -110,6 +113,7 @@ struct Bounded {
     double Hi = 0.0;
 };
 
+/// phi = |A(s) - B(t)|^2 / 2 on the oracle's curves.
 double Phi(const Bounded& a, const Bounded& b, const double s, const double t)
 {
     const Vec3 d = Eval(a.Geometry, s) - Eval(b.Geometry, t);
@@ -178,11 +182,13 @@ double OracleDistance(const Bounded& a, const Bounded& b)
     return std::sqrt(2.0 * best);
 }
 
+/// A random coordinate in [-2, 2], a multiple of 1/8.
 double Coordinate()
 {
     return *rc::gen::inRange(-16, 17) / 8.0;
 }
 
+/// A random point with coordinates from Coordinate().
 Point3 RandomPoint()
 {
     return Point3{Coordinate(), Coordinate(), Coordinate()};
@@ -236,6 +242,7 @@ Bounded RandomPartner()
 
 } // namespace
 
+/// y = x^2 against a line, both orders, and over a restricted domain.
 TEST_CASE("a B-spline's closest approach to a line, in closed form",
           "[intersect][closest-approach][spline]")
 {
@@ -266,6 +273,7 @@ TEST_CASE("a B-spline's closest approach to a line, in closed form",
     CHECK(std::abs(end.Distance - std::sqrt(0.25 + 1.5625)) <= 1e-14);
 }
 
+/// y = x^2 against y = -x^2 - 2: 2 apart at their vertices.
 TEST_CASE("two B-splines' closest approach, in closed form",
           "[intersect][closest-approach][spline]")
 {
@@ -278,6 +286,7 @@ TEST_CASE("two B-splines' closest approach, in closed form",
     CHECK(r.LowerBound >= 2.0 - 1e-6);
 }
 
+/// A circle off the axis (an end minimum) and on it (a tie).
 TEST_CASE("a B-spline against a circle: an end minimum, and a tie left undecided",
           "[intersect][closest-approach][spline]")
 {
@@ -302,6 +311,7 @@ TEST_CASE("a B-spline against a circle: an end minimum, and a tie left undecided
     CHECK(tie.LowerBound <= std::sqrt(5.0) - 1.0);
 }
 
+/// A vee's corner nearest a line: the distance right, no false proof.
 TEST_CASE("a B-spline's corner nearest: the right distance, never a false proof",
           "[intersect][closest-approach][spline]")
 {
@@ -315,6 +325,7 @@ TEST_CASE("a B-spline's corner nearest: the right distance, never a false proof"
     }
 }
 
+/// Domains beside the spline, rational splines and the products.
 TEST_CASE("B-spline closest approach input outside what is proved",
           "[intersect][closest-approach][spline]")
 {
@@ -344,6 +355,7 @@ TEST_CASE("B-spline closest approach input outside what is proved",
     CHECK_FALSE(jvp->GetValues().has_value());
 }
 
+/// The lower bound and Unique answers against the oracle on random cubics.
 TEST_CASE("a B-spline's closest approach agrees with an independent oracle",
           "[intersect][closest-approach][spline][property]")
 {
