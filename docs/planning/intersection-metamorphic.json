@@ -839,7 +839,19 @@
     {
       "id": "PR-339",
       "source": "https://github.com/onurtuncer/Stereon/pull/339",
-      "state": "untriaged"
+      "state": "verified",
+      "fixture": "tests/intersect/CylinderCylinderSkewSeamTests.cpp#the parametrising cylinder's seam at and beside a fold is cut where it crosses",
+      "direct": "tests/intersect/CylinderCylinderSkewSeamTests.cpp#a seam that passes the curve within rounding and does not meet it cuts nothing",
+      "metamorphic": "tests/intersect/CylinderCylinderSkewSeamTests.cpp#the parametrising cylinder's seam at and beside a fold is cut where it crosses",
+      "relations": [
+        "MR-04"
+      ],
+      "oracle": "tests/intersect/CylinderCylinderSkewSeamTests.cpp#bool Check(const Reference&",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#**Replay and review.**",
+      "red": "https://github.com/onurtuncer/Stereon/pull/339",
+      "green": "https://github.com/onurtuncer/Stereon/actions/runs/45570577102/job/139055930299",
+      "review": "docs/planning/intersection-metamorphic-triage.md##### PR-339 skew-cylinder chart continuity",
+      "evidence_kind": "resolved_geometry"
     },
     {
       "id": "PR-334",
