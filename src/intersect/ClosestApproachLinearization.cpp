@@ -111,7 +111,8 @@ struct Motion {
     if (c == ConicComponent::MajorRadius || c == ConicComponent::MinorRadius) {
         return !circle;
     }
-    return true;
+    // A parabola's value: no curve ClosestApproach certifies has one.
+    return c != ConicComponent::FocalLength;
 }
 
 /// One curve's bindings checked against what it is.

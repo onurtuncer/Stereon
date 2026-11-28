@@ -190,9 +190,10 @@ parameters (a sphere's)                derivative, though the geometry is regula
 A result takes its worst point's status, and carries values only for
 ``Valid`` and ``NearEvent``.
 
-``IntersectJvp`` and ``IntersectVjp`` implement the products for a line or
-a B-spline curve against a plane, a cylinder, a cone, a sphere, a torus or
-an ellipsoid.
+``IntersectJvp`` and ``IntersectVjp`` implement the products for a line, a
+circle, an ellipse, a hyperbola, a parabola or a B-spline curve against a
+plane, a cylinder, a cone, a sphere, a torus, an ellipsoid or a B-spline
+surface.
 ``LineBinding`` binds a parameter to a coordinate of the line's origin or
 direction. ``SurfaceBinding`` binds one to a value of the surface, each a
 ``Length`` but the semi-angle and the rotations, ``Angle``\ s:
@@ -292,6 +293,42 @@ properties discard a step that changes the number of crossings (a near
 miss elsewhere becoming two crossings), pair crossings by position (one
 near :math:`t = 0` may pass the seam), and keep away from a sphere's poles,
 where :math:`u` moves too fast for the steps.
+
+A ``Hyperbola`` and a ``Parabola`` have the same products over the bounded
+stretch ``Intersect`` was asked on, bound by the same ``ConicBinding``: a
+hyperbola's centre, ``MajorRadius`` and ``MinorRadius``; a parabola's vertex
+(through ``CenterX``, ``CenterY`` and ``CenterZ``) and ``FocalLength``; and
+either frame's three rotations, about the centre or the vertex. At fixed
+:math:`t`, :math:`C = O + a \cosh t\,X + b \sinh t\,Y` moves by
+:math:`\cosh t\,X` per unit of :math:`a` and :math:`\sinh t\,Y` per unit of
+:math:`b`; :math:`C = V + t^2 / (4 f)\,X + t\,Y` by
+:math:`-t^2 / (4 f^2)\,X` per unit of :math:`f`. A value the conic does not
+have (a hyperbola's ``Radius`` or ``FocalLength``, any radius of a parabola,
+a circle's or an ellipse's ``FocalLength``) is ``InvalidInput``. The tests
+(``tests/intersect/OpenConicLinearizationTests.cpp``) check every binding
+against a closed form:
+
+- The hyperbola :math:`(3 \cosh t, 0, 4 \sinh t)` meets :math:`z = 3` at
+  :math:`(15/4, 0, 3)`, :math:`\sinh t = 3/4`, where
+  :math:`C' = (9/4, 0, 5)`. A binding that moves the point by :math:`q` at
+  fixed :math:`t` gives :math:`t' = -q_z / 5` and :math:`x' = q + C' t'`:
+  :math:`x' = 5/4` per unit of :math:`a`; :math:`t' = -3/20` and
+  :math:`x' = -27/80` per unit of :math:`b`; :math:`t' = -1/5` for a rising
+  centre; :math:`(0, -3, 0)` and :math:`(0, 15/4, 0)` turning about
+  :math:`X` and :math:`Y`; and :math:`t' = -3/4`, :math:`x' = -75/16`
+  turning about the normal :math:`X \times Y`.
+- The parabola :math:`(t^2, 0, t)`, :math:`f = 1/4`, meets :math:`z = 2` at
+  :math:`(4, 0, 2)`, :math:`C' = (4, 0, 1)`: :math:`x' = -16` per unit of
+  :math:`f`; :math:`t' = -1`, :math:`x' = -4` for a rising vertex;
+  :math:`(0, -2, 0)` and :math:`(0, 4, 0)` turning about :math:`X` and
+  :math:`Y`; :math:`t' = -4`, :math:`x' = -18` about the normal.
+
+The Taylor and transpose properties run on random hyperbolas and parabolas
+through spheres, cylinders and planes with every binding moving, discarding
+a step that changes the number of crossings or carries one past the
+stretch's end. Each new partial, its sign flipped, fails them. A touch and a
+conic lying in a plane are ``Nondifferentiable``, an undecided point
+``Indeterminate``, and a crossing a hair off the vertex ``NearEvent``.
 
 Frame rotations are checked against closed forms. The line
 :math:`y = 0, z = 2` meets the cylinder of radius 1.5 about :math:`z` at
