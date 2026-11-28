@@ -26,3 +26,4 @@ Implementation notes
    src/intersect/Linearization.cpp
    src/intersect/Linearization.cppm
    src/intersect/PlanarLinearization.cpp
+   src/intersect/SplineJoint.hpp

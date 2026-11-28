@@ -36,8 +36,17 @@ import :Dispatch;
 /// the solver left undecided is Indeterminate. A result with any point that
 /// carries no derivative carries none as a whole (ADR-0021, section 5).
 ///
-/// The pairs so far are a line, a circle, an ellipse or a B-spline curve
-/// against a plane, a
+/// A crossing where the geometry is not smooth is not Valid either. At a
+/// corner of a B-spline curve (a knot of multiplicity at least its degree
+/// where its one-sided tangents differ) the point passes from one arm to the
+/// other as the geometry moves, and at a B-spline's own end (a curve's, or a
+/// surface's boundary) it leaves the geometry: both Nondifferentiable. On an
+/// interior knot line of a B-spline surface of multiplicity at least its
+/// degree, where the partials may jump, the regularity is not established:
+/// Indeterminate.
+///
+/// The pairs so far are a line, a circle, an ellipse, a hyperbola, a
+/// parabola or a B-spline curve against a plane, a
 /// cylinder, a cone, a sphere, a torus, an ellipsoid or a B-spline surface,
 /// the parameters bound to coordinates of the line's origin and direction,
 /// to a conic's centre and radii (ConicBinding), to the curve's poles and
@@ -74,12 +83,14 @@ struct LineBinding {
     LineComponent Component = LineComponent::OriginX;
 };
 
-/// What a design parameter moves on a circle or an ellipse: a coordinate of
-/// its centre; a circle's Radius; an ellipse's MajorRadius, along its XAxis,
-/// and MinorRadius, along its YAxis; each a Length. Or a component of the
-/// infinitesimal rotation w of its frame about its centre, an Angle, along
-/// the current XAxis (RotationX), YAxis (RotationY) and normal XAxis x
-/// YAxis (RotationZ): the point at fixed angle moves by w x (C - Center).
+/// What a design parameter moves on a conic in space: a coordinate of its
+/// centre (a parabola's vertex); a circle's Radius; an ellipse's or a
+/// hyperbola's MajorRadius, along its XAxis, and MinorRadius, along its
+/// YAxis; a parabola's FocalLength; each a Length. Or a component of the
+/// infinitesimal rotation w of its frame about its centre (a parabola's
+/// vertex), an Angle, along the current XAxis (RotationX), YAxis (RotationY)
+/// and normal XAxis x YAxis (RotationZ): the point at fixed parameter moves
+/// by w x (C - Center).
 enum class ConicComponent : std::uint8_t {
     CenterX,
     CenterY,
@@ -90,10 +101,11 @@ enum class ConicComponent : std::uint8_t {
     RotationX,
     RotationY,
     RotationZ,
+    FocalLength,
 };
 
-/// A design parameter bound to one defining value of a circle or an
-/// ellipse. Several bindings of one parameter add.
+/// A design parameter bound to one defining value of a circle, an ellipse,
+/// a hyperbola or a parabola. Several bindings of one parameter add.
 struct ConicBinding {
     ParameterId Parameter;
     ConicComponent Component = ConicComponent::CenterX;
@@ -187,6 +199,14 @@ Linearize(const BSplineCurve& curve, const Surface& surface, const CurveSurfaceP
 Linearize(const Circle& circle, const Surface& surface, const CurveSurfacePoint& point);
 [[nodiscard]] Result<CurveSurfaceLinearization>
 Linearize(const Ellipse& ellipse, const Surface& surface, const CurveSurfacePoint& point);
+/// The same for a point of Intersect(hyperbola, surface) or Intersect(parabola,
+/// surface), over the bounded domain the intersection was asked on: the
+/// point's parameter is the hyperbola's t of a cosh t X + b sinh t Y, the
+/// parabola's t of t^2 / (4 f) X + t Y.
+[[nodiscard]] Result<CurveSurfaceLinearization>
+Linearize(const Hyperbola& hyperbola, const Surface& surface, const CurveSurfacePoint& point);
+[[nodiscard]] Result<CurveSurfaceLinearization>
+Linearize(const Parabola& parabola, const Surface& surface, const CurveSurfacePoint& point);
 
 /// The forward product of Intersect(line, surface) for the seed of
 /// `sensitivity`: for each point of `intersection`, in its order,
@@ -249,6 +269,31 @@ IntersectVjp(const Ellipse& ellipse, std::span<const ConicBinding> conicBindings
              const Surface& surface, std::span<const SurfaceBinding> surfaceBindings,
              const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
 
+/// The products for a hyperbola or a parabola, as for a circle or an ellipse.
+/// At fixed t the hyperbola Center + a cosh t X + b sinh t Y moves by
+/// cosh t X with a (MajorRadius) and by sinh t Y with b (MinorRadius); the
+/// parabola Vertex + t^2 / (4 f) X + t Y by -t^2 / (4 f^2) X with f
+/// (FocalLength), its vertex bound through CenterX, CenterY and CenterZ.
+/// InvalidInput as for a circle, and also for a value the conic does not
+/// have: a Radius or a FocalLength on a hyperbola, a radius of any kind on a
+/// parabola, a FocalLength on a circle or an ellipse.
+[[nodiscard]] Result<SensitivityResult>
+IntersectJvp(const Hyperbola& hyperbola, std::span<const ConicBinding> conicBindings,
+             const Surface& surface, std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
+[[nodiscard]] Result<SensitivityResult>
+IntersectJvp(const Parabola& parabola, std::span<const ConicBinding> conicBindings,
+             const Surface& surface, std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
+[[nodiscard]] Result<SensitivityResult>
+IntersectVjp(const Hyperbola& hyperbola, std::span<const ConicBinding> conicBindings,
+             const Surface& surface, std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
+[[nodiscard]] Result<SensitivityResult>
+IntersectVjp(const Parabola& parabola, std::span<const ConicBinding> conicBindings,
+             const Surface& surface, std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
+
 /// A point of a surface–surface intersection to differentiate: a branch of
 /// the result, by its index, at a parameter of its Range (ADR-0009's
 /// shared edge parameter).
@@ -295,19 +340,42 @@ struct BranchPointLinearization {
 /// The status: a Tangential or Overlap branch is Nondifferentiable; an
 /// uncertified one, or a point at a pole of either surface's parameters,
 /// Indeterminate; a crossing NearEvent below NearEventSine, else Valid.
+/// One branch does not show whether its point is at a node of the result:
+/// the overload taking the whole result does.
 /// InvalidInput for an empty surface, a parameter outside the branch's
 /// Range, or a point Newton's method does not bring onto both surfaces
 /// within the branch's bound.
 [[nodiscard]] Result<BranchPointLinearization>
 Linearize(const Surface& a, const Surface& b, const IntersectionBranch& branch, double t);
 
+/// The linearisation of a sample of `intersection`, the result of
+/// Intersect(a, b): as Linearize(a, b, branch, t) on the sample's branch,
+/// read against the whole result, which shows what one branch cannot. A
+/// result with an overlap is Nondifferentiable at every sample. A sample at
+/// a node is Nondifferentiable: a node is an end where three or more ends of
+/// the result's certified branches meet (four at a transverse node of two
+/// B-spline surfaces, or of two equal cylinders whose axes meet), ends
+/// meeting when they lie within their branches' Bounds of each other, and
+/// the sample is at it when its point lies within its own branch's Bound of
+/// the node. The surfaces are tangent there and the intersection is
+/// singular: a candidate event (ADR-0054), which a generic change of either
+/// surface resolves into other branches, not a point that moves.
+/// IntersectJvp and IntersectVjp classify their samples this way.
+/// InvalidInput as the overload above, and for a sample naming a branch the
+/// result does not have.
+[[nodiscard]] Result<BranchPointLinearization>
+Linearize(const Surface& a, const Surface& b, const SurfaceSurfaceIntersection& intersection,
+          const BranchSample& sample);
+
 /// The forward product of Intersect(a, b) for the seed of `sensitivity`:
 /// for each sample, in order, BranchPointValues values. The bindings of
 /// either surface move it as for a curve–surface intersection; one
 /// parameter may move both. A result with an overlap is Nondifferentiable
-/// as a whole, and so is any sample on a branch that is not a crossing.
+/// as a whole, and so is any sample on a branch that is not a crossing or
+/// at a node of the result (as Linearize on the whole result says).
 /// NotSupported (a status) unless both surfaces are planes, cylinders,
-/// cones, spheres, tori or ellipsoids. InvalidInput as Linearize, for a sample naming
+/// cones, spheres, tori, ellipsoids or B-spline surfaces. InvalidInput as
+/// Linearize, for a sample naming
 /// a branch the result does not have, a binding as IntersectJvp refuses it
 /// above, or a seed that was never set.
 [[nodiscard]] Result<SensitivityResult>
@@ -384,8 +452,11 @@ struct PlanarLinearization {
 /// The linearisation of a point of Intersect(a, b) for plane curves:
 /// Valid or NearEvent for a decided crossing, Nondifferentiable for a
 /// tangential one, Indeterminate for one the solver left undecided or whose
-/// system is singular. InvalidInput for an empty curve or a point whose
-/// parameters are not finite or lie off a curve's domain.
+/// system is singular. A crossing at a corner of a B-spline (a knot of
+/// multiplicity at least its degree where its one-sided tangents differ), or
+/// at a B-spline's own end, is Nondifferentiable: the point changes arm, or
+/// leaves the curve, as the geometry moves. InvalidInput for an empty curve
+/// or a point whose parameters are not finite or lie off a curve's domain.
 [[nodiscard]] Result<PlanarLinearization> Linearize(const Curve2d& a, const Curve2d& b,
                                                     const PlanarPoint& point);
 
