@@ -30,6 +30,8 @@ module Stereon.Intersect;
 import :Dispatch;
 import :Linearization;
 
+#include "SplineJoint.hpp"
+
 /// The derivative products of a curve–surface intersection, through the
 /// equations of its points (Linearization.cppm). The system of a point is
 /// three by three, so it is solved by Cramer's rule on its columns C', -S_u
@@ -57,6 +59,13 @@ struct PointSystem {
     /// One partial is zero within rounding against the other: a pole of
     /// the surface's parameters.
     bool AtPole;
+    /// The point is at a B-spline curve's own end or corner, or on a
+    /// B-spline surface's boundary (SplineJoint.hpp): it leaves the
+    /// geometry, or changes arm, as the geometry moves.
+    bool AtJoint = false;
+    /// The point is on an interior knot line of a B-spline surface where
+    /// its partials may jump (SplineJoint.hpp).
+    bool OnKnotLine = false;
 };
 
 /// A partial shorter than this fraction of the other is zero within the
@@ -114,6 +123,8 @@ struct LineSide {
         return {};
     }
     [[nodiscard]] static bool Covers(double /*t*/) { return true; }
+    /// A line or a conic is smooth everywhere.
+    [[nodiscard]] static bool AtJoint(double /*t*/) { return false; }
 };
 
 /// A B-spline curve's side: its derivative and its pole velocities, the
@@ -147,10 +158,13 @@ struct SplineSide {
     {
         return std::isfinite(t) && Contains(Domain(Geometry), t);
     }
+    /// Whether t is the B-spline's own end or a corner of it (SplineJoint.hpp).
+    [[nodiscard]] bool AtJoint(const double t) const { return Detail::AtSplineJoint(Geometry, t); }
 };
 
-/// Whether a conic has the radius a component moves: a circle its Radius,
-/// an ellipse its MajorRadius and MinorRadius, every conic its centre.
+/// Whether a conic has the value a component moves: a circle its Radius, an
+/// ellipse and a hyperbola their MajorRadius and MinorRadius, a parabola its
+/// FocalLength; every conic its centre (a parabola's vertex) and its frame.
 template <typename Conic>
 [[nodiscard]] bool HasRadius(const ConicComponent component)
 {
@@ -158,16 +172,72 @@ template <typename Conic>
         return std::is_same_v<Conic, Circle>;
     }
     if (component == ConicComponent::MajorRadius || component == ConicComponent::MinorRadius) {
-        return std::is_same_v<Conic, Ellipse>;
+        return std::is_same_v<Conic, Ellipse> || std::is_same_v<Conic, Hyperbola>;
+    }
+    if (component == ConicComponent::FocalLength) {
+        return std::is_same_v<Conic, Parabola>;
     }
     return true;
 }
 
-/// A circle's or an ellipse's side: its derivative, and dC/d(component) at
-/// the angle t: a unit for a centre coordinate, cos t X + sin t Y for a
-/// circle's radius, cos t X and sin t Y for an ellipse's major and minor
-/// radii, and e_k x (C - Center) for a rotation about the frame's axis e_k
-/// (X, Y, X x Y), with C - Center formed in the frame.
+/// C(t) - Center of a conic (a parabola's vertex), formed in its frame
+/// rather than by subtraction, as the coefficients of XAxis and YAxis.
+[[nodiscard]] std::pair<double, double> InFrameOf(const Circle& c, const double t)
+{
+    return {c.Radius * std::cos(t), c.Radius * std::sin(t)};
+}
+/// An ellipse's C(t) - Center in its frame.
+[[nodiscard]] std::pair<double, double> InFrameOf(const Ellipse& e, const double t)
+{
+    return {e.MajorRadius * std::cos(t), e.MinorRadius * std::sin(t)};
+}
+/// A hyperbola's C(t) - Center in its frame: (a cosh t, b sinh t).
+[[nodiscard]] std::pair<double, double> InFrameOf(const Hyperbola& h, const double t)
+{
+    return {h.MajorRadius * std::cosh(t), h.MinorRadius * std::sinh(t)};
+}
+/// A parabola's C(t) - Vertex in its frame: (t^2 / (4 f), t).
+[[nodiscard]] std::pair<double, double> InFrameOf(const Parabola& p, const double t)
+{
+    return {t * t / (4.0 * p.FocalLength), t};
+}
+
+/// dC/d(component) at fixed t of a conic's radius or focal length, as the
+/// coefficients of XAxis and YAxis: cos t X + sin t Y for a circle's radius;
+/// cos t X and sin t Y for an ellipse's major and minor radii; cosh t X and
+/// sinh t Y for a hyperbola's; -t^2 / (4 f^2) X for a parabola's focal
+/// length.
+[[nodiscard]] std::pair<double, double>
+ShapeRate(const Circle& /*c*/, const ConicComponent /*component*/, const double t)
+{
+    return {std::cos(t), std::sin(t)};
+}
+/// An ellipse's dC/dMajorRadius (cos t, 0) or dC/dMinorRadius (0, sin t).
+[[nodiscard]] std::pair<double, double> ShapeRate(const Ellipse& /*e*/,
+                                                  const ConicComponent component, const double t)
+{
+    return component == ConicComponent::MajorRadius ? std::pair{std::cos(t), 0.0}
+                                                    : std::pair{0.0, std::sin(t)};
+}
+/// A hyperbola's dC/dMajorRadius (cosh t, 0) or dC/dMinorRadius (0, sinh t).
+[[nodiscard]] std::pair<double, double> ShapeRate(const Hyperbola& /*h*/,
+                                                  const ConicComponent component, const double t)
+{
+    return component == ConicComponent::MajorRadius ? std::pair{std::cosh(t), 0.0}
+                                                    : std::pair{0.0, std::sinh(t)};
+}
+[[nodiscard]] std::pair<double, double>
+/// A parabola's dC/dFocalLength at fixed t: (-t^2 / (4 f^2), 0).
+ShapeRate(const Parabola& p, const ConicComponent /*component*/, const double t)
+{
+    return {-(t * t) / (4.0 * p.FocalLength * p.FocalLength), 0.0};
+}
+
+/// A conic's side (a circle's, an ellipse's, a hyperbola's or a parabola's):
+/// its derivative, and dC/d(component) at the parameter t: a unit for a
+/// centre coordinate, ShapeRate for a radius or the focal length, and
+/// e_k x (C - Center) for a rotation about the frame's axis e_k (X, Y,
+/// X x Y), with C - Center formed in the frame.
 template <typename Conic>
 struct ConicSide {
     const Conic& Geometry;
@@ -175,15 +245,10 @@ struct ConicSide {
 
     [[nodiscard]] Point3 At(const double t) const { return Eval(Geometry, t); }
     [[nodiscard]] Vec3 Tangent(const double t) const { return Deriv(Geometry, t, 1); }
-    /// C(t) - Center, from the frame rather than by subtraction.
-    [[nodiscard]] Vec3 Offset(const double t) const
+    /// The vector of frame coefficients (x, y): x XAxis + y YAxis.
+    [[nodiscard]] Vec3 Along(const std::pair<double, double>& xy) const
     {
-        if constexpr (std::is_same_v<Conic, Circle>) {
-            return Geometry.Radius * (std::cos(t) * Geometry.XAxis + std::sin(t) * Geometry.YAxis);
-        } else {
-            return (Geometry.MajorRadius * std::cos(t)) * Geometry.XAxis +
-                   (Geometry.MinorRadius * std::sin(t)) * Geometry.YAxis;
-        }
+        return xy.first * Geometry.XAxis + xy.second * Geometry.YAxis;
     }
     [[nodiscard]] Vec3 Partial(const ConicBinding& b, const double t) const
     {
@@ -191,15 +256,15 @@ struct ConicSide {
         case ConicComponent::RotationX:
         case ConicComponent::RotationY:
         case ConicComponent::RotationZ:
-            return Turned(
-                static_cast<int>(b.Component) - static_cast<int>(ConicComponent::RotationX),
-                Geometry.XAxis, Geometry.YAxis, Cross(Geometry.XAxis, Geometry.YAxis), Offset(t));
+            return Turned(static_cast<int>(b.Component) -
+                              static_cast<int>(ConicComponent::RotationX),
+                          Geometry.XAxis, Geometry.YAxis, Cross(Geometry.XAxis, Geometry.YAxis),
+                          Along(InFrameOf(Geometry, t)));
         case ConicComponent::Radius:
-            return std::cos(t) * Geometry.XAxis + std::sin(t) * Geometry.YAxis;
         case ConicComponent::MajorRadius:
-            return std::cos(t) * Geometry.XAxis;
         case ConicComponent::MinorRadius:
-            return std::sin(t) * Geometry.YAxis;
+        case ConicComponent::FocalLength:
+            return Along(ShapeRate(Geometry, b.Component, t));
         default:
             return UnitAlong(static_cast<int>(b.Component));
         }
@@ -216,13 +281,16 @@ struct ConicSide {
             if (!HasRadius<Conic>(b.Component)) {
                 return Fail(ErrorCode::InvalidInput,
                             std::string(where) +
-                                ": a binding of a radius the conic does not have (a major or "
-                                "minor radius on a circle, a radius on an ellipse)");
+                                ": a binding of a value the conic does not have (a circle has a "
+                                "Radius, an ellipse and a hyperbola a MajorRadius and a "
+                                "MinorRadius, a parabola a FocalLength)");
             }
         }
         return {};
     }
     [[nodiscard]] static bool Covers(const double t) { return std::isfinite(t); }
+    /// A line or a conic is smooth everywhere.
+    [[nodiscard]] static bool AtJoint(double /*t*/) { return false; }
 };
 
 /// The surface's partials come from its own Deriv, so any surface fits. At
@@ -241,7 +309,15 @@ template <typename Side>
                   curve.At(point.Parameter) - Eval(surface, uv),
                   0.0,
                   0.0,
+                  false,
+                  false,
                   false};
+    s.AtJoint = curve.AtJoint(point.Parameter);
+    if (const BSplineSurface* spline = surface.Target<BSplineSurface>()) {
+        const Detail::SurfaceJoint joint = Detail::SurfaceJointAt(*spline, uv);
+        s.AtJoint = s.AtJoint || joint == Detail::SurfaceJoint::Boundary;
+        s.OnKnotLine = joint == Detail::SurfaceJoint::KnotLine;
+    }
     const Vec3 normal = Cross(s.Su, s.Sv);
     s.Det = Dot(s.Tangent, normal);
     s.Conditioning = std::abs(s.Det) / (Length(s.Tangent) * Length(normal));
@@ -313,6 +389,16 @@ template <typename Side>
     if (!point.Decided) {
         return {DerivativeStatus::Indeterminate,
                 "a point the solver did not decide: its contact is not established"};
+    }
+    if (system.AtJoint) {
+        return {DerivativeStatus::Nondifferentiable,
+                "a crossing at a B-spline curve's own end or corner, or on a B-spline surface's "
+                "boundary: the point leaves the geometry, or changes arm, as it moves"};
+    }
+    if (system.OnKnotLine) {
+        return {DerivativeStatus::Indeterminate,
+                "a crossing on a knot line of a B-spline surface where its partials may jump: "
+                "the regularity there is not established"};
     }
     if (system.AtPole) {
         return {DerivativeStatus::Indeterminate,
@@ -832,6 +918,20 @@ Result<CurveSurfaceLinearization> Linearize(const Ellipse& ellipse, const Surfac
     return LinearizeOn(ConicSide<Ellipse>{ellipse, {}}, surface, point);
 }
 
+/// Linearize for a hyperbola's crossing: the conic side's system.
+Result<CurveSurfaceLinearization> Linearize(const Hyperbola& hyperbola, const Surface& surface,
+                                            const CurveSurfacePoint& point)
+{
+    return LinearizeOn(ConicSide<Hyperbola>{hyperbola, {}}, surface, point);
+}
+
+/// Linearize for a parabola's crossing: the conic side's system.
+Result<CurveSurfaceLinearization> Linearize(const Parabola& parabola, const Surface& surface,
+                                            const CurveSurfacePoint& point)
+{
+    return LinearizeOn(ConicSide<Parabola>{parabola, {}}, surface, point);
+}
+
 Result<SensitivityResult>
 IntersectJvp(const Line& line, const std::span<const LineBinding> lineBindings,
              const Surface& surface, const std::span<const SurfaceBinding> surfaceBindings,
@@ -900,6 +1000,46 @@ IntersectVjp(const Ellipse& ellipse, const std::span<const ConicBinding> conicBi
 {
     return VjpOn(ConicSide<Ellipse>{ellipse, conicBindings}, surface, surfaceBindings, intersection,
                  sensitivity);
+}
+
+Result<SensitivityResult>
+/// The forward product for a hyperbola's crossings.
+IntersectJvp(const Hyperbola& hyperbola, const std::span<const ConicBinding> conicBindings,
+             const Surface& surface, const std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity)
+{
+    return JvpOn(ConicSide<Hyperbola>{hyperbola, conicBindings}, surface, surfaceBindings,
+                 intersection, sensitivity);
+}
+
+Result<SensitivityResult>
+/// The forward product for a parabola's crossings.
+IntersectJvp(const Parabola& parabola, const std::span<const ConicBinding> conicBindings,
+             const Surface& surface, const std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity)
+{
+    return JvpOn(ConicSide<Parabola>{parabola, conicBindings}, surface, surfaceBindings,
+                 intersection, sensitivity);
+}
+
+Result<SensitivityResult>
+/// The reverse product for a hyperbola's crossings.
+IntersectVjp(const Hyperbola& hyperbola, const std::span<const ConicBinding> conicBindings,
+             const Surface& surface, const std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity)
+{
+    return VjpOn(ConicSide<Hyperbola>{hyperbola, conicBindings}, surface, surfaceBindings,
+                 intersection, sensitivity);
+}
+
+Result<SensitivityResult>
+/// The reverse product for a parabola's crossings.
+IntersectVjp(const Parabola& parabola, const std::span<const ConicBinding> conicBindings,
+             const Surface& surface, const std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity)
+{
+    return VjpOn(ConicSide<Parabola>{parabola, conicBindings}, surface, surfaceBindings,
+                 intersection, sensitivity);
 }
 
 // The branch points of a surface–surface intersection (Linearization.cppm,
@@ -989,16 +1129,30 @@ struct BranchSystem {
 }
 
 /// The system at (onA, onB), for the tangent already in s.
+/// A point of a B-spline surface's parameters held in its domain: a branch
+/// ending on the patch's boundary has its pcurve end there to rounding, and
+/// Newton's steps from it may leave by as much, where Eval's contract does
+/// not reach. Other surfaces' parameters are left alone (an angle wraps).
+[[nodiscard]] Point2 Within(const Surface& surface, const Point2& uv)
+{
+    if (surface.Target<BSplineSurface>() == nullptr) {
+        return uv;
+    }
+    const Box2 d = Domain(surface);
+    return {std::clamp(uv.X, d.X.GetLower(), d.X.GetUpper()),
+            std::clamp(uv.Y, d.Y.GetLower(), d.Y.GetUpper())};
+}
+
 void Fill(const Surface& a, const Surface& b, const Point2& onA, const Point2& onB, BranchSystem& s)
 {
-    s.OnA = onA;
-    s.OnB = onB;
-    s.Position = Eval(a, onA);
-    s.Residual = s.Position - Eval(b, onB);
-    s.SuA = Deriv(a, onA, 1, 0);
-    s.SvA = Deriv(a, onA, 0, 1);
-    s.SuB = Deriv(b, onB, 1, 0);
-    s.SvB = Deriv(b, onB, 0, 1);
+    s.OnA = Within(a, onA);
+    s.OnB = Within(b, onB);
+    s.Position = Eval(a, s.OnA);
+    s.Residual = s.Position - Eval(b, s.OnB);
+    s.SuA = Deriv(a, s.OnA, 1, 0);
+    s.SvA = Deriv(a, s.OnA, 0, 1);
+    s.SuB = Deriv(b, s.OnB, 1, 0);
+    s.SvB = Deriv(b, s.OnB, 0, 1);
     const Vec3 normalA = Cross(s.SuA, s.SvA);
     const Vec3 normalB = Cross(s.SuB, s.SvB);
     s.AtPole = AtPoleOf(s.SuA, s.SvA) || AtPoleOf(s.SuB, s.SvB);
@@ -1031,8 +1185,8 @@ void Refine(const Surface& a, const Surface& b, const Point3& x0, BranchSystem& 
         if (!AllFinite(dz)) {
             return;
         }
-        const Point2 onA{s.OnA.X + dz[0], s.OnA.Y + dz[1]};
-        const Point2 onB{s.OnB.X + dz[2], s.OnB.Y + dz[3]};
+        const Point2 onA = Within(a, Point2{s.OnA.X + dz[0], s.OnA.Y + dz[1]});
+        const Point2 onB = Within(b, Point2{s.OnB.X + dz[2], s.OnB.Y + dz[3]});
         const bool settled = onA == s.OnA && onB == s.OnB;
         Fill(a, b, onA, onB, s);
         if (settled) {
@@ -1100,11 +1254,82 @@ struct BranchPoint {
            Contains(Domain(branch.OnB), t);
 }
 
+/// An end of a certified branch of a bounded range: where it is, and the
+/// branch's bound.
+struct BranchEnd {
+    Point3 At;
+    double Bound = 0.0;
+};
+
+/// The rounding of a point's coordinates, on top of a certified bound: the
+/// budget OnBoth allows.
+[[nodiscard]] double RoundingAt(const Point3& p)
+{
+    return 512.0 * std::numeric_limits<double>::epsilon() *
+           (1.0 + std::max({std::abs(p.X), std::abs(p.Y), std::abs(p.Z)}));
+}
+
+/// Whether two points, each within its bound of the intersection, may be
+/// one point of it.
+[[nodiscard]] bool Coincide(const Point3& p, const double boundP, const Point3& q,
+                            const double boundQ)
+{
+    return Distance(p, q) <= boundP + boundQ + RoundingAt(p) + RoundingAt(q);
+}
+
+/// The nodes of a result: every branch end where three or more ends of
+/// certified branches coincide. The handlers end branches at a node (two
+/// equal cylinders through their axes' common normal, a transverse node of
+/// two B-spline surfaces, four ends each) and otherwise only at the
+/// requested domains' boundaries and at seams and cuts, where two ends
+/// meet. An uncertified branch is Indeterminate on its own; its ends are
+/// not counted.
+[[nodiscard]] std::vector<BranchEnd> NodesOf(const SurfaceSurfaceIntersection& intersection)
+{
+    std::vector<BranchEnd> ends;
+    for (const IntersectionBranch& branch : intersection.Branches) {
+        if (!branch.IsCertified() || !branch.Range.IsBounded() || branch.Curve3d.IsEmpty()) {
+            continue;
+        }
+        for (const double t : {branch.Range.GetLower(), branch.Range.GetUpper()}) {
+            if (Contains(Domain(branch.Curve3d), t)) {
+                ends.push_back({Eval(branch.Curve3d, t), branch.Bound});
+            }
+        }
+    }
+    std::vector<BranchEnd> nodes;
+    for (const BranchEnd& end : ends) {
+        const auto meeting = std::ranges::count_if(ends, [&](const BranchEnd& other) {
+            return Coincide(end.At, end.Bound, other.At, other.Bound);
+        });
+        if (meeting >= 3) {
+            nodes.push_back(end);
+        }
+    }
+    return nodes;
+}
+
+/// Whether the branch's point at t is at one of the nodes.
+[[nodiscard]] bool AtNode(const IntersectionBranch& branch, const double t,
+                          const std::span<const BranchEnd> nodes)
+{
+    if (nodes.empty() || !OnBranch(branch, t) || !branch.IsCertified()) {
+        return false;
+    }
+    const Point3 x = Eval(branch.Curve3d, t);
+    return std::ranges::any_of(nodes, [&](const BranchEnd& node) {
+        return Coincide(x, branch.Bound, node.At, node.Bound);
+    });
+}
+
 /// The branch's point at t, refined onto both surfaces when it has a
-/// derivative.
+/// derivative. A point at a node of the result has none: the surfaces are
+/// tangent there and the intersection is not a curve but a crossing of
+/// two, a candidate event (ADR-0054) that a generic change of either
+/// surface resolves into other branches, not a point that moves.
 [[nodiscard]] Result<BranchPoint> PointOn(const Surface& a, const Surface& b,
                                           const IntersectionBranch& branch, const double t,
-                                          const std::string_view where)
+                                          const bool atNode, const std::string_view where)
 {
     if (!OnBranch(branch, t)) {
         return Fail(ErrorCode::InvalidInput,
@@ -1120,6 +1345,12 @@ struct BranchPoint {
     p.System.Tangent = direction / Length(direction);
     Fill(a, b, Eval(branch.OnA, t), Eval(branch.OnB, t), p.System);
     std::tie(p.Status, p.Reason) = ClassifyBranch(branch, p.System);
+    if (atNode && p.Status != DerivativeStatus::Nondifferentiable) {
+        p.Status = DerivativeStatus::Nondifferentiable;
+        p.Reason = "a point at a node of the result, where three or more branch ends meet: the "
+                   "surfaces are tangent there, and a generic change resolves the node into "
+                   "other branches rather than moving it";
+    }
     if (!HasDerivative(p.Status)) {
         return p;
     }
@@ -1156,13 +1387,16 @@ struct BranchAnalysis {
         an.Summary.Reason = "the surfaces coincide over a region: its boundary is not isolated";
         return an;
     }
+    const std::vector<BranchEnd> nodes = NodesOf(intersection);
     for (std::size_t k = 0; k < samples.size(); ++k) {
         if (samples[k].Branch >= intersection.Branches.size()) {
             return Fail(ErrorCode::InvalidInput,
                         std::string(where) + ": a sample names a branch the result does not have");
         }
-        STEREON_TRY(const BranchPoint p, PointOn(a, b, intersection.Branches[samples[k].Branch],
-                                                 samples[k].Parameter, where));
+        const IntersectionBranch& branch = intersection.Branches[samples[k].Branch];
+        STEREON_TRY(const BranchPoint p,
+                    PointOn(a, b, branch, samples[k].Parameter,
+                            AtNode(branch, samples[k].Parameter, nodes), where));
         if (Rank(p.Status) > Rank(an.Summary.Status)) {
             an.Summary.Status = p.Status;
             an.Summary.Reason = "sample " + std::to_string(k) + ": " + std::string(p.Reason);
@@ -1271,13 +1505,40 @@ void AccumulateBranch(const Surface& a, const std::span<const SurfaceBinding> bi
 
 } // namespace
 
+/// The linearisation of a sample read against the whole result: a node's
+/// sample is Nondifferentiable (Linearization.cppm).
 Result<BranchPointLinearization> Linearize(const Surface& a, const Surface& b,
                                            const IntersectionBranch& branch, const double t)
 {
     if (a.IsEmpty() || b.IsEmpty()) {
         return Fail(ErrorCode::InvalidInput, "Linearize: an empty surface");
     }
-    STEREON_TRY(const BranchPoint p, PointOn(a, b, branch, t, "Linearize"));
+    STEREON_TRY(const BranchPoint p, PointOn(a, b, branch, t, false, "Linearize"));
+    const BranchSystem& s = p.System;
+    return BranchPointLinearization{s.Position, s.OnA, s.OnB, s.Residual,     s.Tangent, s.SuA,
+                                    s.SvA,      s.SuB, s.SvB, s.Conditioning, p.Status};
+}
+
+/// The linearisation of a sample read against the whole result: a node's
+/// sample is Nondifferentiable (Linearization.cppm).
+Result<BranchPointLinearization> Linearize(const Surface& a, const Surface& b,
+                                           const SurfaceSurfaceIntersection& intersection,
+                                           const BranchSample& sample)
+{
+    if (a.IsEmpty() || b.IsEmpty()) {
+        return Fail(ErrorCode::InvalidInput, "Linearize: an empty surface");
+    }
+    if (sample.Branch >= intersection.Branches.size()) {
+        return Fail(ErrorCode::InvalidInput,
+                    "Linearize: the sample names a branch the result does not have");
+    }
+    const IntersectionBranch& branch = intersection.Branches[sample.Branch];
+    const std::vector<BranchEnd> nodes = NodesOf(intersection);
+    STEREON_TRY(BranchPoint p, PointOn(a, b, branch, sample.Parameter,
+                                       AtNode(branch, sample.Parameter, nodes), "Linearize"));
+    if (!intersection.Overlaps.empty()) {
+        p.Status = DerivativeStatus::Nondifferentiable;
+    }
     const BranchSystem& s = p.System;
     return BranchPointLinearization{s.Position, s.OnA, s.OnB, s.Residual,     s.Tangent, s.SuA,
                                     s.SvA,      s.SuB, s.SvB, s.Conditioning, p.Status};
