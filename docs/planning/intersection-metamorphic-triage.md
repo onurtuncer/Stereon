@@ -561,12 +561,7 @@ The inventory audit after #263 stopped at #323. These merges since then, up to `
 - **PR-326** (`8f955e0`): a defect, recorded above. Its kernel commit is inside an OCCT comparison PR.
 - **PR-334** (`431d9e9`): not a defect. A crossing of two B-splines at a spline's own end, or at a corner, was reported undecided. That was the ledger's listed limitation (2D curve–curve, *Remaining*), and the PR decides such crossings. The point it replaced was labelled `Crossing`, but undecided points carry no claim about their contact.
 - **PR-337** (`7cb4564`): not a defect. Transverse nodes on knot lines and seams were refused with `IntersectionFailed`, the generic SSI's documented limitation (step 3 of the critical path). The PR answers them.
-- **PR-339** (`3b4afef`): **untriaged**. Its audit of #195 found three things:
-  - refusals (`CertificationFailed`) of skew cylinders whose seam passes within rounding of a fold, on either cylinder;
-  - the fixed threshold `FoldTouch = 1e-9`;
-  - no answer that was wrong.
-
-  It is still to be decided, from the ledger as it stood then, whether those refusals were inside the skew-cylinder row's supported domain. That rule is what made PR-159 a defect. Until then the record stays open.
+- **PR-339** (`3b4afef`): verified chart-continuity defect in the skew-cylinder fitter. See the historical contract and replay below.
 - **PR-342** (`09c0505`): already recorded, as AUDIT-20261122-plane-cylinder-periodic-box.
 - #310 (which closed issue #309) changed tests only. #333, #338 and #341 add a corpus, Booleans and evidence, and change no intersection result. None of them needs a record.
 
@@ -578,3 +573,11 @@ The inventory audit after #263 stopped at #323. These merges since then, up to `
 - **Batch 4 red:** each fault was killed in both runs by its named MR test, with the declared diagnostic found: PR-271, PR-289, PR-301, PR-304, PR-312, PR-315, PR-316, PR-317-partials-about-patch, PR-317-roots-in-frame, PR-318 and PR-326. The 30 earlier faults were killed in the same run: score 41 / 41, none survived. PR-322's red is its historical replay above.
 - **Batch 4 green:** at the same head, every MR test of this batch passed in each native CTest job of #348: [Linux (gcc16-debug)](https://github.com/onurtuncer/Stereon/actions/runs/45974949273/job/140424249958), [Linux (gcc16-release)](https://github.com/onurtuncer/Stereon/actions/runs/45974949273/job/140424250089), [Linux (gcc16-asan)](https://github.com/onurtuncer/Stereon/actions/runs/45974949273/job/140424249883), [Windows (gcc16-debug)](https://github.com/onurtuncer/Stereon/actions/runs/45974949160/job/140424250795), [Windows (gcc16-windows)](https://github.com/onurtuncer/Stereon/actions/runs/45974949160/job/140424250506), [macOS (gcc16-debug)](https://github.com/onurtuncer/Stereon/actions/runs/45974949208/job/140424250365).
 - **Batch 4 review:** this is this agent's review of the fixtures, oracles and runs above. On it, PR-271, PR-289, PR-301, PR-304, PR-312, PR-315, PR-316, PR-317, PR-318, PR-322 and PR-326 are `verified`. The owner's review is pending.
+
+#### PR-339 skew-cylinder chart continuity
+
+**Historical contract.** The [manual at the defective revision](https://github.com/onurtuncer/Stereon/blob/e84edffd785590fd01f393303b5e3721dc4f9c2d/docs/intersection.rst#L141-L195) includes skew cylinders, caps fitting at 2^14 samples, and permits failure at the cap. It separately permits unresolved or inseparable seam cuts and a 2^16 seam-isolation budget. The two reported fixtures triggered the fitting cap. Neither needed a cut at the offending seam. An inconsistent periodic representative introduced a jump into a smooth pcurve. The refusal was safe; the chart discontinuity that caused it was a defect inside the supported geometry.
+
+**Fixture and oracle.** In `CylinderCylinderSkewSeamTests.cpp`, the parametrising cylinder's seam misses the far fold by 2^-53 radians. In the second fixture B's seam lies above the loop by the 2^-52 input offset with A's seam just outside the fold. Rotating the parameter frames preserves the world-space intersection (MR-04). The tests require an answer at these offsets. The common Check routine compares independently bracketed crossings against the algebraic count and checks the returned pieces against the fixed reference curve. The separate concern about the FoldTouch threshold had no reproduced wrong branch and carries no independent red claim.
+
+**Replay and review.** [PR #339's red-on-main table](https://github.com/onurtuncer/Stereon/pull/339) records the two named failures with the solver from e84edff, GCC 16.2 debug on Windows. This is the PR author's local replay. The repaired PR head 0d6d7b1 passed [Windows debug](https://github.com/onurtuncer/Stereon/actions/runs/45570577102/job/139055930299) and [Linux debug](https://github.com/onurtuncer/Stereon/actions/runs/45570577088/job/139055929913). Review covers the two reproduced chart-dependent refusals. The documented fitting and isolation limits continue to apply.
