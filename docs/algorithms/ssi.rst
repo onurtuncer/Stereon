@@ -34,6 +34,7 @@ Implementation notes
    src/intersect/Implicit.hpp
    src/intersect/ImplicitTrace.cpp
    src/intersect/Intersect.cppm
+   src/intersect/OvalPcurve.hpp
    src/intersect/PlaneCylinder.cpp
    src/intersect/PlaneEllipsoid.cpp
    src/intersect/PlanePlane.cpp

@@ -38,8 +38,10 @@ import :Dispatch;
 import Stereon.Robust;
 
 #include "Analytic.hpp"
+#include "BoxClip.hpp"
 #include "Exact.hpp"
 #include "Implicit.hpp"
+#include "OvalPcurve.hpp"
 
 /// The pairs of planes, cylinders, cones, spheres and tori that
 /// PlanePlane.cpp, PlaneCylinder.cpp and the cylinder handlers do not take
@@ -56,7 +58,11 @@ import Stereon.Robust;
 ///   circle is exact, and its pcurve on a surface whose axis is the common
 ///   one is a line of constant v, exact too. Two spheres always share an
 ///   axis, the line of their centres, and a plane and a sphere the normal
-///   through the centre.
+///   through the centre. A spheroid, an ellipsoid with two equal semi-axes,
+///   turns its meridian ellipse about the third; where it meets another
+///   profile is isolated by certified subdivision of the ellipse's angle
+///   (MeetEllipse), and its circles have line pcurves when its equal
+///   semi-axes are A and B, its chart turning about its own axis.
 /// - A plane through a cone's apex: two generators, one tangent generator,
 ///   or the apex alone.
 /// - A plane containing a torus's axis: two meridian circles.
@@ -74,13 +80,57 @@ namespace {
 
 constexpr double Pi = std::numbers::pi;
 
+// --- Spheroids ----------------------------------------------------------------
+
+/// An ellipsoid with two equal semi-axes, a spheroid: the turn of its
+/// meridian ellipse about the frame's axis `Along` (0 its X axis, 1 its Y
+/// axis, 2 its own axis), with semi-axis `Across` across that axis and
+/// `Height` along it. Equal exactly, on the input doubles: semi-axes equal
+/// only within rounding make no surface of revolution. Nothing for an
+/// ellipsoid with three unequal semi-axes; one with three equal ones turns
+/// about every line through its centre, as a sphere does (IsSphere).
+struct Spheroid {
+    int Along;
+    double Across;
+    double Height;
+};
+
+/// The spheroid an ellipsoid is, from which semi-axes are equal.
+[[nodiscard]] std::optional<Spheroid> SpheroidOf(const Ellipsoid& e)
+{
+    if (e.A == e.B) {
+        return Spheroid{2, e.A, e.C};
+    }
+    if (e.B == e.C) {
+        return Spheroid{0, e.B, e.A};
+    }
+    if (e.A == e.C) {
+        return Spheroid{1, e.A, e.B};
+    }
+    return std::nullopt;
+}
+
 // --- The common axis --------------------------------------------------------
 
 /// The direction of a surface's axis, exactly: its frame's cross product,
-/// turned by the handedness flag; a plane's normal.
+/// turned by the handedness flag; a plane's normal; a spheroid's axis of
+/// revolution, its frame's X or Y axis when the equal semi-axes are the
+/// other two.
 template <typename G>
 [[nodiscard]] ExactVector<4> ExactAxisOf(const G& g)
 {
+    if constexpr (std::same_as<G, Ellipsoid>) {
+        const std::optional<Spheroid> s = SpheroidOf(g);
+        if (s && s->Along != 2) {
+            const ExactVector<1> along = Exactly(s->Along == 0 ? g.XAxis : g.YAxis);
+            ExactVector<4> widened;
+            widened.Hull = along.Hull;
+            for (std::size_t k = 0; k < 3; ++k) {
+                widened.Value[k] = [d = along.Value[k]] { return Expansion<4>(d()); };
+            }
+            return widened;
+        }
+    }
     const ExactVector<4> cross = ExactCross(Exactly(g.XAxis), Exactly(g.YAxis));
     if constexpr (std::same_as<G, Plane>) {
         return cross;
@@ -94,6 +144,18 @@ template <typename G>
     return std::visit([](const auto& g) { return ExactAxisOf(g); }, e);
 }
 
+/// The axis's direction in doubles, as ExactAxisOf takes it.
+[[nodiscard]] Vec3 AxisDirectionOf(const Elementary& e)
+{
+    if (const Ellipsoid* g = std::get_if<Ellipsoid>(&e)) {
+        const std::optional<Spheroid> s = SpheroidOf(*g);
+        if (s && s->Along != 2) {
+            return Normalized(s->Along == 0 ? g->XAxis : g->YAxis);
+        }
+    }
+    return Normalized(QuadricOf(e).Axis);
+}
+
 /// The point the frame is placed at: origin or centre.
 [[nodiscard]] Point3 OriginOf(const Elementary& e)
 {
@@ -105,15 +167,27 @@ template <typename G>
     return std::holds_alternative<Plane>(e);
 }
 
+/// A sphere, or an ellipsoid with three equal semi-axes: round about every
+/// line through its centre.
 [[nodiscard]] bool IsSphere(const Elementary& e)
 {
+    if (const Ellipsoid* g = std::get_if<Ellipsoid>(&e)) {
+        return g->A == g->B && g->B == g->C;
+    }
     return std::holds_alternative<Sphere>(e);
 }
 
-/// A cylinder, cone or torus: a surface with an axis of its own.
+/// An ellipsoid with three unequal semi-axes: no surface of revolution.
+[[nodiscard]] bool IsTriaxial(const Elementary& e)
+{
+    const Ellipsoid* g = std::get_if<Ellipsoid>(&e);
+    return g != nullptr && !SpheroidOf(*g);
+}
+
+/// A cylinder, cone, torus or spheroid: a surface with an axis of its own.
 [[nodiscard]] bool HasOwnAxis(const Elementary& e)
 {
-    return !IsPlane(e) && !IsSphere(e);
+    return !IsPlane(e) && !IsSphere(e) && !IsTriaxial(e);
 }
 
 [[nodiscard]] bool Parallel(const ExactVector<4>& a, const ExactVector<4>& b)
@@ -131,12 +205,66 @@ template <typename G>
 /// its unit direction, the first surface with an axis of its own giving
 /// both, else the plane's normal through the sphere's centre, else the
 /// line of the spheres' centres.
+///
+/// Misalignment is zero when the axes are one exactly. A pair placed by a
+/// rounded rotation is coaxial in its construction but not in its doubles:
+/// the cross products miss zero by units in the last place. It is taken as
+/// coaxial when the misalignment moves its circles by at most the slack,
+/// a sixteenth of the resolution, so that they still certify within the
+/// resolution against both surfaces as given (Keep proves it, or the pair
+/// fails closed); Misalignment then bounds that move.
 struct Axis3 {
     Point3 Origin;
     Vec3 Direction;
+    double Misalignment = 0.0;
 };
 
-[[nodiscard]] std::optional<Axis3> OwnAxisShared(const Elementary& r, const Elementary& other)
+/// How far a surface's points of interest reach from its frame's origin:
+/// its radii and semi-axes; none for a plane, a cone's apex circle.
+[[nodiscard]] double SizeOf(const Elementary& e)
+{
+    const Quadric q = QuadricOf(e);
+    switch (q.Kind) {
+    case QuadricKind::Plane:
+        return 0.0;
+    case QuadricKind::Torus:
+        return q.Major + q.Radius;
+    case QuadricKind::Ellipsoid:
+        return std::max({q.Radius, q.SemiB, q.SemiC});
+    default:
+        return q.Radius;
+    }
+}
+
+/// How far the other surface's axis is from r's, over the reach of the
+/// pair: the sine between the axes times the reach, and the distance of
+/// the other's origin from r's axis. A sphere has no axis of its own, a
+/// plane no origin on one.
+[[nodiscard]] double MisalignmentOf(const Elementary& r, const Elementary& other)
+{
+    const Vec3 a = AxisDirectionOf(r);
+    const Vec3 offset = OriginOf(other) - OriginOf(r);
+    const double reach = Length(offset) + SizeOf(r) + SizeOf(other);
+    double m = 0.0;
+    if (!IsSphere(other)) {
+        // Axes apart by more than rounding are no common axis, however
+        // small the reach: a cone's apex alone reaches nowhere.
+        const double sine = Length(Cross(a, AxisDirectionOf(other)));
+        if (!(sine <= 0x1p-40)) {
+            return std::numeric_limits<double>::infinity();
+        }
+        m += sine * reach;
+    }
+    if (!IsPlane(other)) {
+        m += Length(Cross(offset, a));
+    }
+    return m;
+}
+
+/// r's own axis, when the other surface shares it exactly or within the
+/// slack (Axis3).
+[[nodiscard]] std::optional<Axis3> OwnAxisShared(const Elementary& r, const Elementary& other,
+                                                 const double slack)
 {
     const ExactVector<4> axis = ExactAxisOf(r);
     const Point3 origin = OriginOf(r);
@@ -144,19 +272,28 @@ struct Axis3 {
                         : IsSphere(other) ? OnLine(OriginOf(other), origin, axis)
                                           : Parallel(axis, ExactAxisOf(other)) &&
                                                 OnLine(OriginOf(other), origin, axis);
-    if (!shared) {
+    if (shared) {
+        return Axis3{origin, AxisDirectionOf(r)};
+    }
+    const double misalignment = MisalignmentOf(r, other);
+    if (!(misalignment <= slack)) {
         return std::nullopt;
     }
-    return Axis3{origin, Normalized(QuadricOf(r).Axis)};
+    return Axis3{origin, AxisDirectionOf(r), misalignment};
 }
 
-[[nodiscard]] std::optional<Axis3> CommonAxis(const Elementary& a, const Elementary& b)
+/// The axis both surfaces turn about, if they share one (Axis3).
+[[nodiscard]] std::optional<Axis3> CommonAxis(const Elementary& a, const Elementary& b,
+                                              const double slack)
 {
+    if (IsTriaxial(a) || IsTriaxial(b)) {
+        return std::nullopt;
+    }
     if (HasOwnAxis(a)) {
-        return OwnAxisShared(a, b);
+        return OwnAxisShared(a, b, slack);
     }
     if (HasOwnAxis(b)) {
-        return OwnAxisShared(b, a);
+        return OwnAxisShared(b, a, slack);
     }
     if (IsPlane(a) != IsPlane(b)) {
         const Elementary& sphere = IsPlane(a) ? b : a;
@@ -169,20 +306,39 @@ struct Axis3 {
     return Axis3{OriginOf(a), concentric ? Normalized(QuadricOf(a).Axis) : Normalized(between)};
 }
 
-/// Whether a sphere's poles lie on the common axis, so that its circles
-/// about it are its parallels of latitude. True for every other surface.
-[[nodiscard]] bool Aligned(const Elementary& e, const Elementary& other)
+/// Unit directions parallel within rounding, 2^-40 in sine, whose angle
+/// moves a point `reach` away by at most the slack.
+[[nodiscard]] bool WithinSlack(const Vec3& a, const Vec3& b, const double reach, const double slack)
 {
+    const double sine = Length(Cross(a, b));
+    return sine <= 0x1p-40 && sine * reach <= slack;
+}
+
+/// Whether a sphere's poles lie on the common axis, so that its circles
+/// about it are its parallels of latitude; whether a spheroid turns about
+/// its own axis, its equal semi-axes A and B, so that its circles are too.
+/// True for every other surface.
+///
+/// Poles within the slack of the axis, as for the axes themselves (Axis3):
+/// the sine between the pole's direction and the axis's, times the radius.
+[[nodiscard]] bool Aligned(const Elementary& e, const Elementary& other, const double slack)
+{
+    if (const Ellipsoid* g = std::get_if<Ellipsoid>(&e); g != nullptr && !IsSphere(e)) {
+        return SpheroidOf(*g)->Along == 2;
+    }
     if (!IsSphere(e)) {
         return true;
     }
     const bool concentric = IsSphere(other) && OriginOf(other) == OriginOf(e);
+    const Vec3 pole = AxisDirectionOf(e);
     if (!IsSphere(other) || concentric) {
-        return Parallel(ExactAxisOf(e), ExactAxisOf(other));
+        return Parallel(ExactAxisOf(e), ExactAxisOf(other)) ||
+               WithinSlack(pole, AxisDirectionOf(other), SizeOf(e), slack);
     }
     // Two spheres about the line of their centres.
     const ExactVector<2> between = ExactOffset(OriginOf(other), OriginOf(e));
-    return IsExactlyZero(ExactCross(ExactAxisOf(e), between));
+    return IsExactlyZero(ExactCross(ExactAxisOf(e), between)) ||
+           WithinSlack(pole, Normalized(OriginOf(other) - OriginOf(e)), SizeOf(e), slack);
 }
 
 // --- Meridian profiles --------------------------------------------------------
@@ -201,7 +357,15 @@ struct ProfileCircle {
     double R;
 };
 
-using ProfilePart = std::variant<ProfileLine, ProfileCircle>;
+/// A spheroid's meridian ellipse, centred on the axis at height Z, with
+/// semi-axis Across across the axis and Height along it.
+struct ProfileEllipse {
+    double Z;
+    double Across;
+    double Height;
+};
+
+using ProfilePart = std::variant<ProfileLine, ProfileCircle, ProfileEllipse>;
 using Profile = std::inplace_vector<ProfilePart, 2>;
 
 /// The height of p along the axis.
@@ -235,6 +399,13 @@ using Profile = std::inplace_vector<ProfilePart, 2>;
     if (const Sphere* s = std::get_if<Sphere>(&e)) {
         return {ProfileCircle{0.0, HeightOf(axis, s->Center), s->Radius}};
     }
+    if (const Ellipsoid* g = std::get_if<Ellipsoid>(&e)) {
+        if (IsSphere(e)) {
+            return {ProfileCircle{0.0, HeightOf(axis, g->Center), g->A}};
+        }
+        const Spheroid s = *SpheroidOf(*g);
+        return {ProfileEllipse{HeightOf(axis, g->Center), s.Across, s.Height}};
+    }
     const Torus& t = std::get<Torus>(e);
     return {ProfileCircle{t.MajorRadius, HeightOf(axis, t.Center), t.MinorRadius}};
 }
@@ -254,6 +425,8 @@ struct Meets {
     std::vector<Meet> Points;
     bool Coincident = false;
     double Gap = 0.0;
+    /// A meeting with a spheroid's ellipse left undecided (MeetEllipse).
+    bool Unresolved = false;
 };
 
 /// Records two parts `gap` apart as coincident.
@@ -344,8 +517,295 @@ void MeetCircles(const ProfileCircle& p, const ProfileCircle& q, const double to
     out.Points.push_back({baseRho + h * dz / d, baseZ - h * dr / d, false});
 }
 
+// --- A meridian ellipse against a profile part ----------------------------------
+
+/// A profile part as a level function of the half-plane, w the height
+/// above the ellipse's centre: G = Alpha (rho - Rho0)^2 + Beta (w - W0)^2 +
+/// A rho + B w - C, zero on the part. A point where G = g lies within
+/// |g| Reach of the part: a line has Alpha = Beta = 0 and (A, B) a unit
+/// normal, so |g| is its distance; a circle Alpha = Beta = 1 and C its
+/// radius R squared, and |p - q| - R = g / (|p - q| + R); an ellipse
+/// centred on the axis Alpha = 1 / a^2, Beta = 1 / c^2 and C = 1, and the
+/// point scaled from the centre onto it, by sqrt(1 + g), moves |g| / (1 +
+/// sqrt(1 + g)) times its distance from the centre, which is at most
+/// max(a, c) on the ellipse.
+struct Level {
+    double Alpha = 0.0;
+    double Beta = 0.0;
+    double Rho0 = 0.0;
+    double W0 = 0.0;
+    double A = 0.0;
+    double B = 0.0;
+    double C = 0.0;
+    double Reach = 1.0;
+};
+
+/// The part's level function, heights measured from z0.
+[[nodiscard]] Level LevelOf(const ProfilePart& part, const double z0)
+{
+    if (const ProfileLine* l = std::get_if<ProfileLine>(&part)) {
+        return {0.0, 0.0, 0.0, 0.0, l->A, l->B, l->C - l->B * z0, 1.0};
+    }
+    if (const ProfileCircle* c = std::get_if<ProfileCircle>(&part)) {
+        return {1.0, 1.0, c->Rho, c->Z - z0, 0.0, 0.0, c->R * c->R, 1.0 / c->R};
+    }
+    const ProfileEllipse& e = std::get<ProfileEllipse>(part);
+    return {1.0 / (e.Across * e.Across), 1.0 / (e.Height * e.Height), 0.0, e.Z - z0, 0.0, 0.0, 1.0,
+            std::max(e.Across, e.Height)};
+}
+
+/// g(t) = G(a cos t, c sin t) along the ellipse and its first two
+/// derivatives, by the chain rule: the point's second derivative is minus
+/// the point, measured from the centre.
+template <typename T>
+struct AlongJet {
+    T Value;
+    T Slope;
+    T Curvature;
+};
+
+/// g, g' and g'' at angle t, in doubles or over an interval of angles.
+template <typename T>
+[[nodiscard]] AlongJet<T> AlongEllipse(const ProfileEllipse& e, const Level& g, const T& t)
+{
+    const T cosT = Cos(t);
+    const T sinT = Sin(t);
+    const T rho = T{e.Across} * cosT;
+    const T w = T{e.Height} * sinT;
+    const T dRho = -(T{e.Across} * sinT);
+    const T dW = T{e.Height} * cosT;
+    const T offRho = rho - T{g.Rho0};
+    const T offW = w - T{g.W0};
+    const T gRho = T{2.0 * g.Alpha} * offRho + T{g.A};
+    const T gW = T{2.0 * g.Beta} * offW + T{g.B};
+    return {T{g.Alpha} * offRho * offRho + T{g.Beta} * offW * offW + T{g.A} * rho + T{g.B} * w -
+                T{g.C},
+            gRho * dRho + gW * dW,
+            T{2.0 * g.Alpha} * dRho * dRho + T{2.0 * g.Beta} * dW * dW - gRho * rho - gW * w};
+}
+
+/// The jet enclosed over a range of angles, or at one.
+[[nodiscard]] AlongJet<Interval> JetAlong(const ProfileEllipse& e, const Level& g,
+                                          const Interval& t)
+{
+    const AlongJet<I> j = AlongEllipse(e, g, I{t});
+    return {j.Value.Value, j.Slope.Value, j.Curvature.Value};
+}
+
+/// Bisection to the last bit on the rounded sign of `f` between angles
+/// whose signs differ, `low` the sign at the lower one.
+template <typename F>
+[[nodiscard]] double SignChange(const F& f, double lo, double hi, const int low)
+{
+    for (int step = 0; step < 80; ++step) {
+        const double m = 0.5 * (lo + hi);
+        if (!(lo < m && m < hi)) {
+            break;
+        }
+        ((f(m) < 0.0) == (low < 0) ? lo : hi) = m;
+    }
+    return 0.5 * (lo + hi);
+}
+
+/// The ellipse's point at angle t, as a meeting of the profiles.
+void AddEllipsePoint(const ProfileEllipse& e, const double t, const bool tangent, Meets& out)
+{
+    out.Points.push_back({e.Across * std::cos(t), e.Z + e.Height * std::sin(t), tangent});
+}
+
+/// An angle where the value's and the slope's signs are both certain.
+struct Mark {
+    double T;
+    int Value;
+    int Slope;
+};
+
+/// The mark at t; nothing where either sign is uncertain.
+[[nodiscard]] std::optional<Mark> MarkAt(const ProfileEllipse& e, const Level& g, const double t)
+{
+    const AlongJet<Interval> j = JetAlong(e, g, Interval{t});
+    const Mark m{t, CertainSign(j.Value), CertainSign(j.Slope)};
+    if (m.Value == 0 || m.Slope == 0) {
+        return std::nullopt;
+    }
+    return m;
+}
+
+/// One root of g between two marks whose values' signs differ, g monotone
+/// between them.
+void AddRootBetween(const ProfileEllipse& e, const Level& g, const Mark& lo, const Mark& hi,
+                    Meets& out)
+{
+    const auto value = [&](const double t) { return AlongEllipse(e, g, t).Value; };
+    AddEllipsePoint(e, SignChange(value, lo.T, hi.T, lo.Value), false, out);
+}
+
+/// A span over which g is strictly convex or concave, its marks' slopes of
+/// opposite signs: one extremum t*, placed by bisection on the slope. Where
+/// g(t*) lies within the tolerance of zero, measured as a distance
+/// (Level), the profiles touch there; else they cross on each side of t*
+/// whose end has g's other sign, or miss.
+[[nodiscard]] bool AddExtremum(const ProfileEllipse& e, const Level& g, const Mark& lo,
+                               const Mark& hi, const double tol, Meets& out)
+{
+    const auto slope = [&](const double t) { return AlongEllipse(e, g, t).Slope; };
+    const double at = SignChange(slope, lo.T, hi.T, lo.Slope);
+    const Interval value = JetAlong(e, g, Interval{at}).Value;
+    const double reach = std::max(std::abs(value.GetLower()), std::abs(value.GetUpper())) * g.Reach;
+    if (reach <= tol) {
+        AddEllipsePoint(e, at, true, out);
+        return true;
+    }
+    const int sign = CertainSign(value);
+    if (sign == 0) {
+        return false;
+    }
+    const auto valueAt = [&](const double t) { return AlongEllipse(e, g, t).Value; };
+    if (lo.Value != sign) {
+        AddEllipsePoint(e, SignChange(valueAt, lo.T, at, lo.Value), false, out);
+    }
+    if (hi.Value != sign) {
+        AddEllipsePoint(e, SignChange(valueAt, at, hi.T, sign), false, out);
+    }
+    return true;
+}
+
+/// A cut of the span [lo, hi] where the marks are certain: a little off
+/// its middle, so as to miss the symmetric points of symmetric profiles,
+/// or further off where that one falls within rounding of a root of g or
+/// of its slope.
+[[nodiscard]] std::optional<Mark> CutOf(const ProfileEllipse& e, const Level& g, const Mark& lo,
+                                        const Mark& hi)
+{
+    for (const double ratio : {0.5 + 0x1p-6, 0.5 - 0x1p-5, 0.5 + 0x1p-4, 0.5 - 0x1p-3}) {
+        const double t = lo.T + ratio * (hi.T - lo.T);
+        if (!(lo.T < t && t < hi.T)) {
+            return std::nullopt;
+        }
+        if (const std::optional<Mark> m = MarkAt(e, g, t)) {
+            return m;
+        }
+    }
+    return std::nullopt;
+}
+
+/// The spans examined at most: a work budget, not a geometric tolerance.
+constexpr std::size_t EllipseBudget = std::size_t{1} << 14;
+
+/// One span decided: g keeps a sign over it, clear of the band of a touch
+/// within the tolerance, no meeting; g is monotone,
+/// where g' keeps its sign or g'' does with g' alike at both ends, and the
+/// profiles cross exactly where g's ends differ; or g'' keeps its sign and
+/// g' changes it (AddExtremum). False when the span needs splitting.
+[[nodiscard]] bool ResolveSpan(const ProfileEllipse& e, const Level& g, const Mark& lo,
+                               const Mark& hi, const double tol, Meets& out)
+{
+    const AlongJet<Interval> over = JetAlong(e, g, Interval{lo.T, hi.T});
+    // Proved apart by more than the band within which a near miss is a
+    // touch declared within the tolerance (AddExtremum).
+    const double band = tol / g.Reach;
+    if (!Intersects(over.Value, Interval{-band, band})) {
+        return true;
+    }
+    const bool bent = !Contains(over.Curvature, 0.0);
+    if (!Contains(over.Slope, 0.0) || (bent && lo.Slope == hi.Slope)) {
+        if (lo.Value != hi.Value) {
+            AddRootBetween(e, g, lo, hi, out);
+        }
+        return true;
+    }
+    return bent && AddExtremum(e, g, lo, hi, tol, out);
+}
+
+/// The whole turn of the ellipse's angle, from a start where the signs of
+/// g and g' are certain, to the same point a period on.
+[[nodiscard]] std::optional<std::pair<Mark, Mark>> WholeTurn(const ProfileEllipse& e,
+                                                             const Level& g)
+{
+    for (int k = 0; k < 8; ++k) {
+        const std::optional<Mark> start = MarkAt(e, g, -Pi + 0.375 * k);
+        const std::optional<Mark> end =
+            start ? MarkAt(e, g, start->T + CirclePeriod) : std::optional<Mark>{};
+        if (end && end->Value == start->Value) {
+            return std::pair{*start, *end};
+        }
+    }
+    return std::nullopt;
+}
+
+/// Where the spheroid's meridian ellipse meets a profile part: certified
+/// subdivision of the ellipse's angle over a whole turn, each span with the
+/// signs of g and g' certain at its ends (ResolveSpan). False when a span
+/// cannot be resolved within the budget: a contact of higher order, or the
+/// profiles within rounding of each other over a stretch.
+[[nodiscard]] bool MeetEllipse(const ProfileEllipse& e, const ProfilePart& other, const double tol,
+                               Meets& out)
+{
+    const Level g = LevelOf(other, e.Z);
+    const std::optional<std::pair<Mark, Mark>> turn = WholeTurn(e, g);
+    if (!turn) {
+        return false;
+    }
+    std::vector<std::pair<Mark, Mark>> work{*turn};
+    for (std::size_t evaluated = 0; !work.empty(); ++evaluated) {
+        if (evaluated >= EllipseBudget) {
+            return false;
+        }
+        const auto [lo, hi] = work.back();
+        work.pop_back();
+        if (ResolveSpan(e, g, lo, hi, tol, out)) {
+            continue;
+        }
+        const std::optional<Mark> cut = CutOf(e, g, lo, hi);
+        if (!cut) {
+            return false;
+        }
+        work.emplace_back(*cut, hi);
+        work.emplace_back(lo, *cut);
+    }
+    return true;
+}
+
+/// Two meridian ellipses, or an ellipse and a circle about the axis, are
+/// declared coincident when every point of one lies within the tolerance
+/// of the other: their centres' and semi-axes' differences add up to at
+/// most the tolerance.
+[[nodiscard]] std::optional<double> EllipseGap(const ProfileEllipse& e, const ProfilePart& other)
+{
+    if (const ProfileEllipse* f = std::get_if<ProfileEllipse>(&other)) {
+        return std::abs(e.Z - f->Z) + std::abs(e.Across - f->Across) +
+               std::abs(e.Height - f->Height);
+    }
+    if (const ProfileCircle* c = std::get_if<ProfileCircle>(&other);
+        c != nullptr && c->Rho == 0.0) {
+        return std::abs(e.Z - c->Z) + std::abs(e.Across - c->R) + std::abs(e.Height - c->R);
+    }
+    return std::nullopt;
+}
+
+/// An ellipse and a part: coincident within the tolerance, or met.
+void MeetEllipseParts(const ProfileEllipse& e, const ProfilePart& other, const double tol,
+                      Meets& out)
+{
+    if (const std::optional<double> gap = EllipseGap(e, other); gap && *gap <= tol) {
+        DeclareCoincident(*gap, out);
+        return;
+    }
+    if (!MeetEllipse(e, other, tol, out)) {
+        out.Unresolved = true;
+    }
+}
+
 void MeetParts(const ProfilePart& p, const ProfilePart& q, const double tol, Meets& out)
 {
+    if (const ProfileEllipse* pe = std::get_if<ProfileEllipse>(&p)) {
+        MeetEllipseParts(*pe, q, tol, out);
+        return;
+    }
+    if (const ProfileEllipse* qe = std::get_if<ProfileEllipse>(&q)) {
+        MeetEllipseParts(*qe, p, tol, out);
+        return;
+    }
     const ProfileLine* pl = std::get_if<ProfileLine>(&p);
     const ProfileLine* ql = std::get_if<ProfileLine>(&q);
     if (pl != nullptr && ql != nullptr) {
@@ -369,7 +829,7 @@ void MeetParts(const ProfilePart& p, const ProfilePart& q, const double tol, Mee
             MeetParts(p, q, tol, all);
         }
     }
-    Meets kept{{}, all.Coincident, all.Gap};
+    Meets kept{{}, all.Coincident, all.Gap, all.Unresolved};
     for (Meet m : all.Points) {
         if (m.Rho < -tol) {
             continue;
@@ -592,27 +1052,151 @@ struct Pair {
     Box2 BoxA;
     Box2 BoxB;
     double Tolerance;
+    /// How far from coaxial a pair may be and be taken as coaxial (Axis3).
+    double Slack;
 };
 
 /// The circle the profiles meet at, as branches inside both boxes.
+/// The circle's branch over a span, its contact the meeting's: a tangency
+/// is declared within the pair tolerance (MeetProfiles), so certified
+/// within it.
+[[nodiscard]] Result<void> KeepCircle(SurfaceSurfaceIntersection& result, const Pair& p,
+                                      const Circle& circle, const Meet& m, Curve2d curveA,
+                                      Curve2d curveB, const Interval& span, const Context& ctx)
+{
+    IntersectionBranch branch =
+        m.Tangent ? Tangency(Curve(circle), std::move(curveA), std::move(curveB), span)
+                  : Crossing(Curve(circle), std::move(curveA), std::move(curveB), span);
+    return Keep(result, std::move(branch), p.ErasedA, p.ErasedB, ctx,
+                m.Tangent ? p.Tolerance : 0.0);
+}
+
+[[nodiscard]] bool WholeChart(const Elementary& e, const Box2& box);
+
+// --- Circles on a chart that does not turn about the axis -------------------------
+
+/// The chart of a sphere or an ellipsoid, as OvalPcurve.hpp takes it.
+[[nodiscard]] OvalChart OvalChartOf(const Elementary& e)
+{
+    if (const Sphere* s = std::get_if<Sphere>(&e)) {
+        return ChartOf(*s);
+    }
+    return ChartOf(std::get<Ellipsoid>(e));
+}
+
+/// One side of a circle whose pcurve may be fitted: a sphere whose poles
+/// are off the common axis, or a spheroid turning about its frame's X or Y
+/// axis, has the certified interpolant of OvalPcurve.hpp; every other
+/// surface the exact pcurve of PcurveOf.
+struct CircleSide {
+    const Elementary* Geometry;
+    const Surface* Erased;
+    const Box2* Box;
+    bool Fitted;
+    CirclePcurve Line;
+};
+
+/// The side of the circle on one surface: fitted or exact.
+[[nodiscard]] CircleSide SideOf(const Elementary& e, const Surface& erased, const Box2& box,
+                                const Elementary& other, const Circle& circle, const Axis3& axis,
+                                const double slack)
+{
+    const bool fitted = !Aligned(e, other, slack);
+    return {&e, &erased, &box, fitted, fitted ? CirclePcurve{} : PcurveOf(e, circle, axis)};
+}
+
+/// Where the side's pcurve leaves its chart: a seam crossing of either kind.
+void AddSeamCuts(const CircleSide& side, const Circle& circle, std::vector<double>& cuts)
+{
+    if (!side.Fitted) {
+        if (const std::optional<double> t = SeamOf(side.Line)) {
+            cuts.push_back(*t);
+        }
+        return;
+    }
+    for (const double t : OvalSeamCrossings(OvalChartOf(*side.Geometry), OvalOf(circle))) {
+        cuts.push_back(t);
+    }
+}
+
+/// The side's pcurve over a piece crossing no seam of either chart.
+[[nodiscard]] Result<Curve2d> SideCurve(const CircleSide& side, const Circle& circle,
+                                        const Interval& piece, const Context& ctx)
+{
+    if (!side.Fitted) {
+        return PieceCurve(side.Line, piece);
+    }
+    return FittedOvalPcurve(OvalChartOf(*side.Geometry), OvalOf(circle), Curve(circle),
+                            *side.Erased, piece, ctx, "Intersect");
+}
+
+/// The stretches of a span inside the side's box.
+[[nodiscard]] Result<std::vector<Interval>> SideSpans(const CircleSide& side, const Curve2d& curve,
+                                                      const Interval& span, const Context& ctx)
+{
+    if (!side.Fitted) {
+        return ClipPiece(side.Line, span, *side.Box);
+    }
+    if (WholeChart(*side.Geometry, *side.Box)) {
+        return std::vector<Interval>{span};
+    }
+    return ClipPcurveToBox(curve, span, *side.Box, ctx, "Intersect");
+}
+
+/// The circle cut at every seam of both charts, into pieces of [0, 2 pi].
+[[nodiscard]] std::vector<Interval> FittedPieces(const CircleSide& a, const CircleSide& b,
+                                                 const Circle& circle)
+{
+    std::vector<double> cuts{0.0, CirclePeriod};
+    AddSeamCuts(a, circle, cuts);
+    AddSeamCuts(b, circle, cuts);
+    std::ranges::sort(cuts);
+    std::vector<Interval> pieces;
+    for (std::size_t i = 1; i < cuts.size(); ++i) {
+        if (cuts[i] - cuts[i - 1] > 0x1p-40) {
+            pieces.emplace_back(cuts[i - 1], cuts[i]);
+        }
+    }
+    return pieces;
+}
+
+/// A circle about the axis with a fitted pcurve on a side whose chart does
+/// not turn about it: cut at both charts' seams, each piece's pcurves
+/// computed, then clipped to both boxes.
+[[nodiscard]] Result<void> AddFittedCircle(SurfaceSurfaceIntersection& result, const Pair& p,
+                                           const Circle& circle, const Axis3& axis, const Meet& m,
+                                           const Context& ctx)
+{
+    const CircleSide a = SideOf(p.A, p.ErasedA, p.BoxA, p.B, circle, axis, p.Slack);
+    const CircleSide b = SideOf(p.B, p.ErasedB, p.BoxB, p.A, circle, axis, p.Slack);
+    for (const Interval& piece : FittedPieces(a, b, circle)) {
+        STEREON_TRY(const Curve2d curveA, SideCurve(a, circle, piece, ctx));
+        STEREON_TRY(const Curve2d curveB, SideCurve(b, circle, piece, ctx));
+        STEREON_TRY(const std::vector<Interval> onA, SideSpans(a, curveA, piece, ctx));
+        for (const Interval& spanA : onA) {
+            STEREON_TRY(const std::vector<Interval> onB, SideSpans(b, curveB, spanA, ctx));
+            for (const Interval& span : onB) {
+                STEREON_TRY_VOID(KeepCircle(result, p, circle, m, curveA, curveB, span, ctx));
+            }
+        }
+    }
+    return {};
+}
+
 [[nodiscard]] Result<void> AddCircle(SurfaceSurfaceIntersection& result, const Pair& p,
                                      const Axis3& axis, const Meet& m, const Context& ctx)
 {
     const auto [cx, cy] = CircleFrame(axis, HasOwnAxis(p.A) || !HasOwnAxis(p.B) ? p.A : p.B);
     const Circle circle{axis.Origin + m.Z * axis.Direction, m.Rho, cx, cy};
+    if (!Aligned(p.A, p.B, p.Slack) || !Aligned(p.B, p.A, p.Slack)) {
+        return AddFittedCircle(result, p, circle, axis, m, ctx);
+    }
     const CirclePcurve onA = PcurveOf(p.A, circle, axis);
     const CirclePcurve onB = PcurveOf(p.B, circle, axis);
     STEREON_TRY(const std::vector<Interval> spans, CircleSpans(onA, p.BoxA, onB, p.BoxB));
     for (const Interval& span : spans) {
-        Curve2d curveA = PieceCurve(onA, span);
-        Curve2d curveB = PieceCurve(onB, span);
-        IntersectionBranch branch =
-            m.Tangent ? Tangency(Curve(circle), std::move(curveA), std::move(curveB), span)
-                      : Crossing(Curve(circle), std::move(curveA), std::move(curveB), span);
-        // A tangency is declared within the pair tolerance (MeetProfiles):
-        // certified within it.
-        STEREON_TRY_VOID(Keep(result, std::move(branch), p.ErasedA, p.ErasedB, ctx,
-                              m.Tangent ? p.Tolerance : 0.0));
+        STEREON_TRY_VOID(KeepCircle(result, p, circle, m, PieceCurve(onA, span),
+                                    PieceCurve(onB, span), span, ctx));
     }
     return {};
 }
@@ -626,6 +1210,16 @@ void AddAxisPoint(SurfaceSurfaceIntersection& result, const Pair& p, const Axis3
     const Point2 onB = ProjectOnto(p.B, at);
     if (ParametersIn(p.A, onA, p.BoxA) && ParametersIn(p.B, onB, p.BoxB)) {
         result.Points.push_back({at, onA, onB});
+    }
+}
+
+/// A pair taken as coaxial within rounding says so (Axis3).
+void LogMisalignment(const Axis3& axis, const Context& ctx)
+{
+    if (axis.Misalignment > 0.0) {
+        ctx.Log(LogLevel::Info, "Intersect: surfaces " + Number(axis.Misalignment) +
+                                    " mm from coaxial, within rounding: taken as coaxial, "
+                                    "their circles certified against both (ADR-0029)");
     }
 }
 
@@ -649,7 +1243,7 @@ void LogTangency(const Meets& meets, const Context& ctx)
     if (std::holds_alternative<Torus>(e)) {
         return turn(box.X) && turn(box.Y);
     }
-    if (IsSphere(e)) {
+    if (IsSphere(e) || std::holds_alternative<Ellipsoid>(e)) {
         return turn(box.X) && Contains(box.Y, Interval{-SpherePoleLatitude, SpherePoleLatitude});
     }
     return turn(box.X) && box.Y == Interval::Everything();
@@ -679,8 +1273,8 @@ void LogTangency(const Meets& meets, const Context& ctx)
 [[nodiscard]] Result<SurfaceSurfaceIntersection> Coincident(const Pair& p, const Axis3& axis,
                                                             const double gap, const Context& ctx)
 {
-    if (!WholeChart(p.A, p.BoxA) || !WholeChart(p.B, p.BoxB) || !Aligned(p.A, p.B) ||
-        !Aligned(p.B, p.A)) {
+    if (!WholeChart(p.A, p.BoxA) || !WholeChart(p.B, p.BoxB) || !Aligned(p.A, p.B, p.Slack) ||
+        !Aligned(p.B, p.A, p.Slack)) {
         return Fail(ErrorCode::NotImplemented,
                     "Intersect: coincident cones, spheres or tori over part of their charts, or "
                     "spheres whose poles differ");
@@ -729,7 +1323,7 @@ void LogTangency(const Meets& meets, const Context& ctx)
 [[nodiscard]] Result<std::optional<SurfaceSurfaceIntersection>> Coaxial(const Pair& p,
                                                                         const Context& ctx)
 {
-    const std::optional<Axis3> axis = CommonAxis(p.A, p.B);
+    const std::optional<Axis3> axis = CommonAxis(p.A, p.B, p.Slack);
     if (!axis) {
         return std::optional<SurfaceSurfaceIntersection>{};
     }
@@ -738,16 +1332,19 @@ void LogTangency(const Meets& meets, const Context& ctx)
                     "Nearly parallel unequal cone profiles require refinement");
     }
     const Meets meets = MeetProfiles(ProfileOf(p.A, *axis), ProfileOf(p.B, *axis), p.Tolerance);
+    if (meets.Unresolved) {
+        return Fail(ErrorCode::IntersectionFailed,
+                    "Intersect: a coaxial spheroid's meridian ellipse meets the other profile in "
+                    "a contact of higher order, or runs within rounding of it, which the "
+                    "subdivision of its angle could not resolve (ADR-0029)");
+    }
     if (meets.Coincident) {
-        STEREON_TRY(SurfaceSurfaceIntersection overlap, Coincident(p, *axis, meets.Gap, ctx));
+        STEREON_TRY(SurfaceSurfaceIntersection overlap,
+                    Coincident(p, *axis, std::max(meets.Gap, axis->Misalignment), ctx));
         return std::optional<SurfaceSurfaceIntersection>{std::move(overlap)};
     }
-    const bool circles =
-        std::ranges::any_of(meets.Points, [](const Meet& m) { return m.Rho > 0.0; });
-    if (circles && (!Aligned(p.A, p.B) || !Aligned(p.B, p.A))) {
-        return std::optional<SurfaceSurfaceIntersection>{}; // A sphere's tilted circles: the trace.
-    }
     LogTangency(meets, ctx);
+    LogMisalignment(*axis, ctx);
     SurfaceSurfaceIntersection result;
     for (const Meet& m : meets.Points) {
         if (m.Rho > 0.0) {
@@ -845,9 +1442,10 @@ void AddContacts(SurfaceSurfaceIntersection& result, const Pair& p,
 [[nodiscard]] Result<std::optional<SurfaceSurfaceIntersection>> SphereTouch(const Pair& p,
                                                                             const Context& ctx)
 {
-    const bool aSphere = IsSphere(p.A);
+    const bool aSphere = std::holds_alternative<Sphere>(p.A);
     const Elementary& other = aSphere ? p.B : p.A;
-    if (aSphere == IsSphere(p.B) || !HasOwnAxis(other)) {
+    if (aSphere == std::holds_alternative<Sphere>(p.B) || !HasOwnAxis(other) ||
+        std::holds_alternative<Ellipsoid>(other)) {
         return std::optional<SurfaceSurfaceIntersection>{};
     }
     const Sphere& sphere = std::get<Sphere>(aSphere ? p.A : p.B);
@@ -1027,12 +1625,24 @@ Result<SurfaceSurfaceIntersection> ElementaryPair(const Surface& a, const Box2& 
     if (!ea || !eb) {
         return Fail(ErrorCode::InvalidInput, "ElementaryPair: dispatched for other surface types");
     }
-    // The closed forms are for surfaces of revolution; an ellipsoid with
-    // unequal semi-axes is none, and goes to the trace (ADR-0048 §3.4).
+    const Pair p{a,
+                 b,
+                 *ea,
+                 *eb,
+                 boxA,
+                 boxB,
+                 std::max(tolerance, ctx.GetResolution()),
+                 ctx.GetResolution() / 16.0};
+    // An ellipsoid has the coaxial closed form when it is a spheroid on the
+    // other's axis; every other configuration with one goes to the trace
+    // (ADR-0048 §3.4).
     if (std::holds_alternative<Ellipsoid>(*ea) || std::holds_alternative<Ellipsoid>(*eb)) {
+        STEREON_TRY(std::optional<SurfaceSurfaceIntersection> result, Coaxial(p, ctx));
+        if (result) {
+            return std::move(*result);
+        }
         return ImplicitTrace(a, boxA, b, boxB, ctx);
     }
-    const Pair p{a, b, *ea, *eb, boxA, boxB, std::max(tolerance, ctx.GetResolution())};
     using Closed =
         Result<std::optional<SurfaceSurfaceIntersection>> (*)(const Pair&, const Context&);
     for (const Closed closed : {&Coaxial, &SphereTouch, &PlaneThroughApex, &PlaneThroughAxis}) {
