@@ -190,9 +190,23 @@ parameters (a sphere's)                derivative, though the geometry is regula
 A result takes its worst point's status, and carries values only for
 ``Valid`` and ``NearEvent``.
 
-``IntersectJvp`` and ``IntersectVjp`` implement the products for a line or
-a B-spline curve against a plane, a cylinder, a cone, a sphere, a torus or
-an ellipsoid.
+A crossing where a B-spline is not smooth has no derivative. At a B-spline
+curve's own end the point leaves the curve as the geometry moves (a closed
+curve's end too, where its parameter jumps by the period); at a corner, an
+interior knot of multiplicity at least the degree whose one-sided tangents
+differ, it passes from one arm to the other; on a B-spline surface's
+boundary it leaves the surface. All three are ``Nondifferentiable``, in
+space and in the plane, since #334 decides such crossings exactly. A
+crossing on an interior knot line of a surface of multiplicity at least
+its degree, where the partials may jump, is ``Indeterminate``: whether they
+jump is not checked. A joint whose one-sided tangents agree keeps its
+derivative (``src/intersect/SplineJoint.hpp``;
+``tests/intersect/SplineJointLinearizationTests.cpp``).
+
+``IntersectJvp`` and ``IntersectVjp`` implement the products for a line, a
+circle, an ellipse, a hyperbola, a parabola or a B-spline curve against a
+plane, a cylinder, a cone, a sphere, a torus, an ellipsoid or a B-spline
+surface.
 ``LineBinding`` binds a parameter to a coordinate of the line's origin or
 direction. ``SurfaceBinding`` binds one to a value of the surface, each a
 ``Length`` but the semi-angle and the rotations, ``Angle``\ s:
@@ -292,6 +306,42 @@ properties discard a step that changes the number of crossings (a near
 miss elsewhere becoming two crossings), pair crossings by position (one
 near :math:`t = 0` may pass the seam), and keep away from a sphere's poles,
 where :math:`u` moves too fast for the steps.
+
+A ``Hyperbola`` and a ``Parabola`` have the same products over the bounded
+stretch ``Intersect`` was asked on, bound by the same ``ConicBinding``: a
+hyperbola's centre, ``MajorRadius`` and ``MinorRadius``; a parabola's vertex
+(through ``CenterX``, ``CenterY`` and ``CenterZ``) and ``FocalLength``; and
+either frame's three rotations, about the centre or the vertex. At fixed
+:math:`t`, :math:`C = O + a \cosh t\,X + b \sinh t\,Y` moves by
+:math:`\cosh t\,X` per unit of :math:`a` and :math:`\sinh t\,Y` per unit of
+:math:`b`; :math:`C = V + t^2 / (4 f)\,X + t\,Y` by
+:math:`-t^2 / (4 f^2)\,X` per unit of :math:`f`. A value the conic does not
+have (a hyperbola's ``Radius`` or ``FocalLength``, any radius of a parabola,
+a circle's or an ellipse's ``FocalLength``) is ``InvalidInput``. The tests
+(``tests/intersect/OpenConicLinearizationTests.cpp``) check every binding
+against a closed form:
+
+- The hyperbola :math:`(3 \cosh t, 0, 4 \sinh t)` meets :math:`z = 3` at
+  :math:`(15/4, 0, 3)`, :math:`\sinh t = 3/4`, where
+  :math:`C' = (9/4, 0, 5)`. A binding that moves the point by :math:`q` at
+  fixed :math:`t` gives :math:`t' = -q_z / 5` and :math:`x' = q + C' t'`:
+  :math:`x' = 5/4` per unit of :math:`a`; :math:`t' = -3/20` and
+  :math:`x' = -27/80` per unit of :math:`b`; :math:`t' = -1/5` for a rising
+  centre; :math:`(0, -3, 0)` and :math:`(0, 15/4, 0)` turning about
+  :math:`X` and :math:`Y`; and :math:`t' = -3/4`, :math:`x' = -75/16`
+  turning about the normal :math:`X \times Y`.
+- The parabola :math:`(t^2, 0, t)`, :math:`f = 1/4`, meets :math:`z = 2` at
+  :math:`(4, 0, 2)`, :math:`C' = (4, 0, 1)`: :math:`x' = -16` per unit of
+  :math:`f`; :math:`t' = -1`, :math:`x' = -4` for a rising vertex;
+  :math:`(0, -2, 0)` and :math:`(0, 4, 0)` turning about :math:`X` and
+  :math:`Y`; :math:`t' = -4`, :math:`x' = -18` about the normal.
+
+The Taylor and transpose properties run on random hyperbolas and parabolas
+through spheres, cylinders and planes with every binding moving, discarding
+a step that changes the number of crossings or carries one past the
+stretch's end. Each new partial, its sign flipped, fails them. A touch and a
+conic lying in a plane are ``Nondifferentiable``, an undecided point
+``Indeterminate``, and a crossing a hair off the vertex ``NearEvent``.
 
 Frame rotations are checked against closed forms. The line
 :math:`y = 0, z = 2` meets the cylinder of radius 1.5 about :math:`z` at
@@ -441,8 +491,37 @@ was proved about the minimiser:
   one alone. The reported pair is then the best found, and ``LowerBound`` is
   a certified lower bound on the minimum distance.
 
-``Meets`` says the distance is within the resolution. B-spline curves answer
-``NotSupported``.
+``Meets`` says the distance is within the resolution.
+
+Polynomial B-spline curves (and rational ones whose weights are all equal)
+take part in the same branch and bound. Their bounds on the first three
+derivatives' lengths are the largest poles of the derivative B-splines,
+:math:`p (P_{i+1} - P_i) / (u_{i+p+1} - u_{i+1})` applied up to three
+times, by the convex hull property; their reach is the farthest pole from
+the centre of the poles' box. Those bounds are Lipschitz constants only
+where the curve is twice continuously differentiable, so the search starts
+from one box per pair of pieces between the knots of multiplicity at least
+:math:`p - 1` (every interior knot below degree 3), and no box crosses one.
+A cluster of leaves across such a knot is not proved: the answer is
+``Undecided``, with ``LowerBound`` certified, as for a corner of the curve
+nearest the other. A rational B-spline answers ``NotSupported``, and the
+products of any B-spline's approach answer ``NotSupported`` as a status.
+Two refinements of the proof serve every curve. Uniqueness is proved over
+the hull of all the clusters, every minimiser lying in it: a flat
+direction of phi spaces the surviving leaves a few widths apart, the slack pruning
+some and keeping others, and the clusters they form are one candidate.
+Clusters far apart still give a hull phi is not convex over, and stay
+undecided. And a parameter at an end with no outward pull (a minimiser at
+the end that would be stationary in the interior too) is no longer left
+undecided: it is treated as free, and strict convexity over the hull
+proves the minimiser unique.
+``tests/intersect/SplineClosestApproachTests.cpp`` holds closed forms (a
+parabola written as a quadratic Bézier against a line, a mirrored
+parabola, a circle with an end minimum and with a tie between both ends, a
+corner, a restricted domain) and an independent oracle (dense sampling,
+then projected Newton's method) on random cubics with a double knot half
+the time, against bounded lines, circles and other cubics: the lower bound
+never exceeds the oracle's minimum, and a ``Unique`` answer attains it.
 
 How the minimum is proved:
 
@@ -453,15 +532,14 @@ How the minimum is proved:
   exceeds the best value found. :math:`M_2` bounds the Hessian through the
   curves' derivative bounds; a line's parameter is first cut to the window
   where its nearest points to the conic lie.
-- The surviving leaves form clusters. A single cluster holds the unique
-  minimiser when two conditions hold:
+- The surviving leaves form clusters, and the hull of all of them holds
+  every minimiser. It holds a unique one when :math:`\varphi`'s Hessian
+  over the free parameters outweighs a bound on its third derivatives out
+  to the hull's farthest corner. A parameter is not free when the minimum
+  rests on an end that pushes it outward by more than the gradient can
+  change over the hull; an end without that pull leaves it free.
 
-  - an end the minimum rests on is pushed outward by more than the gradient
-    can change over the cluster;
-  - :math:`\varphi`'s Hessian over the free parameters outweighs a bound on
-    its third derivatives out to the cluster's farthest corner.
-
-  When the cluster is too wide for that, it is searched again with finer
+  When the hull is too wide for that, it is searched again with finer
   leaves.
 
 ``ClosestApproachJvp`` and ``ClosestApproachVjp`` take a ``CurveBindings`` per
@@ -581,7 +659,33 @@ on a ``Tangential`` or ``Overlap`` branch  ``Nondifferentiable``: the branch spl
 any sample of a result with an overlap     ``Nondifferentiable``
 on an uncertified branch                   ``Indeterminate``
 at a pole of either surface's parameters   ``Indeterminate``
+at a node of the result                    ``Nondifferentiable``: a candidate event,
+                                           not a point that moves
 =========================================  ============================================
+
+A *node* is a point where the surfaces are tangent and two branches cross.
+The handlers end four branches there: two equal cylinders whose axes meet
+(two ellipses through two nodes), and a transverse node of two B-spline
+surfaces, on a knot line or a seam or not (#337). At a seam or a cut only
+two ends meet, so a node is read from the result: an end of a
+certified branch where three or more such ends coincide, each within its
+branch's ``Bound`` and a rounding budget of the others. A sample is at the
+node when its point lies within its own branch's ``Bound`` of it. There the
+system above is singular whatever tracking constraint is chosen, and a
+generic change of either surface opens the node into two branches that no
+longer meet (or that meet elsewhere): no point follows it, so it is a
+candidate event in ADR-0054's sense, never ``Valid`` and never a
+``NearEvent`` with values. A sample close to the node but not at it is a
+regular point of one branch, whose conditioning decides between ``Valid``
+and ``NearEvent`` as anywhere else. ``Linearize(a, b, branch, t)`` sees one
+branch and so cannot tell a node from a branch's end at a seam;
+``Linearize(a, b, intersection, sample)`` reads the whole result, as
+``IntersectJvp`` and ``IntersectVjp`` do. The tests
+(``tests/intersect/NodeLinearizationTests.cpp``) hold every branch end of
+the two equal cylinders of radius 3 and of a saddle crossing a plane, in
+both orders, against the closed-form nodes :math:`(0, \pm 3, 0)` and
+:math:`(1/2, 1/2, 0)`. The circle of a plane and a sphere, cut at the
+sphere's seam, keeps its derivatives at every end.
 
 Both surfaces must be planes, cylinders, cones, spheres, tori,
 ellipsoids or B-spline surfaces, whose poles and weights bind as above, so
