@@ -81,12 +81,18 @@ struct ClosestApproachResult {
     bool Meets = false;
 };
 
-/// The closest approach of a and b over the given domains. Lines, circles
-/// and ellipses (decision 5); a line's domain may be unbounded, a conic's is
-/// an interval of its angle, the whole conic when 2 pi wide or wider.
-/// NotSupported for any other curve (a B-spline until a subdivision proof
-/// exists); InvalidInput for an empty curve, a zero direction, a domain
-/// that is empty or not finite where it must be.
+/// The closest approach of a and b over the given domains. Lines, circles,
+/// ellipses and polynomial B-spline curves (decision 5); a line's domain
+/// may be unbounded, a conic's is an interval of its angle, the whole conic
+/// when 2 pi wide or wider, a B-spline's the part of its own domain
+/// requested. A B-spline enters the same branch and bound with bounds on
+/// its derivatives from its derivatives' poles, its range cut at its knots
+/// of multiplicity at least degree - 1, where it is less than C2: no box
+/// crosses a cut, and a cluster across one is Undecided, with LowerBound
+/// certified. NotSupported for any other curve (a hyperbola, a parabola, a
+/// rational B-spline unless its weights are all equal); InvalidInput for
+/// an empty curve, a zero direction, a domain that is empty or not finite
+/// where it must be, or one that misses a B-spline's own.
 [[nodiscard]] Result<ClosestApproachResult> ClosestApproach(const Curve& a, const Interval& domainA,
                                                             const Curve& b, const Interval& domainB,
                                                             const Context& ctx);
@@ -115,7 +121,8 @@ inline constexpr std::size_t ClosestApproachValues = 12;
 /// NearEvent when the normalised Hessian's smaller eigenvalue, or an end's
 /// normalised gradient, is below NearEventSine (decision 6); Valid
 /// otherwise. NotSupported for curves other than lines, circles and
-/// ellipses. InvalidInput for a binding of another curve kind, of a value
+/// ellipses, a B-spline's approach included: its primal is proved, its
+/// products are not yet. InvalidInput for a binding of another curve kind, of a value
 /// the curve does not have or of the wrong quantity; for a result that does
 /// not lie on the current curves; or for a seed that was never set.
 [[nodiscard]] Result<SensitivityResult>

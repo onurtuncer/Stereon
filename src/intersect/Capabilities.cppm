@@ -26,11 +26,11 @@ export namespace Stereon {
 inline constexpr OperationCapability IntersectCatalogue[] = {
     Declare("Intersect", {Dependency::InputGeometry, Dependency::Tolerances},
             {TrackingConvention::MovingTrimCoordinates, TrackingConvention::UniqueProjection},
-            "a line, a circle, an ellipse or a B-spline curve against a plane, a cylinder, a "
-            "cone, a sphere, a torus, "
+            "a line, a circle, an ellipse, a hyperbola, a parabola or a B-spline curve against "
+            "a plane, a cylinder, a cone, a sphere, a torus, "
             "an ellipsoid or a B-spline surface, "
             "through IntersectJvp and IntersectVjp, in the line's origin and direction, a "
-            "conic's centre, radii and frame rotation, the "
+            "conic's centre, radii, focal length and frame rotation, the "
             "curve's poles and weights at fixed knots, and the surface's origin, its radii, a "
             "cone's semi-angle, an ellipsoid's semi-axes and a B-spline surface's poles and "
             "weights at fixed knots, and an analytic surface's frame rotation: decided "
@@ -55,7 +55,9 @@ inline constexpr OperationCapability IntersectCatalogue[] = {
             "at an end of its domain is held there; a set of minimisers, a meeting and an end "
             "the minimum may leave are nondifferentiable, an undecided minimiser or a singular "
             "Hessian indeterminate, NearEvent below NearEventSine on the normalised Hessian; "
-            "B-spline curves answer NotSupported",
+            "the primal also for polynomial B-spline curves, proved by subdivision or Undecided "
+            "with a certified lower bound, their products NotSupported; rational B-splines "
+            "answer NotSupported",
             {DerivativeProduct::Jvp, DerivativeProduct::Vjp}),
 };
 
