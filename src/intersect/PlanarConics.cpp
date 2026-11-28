@@ -607,6 +607,7 @@ struct ConicPair {
     const Conic& B;
     const Interval& DomainB;
     std::string_view Handler;
+    double Resolution = 0.0;
 };
 
 /// The point of a root: A's point at its parameter, B's parameter of it,
@@ -628,7 +629,22 @@ struct ConicPair {
             return {};
         }
     }
-    KeepPoint(result, {f.T, ParameterOn(pair.B, p), p, f.Contact, f.Decided}, pair.DomainA,
+    // Q is B's implicit equation in a frame orthonormal only to rounding,
+    // so far enough out a root of Q is no point of B's parametrisation:
+    // two parabolas of one frame meet once, yet Q keeps a second root at
+    // t ~ 2e18 (tests/intersect/PlanarConicFarRootTests.cpp, *a root of the
+    // implicit equation off the parametric conic fails closed*). A point
+    // off B by more than the resolution, inside A's requested domain, is
+    // not a meeting the doubles can place: fail closed rather than report it.
+    const double onB = ParameterOn(pair.B, p);
+    const bool requested = pair.A.Kind == Shape::Ellipse || Contains(pair.DomainA, f.T);
+    if (requested && !(Distance(p, Eval(pair.CurveB, onB)) <= pair.Resolution)) {
+        return Fail(ErrorCode::IntersectionFailed,
+                    std::string(pair.Handler) +
+                        ": a root of the implicit equation that is no point of the conic's "
+                        "parametrisation, beyond the range of the parameter in doubles");
+    }
+    KeepPoint(result, {f.T, onB, p, f.Contact, f.Decided}, pair.DomainA,
               pair.A.Kind == Shape::Ellipse, pair.DomainB, pair.B.Kind == Shape::Ellipse);
     return {};
 }
@@ -716,7 +732,7 @@ Result<PlanarIntersection> ConicConic2d(const Curve2d& a, const Interval& domain
         return SwappedPlanar(std::move(result));
     }
     const std::string handler = PairName(a, b);
-    return Meet({a, *ca, domainA, b, *cb, domainB, handler});
+    return Meet({a, *ca, domainA, b, *cb, domainB, handler, ctx.GetResolution()});
 }
 
 } // namespace Stereon::Detail
