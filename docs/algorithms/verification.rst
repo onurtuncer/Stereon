@@ -125,6 +125,7 @@ Implementation notes
    tests/intersect/SplineAnalyticTests.cpp
    tests/intersect/SplineClosestApproachTests.cpp
    tests/intersect/SplineCurvePairTests.cpp
+   tests/intersect/SplineJointLinearizationTests.cpp
    tests/intersect/SplineSurfaceTests.cpp
    tests/intersect/SsiCorpusGateTests.cpp
    tests/intersect/SurfaceCorpusTests.cpp

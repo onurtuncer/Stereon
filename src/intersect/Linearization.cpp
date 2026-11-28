@@ -30,6 +30,8 @@ module Stereon.Intersect;
 import :Dispatch;
 import :Linearization;
 
+#include "SplineJoint.hpp"
+
 /// The derivative products of a curve–surface intersection, through the
 /// equations of its points (Linearization.cppm). The system of a point is
 /// three by three, so it is solved by Cramer's rule on its columns C', -S_u
@@ -57,6 +59,13 @@ struct PointSystem {
     /// One partial is zero within rounding against the other: a pole of
     /// the surface's parameters.
     bool AtPole;
+    /// The point is at a B-spline curve's own end or corner, or on a
+    /// B-spline surface's boundary (SplineJoint.hpp): it leaves the
+    /// geometry, or changes arm, as the geometry moves.
+    bool AtJoint = false;
+    /// The point is on an interior knot line of a B-spline surface where
+    /// its partials may jump (SplineJoint.hpp).
+    bool OnKnotLine = false;
 };
 
 /// A partial shorter than this fraction of the other is zero within the
@@ -114,6 +123,8 @@ struct LineSide {
         return {};
     }
     [[nodiscard]] static bool Covers(double /*t*/) { return true; }
+    /// A line or a conic is smooth everywhere.
+    [[nodiscard]] static bool AtJoint(double /*t*/) { return false; }
 };
 
 /// A B-spline curve's side: its derivative and its pole velocities, the
@@ -147,6 +158,8 @@ struct SplineSide {
     {
         return std::isfinite(t) && Contains(Domain(Geometry), t);
     }
+    /// Whether t is the B-spline's own end or a corner of it (SplineJoint.hpp).
+    [[nodiscard]] bool AtJoint(const double t) const { return Detail::AtSplineJoint(Geometry, t); }
 };
 
 /// Whether a conic has the value a component moves: a circle its Radius, an
@@ -276,6 +289,8 @@ struct ConicSide {
         return {};
     }
     [[nodiscard]] static bool Covers(const double t) { return std::isfinite(t); }
+    /// A line or a conic is smooth everywhere.
+    [[nodiscard]] static bool AtJoint(double /*t*/) { return false; }
 };
 
 /// The surface's partials come from its own Deriv, so any surface fits. At
@@ -294,7 +309,15 @@ template <typename Side>
                   curve.At(point.Parameter) - Eval(surface, uv),
                   0.0,
                   0.0,
+                  false,
+                  false,
                   false};
+    s.AtJoint = curve.AtJoint(point.Parameter);
+    if (const BSplineSurface* spline = surface.Target<BSplineSurface>()) {
+        const Detail::SurfaceJoint joint = Detail::SurfaceJointAt(*spline, uv);
+        s.AtJoint = s.AtJoint || joint == Detail::SurfaceJoint::Boundary;
+        s.OnKnotLine = joint == Detail::SurfaceJoint::KnotLine;
+    }
     const Vec3 normal = Cross(s.Su, s.Sv);
     s.Det = Dot(s.Tangent, normal);
     s.Conditioning = std::abs(s.Det) / (Length(s.Tangent) * Length(normal));
@@ -366,6 +389,16 @@ template <typename Side>
     if (!point.Decided) {
         return {DerivativeStatus::Indeterminate,
                 "a point the solver did not decide: its contact is not established"};
+    }
+    if (system.AtJoint) {
+        return {DerivativeStatus::Nondifferentiable,
+                "a crossing at a B-spline curve's own end or corner, or on a B-spline surface's "
+                "boundary: the point leaves the geometry, or changes arm, as it moves"};
+    }
+    if (system.OnKnotLine) {
+        return {DerivativeStatus::Indeterminate,
+                "a crossing on a knot line of a B-spline surface where its partials may jump: "
+                "the regularity there is not established"};
     }
     if (system.AtPole) {
         return {DerivativeStatus::Indeterminate,

@@ -36,6 +36,15 @@ import :Dispatch;
 /// the solver left undecided is Indeterminate. A result with any point that
 /// carries no derivative carries none as a whole (ADR-0021, section 5).
 ///
+/// A crossing where the geometry is not smooth is not Valid either. At a
+/// corner of a B-spline curve (a knot of multiplicity at least its degree
+/// where its one-sided tangents differ) the point passes from one arm to the
+/// other as the geometry moves, and at a B-spline's own end (a curve's, or a
+/// surface's boundary) it leaves the geometry: both Nondifferentiable. On an
+/// interior knot line of a B-spline surface of multiplicity at least its
+/// degree, where the partials may jump, the regularity is not established:
+/// Indeterminate.
+///
 /// The pairs so far are a line, a circle, an ellipse, a hyperbola, a
 /// parabola or a B-spline curve against a plane, a
 /// cylinder, a cone, a sphere, a torus, an ellipsoid or a B-spline surface,
@@ -443,8 +452,11 @@ struct PlanarLinearization {
 /// The linearisation of a point of Intersect(a, b) for plane curves:
 /// Valid or NearEvent for a decided crossing, Nondifferentiable for a
 /// tangential one, Indeterminate for one the solver left undecided or whose
-/// system is singular. InvalidInput for an empty curve or a point whose
-/// parameters are not finite or lie off a curve's domain.
+/// system is singular. A crossing at a corner of a B-spline (a knot of
+/// multiplicity at least its degree where its one-sided tangents differ), or
+/// at a B-spline's own end, is Nondifferentiable: the point changes arm, or
+/// leaves the curve, as the geometry moves. InvalidInput for an empty curve
+/// or a point whose parameters are not finite or lie off a curve's domain.
 [[nodiscard]] Result<PlanarLinearization> Linearize(const Curve2d& a, const Curve2d& b,
                                                     const PlanarPoint& point);
 
