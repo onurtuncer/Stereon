@@ -474,3 +474,81 @@ TEST_CASE("unequal near-parallel cones cannot be declared coincident", "[interse
         REQUIRE(result.error().GetCode() == Stereon::ErrorCode::IntersectionFailed);
     }
 }
+
+/// Coaxial surfaces placed by a rounded rotation are coaxial within rounding:
+/// their exact cross products miss zero, and they are taken as coaxial,
+/// their circles certified against both surfaces as given. Past the slack,
+/// a sixteenth of the resolution, they are not.
+TEST_CASE("surfaces coaxial within rounding meet in their exact circles",
+          "[intersect][elementary][regression]")
+{
+    // The frame of corpus/curved-ssi's tilted placement, and its rounded axis.
+    const Vec3 tx{0.6, 0.8, 0.0};
+    const Vec3 ty{-0.48, 0.36, 0.8};
+    const Vec3 tz = Cross(tx, ty);
+    const Point3 origin{12.0, -7.0, 5.0};
+    const auto up = [&](const double h) { return origin + h * tz; };
+    // A 30 degree cone from the origin and a sphere of radius 2 centred 4 up
+    // its axis: the sphere touches every generator at 4 sin 30 = 2, along
+    // the circle of radius 2 cos 30 at height 4 cos^2 30 = 3.
+    const Surface cone{Cone{origin, 0.0, pi / 6.0, tx, ty, true}};
+    const Box2 coneBox{Interval{0.0, 2.0 * pi}, Interval{-8.0, 8.0}};
+    // Two tori of radii 3 and 1, one 2 up the other's axis: their tubes
+    // touch along the circle of radius 3 at height 1.
+    const Surface lower{Torus{origin, 3.0, 1.0, tx, ty, true}};
+    const Surface upper{Torus{up(2.0), 3.0, 1.0, tx, ty, true}};
+    struct Touch {
+        Surface A;
+        Box2 BoxA;
+        Surface B;
+        double Rho;
+        double Height;
+    };
+    const std::vector<Touch> touches{
+        {cone, coneBox, Surface{Sphere{up(4.0), 2.0, tx, ty, true}}, std::sqrt(3.0), 3.0},
+        {lower, Box2::Everything(), upper, 3.0, 1.0},
+    };
+    for (const Touch& t : touches) {
+        for (const bool swapped : {false, true}) {
+            CAPTURE(swapped);
+            std::vector<std::string> lines;
+            const auto result = swapped ? Intersect(t.B, Box2::Everything(), t.A, t.BoxA, 1e-5,
+                                                    IntersectTest::Logging(lines))
+                                        : Intersect(t.A, t.BoxA, t.B, Box2::Everything(), 1e-5,
+                                                    IntersectTest::Logging(lines));
+            INFO(IntersectTest::ErrorText(result));
+            REQUIRE(result.has_value());
+            REQUIRE(result->Points.empty());
+            REQUIRE_FALSE(result->Branches.empty());
+            double turn = 0.0;
+            for (const Stereon::IntersectionBranch& arc : result->Branches) {
+                const Circle* c = arc.Curve3d.Target<Circle>();
+                REQUIRE(c != nullptr);
+                REQUIRE(arc.Contact == ContactType::Tangential);
+                REQUIRE_THAT(c->Radius, WithinAbs(t.Rho, 1e-12));
+                REQUIRE(Distance(c->Center, up(t.Height)) <= 1e-12);
+                REQUIRE(arc.IsCertified());
+                turn += arc.Range.GetUpper() - arc.Range.GetLower();
+            }
+            REQUIRE_THAT(turn, WithinAbs(2.0 * pi, 1e-12));
+            const bool declared = std::ranges::any_of(lines, [](const std::string& l) {
+                return l.find("from coaxial, within rounding") != std::string::npos;
+            });
+            REQUIRE(declared);
+        }
+    }
+    // A sphere 1e-6 off the cone's axis, past the slack: not taken as
+    // coaxial, so never answered with the exact circle about the axis.
+    std::vector<std::string> lines;
+    const Surface off{Sphere{up(4.0) + 1e-6 * tx, 2.0, tx, ty, true}};
+    const auto result =
+        Intersect(cone, coneBox, off, Box2::Everything(), 1e-5, IntersectTest::Logging(lines));
+    REQUIRE(std::ranges::none_of(lines, [](const std::string& l) {
+        return l.find("from coaxial, within rounding") != std::string::npos;
+    }));
+    if (result) {
+        for (const Stereon::IntersectionBranch& arc : result->Branches) {
+            REQUIRE(arc.Curve3d.Target<Circle>() == nullptr);
+        }
+    }
+}
