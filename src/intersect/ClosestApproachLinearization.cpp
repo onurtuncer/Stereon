@@ -332,6 +332,10 @@ Prepare(const Curve& a, const CurveBindings& bindingsA, const Curve& b,
         }
         return Fail(error.GetCode(), std::string(error.GetMessage()));
     }
+    if (sideA->Shape == ApproachSide::Kind::Spline || sideB->Shape == ApproachSide::Kind::Spline) {
+        // The primal is proved for B-splines; their products are not yet.
+        return std::optional<Prepared>{};
+    }
     STEREON_TRY_VOID(CheckBindings(*sideA, bindingsA, set, where));
     STEREON_TRY_VOID(CheckBindings(*sideB, bindingsB, set, where));
     if (!Consistent(*sideA, *sideB, r)) {
@@ -367,7 +371,8 @@ Prepare(const Curve& a, const CurveBindings& bindingsA, const Curve& b,
 {
     return SensitivityResult::Without(DerivativeStatus::NotSupported,
                                       std::string(where) +
-                                          ": lines, circles and ellipses only (ADR-0052, "
+                                          ": lines, circles and ellipses only; a B-spline's "
+                                          "closest approach has no products yet (ADR-0052, "
                                           "addendum of 2026-11-12)");
 }
 

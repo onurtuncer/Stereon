@@ -54,7 +54,9 @@ inline constexpr OperationCapability IntersectCatalogue[] = {
             "at an end of its domain is held there; a set of minimisers, a meeting and an end "
             "the minimum may leave are nondifferentiable, an undecided minimiser or a singular "
             "Hessian indeterminate, NearEvent below NearEventSine on the normalised Hessian; "
-            "B-spline curves answer NotSupported",
+            "the primal also for polynomial B-spline curves, proved by subdivision or Undecided "
+            "with a certified lower bound, their products NotSupported; rational B-splines "
+            "answer NotSupported",
             {DerivativeProduct::Jvp, DerivativeProduct::Vjp}),
 };
 
