@@ -5,6 +5,7 @@
 - **Policy:** [ADR-0053](../adr/0053-metamorphic-testing.md)
 - **Scope:** Confirmed repairs and candidate defects identified from merged Stereon PR titles,
   recent regression tests and the intersection adversarial suite.
+- **Owner review package:** [the evidence for each family's cells and the defect records, at one revision](intersection-metamorphic-review-package.md)
 
 ## Rules
 
