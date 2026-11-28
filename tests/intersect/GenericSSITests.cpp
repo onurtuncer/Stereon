@@ -371,8 +371,17 @@ TEST_CASE("near extrema never replace closed loops with isolated touches",
     for (const double height : {0.0, 5e-7}) {
         const auto result = Intersect(bowl, Box2::Everything(), Surface{Patch(height)},
                                       Box2::Everything(), 1e-6, ctx);
-        if (result) {
-            REQUIRE(height > 0.0);
+        INFO(IntersectTest::ErrorText(result));
+        REQUIRE((result.has_value() || height > 0.0));
+        if (result && height == 0.0) {
+            // An exact touch at the bowl's bottom: one proved point, no
+            // branch (the owner's decision of 2026-11-26 asks it answered).
+            REQUIRE(result->Branches.empty());
+            REQUIRE(result->Points.size() == 1);
+            REQUIRE(result->Points.front().Bound <= ctx.GetResolution());
+        } else if (result) {
+            // A loop some 1.4e-3 across, wider than the resolution: never a
+            // point.
             REQUIRE_FALSE(result->Branches.empty());
             REQUIRE(result->Points.empty());
         } else {
@@ -385,7 +394,9 @@ TEST_CASE("tangency along a curve fails closed; a transverse node is split",
           "[intersect][generic][special]")
 {
     const Surface flat{Patch(0.0)};
-    // Height exactly 0 along u = 1/2: tangent to the plane along a line.
+    // Height exactly 0 along u = 1/2: tangent to the plane along a line whose
+    // ends lie where both domains end, which the trace does not settle
+    // (GenericSSITangentTests.cpp answers the tangencies it does).
     const auto tangent = Intersect(flat, Surface{Bowl(0.0, 1.0)}, ctx);
     REQUIRE_FALSE(tangent.has_value());
     REQUIRE(tangent.error().GetCode() == ErrorCode::IntersectionFailed);

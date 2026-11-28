@@ -1525,19 +1525,24 @@ enum class Carving : std::uint8_t { Untouched, Consumed, Failed };
 [[nodiscard]] Carving CarvedBy(const PatchPair& pair, const Box2& onA, const Box2& onB,
                                std::vector<PatchPair>& stack)
 {
-    CutPatch a = CutAlong(pair.A, onA);
-    if (a.Outcome == Cut::Halved) {
-        stack.push_back({std::move(a.Halves->first), pair.B});
-        stack.push_back({std::move(a.Halves->second), pair.B});
-        return Carving::Consumed;
+    // The larger patch first, as PushSplit cuts: a long region of thin boxes
+    // (a tangency's trace) would otherwise slice the smaller patch into
+    // slivers, each met again with the whole of the larger.
+    const bool firstA = LargestWidth(pair.A.Extent) >= LargestWidth(pair.B.Extent);
+    for (const bool cutA : {firstA, !firstA}) {
+        CutPatch c = CutAlong(cutA ? pair.A : pair.B, cutA ? onA : onB);
+        if (c.Outcome == Cut::Failed) {
+            return Carving::Failed;
+        }
+        if (c.Outcome == Cut::Halved) {
+            for (Patch* half : {&c.Halves->first, &c.Halves->second}) {
+                stack.push_back(cutA ? PatchPair{std::move(*half), pair.B}
+                                     : PatchPair{pair.A, std::move(*half)});
+            }
+            return Carving::Consumed;
+        }
     }
-    CutPatch b = a.Outcome == Cut::Inside ? CutAlong(pair.B, onB) : CutPatch{Cut::Failed, {}};
-    if (b.Outcome == Cut::Halved) {
-        stack.push_back({pair.A, std::move(b.Halves->first)});
-        stack.push_back({pair.A, std::move(b.Halves->second)});
-        return Carving::Consumed;
-    }
-    return b.Outcome == Cut::Inside ? Carving::Consumed : Carving::Failed;
+    return Carving::Consumed;
 }
 
 [[nodiscard]] Carving CarvedBy(const PatchPair& pair, const NodeRegion& region,
