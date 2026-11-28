@@ -646,7 +646,33 @@ on a ``Tangential`` or ``Overlap`` branch  ``Nondifferentiable``: the branch spl
 any sample of a result with an overlap     ``Nondifferentiable``
 on an uncertified branch                   ``Indeterminate``
 at a pole of either surface's parameters   ``Indeterminate``
+at a node of the result                    ``Nondifferentiable``: a candidate event,
+                                           not a point that moves
 =========================================  ============================================
+
+A *node* is a point where the surfaces are tangent and two branches cross.
+The handlers end four branches there: two equal cylinders whose axes meet
+(two ellipses through two nodes), and a transverse node of two B-spline
+surfaces, on a knot line or a seam or not (#337). At a seam or a cut only
+two ends meet, so a node is read from the result: an end of a
+certified branch where three or more such ends coincide, each within its
+branch's ``Bound`` and a rounding budget of the others. A sample is at the
+node when its point lies within its own branch's ``Bound`` of it. There the
+system above is singular whatever tracking constraint is chosen, and a
+generic change of either surface opens the node into two branches that no
+longer meet (or that meet elsewhere): no point follows it, so it is a
+candidate event in ADR-0054's sense, never ``Valid`` and never a
+``NearEvent`` with values. A sample close to the node but not at it is a
+regular point of one branch, whose conditioning decides between ``Valid``
+and ``NearEvent`` as anywhere else. ``Linearize(a, b, branch, t)`` sees one
+branch and so cannot tell a node from a branch's end at a seam;
+``Linearize(a, b, intersection, sample)`` reads the whole result, as
+``IntersectJvp`` and ``IntersectVjp`` do. The tests
+(``tests/intersect/NodeLinearizationTests.cpp``) hold every branch end of
+the two equal cylinders of radius 3 and of a saddle crossing a plane, in
+both orders, against the closed-form nodes :math:`(0, \pm 3, 0)` and
+:math:`(1/2, 1/2, 0)`. The circle of a plane and a sphere, cut at the
+sphere's seam, keeps its derivatives at every end.
 
 Both surfaces must be planes, cylinders, cones, spheres, tori,
 ellipsoids or B-spline surfaces, whose poles and weights bind as above, so
