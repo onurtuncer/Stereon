@@ -18,9 +18,7 @@
 // Two gates. Safety: an answer is never wrong, and a refusal is a fail-closed
 // error (IntersectionFailed or NotImplemented), never another one; this one
 // must pass. Completeness: only a case that names may_fail_closed, a
-// limitation the v0.2 ledger documents, is refused; it must pass too, except
-// MR-04's for two B-splines, [!mayfail] while the kernel refuses cases the
-// ledger does not list (the test's comment).
+// limitation the v0.2 ledger documents, may be refused in either chart.
 
 #include "Json.hpp"
 
@@ -313,19 +311,6 @@ std::vector<std::filesystem::path> OnePlacementEach()
     return picked;
 }
 
-/// The files of every family but the B-spline pairs (spline-spline,
-/// spline-rational, rational-rational): the ordered pairs other than
-/// BSplineCurve2d with BSplineCurve2d.
-std::vector<std::filesystem::path> WithoutSplinePairs(std::vector<std::filesystem::path> files)
-{
-    std::erase_if(files, [](const std::filesystem::path& file) {
-        const std::string family = file.parent_path().filename().string();
-        return family == "spline-spline" || family == "spline-rational" ||
-               family == "rational-rational";
-    });
-    return files;
-}
-
 void RunAll(const std::vector<std::filesystem::path>& files, const bool bothWays, const Gate gate)
 {
     Tally tally;
@@ -533,6 +518,18 @@ void CheckRefusal(const JsonValue& expected, const ErrorCode code, const Gate ga
     ++(documented ? tally.Refused : tally.Undocumented);
 }
 
+/// The identical spline arc fixtures start with matching orientations;
+/// reversing either chart reverses the correspondence along their overlap.
+void CheckReversedSplineOrientation(const JsonValue& c, const PlanarIntersection& result)
+{
+    const auto& curves = c["inputs"]["curves"];
+    if (curves[0]["type"].AsString() == "bspline" && curves[1]["type"].AsString() == "bspline" &&
+        c["id"].AsString().find("/identical-arcs-") != std::string::npos) {
+        REQUIRE(result.Overlaps.size() == 1);
+        CHECK_FALSE(result.Overlaps.front().SameDirection);
+    }
+}
+
 /// MR-04 for one case, one order, one operand moved to its equivalent
 /// chart: the result in the new chart is the case's closed-form answer,
 /// and every parameter on the moved operand maps back, by the closed-form
@@ -565,6 +562,7 @@ void CheckReparam(const JsonValue& c, const bool swapped, const bool moveFirst, 
         return;
     }
     if (!expected["overlaps"].AsArray().empty()) {
+        CheckReversedSplineOrientation(c, *result);
         CheckOverlaps(*result, expected["overlaps"], a, b);
     } else {
         CheckPoints(*result, expected, a, b);
@@ -646,43 +644,14 @@ TEST_CASE("MR-04: every planar-curves corpus case answers alike in an equivalent
     RunReparam(files, true);
 }
 
-// Incomplete evidence is recorded as MR implemented, never verified. This
-// test exposes the documented completeness debt separately from safety. It
-// is [!mayfail] for one ordered pair only, BSplineCurve2d with itself: on main
-// 09c0505, identical arcs of two B-splines (spline-spline and
-// rational-rational/identical-arcs) are answered as one overlap, but refused
-// as "neither apart nor a single crossing" when either is reversed. The
-// tests after these hold every other pair to the gate, strictly.
 TEST_CASE("MR-04: only documented planar configurations refuse an equivalent chart",
-          "[intersect][planar][corpus][metamorphic][!mayfail]")
+          "[intersect][planar][corpus][metamorphic]")
 {
     RunReparam(OnePlacementEach(), false, Gate::Completeness);
 }
 
 TEST_CASE("MR-04: only documented planar corpus cases refuse equivalent charts, both ways",
-          "[.][exhaustive][intersect][planar][corpus][metamorphic][!mayfail]")
-{
-    RunReparam(CaseFiles(), true, Gate::Completeness);
-}
-
-/// The MR-04 completeness gate on the 35 ordered pairs other than
-/// BSplineCurve2d with itself, strict: a refusal in an equivalent chart that
-/// the case does not document fails.
-TEST_CASE("MR-04: planar configurations of every pair but two B-splines refuse an equivalent "
-          "chart only as documented",
-          "[intersect][planar][corpus][metamorphic]")
-{
-    const std::vector<std::filesystem::path> files = WithoutSplinePairs(OnePlacementEach());
-    REQUIRE(files.size() >= 100);
-    RunReparam(files, false, Gate::Completeness);
-}
-
-/// The same at every placement and scale, both ways.
-TEST_CASE("MR-04: planar corpus cases of every pair but two B-splines refuse equivalent charts "
-          "only as documented, both ways",
           "[.][exhaustive][intersect][planar][corpus][metamorphic]")
 {
-    const std::vector<std::filesystem::path> files = WithoutSplinePairs(CaseFiles());
-    REQUIRE(files.size() >= 700);
-    RunReparam(files, true, Gate::Completeness);
+    RunReparam(CaseFiles(), true, Gate::Completeness);
 }

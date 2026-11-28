@@ -1561,6 +1561,64 @@ using Exact3 = std::array<double, 3>;
     return result;
 }
 
+/// Reflect both finite endpoints exactly, preserving interval order.
+[[nodiscard]] std::optional<Interval> ReflectExactly(const Interval& range, double sum)
+{
+    const auto lo = ExactSum(sum, -range.GetUpper());
+    const auto hi = ExactSum(sum, -range.GetLower());
+    if (!lo || !hi) {
+        return std::nullopt;
+    }
+    return Interval{*lo, *hi};
+}
+
+/// Equal control data in reverse order are necessary for this coincidence proof.
+[[nodiscard]] bool ReversedControls(const BSplineCurve2d& a, const BSplineCurve2d& b)
+{
+    return a.Degree == b.Degree && a.Knots.size() == b.Knots.size() &&
+           std::equal(a.Poles.begin(), a.Poles.end(), b.Poles.rbegin(), b.Poles.rend()) &&
+           std::equal(a.Weights.begin(), a.Weights.end(), b.Weights.rbegin(), b.Weights.rend());
+}
+
+/// Reversing the poles, weights and knot sequence proves B(sum - t) = A(t)
+/// when each reflected knot is exact. Clip in A's chart and reflect the
+/// common interval back to B. Leave unproved mappings to the pair search.
+[[nodiscard]] std::optional<PlanarIntersection> CoincidentOverlap(const BSplineCurve2d& a,
+                                                                  const Interval& domainA,
+                                                                  const BSplineCurve2d& b,
+                                                                  const Interval& domainB)
+{
+    if (a == b || SameCurve(a, b)) {
+        return Identical(a, domainA, domainB);
+    }
+    if (!ReversedControls(a, b)) {
+        return std::nullopt;
+    }
+    const auto sum = ExactSum(a.Knots.front(), b.Knots.back());
+    if (!sum || !std::equal(a.Knots.begin(), a.Knots.end(), b.Knots.rbegin(),
+                            [&](double x, double y) { return ExactSum(*sum, -x) == y; })) {
+        return std::nullopt;
+    }
+    const auto inB = Intersection(domainB, Domain(b));
+    PlanarIntersection result;
+    if (inB.IsEmpty()) {
+        return result;
+    }
+    const auto mapped = ReflectExactly(inB, *sum);
+    if (!mapped) {
+        return std::nullopt;
+    }
+    const auto inA = Intersection(Intersection(domainA, Domain(a)), *mapped);
+    if (!inA.IsEmpty()) {
+        const auto onB = ReflectExactly(inA, *sum);
+        if (!onB) {
+            return std::nullopt;
+        }
+        result.Overlaps.push_back({inA, *onB, false});
+    }
+    return result;
+}
+
 /// Whether a - b is exact in doubles: Knuth's TwoSum of a and -b, whose
 /// rounding error is itself exact, has none.
 [[nodiscard]] bool ExactDifference(const double a, const double b)
@@ -1659,8 +1717,8 @@ Result<PlanarIntersection> SplineSpline2d(const Curve2d& a, const Interval& doma
     search.SplineA = sa;
     search.SplineB = sb;
     STEREON_TRY_VOID(CheckBoth(*sa, domainA, *sb, domainB, search.Handler));
-    if (*sa == *sb || SameCurve(*sa, *sb)) {
-        return Identical(*sa, domainA, domainB);
+    if (auto overlap = CoincidentOverlap(*sa, domainA, *sb, domainB)) {
+        return std::move(*overlap);
     }
     STEREON_TRY_VOID(SearchPair(search, *sa, domainA, *sb, domainB));
     // A bracket across a spline's end is placed on the spline, in the domain.
