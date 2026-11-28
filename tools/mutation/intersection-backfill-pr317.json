@@ -1,0 +1,35 @@
+{
+  "description": "The root causes repaired by #317 that the near-pole fixture detects separately: the partials enclosed about the patch (the origin placement) and the boundary roots isolated in a patch frame (the tilted placement).",
+  "defect": "PR-317",
+  "preset": "gcc16-debug",
+  "mutants": [
+    {
+      "id": "PR-317-partials-about-patch",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: a rational patch's partials are enclosed about the patch, not the origin",
+      "file": "src/intersect/GenericSSI.cpp",
+      "find": "    if (!AllBounded(extent)) {",
+      "replace": "    if (true) {",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ PR\\-317\\ a\\ plane\\ near\\ the\\ pole\\ of\\ a\\ rational\\ sphere\\ cuts\\ its\\ small\\ circle$",
+      "diagnostic": "intersect: MR PR-317 a plane near the pole of a rational sphere cuts its small circle",
+      "repair_commit": "776459d8139decca8f8ab9e7c0e9d63d9584de00"
+    },
+    {
+      "id": "PR-317-roots-in-frame",
+      "critical": true,
+      "operator": "historical fault reintroduction",
+      "contract": "ADR-0053: boundary roots not settled in world axes are isolated in a patch frame",
+      "file": "src/intersect/GenericSSI.cpp",
+      "find": "            seeds = SeedsInFrame(pair, a, b, s.Join);\n",
+      "replace": "            if (false) {\n                seeds = SeedsInFrame(pair, a, b, s.Join);\n            }\n",
+      "site": "statement",
+      "target": "stereon_intersect_tests",
+      "tests": "^intersect:\\ MR\\ PR\\-317\\ a\\ plane\\ near\\ the\\ pole\\ of\\ a\\ rational\\ sphere\\ cuts\\ its\\ small\\ circle$",
+      "diagnostic": "intersect: MR PR-317 a plane near the pole of a rational sphere cuts its small circle",
+      "repair_commit": "776459d8139decca8f8ab9e7c0e9d63d9584de00"
+    }
+  ]
+}
