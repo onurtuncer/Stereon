@@ -26,20 +26,23 @@ export namespace Stereon {
 inline constexpr OperationCapability IntersectCatalogue[] = {
     Declare("Intersect", {Dependency::InputGeometry, Dependency::Tolerances},
             {TrackingConvention::MovingTrimCoordinates, TrackingConvention::UniqueProjection},
-            "a line, a circle, an ellipse or a B-spline curve against a plane, a cylinder, a "
-            "cone, a sphere, a torus, "
+            "a line, a circle, an ellipse, a hyperbola, a parabola or a B-spline curve against "
+            "a plane, a cylinder, a cone, a sphere, a torus, "
             "an ellipsoid or a B-spline surface, "
             "through IntersectJvp and IntersectVjp, in the line's origin and direction, a "
-            "conic's centre, radii and frame rotation, the "
+            "conic's centre, radii, focal length and frame rotation, the "
             "curve's poles and weights at fixed knots, and the surface's origin, its radii, a "
             "cone's semi-angle, an ellipsoid's semi-axes and a B-spline surface's poles and "
             "weights at fixed knots, and an analytic surface's frame rotation: decided "
             "transversal "
             "crossings only, NearEvent below NearEventSine; "
             "Tangential and Overlap contacts (ADR-0010) are nondifferentiable, undecided points "
-            "and poles of the surface's parameters indeterminate; the point count and the "
+            "and poles of the surface's parameters indeterminate; a crossing at a B-spline's own "
+            "end or corner, or on a B-spline surface's boundary, nondifferentiable, on its "
+            "interior knot line of low continuity indeterminate; the point count and the "
             "tolerance stay fixed; branch points of two such surfaces under the normal-plane "
-            "tracking constraint (BranchSample), certified crossing branches only; "
+            "tracking constraint (BranchSample), certified crossing branches only, a sample at a "
+            "node of the result (three or more branch ends meeting) nondifferentiable; "
             "points where two plane curves (lines, conics, B-splines) cross, in "
             "their defining values (PlaneCurveBinding); a meeting of two space curves is an "
             "event of codimension one, nondifferentiable, a separation valid with no values; "
@@ -54,7 +57,9 @@ inline constexpr OperationCapability IntersectCatalogue[] = {
             "at an end of its domain is held there; a set of minimisers, a meeting and an end "
             "the minimum may leave are nondifferentiable, an undecided minimiser or a singular "
             "Hessian indeterminate, NearEvent below NearEventSine on the normalised Hessian; "
-            "B-spline curves answer NotSupported",
+            "the primal also for polynomial B-spline curves, proved by subdivision or Undecided "
+            "with a certified lower bound, their products NotSupported; rational B-splines "
+            "answer NotSupported",
             {DerivativeProduct::Jvp, DerivativeProduct::Vjp}),
 };
 

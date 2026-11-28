@@ -28,6 +28,8 @@ module Stereon.Intersect;
 import :Dispatch;
 import :Linearization;
 
+#include "SplineJoint.hpp"
+
 /// The linearisation of points where two plane curves meet (ADR-0021,
 /// section 9; Linearization.cppm, PlanarLinearization): F(s, t) = A(s) -
 /// B(t) = 0, two equations in two unknowns, solved by Cramer's rule forward
@@ -108,6 +110,12 @@ struct PlaneSide {
         if (const BSplineCurve2d* spline = geometry.Target<BSplineCurve2d>()) {
             Spline = Lifted(*spline);
         }
+    }
+
+    /// Whether t is a B-spline's own end or a corner of it.
+    [[nodiscard]] bool AtJoint(const double t) const
+    {
+        return Spline.has_value() && Detail::AtSplineJoint(*Spline, t);
     }
 
     /// The curves whose defining values a binding can move.
@@ -263,6 +271,8 @@ struct PlanarSystem {
     Vec2 Residual;
     double Det = 0.0;
     double Conditioning = 0.0;
+    /// The point is at a B-spline's own end or corner (SplineJoint.hpp).
+    bool AtJoint = false;
 };
 
 [[nodiscard]] PlanarSystem SystemOf(const PlaneSide& a, const PlaneSide& b, const PlanarPoint& p)
@@ -273,6 +283,7 @@ struct PlanarSystem {
     s.Residual = a.At(p.ParameterA) - b.At(p.ParameterB);
     s.Det = -Cross2(s.TangentA, s.TangentB);
     s.Conditioning = std::abs(s.Det) / (Length(s.TangentA) * Length(s.TangentB));
+    s.AtJoint = a.AtJoint(p.ParameterA) || b.AtJoint(p.ParameterB);
     return s;
 }
 
@@ -287,6 +298,11 @@ struct PlanarSystem {
     if (!point.Decided) {
         return {DerivativeStatus::Indeterminate,
                 "a point the solver did not decide: its contact is not established"};
+    }
+    if (s.AtJoint) {
+        return {DerivativeStatus::Nondifferentiable,
+                "a crossing at a B-spline's own end or at a corner: the point leaves the curve, "
+                "or changes arm, as the geometry moves"};
     }
     if (!(s.Conditioning > 0.0) || !std::isfinite(s.Conditioning)) { // STEREON-LINT-ALLOW(epsilon)
         return {DerivativeStatus::Indeterminate,

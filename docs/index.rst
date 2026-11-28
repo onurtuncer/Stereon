@@ -64,6 +64,7 @@ Stereon
 
    python
    api
+   algorithms/index
    testing
    debugging
    references
