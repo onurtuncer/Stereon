@@ -574,57 +574,225 @@
     {
       "id": "PR-271",
       "source": "https://github.com/onurtuncer/Stereon/pull/271",
-      "state": "untriaged"
+      "state": "verified",
+      "fixture": "tests/intersect/PlanarSplineOsculationTests.cpp#a B-spline's contact of order four with a parabola is reported as a touch",
+      "direct": "tests/intersect/PlanarSplineOsculationTests.cpp#a B-spline's contact of order four with a parabola is reported as a touch",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-271 a B-spline contact of order four with a parabola is a touch",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-271",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 4 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03",
+        "MR-04"
+      ],
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#PR-271",
+      "repair_commit": "ca74138fb1f1a97090c4ae6833cdf5a584df7071",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 red:**",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 green:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 review:**"
     },
     {
       "id": "PR-289",
       "source": "https://github.com/onurtuncer/Stereon/pull/289",
-      "state": "untriaged"
+      "state": "verified",
+      "fixture": "tests/intersect/SkewOrderTests.cpp#two skew cylinders are answered in either order, the parametrisation chosen canonically",
+      "direct": "tests/intersect/SkewOrderTests.cpp#two skew cylinders are answered in either order, the parametrisation chosen canonically",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-289 skew cylinders are answered in either order",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-289",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 4 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03"
+      ],
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#PR-289",
+      "repair_commit": "51906ee3e021e5dcbccdd4f0fd2be2652c8b4399",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 red:**",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 green:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 review:**"
     },
     {
       "id": "PR-301",
       "source": "https://github.com/onurtuncer/Stereon/pull/301",
-      "state": "untriaged"
+      "state": "verified",
+      "fixture": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-301 seam crossings of a full turn stay in the conic domain",
+      "direct": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-301 seam crossings of a full turn stay in the conic domain",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-301 seam crossings of a full turn stay in the conic domain",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-301",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Historical replays of PR-301, PR-322 and PR-323",
+      "relations": [
+        "MR-01",
+        "MR-03",
+        "MR-04"
+      ],
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#PR-301",
+      "repair_commit": "0b8f782f7cb88ccad10f3fca1f72084ac82d2bb7",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 red:**",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 green:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 review:**"
     },
     {
       "id": "PR-304",
       "source": "https://github.com/onurtuncer/Stereon/pull/304",
-      "state": "untriaged"
+      "state": "verified",
+      "fixture": "tests/intersect/ClosestApproachTests.cpp#closest approach places the free parameter to rounding when the other rests on an end",
+      "direct": "tests/intersect/ClosestApproachTests.cpp#closest approach places the free parameter to rounding when the other rests on an end",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-304 closest approach places the free parameter to rounding",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-304",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 4 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03"
+      ],
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#PR-304",
+      "repair_commit": "814391b6152004bc0689eb15dee1a59aa17ac6e9",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 red:**",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 green:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 review:**"
     },
     {
       "id": "PR-312",
       "source": "https://github.com/onurtuncer/Stereon/pull/312",
-      "state": "untriaged"
+      "state": "verified",
+      "fixture": "tests/intersect/ClosestApproachTests.cpp#closest approach moves the other parameter on once one lands on an end",
+      "direct": "tests/intersect/ClosestApproachTests.cpp#closest approach moves the other parameter on once one lands on an end",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-312 closest approach steps on after one parameter lands on an end",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-312",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 4 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03"
+      ],
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#PR-312",
+      "repair_commit": "9438a7eb05c8f1dd34c2477ad9140f6f91b9f8a8",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 red:**",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 green:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 review:**"
     },
     {
       "id": "PR-315",
       "source": "https://github.com/onurtuncer/Stereon/pull/315",
-      "state": "untriaged"
+      "state": "verified",
+      "fixture": "tests/intersect/SurfaceCorpusTests.cpp#far-placed rational SSI branches certify against the input surfaces",
+      "direct": "tests/intersect/SurfaceCorpusTests.cpp#far-placed rational SSI branches certify against the input surfaces",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-315 far rational SSI branches certify against the input surfaces",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-315",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 4 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02"
+      ],
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#PR-315",
+      "repair_commit": "eeb3367d017453d444ee626af2f1c55e33536e7e",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 red:**",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 green:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 review:**"
     },
     {
       "id": "PR-316",
       "source": "https://github.com/onurtuncer/Stereon/pull/316",
-      "state": "untriaged"
+      "state": "verified",
+      "fixture": "tests/intersect/PlanarLinearizationTests.cpp#two cubic Beziers' proved crossings lie on both curves to rounding",
+      "direct": "tests/intersect/PlanarLinearizationTests.cpp#two cubic Beziers' proved crossings lie on both curves to rounding",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-316 proved crossings of two cubic Beziers lie on both curves",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-316",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 4 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03",
+        "MR-04"
+      ],
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#PR-316",
+      "repair_commit": "8a1a76082d439cf2c73bc1a10df7ff523c54dda1",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 red:**",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 green:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 review:**"
     },
     {
       "id": "PR-317",
       "source": "https://github.com/onurtuncer/Stereon/pull/317",
-      "state": "untriaged"
+      "state": "verified",
+      "fixture": "tests/intersect/GenericSSITests.cpp#a plane a thousandth below a rational sphere's pole cuts its small circle",
+      "direct": "tests/intersect/GenericSSITests.cpp#a plane a thousandth below a rational sphere's pole cuts its small circle",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-317 a plane near the pole of a rational sphere cuts its small circle",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-317",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 4 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02"
+      ],
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill-pr317.json#PR-317",
+      "repair_commit": "776459d8139decca8f8ab9e7c0e9d63d9584de00",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 red:**",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 green:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 review:**"
     },
     {
       "id": "PR-318",
       "source": "https://github.com/onurtuncer/Stereon/pull/318",
-      "state": "untriaged"
+      "state": "verified",
+      "fixture": "tests/intersect/CurveSplineSurfaceTests.cpp#a requested B-spline surface knot excludes curve crossings beyond it",
+      "direct": "tests/intersect/CurveSplineSurfaceTests.cpp#a requested B-spline surface knot excludes curve crossings beyond it",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-318 a request ending on a surface knot excludes crossings beyond it",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-318",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 4 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-03",
+        "MR-04"
+      ],
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#PR-318",
+      "repair_commit": "f0da86e92c0f8e67769cff441888a4f823a36f17",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 red:**",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 green:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 review:**"
     },
     {
       "id": "PR-322",
       "source": "https://github.com/onurtuncer/Stereon/pull/322",
-      "state": "untriaged"
+      "state": "verified",
+      "fixture": "tests/intersect/CylinderCylinderSkewTests.cpp#two B seam crossings inside a former scan cell are both isolated",
+      "direct": "tests/intersect/CylinderCylinderSkewTests.cpp#two B seam crossings inside a former scan cell are both isolated",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-322 two B seam crossings in one former scan cell are both isolated",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-322",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Historical replays of PR-301, PR-322 and PR-323",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03",
+        "MR-04"
+      ],
+      "evidence_kind": "resolved_geometry",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **PR-322:** `verify/replay-pr322-red`",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 green:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 review:**"
     },
     {
       "id": "PR-323",
       "source": "https://github.com/onurtuncer/Stereon/pull/323",
-      "state": "untriaged"
+      "state": "exception reviewed",
+      "fixture": "tests/surface/CertifyTests.cpp#a B-spline surface's jet covers its rounding on every span, polynomial or rational",
+      "direct": "tests/surface/CertifyTests.cpp#a B-spline surface's jet covers its rounding on every span, polynomial or rational",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#- **Direct regression and oracle:**",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#- **PR-323:** `verify/replay-pr323-red`",
+      "evidence_kind": "resolved_geometry",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **PR-323:** `verify/replay-pr323-red`",
+      "green": "docs/planning/intersection-metamorphic-triage.md#The three PR-323 tests passed on `main` 09c0505",
+      "rationale": "docs/planning/intersection-metamorphic-triage.md#- **Relations considered:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Review:** this agent's review of the margin argument"
     },
     {
       "id": "PR-267",
@@ -646,6 +814,46 @@
       "state": "not a defect",
       "rationale": "docs/planning/intersection-metamorphic-triage.md#- **PR-295**",
       "review": "docs/planning/intersection-metamorphic-triage.md#Inventory audit after #263"
+    },
+    {
+      "id": "PR-326",
+      "source": "https://github.com/onurtuncer/Stereon/pull/326",
+      "state": "verified",
+      "fixture": "tests/intersect/ElementaryPairsTests.cpp#spheres touching within the tolerance touch between their surfaces",
+      "direct": "tests/intersect/ElementaryPairsTests.cpp#spheres touching within the tolerance touch between their surfaces",
+      "metamorphic": "tests/intersect/MetamorphicRegressionTests.cpp#MR PR-326 spheres touching within the tolerance touch between their surfaces",
+      "oracle": "docs/planning/intersection-metamorphic-triage.md#### PR-326",
+      "replay": "docs/planning/intersection-metamorphic-triage.md#### Batch 4 fault replay",
+      "relations": [
+        "MR-01",
+        "MR-02",
+        "MR-03"
+      ],
+      "evidence_kind": "resolved_geometry",
+      "campaign": "tools/mutation/intersection-backfill.json#PR-326",
+      "repair_commit": "8f955e00f93c166562e6a105e1fec0239a4f6bd0",
+      "red": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 red:**",
+      "green": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 green:**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#- **Batch 4 review:**"
+    },
+    {
+      "id": "PR-339",
+      "source": "https://github.com/onurtuncer/Stereon/pull/339",
+      "state": "untriaged"
+    },
+    {
+      "id": "PR-334",
+      "source": "https://github.com/onurtuncer/Stereon/pull/334",
+      "state": "not a defect",
+      "rationale": "docs/planning/intersection-metamorphic-triage.md#- **PR-334**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#### Leads after #323"
+    },
+    {
+      "id": "PR-337",
+      "source": "https://github.com/onurtuncer/Stereon/pull/337",
+      "state": "not a defect",
+      "rationale": "docs/planning/intersection-metamorphic-triage.md#- **PR-337**",
+      "review": "docs/planning/intersection-metamorphic-triage.md#### Leads after #323"
     }
   ],
   "handlers": {
@@ -3759,27 +3967,33 @@
     },
     "planar:BSplineCurve2d:BSplineCurve2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
@@ -3793,1191 +4007,1471 @@
     },
     "planar:BSplineCurve2d:Circle2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:BSplineCurve2d:Ellipse2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:BSplineCurve2d:Hyperbola2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:BSplineCurve2d:Line2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:BSplineCurve2d:Parabola2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Circle2d:BSplineCurve2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Circle2d:Circle2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Circle2d:Ellipse2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Circle2d:Hyperbola2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Circle2d:Line2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Circle2d:Parabola2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Ellipse2d:BSplineCurve2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Ellipse2d:Circle2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Ellipse2d:Ellipse2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Ellipse2d:Hyperbola2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Ellipse2d:Line2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Ellipse2d:Parabola2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Hyperbola2d:BSplineCurve2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Hyperbola2d:Circle2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Hyperbola2d:Ellipse2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Hyperbola2d:Hyperbola2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Hyperbola2d:Line2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Hyperbola2d:Parabola2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Line2d:BSplineCurve2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Line2d:Circle2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Line2d:Ellipse2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Line2d:Hyperbola2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Line2d:Line2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Line2d:Parabola2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Parabola2d:BSplineCurve2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Parabola2d:Circle2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Parabola2d:Ellipse2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Parabola2d:Hyperbola2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Parabola2d:Line2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },
     "planar:Parabola2d:Parabola2d": {
       "MR-01": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-02": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-03": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#no planar-curves corpus case is answered wrongly, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       },
       "MR-04": {
-        "state": "MR implemented",
+        "state": "verified",
         "domain": "docs/planning/intersection-metamorphic-relations-planar.md#### Domain",
         "test": "tests/intersect/PlanarCorpusTests.cpp#MR-04: every planar-curves corpus case answers alike in an equivalent chart, both ways",
         "oracle": "corpus/planar-curves/README.md#How the answer is known",
         "replay": "docs/planning/intersection-metamorphic-relations-planar.md#### Replay",
+        "green": "docs/planning/intersection-metamorphic-relations-planar.md#### Strict green",
+        "review": "docs/planning/intersection-metamorphic-relations-planar.md#**Strict review.**",
         "evidence_kind": "resolved_geometry"
       }
     },

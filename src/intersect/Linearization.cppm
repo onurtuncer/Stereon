@@ -45,8 +45,8 @@ import :Dispatch;
 /// degree, where the partials may jump, the regularity is not established:
 /// Indeterminate.
 ///
-/// The pairs so far are a line, a circle, an ellipse or a B-spline curve
-/// against a plane, a
+/// The pairs so far are a line, a circle, an ellipse, a hyperbola, a
+/// parabola or a B-spline curve against a plane, a
 /// cylinder, a cone, a sphere, a torus, an ellipsoid or a B-spline surface,
 /// the parameters bound to coordinates of the line's origin and direction,
 /// to a conic's centre and radii (ConicBinding), to the curve's poles and
@@ -83,12 +83,14 @@ struct LineBinding {
     LineComponent Component = LineComponent::OriginX;
 };
 
-/// What a design parameter moves on a circle or an ellipse: a coordinate of
-/// its centre; a circle's Radius; an ellipse's MajorRadius, along its XAxis,
-/// and MinorRadius, along its YAxis; each a Length. Or a component of the
-/// infinitesimal rotation w of its frame about its centre, an Angle, along
-/// the current XAxis (RotationX), YAxis (RotationY) and normal XAxis x
-/// YAxis (RotationZ): the point at fixed angle moves by w x (C - Center).
+/// What a design parameter moves on a conic in space: a coordinate of its
+/// centre (a parabola's vertex); a circle's Radius; an ellipse's or a
+/// hyperbola's MajorRadius, along its XAxis, and MinorRadius, along its
+/// YAxis; a parabola's FocalLength; each a Length. Or a component of the
+/// infinitesimal rotation w of its frame about its centre (a parabola's
+/// vertex), an Angle, along the current XAxis (RotationX), YAxis (RotationY)
+/// and normal XAxis x YAxis (RotationZ): the point at fixed parameter moves
+/// by w x (C - Center).
 enum class ConicComponent : std::uint8_t {
     CenterX,
     CenterY,
@@ -99,10 +101,11 @@ enum class ConicComponent : std::uint8_t {
     RotationX,
     RotationY,
     RotationZ,
+    FocalLength,
 };
 
-/// A design parameter bound to one defining value of a circle or an
-/// ellipse. Several bindings of one parameter add.
+/// A design parameter bound to one defining value of a circle, an ellipse,
+/// a hyperbola or a parabola. Several bindings of one parameter add.
 struct ConicBinding {
     ParameterId Parameter;
     ConicComponent Component = ConicComponent::CenterX;
@@ -196,6 +199,14 @@ Linearize(const BSplineCurve& curve, const Surface& surface, const CurveSurfaceP
 Linearize(const Circle& circle, const Surface& surface, const CurveSurfacePoint& point);
 [[nodiscard]] Result<CurveSurfaceLinearization>
 Linearize(const Ellipse& ellipse, const Surface& surface, const CurveSurfacePoint& point);
+/// The same for a point of Intersect(hyperbola, surface) or Intersect(parabola,
+/// surface), over the bounded domain the intersection was asked on: the
+/// point's parameter is the hyperbola's t of a cosh t X + b sinh t Y, the
+/// parabola's t of t^2 / (4 f) X + t Y.
+[[nodiscard]] Result<CurveSurfaceLinearization>
+Linearize(const Hyperbola& hyperbola, const Surface& surface, const CurveSurfacePoint& point);
+[[nodiscard]] Result<CurveSurfaceLinearization>
+Linearize(const Parabola& parabola, const Surface& surface, const CurveSurfacePoint& point);
 
 /// The forward product of Intersect(line, surface) for the seed of
 /// `sensitivity`: for each point of `intersection`, in its order,
@@ -255,6 +266,31 @@ IntersectVjp(const Circle& circle, std::span<const ConicBinding> conicBindings,
              const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
 [[nodiscard]] Result<SensitivityResult>
 IntersectVjp(const Ellipse& ellipse, std::span<const ConicBinding> conicBindings,
+             const Surface& surface, std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
+
+/// The products for a hyperbola or a parabola, as for a circle or an ellipse.
+/// At fixed t the hyperbola Center + a cosh t X + b sinh t Y moves by
+/// cosh t X with a (MajorRadius) and by sinh t Y with b (MinorRadius); the
+/// parabola Vertex + t^2 / (4 f) X + t Y by -t^2 / (4 f^2) X with f
+/// (FocalLength), its vertex bound through CenterX, CenterY and CenterZ.
+/// InvalidInput as for a circle, and also for a value the conic does not
+/// have: a Radius or a FocalLength on a hyperbola, a radius of any kind on a
+/// parabola, a FocalLength on a circle or an ellipse.
+[[nodiscard]] Result<SensitivityResult>
+IntersectJvp(const Hyperbola& hyperbola, std::span<const ConicBinding> conicBindings,
+             const Surface& surface, std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
+[[nodiscard]] Result<SensitivityResult>
+IntersectJvp(const Parabola& parabola, std::span<const ConicBinding> conicBindings,
+             const Surface& surface, std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
+[[nodiscard]] Result<SensitivityResult>
+IntersectVjp(const Hyperbola& hyperbola, std::span<const ConicBinding> conicBindings,
+             const Surface& surface, std::span<const SurfaceBinding> surfaceBindings,
+             const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
+[[nodiscard]] Result<SensitivityResult>
+IntersectVjp(const Parabola& parabola, std::span<const ConicBinding> conicBindings,
              const Surface& surface, std::span<const SurfaceBinding> surfaceBindings,
              const CurveSurfaceIntersection& intersection, const SensitivityContext& sensitivity);
 

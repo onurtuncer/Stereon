@@ -105,8 +105,10 @@ Implementation notes
    tests/intersect/LineSurfaceTests.cpp
    tests/intersect/LinearizationTests.cpp
    tests/intersect/MetamorphicRegressionTests.cpp
+   tests/intersect/OpenConicLinearizationTests.cpp
    tests/intersect/OpenConicSurfaceTests.cpp
    tests/intersect/OutcomeTests.cpp
+   tests/intersect/PlanarConicFarRootTests.cpp
    tests/intersect/PlanarCorpusTests.cpp
    tests/intersect/PlanarLinearizationTests.cpp
    tests/intersect/PlanarPairTests.cpp
@@ -120,6 +122,7 @@ Implementation notes
    tests/intersect/PlanePlaneTests.cpp
    tests/intersect/SkewOrderTests.cpp
    tests/intersect/SplineAnalyticTests.cpp
+   tests/intersect/SplineClosestApproachTests.cpp
    tests/intersect/SplineCurvePairTests.cpp
    tests/intersect/SplineJointLinearizationTests.cpp
    tests/intersect/SplineSurfaceTests.cpp
