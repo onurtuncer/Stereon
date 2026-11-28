@@ -1129,16 +1129,30 @@ struct BranchSystem {
 }
 
 /// The system at (onA, onB), for the tangent already in s.
+/// A point of a B-spline surface's parameters held in its domain: a branch
+/// ending on the patch's boundary has its pcurve end there to rounding, and
+/// Newton's steps from it may leave by as much, where Eval's contract does
+/// not reach. Other surfaces' parameters are left alone (an angle wraps).
+[[nodiscard]] Point2 Within(const Surface& surface, const Point2& uv)
+{
+    if (surface.Target<BSplineSurface>() == nullptr) {
+        return uv;
+    }
+    const Box2 d = Domain(surface);
+    return {std::clamp(uv.X, d.X.GetLower(), d.X.GetUpper()),
+            std::clamp(uv.Y, d.Y.GetLower(), d.Y.GetUpper())};
+}
+
 void Fill(const Surface& a, const Surface& b, const Point2& onA, const Point2& onB, BranchSystem& s)
 {
-    s.OnA = onA;
-    s.OnB = onB;
-    s.Position = Eval(a, onA);
-    s.Residual = s.Position - Eval(b, onB);
-    s.SuA = Deriv(a, onA, 1, 0);
-    s.SvA = Deriv(a, onA, 0, 1);
-    s.SuB = Deriv(b, onB, 1, 0);
-    s.SvB = Deriv(b, onB, 0, 1);
+    s.OnA = Within(a, onA);
+    s.OnB = Within(b, onB);
+    s.Position = Eval(a, s.OnA);
+    s.Residual = s.Position - Eval(b, s.OnB);
+    s.SuA = Deriv(a, s.OnA, 1, 0);
+    s.SvA = Deriv(a, s.OnA, 0, 1);
+    s.SuB = Deriv(b, s.OnB, 1, 0);
+    s.SvB = Deriv(b, s.OnB, 0, 1);
     const Vec3 normalA = Cross(s.SuA, s.SvA);
     const Vec3 normalB = Cross(s.SuB, s.SvB);
     s.AtPole = AtPoleOf(s.SuA, s.SvA) || AtPoleOf(s.SuB, s.SvB);
@@ -1171,8 +1185,8 @@ void Refine(const Surface& a, const Surface& b, const Point3& x0, BranchSystem& 
         if (!AllFinite(dz)) {
             return;
         }
-        const Point2 onA{s.OnA.X + dz[0], s.OnA.Y + dz[1]};
-        const Point2 onB{s.OnB.X + dz[2], s.OnB.Y + dz[3]};
+        const Point2 onA = Within(a, Point2{s.OnA.X + dz[0], s.OnA.Y + dz[1]});
+        const Point2 onB = Within(b, Point2{s.OnB.X + dz[2], s.OnB.Y + dz[3]});
         const bool settled = onA == s.OnA && onB == s.OnB;
         Fill(a, b, onA, onB, s);
         if (settled) {
@@ -1240,11 +1254,82 @@ struct BranchPoint {
            Contains(Domain(branch.OnB), t);
 }
 
+/// An end of a certified branch of a bounded range: where it is, and the
+/// branch's bound.
+struct BranchEnd {
+    Point3 At;
+    double Bound = 0.0;
+};
+
+/// The rounding of a point's coordinates, on top of a certified bound: the
+/// budget OnBoth allows.
+[[nodiscard]] double RoundingAt(const Point3& p)
+{
+    return 512.0 * std::numeric_limits<double>::epsilon() *
+           (1.0 + std::max({std::abs(p.X), std::abs(p.Y), std::abs(p.Z)}));
+}
+
+/// Whether two points, each within its bound of the intersection, may be
+/// one point of it.
+[[nodiscard]] bool Coincide(const Point3& p, const double boundP, const Point3& q,
+                            const double boundQ)
+{
+    return Distance(p, q) <= boundP + boundQ + RoundingAt(p) + RoundingAt(q);
+}
+
+/// The nodes of a result: every branch end where three or more ends of
+/// certified branches coincide. The handlers end branches at a node (two
+/// equal cylinders through their axes' common normal, a transverse node of
+/// two B-spline surfaces, four ends each) and otherwise only at the
+/// requested domains' boundaries and at seams and cuts, where two ends
+/// meet. An uncertified branch is Indeterminate on its own; its ends are
+/// not counted.
+[[nodiscard]] std::vector<BranchEnd> NodesOf(const SurfaceSurfaceIntersection& intersection)
+{
+    std::vector<BranchEnd> ends;
+    for (const IntersectionBranch& branch : intersection.Branches) {
+        if (!branch.IsCertified() || !branch.Range.IsBounded() || branch.Curve3d.IsEmpty()) {
+            continue;
+        }
+        for (const double t : {branch.Range.GetLower(), branch.Range.GetUpper()}) {
+            if (Contains(Domain(branch.Curve3d), t)) {
+                ends.push_back({Eval(branch.Curve3d, t), branch.Bound});
+            }
+        }
+    }
+    std::vector<BranchEnd> nodes;
+    for (const BranchEnd& end : ends) {
+        const auto meeting = std::ranges::count_if(ends, [&](const BranchEnd& other) {
+            return Coincide(end.At, end.Bound, other.At, other.Bound);
+        });
+        if (meeting >= 3) {
+            nodes.push_back(end);
+        }
+    }
+    return nodes;
+}
+
+/// Whether the branch's point at t is at one of the nodes.
+[[nodiscard]] bool AtNode(const IntersectionBranch& branch, const double t,
+                          const std::span<const BranchEnd> nodes)
+{
+    if (nodes.empty() || !OnBranch(branch, t) || !branch.IsCertified()) {
+        return false;
+    }
+    const Point3 x = Eval(branch.Curve3d, t);
+    return std::ranges::any_of(nodes, [&](const BranchEnd& node) {
+        return Coincide(x, branch.Bound, node.At, node.Bound);
+    });
+}
+
 /// The branch's point at t, refined onto both surfaces when it has a
-/// derivative.
+/// derivative. A point at a node of the result has none: the surfaces are
+/// tangent there and the intersection is not a curve but a crossing of
+/// two, a candidate event (ADR-0054) that a generic change of either
+/// surface resolves into other branches, not a point that moves.
 [[nodiscard]] Result<BranchPoint> PointOn(const Surface& a, const Surface& b,
                                           const IntersectionBranch& branch, const double t,
-                                          const std::string_view where)
+                                          const bool atNode, const std::string_view where)
 {
     if (!OnBranch(branch, t)) {
         return Fail(ErrorCode::InvalidInput,
@@ -1260,6 +1345,12 @@ struct BranchPoint {
     p.System.Tangent = direction / Length(direction);
     Fill(a, b, Eval(branch.OnA, t), Eval(branch.OnB, t), p.System);
     std::tie(p.Status, p.Reason) = ClassifyBranch(branch, p.System);
+    if (atNode && p.Status != DerivativeStatus::Nondifferentiable) {
+        p.Status = DerivativeStatus::Nondifferentiable;
+        p.Reason = "a point at a node of the result, where three or more branch ends meet: the "
+                   "surfaces are tangent there, and a generic change resolves the node into "
+                   "other branches rather than moving it";
+    }
     if (!HasDerivative(p.Status)) {
         return p;
     }
@@ -1296,13 +1387,16 @@ struct BranchAnalysis {
         an.Summary.Reason = "the surfaces coincide over a region: its boundary is not isolated";
         return an;
     }
+    const std::vector<BranchEnd> nodes = NodesOf(intersection);
     for (std::size_t k = 0; k < samples.size(); ++k) {
         if (samples[k].Branch >= intersection.Branches.size()) {
             return Fail(ErrorCode::InvalidInput,
                         std::string(where) + ": a sample names a branch the result does not have");
         }
-        STEREON_TRY(const BranchPoint p, PointOn(a, b, intersection.Branches[samples[k].Branch],
-                                                 samples[k].Parameter, where));
+        const IntersectionBranch& branch = intersection.Branches[samples[k].Branch];
+        STEREON_TRY(const BranchPoint p,
+                    PointOn(a, b, branch, samples[k].Parameter,
+                            AtNode(branch, samples[k].Parameter, nodes), where));
         if (Rank(p.Status) > Rank(an.Summary.Status)) {
             an.Summary.Status = p.Status;
             an.Summary.Reason = "sample " + std::to_string(k) + ": " + std::string(p.Reason);
@@ -1411,13 +1505,40 @@ void AccumulateBranch(const Surface& a, const std::span<const SurfaceBinding> bi
 
 } // namespace
 
+/// The linearisation of a sample read against the whole result: a node's
+/// sample is Nondifferentiable (Linearization.cppm).
 Result<BranchPointLinearization> Linearize(const Surface& a, const Surface& b,
                                            const IntersectionBranch& branch, const double t)
 {
     if (a.IsEmpty() || b.IsEmpty()) {
         return Fail(ErrorCode::InvalidInput, "Linearize: an empty surface");
     }
-    STEREON_TRY(const BranchPoint p, PointOn(a, b, branch, t, "Linearize"));
+    STEREON_TRY(const BranchPoint p, PointOn(a, b, branch, t, false, "Linearize"));
+    const BranchSystem& s = p.System;
+    return BranchPointLinearization{s.Position, s.OnA, s.OnB, s.Residual,     s.Tangent, s.SuA,
+                                    s.SvA,      s.SuB, s.SvB, s.Conditioning, p.Status};
+}
+
+/// The linearisation of a sample read against the whole result: a node's
+/// sample is Nondifferentiable (Linearization.cppm).
+Result<BranchPointLinearization> Linearize(const Surface& a, const Surface& b,
+                                           const SurfaceSurfaceIntersection& intersection,
+                                           const BranchSample& sample)
+{
+    if (a.IsEmpty() || b.IsEmpty()) {
+        return Fail(ErrorCode::InvalidInput, "Linearize: an empty surface");
+    }
+    if (sample.Branch >= intersection.Branches.size()) {
+        return Fail(ErrorCode::InvalidInput,
+                    "Linearize: the sample names a branch the result does not have");
+    }
+    const IntersectionBranch& branch = intersection.Branches[sample.Branch];
+    const std::vector<BranchEnd> nodes = NodesOf(intersection);
+    STEREON_TRY(BranchPoint p, PointOn(a, b, branch, sample.Parameter,
+                                       AtNode(branch, sample.Parameter, nodes), "Linearize"));
+    if (!intersection.Overlaps.empty()) {
+        p.Status = DerivativeStatus::Nondifferentiable;
+    }
     const BranchSystem& s = p.System;
     return BranchPointLinearization{s.Position, s.OnA, s.OnB, s.Residual,     s.Tangent, s.SuA,
                                     s.SvA,      s.SuB, s.SvB, s.Conditioning, p.Status};
