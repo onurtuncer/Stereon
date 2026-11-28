@@ -671,12 +671,18 @@ TEST_CASE("branch points that are not proved transverse nodes fail closed",
             }
         }
     }
-    SECTION("a definite touch is not a node")
+    SECTION("a definite touch is not a node: one point, no branch")
     {
+        // Before isolated touches were settled this failed closed;
+        // GenericSSITouchTests.cpp holds touches to their closed forms.
         const auto result = Intersect(Surface{Quadric(1.0, 1.0)}, Box2::Everything(), flat,
                                       Box2::Everything(), tolerance, ctx);
-        REQUIRE_FALSE(result.has_value());
-        REQUIRE(result.error().GetCode() == ErrorCode::IntersectionFailed);
+        INFO(IntersectTest::ErrorText(result));
+        REQUIRE(result.has_value());
+        REQUIRE(result->Branches.empty());
+        REQUIRE(result->Points.size() == 1);
+        REQUIRE(Distance(result->Points.front().Position, Point3{0.5, 0.5, 0.0}) <=
+                4.0 * ctx.GetResolution());
     }
 }
 

@@ -49,9 +49,10 @@ import Stereon.Robust;
 ///   the boundary. The roots of the pair's eight boundary curves against the
 ///   other patch, isolated by Krawczyk's operator, are therefore all its
 ///   branch ends: none is no branch, two are one arc, more need a smaller pair;
-/// - an isolated touch, polynomial surfaces only: a unique solution of the
-///   extremal system at which the relative second form is definite, within
-///   the tolerance (found, not yet settled: it fails closed);
+/// - an isolated touch, polynomial or rational: a critical point of one
+///   surface's height over the other within the tolerance, the height's
+///   Hessian proved definite over a box about it, so that every common point
+///   there lies within the resolution of it (TouchPoint.hpp);
 /// - a transverse node, polynomial or rational: a critical point of one
 ///   surface's height over the other, isolated by Krawczyk's operator within
 ///   the tolerance, around which a Lyapunov function proved on the Hessian's
@@ -74,7 +75,7 @@ import Stereon.Robust;
 /// fitted cubic's pcurve can leave a surface's domain.
 ///
 /// What cannot be settled fails, never a partial or an unproved empty result:
-/// an isolated touch, a tangency along a curve the trace does not settle, a
+/// an isolated touch not proved one, a tangency along a curve the trace does not settle, a
 /// branch point that is not a proved transverse node (a higher-order
 /// singularity, a node on a knot line or seam with a crease or a gap beyond
 /// the tolerance), an overlap, at the smallest pair, IntersectionFailed; a
@@ -514,23 +515,6 @@ struct SecondNets {
     return {std::move(du), std::move(dv), std::move(duu), std::move(duv), std::move(dvv)};
 }
 
-[[nodiscard]] Bounds XyzHull(const Net& net)
-{
-    const HPoint h = HullOf(net);
-    return {h.X, h.Y, h.Z};
-}
-
-/// The stretch a derivative net is evaluated over: a net of one pole has
-/// the same value everywhere, so any stretch serves.
-[[nodiscard]] Bounds XyzAt(const Net& net, const Box2& stretch, const double u, const double v)
-{
-    if (net.Poles.size() == 1) {
-        return {net.Poles[0].X, net.Poles[0].Y, net.Poles[0].Z};
-    }
-    const HPoint h = ValueOf(net, stretch, Interval{u}, Interval{v});
-    return {h.X, h.Y, h.Z};
-}
-
 /// S x T for enclosed vectors, as a sum of the two product terms the
 /// derivative of a normal has.
 [[nodiscard]] Bounds PlusOf(const Bounds& a, const Bounds& b)
@@ -544,80 +528,6 @@ struct NormalJet {
     Bounds Nu;
     Bounds Nv;
 };
-
-/// The Jacobian of the extremal system over the pair (see ExtremalPoint), in
-/// (uA, vA, uB, vB, lambda), lambda enclosed in `reach`.
-[[nodiscard]] IntervalMatrix<5> ExtremalJacobian(const SecondNets& a, const SecondNets& b,
-                                                 const NormalJet& n, const Interval& reach)
-{
-    const Bounds au = XyzHull(a.Du);
-    const Bounds av = XyzHull(a.Dv);
-    const Bounds bu = XyzHull(b.Du);
-    const Bounds bv = XyzHull(b.Dv);
-    IntervalMatrix<5> j{};
-    for (std::size_t r = 0; r < 3; ++r) {
-        j[r] = {au[r], av[r], reach * (-n.Nu[r]) - bu[r], reach * (-n.Nv[r]) - bv[r], -n.N[r]};
-    }
-    const Interval zero{0.0};
-    j[3] = {DotOf(XyzHull(a.Duu), n.N), DotOf(XyzHull(a.Duv), n.N), DotOf(au, n.Nu),
-            DotOf(au, n.Nv), zero};
-    j[4] = {DotOf(XyzHull(a.Duv), n.N), DotOf(XyzHull(a.Dvv), n.N), DotOf(av, n.Nu),
-            DotOf(av, n.Nv), zero};
-    return j;
-}
-
-[[nodiscard]] Bounds XyzValue(const Patch& p, const double u, const double v)
-{
-    const HPoint h = ValueOf(p.Poles, p.Parameters, Interval{u}, Interval{v});
-    return {h.X, h.Y, h.Z};
-}
-
-[[nodiscard]] NormalJet NormalHull(const SecondNets& b)
-{
-    const Bounds bu = XyzHull(b.Du);
-    const Bounds bv = XyzHull(b.Dv);
-    return {CrossOf(bu, bv), PlusOf(CrossOf(XyzHull(b.Duu), bv), CrossOf(bu, XyzHull(b.Duv))),
-            PlusOf(CrossOf(XyzHull(b.Duv), bv), CrossOf(bu, XyzHull(b.Dvv)))};
-}
-
-/// Where lambda may lie over the pair: R . n / n . n, enclosed.
-[[nodiscard]] std::optional<Interval> LambdaReach(const PatchPair& pair, const Bounds& n)
-{
-    const Bounds r = MinusOf(XyzHull(pair.A.Poles), XyzHull(pair.B.Poles));
-    const Interval square = DotOf(n, n);
-    if (!(square.GetLower() > 0.0)) {
-        return std::nullopt;
-    }
-    const Interval reach = DotOf(r, n) / square;
-    return Inflated(reach, 0.5 * Width(reach));
-}
-
-/// The points where the two surfaces share a tangent plane, solved for
-/// (uA, vA, uB, vB, lambda):
-///     S_A - S_B - lambda n_B = 0,  A_u . n_B = 0,  A_v . n_B = 0.
-/// Every tangential contact is one (with lambda 0), and at an isolated touch
-/// the system is regular, as the distance's own gradient is not: its Hessian
-/// is singular wherever the surfaces meet.
-[[nodiscard]] Isolated<5> ExtremalPoint(const PatchPair& pair, const SecondNets& a,
-                                        const SecondNets& b)
-{
-    const NormalJet n = NormalHull(b);
-    const std::optional<Interval> reach = LambdaReach(pair, n.N);
-    if (!reach) {
-        return {};
-    }
-    const IntervalsN<5> box{pair.A.Parameters.X, pair.A.Parameters.Y, pair.B.Parameters.X,
-                            pair.B.Parameters.Y, *reach};
-    return Krawczyk<5>(box, ExtremalJacobian(a, b, n, *reach), [&](const std::array<double, 5>& m) {
-        const Bounds normal = CrossOf(XyzAt(b.Du, pair.B.Parameters, m[2], m[3]),
-                                      XyzAt(b.Dv, pair.B.Parameters, m[2], m[3]));
-        const Bounds r = MinusOf(XyzValue(pair.A, m[0], m[1]), XyzValue(pair.B, m[2], m[3]));
-        const Interval l{m[4]};
-        return IntervalsN<5>{r[0] - l * normal[0], r[1] - l * normal[1], r[2] - l * normal[2],
-                             DotOf(XyzAt(a.Du, pair.A.Parameters, m[0], m[1]), normal),
-                             DotOf(XyzAt(a.Dv, pair.A.Parameters, m[0], m[1]), normal)};
-    });
-}
 
 /// A symmetric 2 x 2 form: its entries (uu, uv, vv).
 using Form2 = std::array<double, 3>;
@@ -633,13 +543,6 @@ struct LocalForm {
     Vec3 Dv;
     Form2 Second;
 };
-
-[[nodiscard]] LocalForm LocalAt(const SecondNets& s, const Box2& box, const double u,
-                                const double v, const Vec3& n)
-{
-    const auto at = [&](const Net& net) { return MiddleVec(XyzAt(net, box, u, v)); };
-    return {at(s.Du), at(s.Dv), {Dot(n, at(s.Duu)), Dot(n, at(s.Duv)), Dot(n, at(s.Dvv))}};
-}
 
 /// Whether the surfaces separate on every side of the point of common
 /// tangency: the relative second form, A's less B's pulled back through the
@@ -686,11 +589,6 @@ struct LocalForm {
         return 1;
     }
     return det < -0x1p-20 * scale ? -1 : 0;
-}
-
-[[nodiscard]] bool RelativelyDefinite(const LocalForm& a, const LocalForm& b)
-{
-    return FormSign(a, b) > 0;
 }
 
 // --- The search ------------------------------------------------------------
@@ -763,7 +661,6 @@ struct Atlas {
 struct SearchSettings {
     double Tolerance;
     double Join;
-    bool Polynomial;
     /// The patches a node on a knot line or seam is settled across; without
     /// them such a node fails closed.
     const Atlas* OnA = nullptr;
@@ -1686,46 +1583,25 @@ struct Placed {
 
 #include "SeamNode.hpp"
 #include "TangentBranch.hpp"
+#include "TouchPoint.hpp"
 
 namespace Stereon::Detail {
 namespace {
 
 /// A pair with no advance direction. Settled here: a proved transverse node
-/// (SettleNode), one on a knot line or seam (SettleSeamNode), or a tangency
-/// along a curve, traced across a Bezier patch (SettleTangent). An isolated
-/// touch, a unique point of common tangency with the surfaces separating on
-/// every side of it, is found, of polynomial surfaces, but not yet settled.
-/// No solution rules out only tangency, not a crossing; everything else is
-/// cut further, and fails at the smallest pair.
+/// (SettleNode), one on a knot line or seam (SettleSeamNode), a tangency
+/// along a curve, traced across a Bezier patch (SettleTangent), or an
+/// isolated touch, a unique point of common tangency with the surfaces
+/// parting on every side of it (SettleTouchPoint). No solution rules out
+/// only tangency, not a crossing; everything else is cut further, and fails
+/// at the smallest pair.
 [[nodiscard]] Settled SettleTouch(const PatchPair& pair, const SearchSettings& s, Findings& found,
                                   std::vector<PatchPair>& stack)
 {
     if (SettleNode(pair, s, found, stack) || SettleSeamNode(pair, s, found, stack) ||
-        SettleTangent(pair, s, found, stack)) {
+        SettleTangent(pair, s, found, stack) || SettleTouchPoint(pair, s, found, stack)) {
         return Settled::Done;
     }
-    if (!s.Polynomial) {
-        return Settled::Cut;
-    }
-    const SecondNets a = SecondNetsOf(pair.A);
-    const SecondNets b = SecondNetsOf(pair.B);
-    const Isolated<5> extremal = ExtremalPoint(pair, a, b);
-    if (extremal.Outcome != Isolation::Unique) {
-        return Settled::Cut;
-    }
-    const std::array<double, 5> m = MidpointsOf<5>(extremal.Box);
-    const Bounds onA = XyzValue(pair.A, m[0], m[1]);
-    const Vec3 n = Normalized(MiddleVec(CrossOf(XyzAt(b.Du, pair.B.Parameters, m[2], m[3]),
-                                                XyzAt(b.Dv, pair.B.Parameters, m[2], m[3]))));
-    const Interval gap = DistanceBetween(MinusOf(onA, XyzValue(pair.B, m[2], m[3])));
-    if (gap.GetUpper() > s.Tolerance ||
-        !RelativelyDefinite(LocalAt(a, pair.A.Parameters, m[0], m[1], n),
-                            LocalAt(b, pair.B.Parameters, m[2], m[3], n))) {
-        return Settled::Cut;
-    }
-    // A nearby extremum does not exclude a surrounding crossing loop.
-    // Until isolation of the zero set is proved, fail closed rather than
-    // discard the remainder of this patch pair.
     return Settled::Cut;
 }
 
@@ -2696,8 +2572,7 @@ SSIResult NurbsHull(const Surface& a, const Box2& domainA, const Surface& b, con
         return SurfaceSurfaceIntersection{}; // Proven empty, including trims.
     }
     STEREON_TRY(ShiftedSearch search, SearchAbout(*sa, domainA, *sb, domainB));
-    const SearchSettings settings{tolerance, 0x1p-7 * ctx.GetResolution(),
-                                  sa->Weights.empty() && sb->Weights.empty(), &search.OnA,
+    const SearchSettings settings{tolerance, 0x1p-7 * ctx.GetResolution(), &search.OnA,
                                   &search.OnB};
     STEREON_TRY(Findings found, SearchPairs(std::move(search.Pairs), settings));
     const Surface localA{Moved(*sa, search.Shift)};

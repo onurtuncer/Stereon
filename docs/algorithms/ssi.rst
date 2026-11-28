@@ -39,3 +39,4 @@ Implementation notes
    src/intersect/PlanePlane.cpp
    src/intersect/SeamNode.hpp
    src/intersect/TangentBranch.hpp
+   src/intersect/TouchPoint.hpp

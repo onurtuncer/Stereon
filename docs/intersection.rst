@@ -1762,19 +1762,54 @@ a rational sphere, which meets it at 2.56 degrees in a circle of radius
 0.0447, is resolved this way; at a ten-thousandth (0.81 degrees, radius
 0.0141) the search still fails closed.
 
-*An isolated touch*, for polynomial surfaces. Every tangential contact solves
+*An isolated touch*, of polynomial or rational surfaces: the surfaces share a
+tangent plane at a point and their relative second form there is definite,
+so near it they part on every side (``src/intersect/TouchPoint.hpp``). It is
+settled on a pair of a box :math:`R` of :math:`S` about the point and a box
+of :math:`C` covering it, in a frame about :math:`C`'s normal there, by three
+facts proved in interval arithmetic:
 
-.. math::
+1. *Coordinates and containment*, as for a node: the height :math:`h` of
+   :math:`S` over :math:`C` is defined on :math:`R`, its zeros are the points
+   the surfaces share there, and :math:`|h|` bounds how far a point of
+   :math:`S` is from :math:`C`.
+2. *The critical point* :math:`s^*` of :math:`h`, isolated by Krawczyk's
+   operator strictly inside both boxes, the surfaces within the tolerance
+   there (fact 3 of a node).
+3. *Convexity.* The Hessian of :math:`h`, enclosed over :math:`R`, is
+   definite: :math:`h_{uu}` excludes zero and :math:`\det H > 0` throughout.
+   :math:`h` is then strictly convex (or concave) on the convex box,
+   :math:`s^*` is its only critical point, and with :math:`\lambda` a lower
+   bound on the smaller eigenvalue's magnitude (:math:`\det / |\mathrm{tr}|`)
+   and :math:`\sigma` the sign of :math:`h_{uu}`,
+   :math:`\sigma (h(s) - h(s^*)) \ge \lambda |s - s^*|^2 / 2`.
 
-   S_A - S_B - \lambda\,\mathbf{n}_B = 0, \qquad
-   \partial_u S_A \cdot \mathbf{n}_B = 0, \qquad
-   \partial_v S_A \cdot \mathbf{n}_B = 0,
+With :math:`h^* = h(s^*)`: if :math:`\sigma h^* > 0` is proved, :math:`h` has
+no zero on :math:`R`, and the surfaces are within the tolerance of each other
+at :math:`s^*` without meeting; otherwise every zero lies in the disc
+:math:`|s - s^*| \le \rho = \sqrt{2 \max(0, -\sigma h^*) / \lambda}`, within
+:math:`|S_s| \rho` of :math:`S(s^*)` in space. The touch is reported as the
+point :math:`S(s^*)`, its bound the larger of the gap there and that reach,
+only where the reach is within the resolution: a loop of the zero set any
+wider is a curve, left to the search, and never reported as a point. A gap
+within the tolerance with the surfaces apart is a declared touch (ADR-0050);
+the point is a candidate for an event (ADR-0054).
 
-and at an isolated touch this system is regular, as the gradient of the
-distance is not. A unique solution within the tolerance, where the relative
-second form of the two surfaces is definite, is found, but not yet settled: a
-nearby extremum does not rule out a small loop around it, so the pair is cut
-further and fails closed.
+The search tries a pair with no advance direction whose cells hold a
+candidate (Krawczyk's isolation of the critical point within the tolerance,
+the relative form definite in doubles), with either surface as :math:`S`.
+:math:`S`'s box reaches about :math:`s^*` as far as the surfaces need to part
+by eight tolerances by the relative form's smaller eigenvalue, inside the
+Bézier patch holding the cell, and :math:`C`'s covers its projection inside
+:math:`C`'s; both are widened to a dyadic grid and halved until the proof
+holds. The product of the boxes is recorded as a settled region where nothing
+was found yet, and carved from the search as a node's is.
+
+Not covered, and failing closed: a touch on a knot line or a seam of either
+surface, or on the boundary of a requested domain (no single Bézier patch
+holds a box about it); a touch at a singular point of a parameterization,
+such as a sphere's pole; a degenerate relative form; and a loop wider than
+the resolution that the search cannot resolve as a curve.
 
 *A transverse node*, of polynomial or rational surfaces: a point where the surfaces share
 a tangent plane and the relative second form is indefinite and nondegenerate,
@@ -2079,15 +2114,16 @@ space and on both surfaces are certified by ``CertifyDeviation``, tightened
 until they pass. They are polylines because a fitted cubic pcurve can leave a
 surface's domain.
 
-Whatever cannot be settled fails: an isolated touch, a tangency along a curve
-outside the cases above, a branch point not proved a transverse node (a
+Whatever cannot be settled fails: an isolated touch or a tangency along a
+curve outside the cases above, a branch point not proved a transverse node (a
 degenerate Hessian, as where three branches cross; a node on a knot line or
 seam with a crease or a gap beyond the tolerance; a node whose gap the
 tolerance does not admit), an overlap, and a search past its budget of
 :math:`2^{14}` pairs return ``IntersectionFailed``, naming the patches, never
 a partial or an unproved empty result (``src/intersect/GenericSSI.cpp``;
 nodes in ``tests/intersect/GenericSSINodeTests.cpp``, tangencies along a
-curve in ``tests/intersect/GenericSSITangentTests.cpp``).
+curve in ``tests/intersect/GenericSSITangentTests.cpp``, touches in
+``tests/intersect/GenericSSITouchTests.cpp``).
 
 A B-spline surface against a plane, cylinder, cone, sphere, torus or
 ellipsoid, in either order, goes to the parametric-implicit trace of
